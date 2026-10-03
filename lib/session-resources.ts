@@ -213,13 +213,15 @@ function failed(step: string, r: { status: number | null; stdout: string; stderr
  * - Android: a -read-only instance of the AVD whose host process carries
  *   `-prop qemu.omt.session=<session>` in argv (the guest drops custom props on
  *   current images, the host argv keeps it); stop kills the emulator only when
- *   a process with that port and tag still exists.
+ *   a process with that port and tag still exists. `emulatorArgs` are the extra
+ *   flags a project's documented launcher boots with (`-writable-system`,
+ *   `-qemu …`); they go after the tag, so a trailing `-qemu` block stays last.
  *
  * Returns the UDID (iOS) or serial (Android).
  */
 export function acquireDevice(
 	sessionId: string,
-	req: { platform: string; base: string; runtime?: string },
+	req: { platform: string; base: string; runtime?: string; emulatorArgs?: string[] },
 	deps: DeviceDeps = systemDeps,
 ): string {
 	if (req.platform !== "ios" && req.platform !== "android") {
@@ -245,6 +247,9 @@ export function acquireDevice(
 		return udid;
 	}
 
+	const extra = req.emulatorArgs ?? [];
+	const owned_flag = extra.find((arg) => ["-avd", "-port", "-prop", "-read-only"].includes(arg));
+	if (owned_flag) throw new Error(`acquire-device: refused — --emulator-args may not set ${owned_flag}; acquire-device owns it`);
 	const adb = androidTool("platform-tools", "adb");
 	const listed = deps.run(adb, ["devices"]);
 	if (listed.status !== 0) throw failed("adb devices", listed);
@@ -260,7 +265,7 @@ export function acquireDevice(
 	const tag = `qemu.omt.session=${sessionId}`;
 	deps.launchDetached(
 		androidTool("emulator", "emulator"),
-		["-avd", req.base, "-read-only", "-no-boot-anim", "-port", String(port), "-prop", tag],
+		["-avd", req.base, "-read-only", "-no-boot-anim", "-port", String(port), "-prop", tag, ...extra],
 		join(tmpdir(), `omt-${serial}-${sessionId}.log`),
 	);
 	// `[-]port` keeps pgrep from matching this bash -c command line itself.

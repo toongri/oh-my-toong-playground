@@ -1501,7 +1501,7 @@ const ROSTER: CliCommand[] = [
 	{
 		name: "acquire-device",
 		authority: "ai",
-		effect: "starts a simulator/emulator owned by this session (--platform ios|android --base <device type|AVD> [--runtime <id>]) and records it; prints IOS_UDID=/ANDROID_SERIAL=",
+		effect: "starts a simulator/emulator owned by this session (--platform ios|android --base <device type|AVD> [--runtime <id>] [--emulator-args '<JSON array>']) and records it; prints IOS_UDID=/ANDROID_SERIAL=",
 	},
 	{
 		name: "record-resource",
@@ -1667,7 +1667,12 @@ function main(): void {
 				throw new Error("waive is retired: execute the scenario, or record-scenario --status blocked --obstacle … --attempts '[…]' --deepest-reachable … --attempt-log <file>");
 			} else if (subcommand === "acquire-device") {
 				const platform = requiredArg(args, "platform");
-				const id = acquireDevice(sessionId, { platform, base: requiredArg(args, "base"), runtime: str(args["runtime"]) });
+				const rawEmulatorArgs = str(args["emulator-args"]);
+				const emulatorArgs: unknown = rawEmulatorArgs === undefined ? undefined : JSON.parse(rawEmulatorArgs);
+				if (emulatorArgs !== undefined && !(Array.isArray(emulatorArgs) && emulatorArgs.every((arg) => typeof arg === "string"))) {
+					throw new Error("acquire-device: --emulator-args must be a JSON array of strings");
+				}
+				const id = acquireDevice(sessionId, { platform, base: requiredArg(args, "base"), runtime: str(args["runtime"]), emulatorArgs });
 				const flags = `--platform ${platform} ${platform === "ios" ? "--udid" : "--serial"} ${id} --session qa-${id}`;
 				process.stdout.write(
 					`${platform === "ios" ? "IOS_UDID" : "ANDROID_SERIAL"}=${id}\nacquired and recorded: this device belongs to this session only. Export the line above, and release it with release-resource --id ${id} at cleanup.\n` +

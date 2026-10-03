@@ -122,6 +122,14 @@ describe("acquireDevice", () => {
 		expect(unreleasedResources(SID)[0].id).toBe("emulator-5556");
 	});
 
+	test("Android는 프로젝트 런북의 에뮬레이터 인자를 태그 뒤에 붙이고 소유 인자는 거부한다", () => {
+		const deps = fakeDeps({ "devices": { status: 0, stdout: "" }, "sys.boot_completed": { status: 0, stdout: "1\n" } });
+		acquireDevice(SID, { platform: "android", base: "Pixel", emulatorArgs: ["-writable-system", "-qemu", "-device", "virtio-serial-pci"] }, deps);
+		const launch = deps.calls.find((c) => c[0] === "launch") ?? [];
+		expect(launch.join(" ")).toEndWith(`-prop qemu.omt.session=${SID} -writable-system -qemu -device virtio-serial-pci`);
+		expect(() => acquireDevice(SID, { platform: "android", base: "Pixel", emulatorArgs: ["-port", "5560"] }, deps)).toThrow("may not set -port");
+	});
+
 	test("Android stop은 태그가 맞는 프로세스가 없으면 다른 세션 기기를 건드리지 않고 해제된다", () => {
 		const deps = fakeDeps({ "devices": { status: 0, stdout: "" }, "sys.boot_completed": { status: 0, stdout: "1" } });
 		acquireDevice(SID, { platform: "android", base: "Pixel" }, deps);

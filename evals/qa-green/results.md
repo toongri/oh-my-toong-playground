@@ -264,3 +264,23 @@ r1보다 크게 나아졌다.
 - B1.3 실패: 기능 개요가 14문장이고 장바구니 수량 결과, 확인하지 않은 범위, 보조 점검, 시드 오류 건수가 들어갔다.
   B5.3 실패: 감사 표 839/832. 두 항목 모두 이 런타임 뒤에 고쳤다(개요 레시피·게이트 e40a70b9, 감사 표 CSS
   457b56e7). 다음 회차에서 확인한다.
+
+### r2 — #4345 dispenser (런타임 e785fbcf, fast)
+
+판정 **실패** (A4.2·A4.3·A5.5, A6.1 미도달). 판정과 보고서 없이 두 번째 `await-user`에서 멈췄다. 시나리오
+3개가 모두 막힘이고, 반복 실행 점검은 기록되지 않았다.
+
+- 첫 `await-user`는 정당했다. 런북이 에뮬레이터 기동 전 승인을 요구한다. 이번에는 승인 요청에 "페어링 QR을
+  열면 STG에 임시 nonce가 생긴다"를 넣었다. eb0d2902의 의도대로다. 하네스가 승인했다.
+- **A5.5 실패.** QR 시나리오 3개가 "가상 메인보드의 하드웨어 ID를 읽을 수 없다"로 막혔다. 디스펜서 런북은 AVD를
+  `-selinux permissive -writable-system -qemu …`(UART 포트)로 띄운다(`apps/dispenser/scripts/emulator/dev.sh`
+  182행). `acquire-device`는 Android를 늘 `-read-only`로만 띄우고 다른 옵션을 받지 않았다. 그래서
+  `setup-usb-feature.sh`가 "-writable-system으로 떠 있는지 보세요"로 실패했고, 앱은 Welcome 화면에 머물렀다.
+  QA 탓이 아니라 스킬의 기기 획득 경로가 프로젝트 런북을 따를 수 없었다. 두 번째 질문("등록된 STG QA ID나
+  주입 절차를 달라")은 그 결과다.
+  → 고친 것: `acquire-device --emulator-args '<JSON 배열>'`. 런북의 옵션을 세션 태그 뒤에 붙이므로 `-qemu`
+  블록이 마지막에 남는다. `-avd`·`-port`·`-prop`·`-read-only`는 거부한다. stage3-handson.md에 런북의 부팅
+  단계 대신 이 옵션을 쓰고, 나머지 설정 단계는 획득한 serial로 돌리라고 적었다.
+- 환경: 채점 중 디스크 여유가 1.5GB(사용률 100%)였다. `-read-only -writable-system` 조합 실험이 "디스크 공간
+  부족"으로 부팅되지 않았다. `-writable-system`은 수백 MB의 system 복사본을 만들므로 다음 회차 전에 공간을
+  확보해야 한다. 하네스 워크트리 다섯 개가 약 50GB이고, 그중 #4345는 Android 빌드 산출물만 약 9GB다.
