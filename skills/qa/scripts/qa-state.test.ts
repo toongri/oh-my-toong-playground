@@ -507,6 +507,7 @@ describe("qa state: scenario authoring and risk coverage", () => {
 		authorScenario(S, scenarioOpts("s1", "H", [1]));
 		expect(() => declareRiskNotApplicable(S, 3, "  ")).toThrow(/reason is required/);
 		expect(() => declareRiskNotApplicable(S, 7, "no such axis")).toThrow(/axis must be one of/);
+		expect(() => declareRiskNotApplicable(S, 2, "liftBundlesToTop은 순수 정렬 함수다")).toThrow(/reason names the code identifier "liftBundlesToTop"/);
 		expect(() => declareRiskNotApplicable(S, 1, "claimed inapplicable")).toThrow(/already exercises axis 1/);
 		expect(rawState().risk_not_applicable ?? []).toEqual([]);
 	});

@@ -918,7 +918,7 @@ export function authorScenario(sessionId: string, opts: AuthorScenarioOpts): voi
 /** Declares, once per cycle, that no scenario of this change can exercise an adversarial axis. */
 export function declareRiskNotApplicable(sessionId: string, axis: number, reason: string): void {
 	if (!isRiskAxis(axis)) throw new Error(`axis must be one of ${RISK_AXES.join("|")}`);
-	const why = nonEmpty(reason, "reason");
+	const why = readerProse(reason, "reason");
 	withStateLock(resolveStatePath(sessionId), () => {
 		const prior = readPrior(sessionId);
 		const cycle = currentCycle(prior);

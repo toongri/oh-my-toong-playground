@@ -213,7 +213,10 @@ there is no separate actor-roster table).
   `fail`; `partial` requires at least one `pass` and one `fail` and no
   `blocked`; `unverified` requires at least one valid `blocked`. Missing/legacy/malformed/duplicate/stale/unknown/ineligible
   mappings fail closed to a visible neutral gap (`미판정`) rather than a green
-  verdict. Prose evidence explains a verdict but cannot establish it. Use
+  verdict. Prose evidence explains a verdict but cannot establish it, so it names
+  only what the referenced scenarios show. A test that proves part of the
+  criterion is a scenario recorded with `--evidence-surface test` and listed in
+  `scenarioRefs`. Use
   **unverified (`unverified`)** — never `yes`/`partial` — when the requirement could
   not be proven (a `blocked` scenario): it renders LOUDLY, so a PO reads it as
   *not done*, not as a mild partial. A green suite alone is never grounds for
