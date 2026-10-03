@@ -56,6 +56,9 @@ codex_flags=(--skip-git-repo-check -m gpt-6-luna -c model_reasoning_effort=max -
 
 if [ -n "$resume_answer" ]; then
 	session_id="$(cat "$run_dir/session-id")"
+	# codex exec resume has no -C; without this cd the run continues in the caller's directory,
+	# where the hooks resolve a different OMT project and read an empty qa state.
+	cd "$worktree"
 	printf '%s\n' "$resume_answer" |
 		codex exec resume "${codex_flags[@]}" -o "$run_dir/last-message.md" "$session_id" - >>"$run_dir/codex.jsonl"
 	exit 0

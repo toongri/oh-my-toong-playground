@@ -157,7 +157,7 @@ Record the roster in state before authoring scenarios. First capture the accepta
 
 **A step only a person can do is not an obstacle.** A pairing code shown on a physical dispenser, an OTP sent to a real phone, a consent tap on a production account: ask the user for it in plain text, run `await-user`, and end the turn. Never leave `reachable` at "waiting for input" and close the cycle, and never record the scenario `blocked` for it.
 
-**A limit you set yourself is not an obstacle either.** When a runbook makes you ask before you build, install or run, put into that one request every action the H scenarios need, and name the data each one writes: "open the pairing screen on STG, which issues one pairing nonce". A scenario blocked by a scope you proposed is a question you did not ask. Ask it with `await-user`.
+**A limit you set yourself is not an obstacle either.** When a runbook makes you ask before you build, install or run, put into that one request every action the H scenarios need, and name the data each one writes: "open the pairing screen on STG, which issues one pairing nonce". A scenario blocked by a scope you proposed is a question you did not ask. Ask it with `await-user`. The approval covers the actions and the data they write. A serial, port or file path that `acquire-device` or a tool picks is not part of it, so a different one needs no new approval.
 
 After each story exists, record the feature-map lookup as planning context (not execution-verified fact), before BASELINE begins:
 
