@@ -348,6 +348,7 @@ Every background resource this cycle starts is recorded, together with the comma
 
 - **Simulator or emulator**: get it only through `acquire-device` (stage3-handson.md, Modality Setup), and only when a claim needs a rendered mobile screen. The command creates a device owned by this session and records it. Release it as soon as its scenarios are recorded. A device that is already booted may belong to another concurrent session or to the user. Do not reuse it unless the user names it, and never record or stop it.
 - **Server or other process**: record it right after it starts. A tool that leaves its own daemon behind (`agent-react-devtools`, a Metro that a run script started) counts too: find that PID after the call and record it.
+- **Container stack**: a local stack this cycle brings up (`docker compose up`, or a project script that runs it) is a resource as well. Run `docker ps` before and after; record each compose project that is new, with `--kind container-stack --stop 'docker compose -p <project> down'`. A stack that was already running belongs to the user or another session: use it, but never record or stop it.
 
 ```
 bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts record-resource --id <pid> --kind server --stop 'kill <pid> 2>/dev/null; for _ in $(seq 50); do kill -0 <pid> 2>/dev/null || exit 0; sleep 0.2; done; exit 1'

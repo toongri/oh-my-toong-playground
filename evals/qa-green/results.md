@@ -376,7 +376,7 @@ REQUEST_CHANGES인 채로 `complete` 없이 끝났다.
 
 ### r3 — #4413 commerce (런타임 69612be6, fast)
 
-판정 **실패** (A6.3·A6.2, A6.4, B2.1·B2.2, B3.3). QA 판정은 REQUEST_CHANGES이고 35개 중 통과 23, 실패 12다. `complete`까지 갔다.
+판정 **실패** (A6.3·A6.2, A6.4, A5.7, B2.1·B2.2, B3.3). QA 판정은 REQUEST_CHANGES이고 35개 중 통과 23, 실패 12다. `complete`까지 갔다.
 
 - 가입 흐름은 잘 했다. 8개 프로필 전부에서 12개 가입 시나리오를 화면으로 몰고 layout claim을 남겼다. 보고서 감사 표는
   792/832, 375px에서 가로 스크롤이 없고, 개요는 제품 언어로 쓰였다.
@@ -391,3 +391,8 @@ REQUEST_CHANGES인 채로 `complete` 없이 끝났다.
   → 고친 것: 화면 실패는 스크린샷과 근거 검토가 완전하고 claim이 모두 `supported`일 때만 REQUEST_CHANGES 근거로 센다
   (`requestChangesOk`). SKILL.md red flag에 "원인을 못 가리면 스크롤 위치·고정 헤더 위치를 측정해 다시 찍는다"를 더했다.
   `review-evidence`가 claim·observation·source location의 코드 이름을 거부한다. 보고서 gap에서 내부 문서 안내를 지웠다.
+- **A5.7 실패.** 기록한 자원 19개는 모두 해제했지만, 직접 띄운 로컬 Docker 스택(compose 프로젝트 `local`의
+  postgres·redis·minio·dynamodb)은 기록하지 않았다. 실행이 끝나고 9시간 뒤에도 떠 있었고, 데이터는 워크트리 안에
+  bind mount돼 있었다. 채점자가 `docker compose -p local down`으로 정리했다.
+  → 고친 것: SKILL.md CLEANUP에 컨테이너 스택 항목을 더했다. 시작 전후 `docker ps`를 비교해 새 compose 프로젝트를
+  `container-stack`으로 기록하고, 이미 떠 있던 스택은 쓰기만 하고 멈추지 않는다.
