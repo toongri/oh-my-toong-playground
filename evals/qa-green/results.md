@@ -373,3 +373,21 @@ REQUEST_CHANGES인 채로 `complete` 없이 끝났다.
   - 보고서는 "실패 2건은 제품 결함 수가 아니다"라고 설명하면서 그 실패로 REQUEST_CHANGES를 냈다(A6.2).
   → 고친 것: SKILL.md red flag 세 줄. 릴리스 서명·번들 로딩은 로컬 설정 작업이다. 값이 없다는 실패는 클라이언트가 실제로
   읽는 경로에서 증명한다. `expected`는 PR·스펙·런북이 약속한 것으로만 쓴다.
+
+### r3 — #4413 commerce (런타임 69612be6, fast)
+
+판정 **실패** (A6.3·A6.2, A6.4, B2.1·B2.2, B3.3). QA 판정은 REQUEST_CHANGES이고 35개 중 통과 23, 실패 12다. `complete`까지 갔다.
+
+- 가입 흐름은 잘 했다. 8개 프로필 전부에서 12개 가입 시나리오를 화면으로 몰고 layout claim을 남겼다. 보고서 감사 표는
+  792/832, 375px에서 가로 스크롤이 없고, 개요는 제품 언어로 쓰였다.
+- **A6.3 실패.** 채팅 실패들의 근거 검토 claim이 `insufficient`로 남았다. QA 스스로 "원인이 페이지 스크롤인지 대화 영역
+  스크롤인지 구별되지 않는다"고 적었다. 원인을 가리지 못한 화면 실패로 REQUEST_CHANGES를 냈다(A6.2).
+  - `chat-thread-position`은 PR이 약속하지 않은 동작을 `expected`로 썼다.
+  - `auth-legacy-keyboard` 실패는 이 PR이 만든 회귀인지 확인하지 않았다.
+- **A6.4 실패.** `flaky_rerun`을 "fail"로 기록했는데 메모는 "재실행 안정성 미확인"이다. 실패가 아니라 미확인이다.
+- **B2.1·B2.2 실패.** AC 5개가 "미검증 — 근거 미검증 … presentation.md 참조"로 렌더됐다. 독자가 볼 수 없는 내부 문서를
+  가리킨다.
+- **B3.3 실패.** 근거 claim에 `rightEdgeHit`, `scrollWidth`, `visualViewport` 같은 코드 이름이 남았다.
+  → 고친 것: 화면 실패는 스크린샷과 근거 검토가 완전하고 claim이 모두 `supported`일 때만 REQUEST_CHANGES 근거로 센다
+  (`requestChangesOk`). SKILL.md red flag에 "원인을 못 가리면 스크롤 위치·고정 헤더 위치를 측정해 다시 찍는다"를 더했다.
+  `review-evidence`가 claim·observation·source location의 코드 이름을 거부한다. 보고서 gap에서 내부 문서 안내를 지웠다.

@@ -309,6 +309,15 @@ describe("qa chain core", () => {
 		state.scenarios[1] = reviewed({ ...state.scenarios[1], status: "fail" });
 		expect(requestChangesOk(state, probe)).toBe(true);
 	});
+	test("requestChangesOk는 근거 검토가 부족함으로 남은 화면 실패를 근거로 세지 않음", () => {
+		const state = authoredState();
+		const failed = reviewed({ ...state.scenarios[1], status: "fail" });
+		failed.evidence_review!.claims[0] = { ...failed.evidence_review!.claims[0], verdict: "insufficient", gap: "페이지 스크롤인지 대화 영역 스크롤인지 다시 측정" };
+		state.scenarios[1] = failed;
+		expect(requestChangesOk(state, probe)).toBe(false);
+		state.scenarios[1] = reviewed({ ...state.scenarios[1], status: "fail" });
+		expect(requestChangesOk(state, probe)).toBe(true);
+	});
 	test("requestChangesOk는 실패 뒤 실행을 멈춘 미기록 시나리오가 남아도 허용함", () => {
 		const state = authoredState();
 		state.stories[0].baseline = { result: "fail", cycle: 2 };

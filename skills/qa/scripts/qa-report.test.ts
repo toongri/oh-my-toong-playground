@@ -479,8 +479,7 @@ describe("qa-report renderer", () => {
 	test("gap 참조 문구를 하나의 non-breaking span으로 렌더한다", () => {
 		const html = renderQaReport(baseView({ scenarios: [scenario({ id: "sc-1", status: "fail" })] }), {}, fakeReader)!;
 
-		expect(html).toContain('<span class="gap-reference">presentation.md 참조</span>');
-		expect(html).toContain(".gap-reference { white-space: nowrap; }");
+		expect(html).not.toContain("presentation.md 참조");
 	});
 
 	test("감사 표의 story 식별자와 coverage/boundary 셀은 CJK 의미 단위 wrapping 계약을 갖고 가로 overflow를 유지한다", () => {

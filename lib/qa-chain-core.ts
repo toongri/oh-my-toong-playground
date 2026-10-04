@@ -530,13 +530,20 @@ export function recordComplete(state: QaChainState, probe: EvidenceProbe): boole
  * failure: a failed current-cycle scenario, baseline, stale-state, or
  * flaky-rerun check. Unexecuted work is not a failure; it is work left to do. A
  * dirty worktree is harness debris, not a product defect, so it does not count.
- * Scenarios left unrun after a stop-driving failure do not block it.
+ * Scenarios left unrun after a stop-driving failure do not block it. A failed
+ * screen scenario counts only once its screenshots and evidence review are
+ * complete: a failure the reviewer marked insufficient is not yet established.
  */
-export function requestChangesOk(state: QaChainState, _probe: EvidenceProbe): boolean {
+export function requestChangesOk(state: QaChainState, probe: EvidenceProbe): boolean {
 	if (!chainComplete(state)) return false;
 	const checks = state.run_checks ?? {};
+	const established = (scenario: QaScenario): boolean => {
+		const story = storyFor(state, scenario);
+		const driver = story ? actorFor(state, story)?.driver : undefined;
+		return !scenarioNeedsVisualProof(scenario, driver) || (visualEvidenceComplete(scenario.evidence, probe) && evidenceReviewComplete(scenario, probe));
+	};
 	return (
-		currentScenarios(state).some((scenario) => scenario.status === "fail") ||
+		currentScenarios(state).some((scenario) => scenario.status === "fail" && established(scenario)) ||
 		(state.stories ?? []).some((story) => result(story.baseline) === "fail") ||
 		[checks.stale_state, checks.flaky_rerun].some((check) => result(check) === "fail")
 	);

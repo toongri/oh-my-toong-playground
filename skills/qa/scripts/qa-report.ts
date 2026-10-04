@@ -306,7 +306,7 @@ function imageSlot(label: string, path: string | undefined, readEvidence: Eviden
 
 /** A visible marker for a required presentation slot the author left unwritten. */
 function gap(what: string): string {
-	return `<p class="gap">${escapeHtml(what)} — <span class="gap-reference">presentation.md 참조</span></p>`;
+	return `<p class="gap">${escapeHtml(what)}</p>`;
 }
 
 /** A block of author prose, escaped; or a gap marker when it is absent. */
@@ -1032,7 +1032,6 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .issue-LOW { color: var(--na); }
 .presentation { margin-bottom: 1rem; }
 .gap { color: var(--fail); background: var(--code-bg); border: 1px dashed var(--fail); border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.92rem; }
-.gap-reference { white-space: nowrap; }
 .audit-story { min-width: 6rem; }
 .audit-story code { white-space: normal; overflow-wrap: anywhere; }
 .audit-coverage { min-width: 8rem; word-break: keep-all; overflow-wrap: normal; }

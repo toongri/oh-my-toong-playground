@@ -1124,12 +1124,12 @@ export function reviewEvidence(sessionId: string, story: string, scenarioId: str
 		if (!Array.isArray(input) || input.length === 0) throw new Error("review-evidence requires a nonempty claim array");
 		const claims: QaEvidenceClaim[] = input.map((item) => {
 			if (!item || typeof item !== "object") throw new Error("invalid evidence claim");
-			const claim = nonEmpty(item.claim, "claim");
-			const observation = nonEmpty(item.observation, "observation");
+			const claim = readerProse(item.claim, "claim");
+			const observation = readerProse(item.observation, "observation");
 			if (item.verdict !== "supported" && item.verdict !== "insufficient") throw new Error("claim verdict must be supported or insufficient");
 			if (typeof item.gap !== "string" || (item.verdict === "supported" ? item.gap !== "" : !item.gap.trim())) throw new Error("supported claims require empty gap; insufficient claims require recapture instructions");
 			if (!Array.isArray(item.sources) || item.sources.length === 0) throw new Error("claim requires inspected sources");
-			const sources = item.sources.map((source: { path?: unknown; location?: unknown }) => ({ path: probePlainFile(nonEmpty(source?.path, "source path")), location: nonEmpty(source?.location, "source location") }));
+			const sources = item.sources.map((source: { path?: unknown; location?: unknown }) => ({ path: probePlainFile(nonEmpty(source?.path, "source path")), location: readerProse(source?.location, "source location") }));
 			if (item.kind === undefined) return { claim, observation, verdict: item.verdict, gap: item.gap, sources };
 			if (item.kind !== "layout") throw new Error('claim kind must be "layout" when given');
 			const checked: unknown[] = Array.isArray(item.checked) ? item.checked : [];
@@ -1219,7 +1219,7 @@ export function setVerdict(sessionId: string, verdict: string): void {
 			throw new Error("set-verdict: COMMENT refused — commentOk is false; every scenario must be recorded, and only a non-H fail may remain");
 		}
 		if (verdict === "REQUEST_CHANGES" && !cycleUntouched(prior) && !requestChangesOk(prior, stateProbe)) {
-			throw new Error("set-verdict: REQUEST_CHANGES refused — it requires a recorded failure (a failed scenario, baseline, or run check). Unexecuted scenarios are your remaining work, not a product defect: execute them, or record-scenario --status blocked with the attempts that failed");
+			throw new Error("set-verdict: REQUEST_CHANGES refused — it requires a recorded failure (a failed scenario, baseline, or run check); a failed screen scenario counts once its screenshots and evidence review are complete, with every claim supported. Unexecuted scenarios are your remaining work, not a product defect: execute them, or record-scenario --status blocked with the attempts that failed");
 		}
 		mergeWriteUnlocked(sessionId, { verdict });
 	});
