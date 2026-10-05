@@ -62,12 +62,14 @@ what the capture shows for each. The CLI refuses the review without it:
 A broken layout is still a `supported` claim of what the capture shows; the
 scenario itself is recorded `fail`.
 
-A `fail` scenario also needs one cause claim. It shows the failure is the change's
-product defect. `product-path` cites the product's own log line or code location that
+A `fail` scenario that grounds REQUEST_CHANGES needs one cause claim. It shows the
+failure is the change's product defect. `product-path` cites the product's own log line or code location that
 took the wrong path, not setup such as signing, keys or debug mode. `base-commit`
 cites the base commit run that behaves differently, or the diff hunk that touches the
-code that breaks. The CLI refuses a failed scenario's review without it, and
-REQUEST_CHANGES counts the failure only once this claim is `supported`:
+code that breaks. REQUEST_CHANGES counts the failure only once this claim is
+`supported`. A failure whose cause you could not show may be reviewed without it, or
+with a cause claim marked `insufficient` and the gap named. It then stays an open
+finding under COMMENT, and the report says the cause is unproven:
 
 ```json
 {

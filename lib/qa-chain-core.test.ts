@@ -353,13 +353,17 @@ describe("qa chain core", () => {
 		state.scenarios[0].blocked!.attempts = [];
 		expect(recordComplete(state, probe)).toBe(false);
 	});
-	test("commentOk allows M/L failures but not H failures", () => {
+	test("commentOk는 M/L 실패와 원인 미증명 H 실패를 허용하고 원인이 증명된 H 실패는 거부함", () => {
 		const state = authoredState();
 		state.scenarios[1] = reviewed({ ...state.scenarios[1], status: "fail" });
 		expect(commentOk(state, probe)).toBe(true);
 		expect(approveOk(state, probe)).toBe(false);
 		state.scenarios[0] = reviewed({ ...state.scenarios[0], status: "fail" });
+		expect(commentOk(state, probe)).toBe(true);
+		expect(requestChangesOk(state, probe)).toBe(false);
+		state.scenarios[0] = failedWithCause(state.scenarios[0]);
 		expect(commentOk(state, probe)).toBe(false);
+		expect(requestChangesOk(state, probe)).toBe(true);
 	});
 
 	test("recordComplete false-case: missing run check, missing and empty evidence, surface mismatch", () => {

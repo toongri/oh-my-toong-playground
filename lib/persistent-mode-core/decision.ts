@@ -312,7 +312,7 @@ function buildQaContinuationMessage(
 				: verdict === "COMMENT"
 					? {
 						deliverable: "scenario records that support COMMENT",
-						problem: "commentOk=false — a scenario is unresolved or an H-priority scenario failed",
+						problem: "commentOk=false — a scenario is unresolved or an H-priority failure has an established cause",
 						guideline: "SKILL.md (Approval Decision — verdicts follow recorded outcomes)",
 						produce: "record every remaining scenario; an H-priority fail supports REQUEST_CHANGES, not COMMENT",
 						submit: "qa-state.ts record-scenario, then qa-state.ts set-verdict matching the recorded outcomes",

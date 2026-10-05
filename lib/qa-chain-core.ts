@@ -535,6 +535,15 @@ export function recordComplete(state: QaChainState, probe: EvidenceProbe): boole
 	);
 }
 
+function failureEstablished(state: QaChainState, scenario: QaScenario, probe: EvidenceProbe): boolean {
+	if (scenario.status !== "fail") return false;
+	const story = storyFor(state, scenario);
+	const driver = story ? actorFor(state, story)?.driver : undefined;
+	if (scenarioNeedsVisualProof(scenario, driver) && !visualEvidenceComplete(scenario.evidence, probe)) return false;
+	const cause = scenario.evidence_review?.claims?.some((claim) => claim?.kind === "cause" && CAUSE_CHECKS.every((check) => claim.checked?.includes(check)));
+	return !!cause && evidenceReviewComplete(scenario, probe);
+}
+
 /**
  * REQUEST_CHANGES asks for a product change, so it needs a recorded product
  * failure: a failed current-cycle scenario, baseline, stale-state, or
@@ -548,15 +557,8 @@ export function recordComplete(state: QaChainState, probe: EvidenceProbe): boole
 export function requestChangesOk(state: QaChainState, probe: EvidenceProbe): boolean {
 	if (!chainComplete(state)) return false;
 	const checks = state.run_checks ?? {};
-	const established = (scenario: QaScenario): boolean => {
-		const story = storyFor(state, scenario);
-		const driver = story ? actorFor(state, story)?.driver : undefined;
-		if (scenarioNeedsVisualProof(scenario, driver) && !visualEvidenceComplete(scenario.evidence, probe)) return false;
-		const cause = scenario.evidence_review?.claims?.some((claim) => claim?.kind === "cause" && CAUSE_CHECKS.every((check) => claim.checked?.includes(check)));
-		return !!cause && evidenceReviewComplete(scenario, probe);
-	};
 	return (
-		currentScenarios(state).some((scenario) => scenario.status === "fail" && established(scenario)) ||
+		currentScenarios(state).some((scenario) => failureEstablished(state, scenario, probe)) ||
 		(state.stories ?? []).some((story) => result(story.baseline) === "fail") ||
 		[checks.stale_state, checks.flaky_rerun].some((check) => result(check) === "fail")
 	);
@@ -581,8 +583,14 @@ export function approveOk(state: QaChainState, probe: EvidenceProbe): boolean {
 }
 
 /** Soft pass: a failed non-H scenario (the 50-74 nitpick band) permits COMMENT. */
+/**
+ * COMMENT leaves the merge to a person. An H failure whose product cause is
+ * established asks for REQUEST_CHANGES instead; an H failure whose cause is
+ * still unproven may stay as an open finding under COMMENT.
+ */
 export function commentOk(state: QaChainState, probe: EvidenceProbe): boolean {
-	return verdictGround(state, probe) && currentScenarios(state).every((scenario) => scenario.status !== "fail" || scenario.priority !== "H");
+	return verdictGround(state, probe) &&
+		currentScenarios(state).every((scenario) => scenario.priority !== "H" || !failureEstablished(state, scenario, probe));
 }
 
 export function cycleUntouched(state: Partial<QaChainState>): boolean {
