@@ -28,8 +28,9 @@ to the assertion. Existing capture guidance above still governs sufficiency.
 `review-evidence --story <id> --scenario <id> --json-file <file>` accepts
 a nonempty JSON array. Each row requires `claim`, `verdict` (`supported` or
 `insufficient`), `observation`, `gap`, and nonempty `sources` with `path` and
-`location` (visible region or timestamp/log line). `gap` is empty for supported
-claims; otherwise it names the missing proof and next capture. For example:
+`location` (visible region in Korean, or timestamp/log line; the CLI refuses a
+label with neither, such as an English heading copied from your notes). `gap` is
+empty for supported claims; otherwise it names the missing proof and next capture. For example:
 
 ```json
 [
@@ -247,7 +248,8 @@ there is no separate actor-roster table).
   An English infrastructure word ("scheduler", "worker", "parity", "stale") or a
   key name ("daily-billing") passes it but is still code to a PO: write what the
   actor sees in Korean ("정기 결제 예약", "대조 결과") and keep the technical name
-  in `driven-at`. A test that proves part of the
+  in `driven-at`. The same holds for a translated API structure ("응답 맵", "조회
+  결과의 필드"): name what appears on the screen ("카테고리 이름"). A test that proves part of the
   criterion is a scenario recorded with `--evidence-surface test` and listed in
   `scenarioRefs`. Use
   **unverified (`unverified`)** — never `yes`/`partial` — when the requirement could

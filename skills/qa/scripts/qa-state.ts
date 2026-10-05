@@ -152,6 +152,13 @@ function readerProse(value: unknown, field: string): string {
 	return text;
 }
 
+/** A short reader-facing label (a claim's source location) is shown as is: a region in the report language, or a line/timestamp. */
+function readerLabel(value: unknown, field: string): string {
+	const text = readerProse(value, field);
+	if (!/[가-힣0-9]/.test(text)) throw new Error(`${field} "${text}" has no Korean; name the part of the screen or file the reader would look at ("보유분 표의 영양제 열") or its line/timestamp, not a heading copied from your notes`);
+	return text;
+}
+
 function currentCycle(state: Partial<ChainState>): number {
 	return typeof state.cycle === "number" && Number.isInteger(state.cycle) ? state.cycle : 0;
 }
@@ -1130,7 +1137,7 @@ export function reviewEvidence(sessionId: string, story: string, scenarioId: str
 			if (item.verdict !== "supported" && item.verdict !== "insufficient") throw new Error("claim verdict must be supported or insufficient");
 			if (typeof item.gap !== "string" || (item.verdict === "supported" ? item.gap !== "" : !item.gap.trim())) throw new Error("supported claims require empty gap; insufficient claims require recapture instructions");
 			if (!Array.isArray(item.sources) || item.sources.length === 0) throw new Error("claim requires inspected sources");
-			const sources = item.sources.map((source: { path?: unknown; location?: unknown }) => ({ path: probePlainFile(nonEmpty(source?.path, "source path")), location: readerProse(source?.location, "source location") }));
+			const sources = item.sources.map((source: { path?: unknown; location?: unknown }) => ({ path: probePlainFile(nonEmpty(source?.path, "source path")), location: readerLabel(source?.location, "source location") }));
 			if (item.kind === undefined) return { claim, observation, verdict: item.verdict, gap: item.gap, sources };
 			if (item.kind !== "layout" && item.kind !== "cause") throw new Error('claim kind must be "layout" or "cause" when given');
 			const required = item.kind === "layout" ? LAYOUT_CHECKS : CAUSE_CHECKS;

@@ -483,6 +483,7 @@ describe("qa state: render actor device profiles", () => {
 		expect(() => reviewEvidence(S, "story-1", "s1", [{ ...content, claim: "rightEdgeHit 값이 버튼이다" }, layout])).toThrow(/claim names the code identifier "rightEdgeHit"/);
 		expect(() => reviewEvidence(S, "story-1", "s1", [{ ...content, observation: "scrollWidth가 375" }, layout])).toThrow(/observation names the code identifier "scrollWidth"/);
 		expect(() => reviewEvidence(S, "story-1", "s1", [{ ...content, sources: [{ path: after, location: "visualViewport 하단" }] }, layout])).toThrow(/source location names the code identifier "visualViewport"/);
+		expect(() => reviewEvidence(S, "story-1", "s1", [{ ...content, sources: [{ path: after, location: "Layout inspection" }] }, layout])).toThrow(/source location "Layout inspection" has no Korean/);
 		reviewEvidence(S, "story-1", "s1", [content, layout]);
 		expect(rawState().scenarios[0].evidence_review.claims[1]).toMatchObject({ kind: "layout", checked: ["clipping", "overlap", "horizontal-scroll", "text-wrap"] });
 	});
