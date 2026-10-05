@@ -322,6 +322,10 @@ Everything else blocks. A finding scoring **75+** blocks whatever the row's prio
 
 CHECK failure hands off to a three-way-separated loop so the agent that fixes the defect is never the one that certifies the fix:
 
+**Enter the loop only for code the caller owns and asked you to fix** — a working branch handed to QA with that request. When the target is a pull request under review or its merge commit, do not fix: the failure stands, the verdict is REQUEST_CHANGES, and the worktree stays at the target commit. A fix committed there would make the verdict describe code nobody submitted.
+
+**A defect the change did not cause is not the change's failure.** Before you record a `fail`, check the same screen or call on the base commit (the PR's first parent). If the base shows it too and the diff does not touch the code that breaks, it is pre-existing: record the scenario on what the change promised, and name the pre-existing defect in the observation and in the report's findings. It never drives REQUEST_CHANGES or a fix.
+
 #### DIAGNOSIS
 
 delegate to `oracle` (fresh, read-only, root cause + file:line). oracle never modifies files; it returns a diagnosis, not a patch.
