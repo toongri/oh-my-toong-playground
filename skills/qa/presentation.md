@@ -244,7 +244,9 @@ there is no separate actor-roster table).
   it checks ("보유분 표 화면 테스트"), never by its file name. The final render
   refuses a code name in the overview, AC evidence, actor and story prose, and card
   observations; `author-scenario` refuses one in a scenario title or expected
-  result, because the card shows both. The check catches only identifier shapes.
+  result, because the card shows both. The check catches only identifier shapes;
+  after rendering, `qa-report.ts` lists every English word left in reader prose
+  so you can replace the rest.
   An English infrastructure word ("scheduler", "worker", "parity", "stale") or a
   key name ("daily-billing") passes it but is still code to a PO: write what the
   actor sees in Korean ("정기 결제 예약", "대조 결과") and keep the technical name

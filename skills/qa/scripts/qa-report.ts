@@ -842,6 +842,31 @@ function renderEvidenceFiles(view: QaView): string {
 }
 
 /**
+ * English words in the reader-facing prose, for the author and the presentation
+ * reviewer to check. Device and product names are fine; a CSS property, setting
+ * value or code word ("overflow", "fixed", "fetch") is not. Advisory only: the
+ * identifier shapes are already refused.
+ */
+export function readerEnglishWords(view: QaView, narrative: QaReportNarrative): string[] {
+	const p = narrative.presentation;
+	const texts = [
+		p?.overview,
+		...Object.values(p?.requirementMapping ?? {}).map((entry) => entry.evidence),
+		...Object.values(p?.affectedUsers ?? {}),
+		...Object.values(p?.scenarioFlows ?? {}),
+		...Object.values(narrative.scenarios ?? {}).map((entry) => entry.observed),
+		...(view.scenarios ?? []).flatMap((scenario) => [
+			scenario.title,
+			scenario.expected,
+			...(scenario.evidence_review?.claims ?? []).flatMap((claim) => [claim.claim, claim.observation]),
+		]),
+	];
+	const words = new Set<string>();
+	for (const text of texts) for (const word of text?.match(/[A-Za-z][A-Za-z-]*[A-Za-z]/g) ?? []) words.add(word);
+	return [...words].sort();
+}
+
+/**
  * Renders the full report, or `null` when the cycle never reached a roster
  * (PRE-FLIGHT fail-fast) — a no-op, not an empty document.
  */
@@ -1095,6 +1120,8 @@ function main(): void {
 	if (!view.report_source_snapshot) throw new Error("qa-report: missing source snapshot");
 	recordRenderedReport(session, out, view.report_source_snapshot);
 	process.stdout.write(`${out}\n`);
+	const english = readerEnglishWords(view, narrative);
+	if (english.length > 0) process.stdout.write(`English words in reader prose (keep device and product names; replace any code or setting word a PO would not know): ${english.join(", ")}\n`);
 }
 
 if (import.meta.main) {

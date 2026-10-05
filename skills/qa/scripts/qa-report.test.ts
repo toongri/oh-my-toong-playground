@@ -8,6 +8,7 @@ import { evidenceReviewSnapshot, type QaScenario } from "@lib/qa-chain-core";
 
 import {
 	renderQaReport,
+	readerEnglishWords,
 	defaultEvidenceReader,
 	scenarioKey,
 	MAX_EMBED_BYTES,
@@ -1110,6 +1111,15 @@ describe("qa-report presentation layer", () => {
 			expect(() => renderQaReport(baseView(), { presentation: { overview } }, fakeReader, fakeMermaid, undefined, true)).toThrow(/기능 개요/);
 		}
 		expect(() => renderQaReport(baseView(), { presentation: { overview: "운영자는 매일 새벽 자동 대조 작업에 기대지 않고 필요할 때 직접 실행한다." } }, fakeReader, fakeMermaid, undefined, true)).not.toThrow(/기능 개요/);
+	});
+
+	test("독자용 문장의 영어 단어를 중복 없이 정렬해 알려준다", () => {
+		const view = baseView();
+		const narrative = { presentation: { overview: "iPhone SE에서 overflow가 hidden으로 바뀐다." }, scenarios: { "s/x": { observed: "iPhone 화면에서 interactive-widget 값이 fixed다." } } };
+		const words = readerEnglishWords(view, narrative);
+		for (const word of ["SE", "fixed", "hidden", "iPhone", "interactive-widget", "overflow"]) expect(words).toContain(word);
+		expect(words.filter((word) => word === "iPhone")).toHaveLength(1);
+		expect([...words].sort()).toEqual(words);
 	});
 
 	test("최종 보고서의 독자용 문장에 코드 이름을 쓰면 렌더를 거부한다", () => {

@@ -393,6 +393,7 @@ Once the cycle concludes (any EXIT outcome — Goal Met, max_cycles, or Safety),
 - **presentation**: the rendered report HTML (its top presentation layer) and the `--narrative` JSON you authored.
 - **sources**: the recorded evidence (screenshots, observations, run checks from qa-state) and the referenced plan/spec/ticket/docs the acceptance criteria came from.
 - **reader_persona**: "a context-free PO/designer who does not read code — judges from the report alone whether the change met its requirements, in product/user terms".
+- **reader terms**: the English words `qa-report.ts` printed after rendering. Before dispatch, replace each code or setting word a PO would not know ("overflow", "fixed", "fetch", "claim") with what the screen shows; device and product names stay. Pass the remaining list so the reviewer checks it.
 
 Its verdict is `APPROVE` / `REQUEST_CHANGES` / `COMMENT` / `INCONCLUSIVE`. Only `APPROVE` or `COMMENT` may proceed to `complete`; on `REQUEST_CHANGES`, fix the narrative/report, re-render, re-`review-report`, and re-review before `complete`. `INCONCLUSIVE` or a missing/malformed verdict blocks handoff and completion and requires fixing the presentation or re-supplying the review inputs. This is a required review step, not an added CLI gate; run it every time. It never overrides a recorded pass/fail fact — those come from qa-state, and a fidelity finding against them means the narrative misread the record, not that the record changes.
 
