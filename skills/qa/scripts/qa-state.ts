@@ -55,6 +55,7 @@ import {
 	visualEvidenceComplete,
 	CLIENT_IMPACTS,
 	RISK_AXES,
+	CAUSE_CHECKS,
 	LAYOUT_CHECKS,
 	isRiskAxis,
 	TEST_EVIDENCE_SURFACE,
@@ -1131,12 +1132,16 @@ export function reviewEvidence(sessionId: string, story: string, scenarioId: str
 			if (!Array.isArray(item.sources) || item.sources.length === 0) throw new Error("claim requires inspected sources");
 			const sources = item.sources.map((source: { path?: unknown; location?: unknown }) => ({ path: probePlainFile(nonEmpty(source?.path, "source path")), location: readerProse(source?.location, "source location") }));
 			if (item.kind === undefined) return { claim, observation, verdict: item.verdict, gap: item.gap, sources };
-			if (item.kind !== "layout") throw new Error('claim kind must be "layout" when given');
+			if (item.kind !== "layout" && item.kind !== "cause") throw new Error('claim kind must be "layout" or "cause" when given');
+			const required = item.kind === "layout" ? LAYOUT_CHECKS : CAUSE_CHECKS;
 			const checked: unknown[] = Array.isArray(item.checked) ? item.checked : [];
-			const missing = LAYOUT_CHECKS.filter((check) => !checked.includes(check));
-			if (missing.length) throw new Error(`layout claim must record checked: ${missing.join(", ")}`);
-			return { claim, observation, verdict: item.verdict, gap: item.gap, sources, kind: "layout" as const, checked: [...LAYOUT_CHECKS] };
+			const missing = required.filter((check) => !checked.includes(check));
+			if (missing.length) throw new Error(`${item.kind} claim must record checked: ${missing.join(", ")}`);
+			return { claim, observation, verdict: item.verdict, gap: item.gap, sources, kind: item.kind, checked: [...required] };
 		});
+		if (scenario.status === "fail" && !claims.some((claim) => claim.kind === "cause")) {
+			throw new Error(`a failed scenario needs a cause claim: {"kind":"cause","checked":${JSON.stringify(CAUSE_CHECKS)}, …} citing the product's own log line or code location that took the wrong path (not setup such as signing, keys or debug mode), and the base commit run or diff hunk that shows the change caused it. If you cannot show both, the cause is not established: fix the setup and re-drive, or record the scenario blocked with those attempts`);
+		}
 		if (scenario.profile && !claims.some((claim) => claim.kind === "layout")) {
 			throw new Error(`profile scenario needs a layout claim for "${scenario.profile}": {"kind":"layout","checked":${JSON.stringify(LAYOUT_CHECKS)}, …} observing that nothing is clipped or overlapping, the page does not scroll sideways, and text wraps without breaking`);
 		}
@@ -1219,7 +1224,7 @@ export function setVerdict(sessionId: string, verdict: string): void {
 			throw new Error("set-verdict: COMMENT refused — commentOk is false; every scenario must be recorded, and only a non-H fail may remain");
 		}
 		if (verdict === "REQUEST_CHANGES" && !cycleUntouched(prior) && !requestChangesOk(prior, stateProbe)) {
-			throw new Error("set-verdict: REQUEST_CHANGES refused — it requires a recorded failure (a failed scenario, baseline, or run check); a failed screen scenario counts once its screenshots and evidence review are complete, with every claim supported. Unexecuted scenarios are your remaining work, not a product defect: execute them, or record-scenario --status blocked with the attempts that failed");
+			throw new Error("set-verdict: REQUEST_CHANGES refused — it requires a recorded failure (a failed scenario, baseline, or run check); a failed scenario counts once its evidence review is complete with a supported cause claim (and, on a screen, its screenshots). Unexecuted scenarios are your remaining work, not a product defect: execute them, or record-scenario --status blocked with the attempts that failed");
 		}
 		mergeWriteUnlocked(sessionId, { verdict });
 	});

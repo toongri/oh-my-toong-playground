@@ -565,7 +565,7 @@ A risk that nothing on the changed surface can carry is not a scenario state: it
 | Condition | Verdict |
 |-----------|---------|
 | PRE-FLIGHT contract violation | **REQUEST_CHANGES** (MUST-NOT-DO / B⊆A violated, cycle not executed) |
-| A recorded product failure: a failed scenario, baseline, stale-state, or flaky-rerun check (unresolved after the loop, or a stop-driving failure) | **REQUEST_CHANGES** — name the failure and its evidence |
+| A recorded product failure: a failed scenario whose review carries a supported cause claim ([presentation.md](presentation.md#claim-review-record)), baseline, stale-state, or flaky-rerun check (unresolved after the loop, or a stop-driving failure) | **REQUEST_CHANGES** — name the failure and its evidence |
 | CHECK soft-passes: every scenario recorded; the only failures are self-authored `M`/`L` rows in the 50–74 nitpick band | **COMMENT** (never APPROVE — the failed row stays FAIL in the roster) |
 | Every scenario `pass`, or `blocked` at M/L priority; baseline and run checks green | **APPROVE** (or **COMMENT** to surface LOW notes). Each `blocked` scenario is named in the report banner and in your final message |
 | An H scenario `blocked`, no failure | **COMMENT**: its requirement is unproven, so the CLI refuses APPROVE |
@@ -590,7 +590,7 @@ INPUT:      read the plan/issue/spec/PR yourself; write ACs as user-observable o
 ACTOR:      Actor Roster before scenarios — actor · boundary (verification surface) · driver · client impact (none|contract|render + reason) · profiles · reachable. One actor per client that reads what changed; "screen unchanged" means contract, never an inward boundary. Human-only step (pairing code, OTP) → await-user. Substitute only an unreachable hop and record driven-at; otherwise record blocked (obstacle + attempts + deepest reachable + attempt log), never PASS
 PROFILES:   render actors are proven on every device profile they run on; profiles come from qa-device-profiles.ts get; unconfigured → show the defaults and ask once; "don't know" → set --defaults; prune/fix/add with remove / upsert; never guess sizes. Each profile: before/after screenshots, readable and unbroken
 SCENARIOS:  user scenarios under stories (author-scenario): what the actor does and sees; ≥1 H per story; risks 1..6 are tags; each risk covered by a scenario or declare-risk-na once per cycle. States: pass/fail · blocked · unrecorded (open work). author-cell, record-cell, waive, na, not_applicable are retired
-VERDICT:    REQUEST_CHANGES needs a recorded product failure; APPROVE needs every scenario pass/blocked; any unrecorded scenario with no failure = no verdict yet
+VERDICT:    REQUEST_CHANGES needs a recorded product failure (a failed scenario counts once a supported cause claim shows product path + base commit); APPROVE needs every scenario pass/blocked; any unrecorded scenario with no failure = no verdict yet
 BOOTSTRAP:  set up only what the chosen surface needs — isolated local instance, documented QA accounts/seeders first, cross-platform preconditions via API/seed/DB. When the QA REQUEST verifies the deployment itself, its failure is the FAIL
 EVIDENCE:   the observation at the surface (before/action/after for screens) or a cited test run; claim only what it proves; launch screens prove nothing; depths never merge
 BASELINE:   build/test/lint green. See stage1-commands.md

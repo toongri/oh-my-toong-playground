@@ -50,6 +50,12 @@ function reviewed(scenario: QaScenario): QaScenario {
 	};
 }
 
+function failedWithCause(scenario: QaScenario): QaScenario {
+	const failed = reviewed({ ...scenario, status: "fail" });
+	failed.evidence_review!.claims.push({ kind: "cause", checked: ["product-path", "base-commit"], claim: "목록 정렬 코드가 담은 순서를 버린다", verdict: "supported", observation: "앱 로그의 정렬 결과가 담은 순서와 다르고, base 커밋에서는 순서가 유지된다", gap: "", sources: [{ path: scenario.evidence!.after!, location: "목록 첫 행" }] });
+	return failed;
+}
+
 function scenario(id: string, profile: string, priority: "H" | "M" | "L", risks: number[]): QaScenario {
 	return reviewed({
 		story: "s1",
@@ -306,17 +312,26 @@ describe("qa chain core", () => {
 		const state = authoredState();
 		state.run_checks.dirty_worktree = { result: "fail", cycle: 2 };
 		expect(requestChangesOk(state, probe)).toBe(false);
-		state.scenarios[1] = reviewed({ ...state.scenarios[1], status: "fail" });
+		state.scenarios[1] = failedWithCause(state.scenarios[1]);
 		expect(requestChangesOk(state, probe)).toBe(true);
 	});
 	test("requestChangesOk는 근거 검토가 부족함으로 남은 화면 실패를 근거로 세지 않음", () => {
 		const state = authoredState();
-		const failed = reviewed({ ...state.scenarios[1], status: "fail" });
+		const failed = failedWithCause(state.scenarios[1]);
 		failed.evidence_review!.claims[0] = { ...failed.evidence_review!.claims[0], verdict: "insufficient", gap: "페이지 스크롤인지 대화 영역 스크롤인지 다시 측정" };
 		state.scenarios[1] = failed;
 		expect(requestChangesOk(state, probe)).toBe(false);
-		state.scenarios[1] = reviewed({ ...state.scenarios[1], status: "fail" });
+		state.scenarios[1] = failedWithCause(state.scenarios[1]);
 		expect(requestChangesOk(state, probe)).toBe(true);
+	});
+	test("requestChangesOk는 원인 claim이 없거나 점검이 빠진 실패를 근거로 세지 않음", () => {
+		const state = authoredState();
+		state.scenarios[1] = reviewed({ ...state.scenarios[1], status: "fail" });
+		expect(requestChangesOk(state, probe)).toBe(false);
+		const partial = failedWithCause(state.scenarios[1]);
+		partial.evidence_review!.claims[1] = { ...partial.evidence_review!.claims[1], checked: ["product-path"] };
+		state.scenarios[1] = partial;
+		expect(requestChangesOk(state, probe)).toBe(false);
 	});
 	test("requestChangesOk는 실패 뒤 실행을 멈춘 미기록 시나리오가 남아도 허용함", () => {
 		const state = authoredState();

@@ -221,13 +221,23 @@ export interface QaEvidenceClaim {
 	observation: string;
 	gap: string;
 	sources: Array<{ path: string; location: string }>;
-	/** "layout" marks the claim that a profile screen was checked for the LAYOUT_CHECKS breakages. */
-	kind?: "layout";
+	/**
+	 * "layout" marks the claim that a profile screen was checked for the LAYOUT_CHECKS breakages.
+	 * "cause" marks the claim that a failure is the change's product defect, checked for CAUSE_CHECKS.
+	 */
+	kind?: "layout" | "cause";
 	checked?: string[];
 }
 
 /** What a person-usable screen must be free of on each device profile. */
 export const LAYOUT_CHECKS = ["clipping", "overlap", "horizontal-scroll", "text-wrap"] as const;
+
+/**
+ * What a failure must show before it counts as the change's defect: the product's own
+ * log or code took the wrong path (not setup such as signing, keys or debug mode), and
+ * the base commit behaves differently or the diff touches the code that breaks.
+ */
+export const CAUSE_CHECKS = ["product-path", "base-commit"] as const;
 
 export interface QaEvidenceReview {
 	claims: QaEvidenceClaim[];
@@ -531,8 +541,9 @@ export function recordComplete(state: QaChainState, probe: EvidenceProbe): boole
  * flaky-rerun check. Unexecuted work is not a failure; it is work left to do. A
  * dirty worktree is harness debris, not a product defect, so it does not count.
  * Scenarios left unrun after a stop-driving failure do not block it. A failed
- * screen scenario counts only once its screenshots and evidence review are
- * complete: a failure the reviewer marked insufficient is not yet established.
+ * scenario counts only once its evidence review is complete with a supported
+ * "cause" claim (and, on a screen, its screenshots): a failure whose cause is
+ * unproven or that the reviewer marked insufficient is not yet established.
  */
 export function requestChangesOk(state: QaChainState, probe: EvidenceProbe): boolean {
 	if (!chainComplete(state)) return false;
@@ -540,7 +551,9 @@ export function requestChangesOk(state: QaChainState, probe: EvidenceProbe): boo
 	const established = (scenario: QaScenario): boolean => {
 		const story = storyFor(state, scenario);
 		const driver = story ? actorFor(state, story)?.driver : undefined;
-		return !scenarioNeedsVisualProof(scenario, driver) || (visualEvidenceComplete(scenario.evidence, probe) && evidenceReviewComplete(scenario, probe));
+		if (scenarioNeedsVisualProof(scenario, driver) && !visualEvidenceComplete(scenario.evidence, probe)) return false;
+		const cause = scenario.evidence_review?.claims?.some((claim) => claim?.kind === "cause" && CAUSE_CHECKS.every((check) => claim.checked?.includes(check)));
+		return !!cause && evidenceReviewComplete(scenario, probe);
 	};
 	return (
 		currentScenarios(state).some((scenario) => scenario.status === "fail" && established(scenario)) ||

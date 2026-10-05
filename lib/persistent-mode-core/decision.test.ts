@@ -2900,6 +2900,20 @@ describe("QA Stop-gate decision table", () => {
 		};
 	}
 
+	/** A failure established the way requestChangesOk counts it: evidence plus a supported cause claim. */
+	function establishedFailure(story: string, id: string, risks: number[]): Record<string, any> {
+		const failed = { ...scenario(story, id, risks, "fail"), evidence: { path: evidencePath, surface: "bash" } };
+		const sources = [{ path: evidencePath, location: "failing assertion" }];
+		return {
+			...failed,
+			evidence_review: {
+				claims: [{ kind: "cause", checked: ["product-path", "base-commit"], claim: "the boundary drops the input", verdict: "supported", observation: "the product log shows the dropped input; the base commit keeps it", gap: "", sources }],
+				cell_snapshot: evidenceReviewSnapshot(failed as never),
+				files: { [evidencePath]: createHash("sha256").update(fs.readFileSync(evidencePath)).digest("hex") },
+			},
+		};
+	}
+
 	function completeQa(verdict: "APPROVE" | "COMMENT" | "REQUEST_CHANGES" = "APPROVE"): Record<string, any> {
 		return {
 			active: true,
@@ -2994,7 +3008,7 @@ describe("QA Stop-gate decision table", () => {
 
 	it("qa inactive completed REQUEST_CHANGES with a recorded failure allows stop", () => {
 		const state = completeQa("REQUEST_CHANGES");
-		state.scenarios[1] = scenario("story-1", "bad-input", [2, 3], "fail");
+		state.scenarios[1] = establishedFailure("story-1", "bad-input", [2, 3]);
 		state.active = false;
 		writeQaState(state);
 		expect(makeDecision(context())).toEqual({ continue: true });
@@ -3030,7 +3044,7 @@ describe("QA Stop-gate decision table", () => {
 
 	it("qa request-changes allow: recordComplete plus a recorded failure", () => {
 		const state = completeQa("REQUEST_CHANGES");
-		state.scenarios[1] = scenario("story-1", "bad-input", [2, 3], "fail");
+		state.scenarios[1] = establishedFailure("story-1", "bad-input", [2, 3]);
 		writeQaState(state);
 		expect(makeDecision(context())).toEqual({ continue: true });
 	});

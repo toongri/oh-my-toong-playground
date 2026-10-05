@@ -62,6 +62,28 @@ what the capture shows for each. The CLI refuses the review without it:
 A broken layout is still a `supported` claim of what the capture shows; the
 scenario itself is recorded `fail`.
 
+A `fail` scenario also needs one cause claim. It shows the failure is the change's
+product defect. `product-path` cites the product's own log line or code location that
+took the wrong path, not setup such as signing, keys or debug mode. `base-commit`
+cites the base commit run that behaves differently, or the diff hunk that touches the
+code that breaks. The CLI refuses a failed scenario's review without it, and
+REQUEST_CHANGES counts the failure only once this claim is `supported`:
+
+```json
+{
+  "kind": "cause",
+  "checked": ["product-path", "base-commit"],
+  "claim": "앱이 새 연결 링크를 기기 연결 화면으로 보내지 않는다",
+  "verdict": "supported",
+  "observation": "앱 로그에 딥링크 해소 결과가 '찾을 수 없음'으로 남는다. 같은 단계를 base 커밋 빌드에서 돌리면 기기 연결 화면이 열린다",
+  "gap": "",
+  "sources": [{ "path": "evidence/installed-link-logcat.txt", "location": "딥링크 해소 결과 줄" }]
+}
+```
+
+When you cannot show both, the cause is not established. Fix the setup and drive the
+scenario again, or record it `blocked` with those attempts.
+
 The CLI persists the review and hashes the scenario's evidence plus every cited
 source. Re-recording the scenario, changing its scenario fields, actor assignment,
 actor boundary/driver, or evidence bytes invalidates the receipt. Review the new evidence and resubmit. These checks

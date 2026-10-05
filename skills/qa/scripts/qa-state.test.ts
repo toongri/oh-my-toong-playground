@@ -842,10 +842,21 @@ describe("qa-state CLI wiring", () => {
 	test("set-verdict follows recorded outcomes: a fail scenario refuses APPROVE and permits REQUEST_CHANGES", () => {
 		authorCompleteChain();
 		recordAllPass();
-		run("record-scenario --story story-1 --scenario s1 --status fail");
+		run(`record-scenario --story story-1 --scenario s1 --status fail ${PASS_EVIDENCE}`);
 		const before = readFileSync(resolveStatePath(S), "utf8");
 		expect(() => run("set-verdict APPROVE")).toThrow();
 		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+		expect(() => run("set-verdict REQUEST_CHANGES")).toThrow(/supported cause claim/);
+		const source = { path: "skills/qa/scripts/qa-state.test.ts", location: "실패한 단언 줄" };
+		const content = { claim: "오늘 영양제 목록이 비어 있다", verdict: "supported", observation: "응답의 목록이 비어 있다", gap: "", sources: [source] };
+		const reviewFile = join(tmpDir, "fail-review.json");
+		writeFileSync(reviewFile, JSON.stringify([content]));
+		expect(() => run(`review-evidence --story story-1 --scenario s1 --json-file ${reviewFile}`)).toThrow(/failed scenario needs a cause claim/);
+		const cause = { kind: "cause", checked: ["product-path", "base-commit"], claim: "목록 조회가 오늘 날짜를 빼고 거른다", verdict: "supported", observation: "서버 로그의 조회 조건에 오늘 날짜가 없고, base 커밋에서는 목록이 채워진다", gap: "", sources: [source] };
+		writeFileSync(reviewFile, JSON.stringify([content, { ...cause, checked: ["product-path"] }]));
+		expect(() => run(`review-evidence --story story-1 --scenario s1 --json-file ${reviewFile}`)).toThrow(/cause claim must record checked: base-commit/);
+		writeFileSync(reviewFile, JSON.stringify([content, cause]));
+		run(`review-evidence --story story-1 --scenario s1 --json-file ${reviewFile}`);
 		run("set-verdict REQUEST_CHANGES");
 		expect(rawState().verdict).toBe("REQUEST_CHANGES");
 	});
