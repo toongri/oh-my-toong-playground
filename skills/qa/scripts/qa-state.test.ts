@@ -511,6 +511,8 @@ describe("qa state: scenario authoring and risk coverage", () => {
 		expect(() => declareRiskNotApplicable(S, 3, "  ")).toThrow(/reason is required/);
 		expect(() => declareRiskNotApplicable(S, 7, "no such axis")).toThrow(/axis must be one of/);
 		expect(() => declareRiskNotApplicable(S, 2, "liftBundlesToTop은 순수 정렬 함수다")).toThrow(/reason names the code identifier "liftBundlesToTop"/);
+		expect(() => authorScenario(S, { ...scenarioOpts("s2", "M", []), title: "운영자가 deep_link_value를 연다" })).toThrow(/title names the code identifier "deep_link_value"/);
+		expect(() => authorScenario(S, { ...scenarioOpts("s2", "M", []), expected: "displayName이 보인다" })).toThrow(/expected names the code identifier "displayName"/);
 		expect(() => declareRiskNotApplicable(S, 1, "claimed inapplicable")).toThrow(/already exercises axis 1/);
 		expect(rawState().risk_not_applicable ?? []).toEqual([]);
 	});

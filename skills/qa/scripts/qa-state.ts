@@ -899,10 +899,10 @@ export function authorScenario(sessionId: string, opts: AuthorScenarioOpts): voi
 		const next: QaScenario = {
 			story,
 			id,
-			title: nonEmpty(opts.title, "title"),
+			title: readerProse(opts.title, "title"),
 			preconditions: nonEmpty(opts.preconditions, "preconditions"),
 			steps,
-			expected: nonEmpty(opts.expected, "expected"),
+			expected: readerProse(opts.expected, "expected"),
 			why_needed: nonEmpty(opts.whyNeeded, "why-needed"),
 			priority,
 			risks,

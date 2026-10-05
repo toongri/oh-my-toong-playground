@@ -184,7 +184,8 @@ there is no separate actor-roster table).
   the change ships behind a flag or a staged rollout. The QA result has its own
   places: the summary line (verdict and counts), the banner (blocked scenarios)
   and the AC board (each requirement). The final render refuses an overview that
-  carries a verdict, "검증 불가", "미검증" or a confidence score.
+  carries a verdict, "QA", "검증 불가", "미검증" or a confidence score. What this
+  cycle did not check goes in the AC board and the unverified list, not here.
 - **Affected users (`affectedUsers`, keyed by actor id)** — the roster and the
   affected-users narrative are the **same actors** (same ids), merged into ONE
   block per actor: **there is no separate actor-roster table.** For each recorded
@@ -241,7 +242,12 @@ there is no separate actor-roster table).
   only what the referenced scenarios show, in reader words: a test is named by what
   it checks ("보유분 표 화면 테스트"), never by its file name. The final render
   refuses a code name in the overview, AC evidence, actor and story prose, and card
-  observations. A test that proves part of the
+  observations; `author-scenario` refuses one in a scenario title or expected
+  result, because the card shows both. The check catches only identifier shapes.
+  An English infrastructure word ("scheduler", "worker", "parity", "stale") or a
+  key name ("daily-billing") passes it but is still code to a PO: write what the
+  actor sees in Korean ("정기 결제 예약", "대조 결과") and keep the technical name
+  in `driven-at`. A test that proves part of the
   criterion is a scenario recorded with `--evidence-surface test` and listed in
   `scenarioRefs`. Use
   **unverified (`unverified`)** — never `yes`/`partial` — when the requirement could

@@ -1106,7 +1106,7 @@ describe("qa-report presentation layer", () => {
 	});
 
 	test("최종 보고서의 기능 개요에 QA 결과를 쓰면 렌더를 거부한다", () => {
-		for (const overview of ["판정은 의견과 함께 승인(COMMENT)입니다. 예약을 지웠다.", "운영 로그는 검증 불가였다.", "신뢰도 70/100 LOW 의견이 있다."]) {
+		for (const overview of ["판정은 의견과 함께 승인(COMMENT)입니다. 예약을 지웠다.", "운영 로그는 검증 불가였다.", "신뢰도 70/100 LOW 의견이 있다.", "이번 QA는 예약 제거만 확인했다."]) {
 			expect(() => renderQaReport(baseView(), { presentation: { overview } }, fakeReader, fakeMermaid, undefined, true)).toThrow(/기능 개요/);
 		}
 		expect(() => renderQaReport(baseView(), { presentation: { overview: "운영자는 매일 새벽 자동 대조 작업에 기대지 않고 필요할 때 직접 실행한다." } }, fakeReader, fakeMermaid, undefined, true)).not.toThrow(/기능 개요/);
