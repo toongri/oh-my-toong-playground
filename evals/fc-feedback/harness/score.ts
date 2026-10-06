@@ -63,19 +63,19 @@ import { fileURLToPath } from "node:url";
 // ── shared JSON helpers (no `as`, no `any`: narrow `unknown` by hand) ───────
 
 /** Shallow-copies an unknown value into a plain string-keyed record, or null if it isn't one. */
-function asRecord(node: unknown): Record<string, unknown> | null {
+export function asRecord(node: unknown): Record<string, unknown> | null {
 	if (node === null || typeof node !== "object" || Array.isArray(node)) return null;
 	const record: Record<string, unknown> = {};
 	Object.assign(record, node);
 	return record;
 }
 
-function stringArray(value: unknown): string[] {
+export function stringArray(value: unknown): string[] {
 	if (!Array.isArray(value)) return [];
 	return value.filter((item): item is string => typeof item === "string");
 }
 
-function readJsonFile(path: string): unknown {
+export function readJsonFile(path: string): unknown {
 	if (!existsSync(path)) return undefined;
 	try {
 		return JSON.parse(readFileSync(path, "utf8"));
