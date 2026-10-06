@@ -773,6 +773,25 @@ describe("qa-state CLI wiring", () => {
 		expect(rawState().verdict).toBe("APPROVE");
 	});
 
+	test("flaky-rerun은 막힌 근거와 함께 blocked로 기록하면 COMMENT만 허용하고, 다른 run check는 blocked를 거부한다", () => {
+		authorCompleteChain();
+		run(`record-baseline --story story-1 --result pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface test`);
+		for (const [id] of SCENARIOS) {
+			run(`record-scenario --story story-1 --scenario ${id} --status pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface test`);
+		}
+		run("record-run-check --check stale-state --result pass");
+		run("record-run-check --check dirty-worktree --result pass");
+		const logPath = join(tmpDir, "rerun-attempts.txt");
+		writeFileSync(logPath, "emulator-5592 not found\n");
+		expect(() => run("record-run-check --check flaky-rerun --result blocked")).toThrow(/attempts|obstacle/);
+		expect(() => run(`record-run-check --check stale-state --result blocked --obstacle o --attempts '["a"]' --deepest-reachable d --attempt-log ${logPath}`)).toThrow(/flaky-rerun/);
+		run(`record-run-check --check flaky-rerun --result blocked --obstacle "에뮬레이터 부팅 멈춤" --attempts '["런처 재실행 → ADB 기기 없음"]' --deepest-reachable "QEMU 기동" --attempt-log ${logPath}`);
+		expect(rawState().run_checks.flaky_rerun.blocked.obstacle).toBe("에뮬레이터 부팅 멈춤");
+		expect(() => run("set-verdict APPROVE")).toThrow(/APPROVE refused/);
+		run("set-verdict COMMENT");
+		expect(rawState().verdict).toBe("COMMENT");
+	});
+
 	test("agent-device actor still requires before/after screenshots when evidence-surface is its own driver", () => {
 		authorCompleteChain();
 		run('add-actor --id actor-1 --driver agent-device --reachable yes');

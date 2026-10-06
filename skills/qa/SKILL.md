@@ -558,6 +558,7 @@ A risk that nothing on the changed surface can carry is not a scenario state: it
 | CHECK soft-passes: every scenario recorded; the only failures are self-authored `M`/`L` rows in the 50–74 nitpick band | **COMMENT** (never APPROVE — the failed row stays FAIL in the roster) |
 | Every scenario `pass`; baseline and run checks green | **APPROVE** (or **COMMENT** to surface LOW notes) |
 | Any scenario `blocked`, no failure | **COMMENT**: its requirement is unproven, so the CLI refuses APPROVE. Each `blocked` scenario is named in the report banner and in your final message |
+| flaky-rerun `blocked` (the environment kept the rerun from running), no failure | **COMMENT**: stability is unproven, so the CLI refuses APPROVE. The report banner and your final message name the obstacle |
 | An H scenario `fail` whose product cause you could not show (your setup or an external service may explain it) | **COMMENT**: report the failure as an open finding and say its cause is unproven. Fix the setup and re-drive first when you can |
 | Any scenario unrecorded and no recorded failure | **No verdict.** Execute the remaining scenarios, cheapest proof first. A request to hurry or wrap up means execute faster, not stop. Only when the user explicitly says to stop verifying or to defer the rest: say which scenarios remain and why, show `force-complete`, run `await-user`, and end the turn |
 

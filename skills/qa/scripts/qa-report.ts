@@ -206,7 +206,7 @@ export function mmdcRenderSvg(source: string, index: number): string {
 
 type RecordedCheck = QaBaseline | QaRunCheck | QaResult | null | undefined;
 
-function recordedResult(value: RecordedCheck): QaResult | null {
+function recordedResult(value: RecordedCheck): QaResult | "blocked" | null {
 	if (typeof value === "string") return value;
 	return value?.result ?? value?.status ?? null;
 }
@@ -795,8 +795,15 @@ function renderFailures(view: QaView, narrative: QaReportNarrative): string {
 // so the reader sees blocked scenarios before any finding.
 function renderBlockedBanner(view: QaView): string {
 	const blocked = (view.scenarios ?? []).filter((scenario) => scenario.cycle === currentCycle(view) && scenario.status === "blocked");
-	if (!blocked.length) return "";
-	return `<p class="gap waive-banner">검증 불가 시나리오 ${blocked.length}건 — 변경 밖의 한계로 실행하지 못했습니다. 판정은 이 시나리오들을 검증하지 않은 채 내려졌습니다: ${blocked.map((scenario) => escapeHtml(scenario.title ?? scenario.id)).join(" · ")}</p>`;
+	const rerun = view.run_checks?.flaky_rerun;
+	const rerunBlocked = typeof rerun === "object" && rerun !== null && rerun.result === "blocked" && rerun.cycle === currentCycle(view) ? rerun.blocked : undefined;
+	const scenarioBanner = blocked.length
+		? `<p class="gap waive-banner">검증 불가 시나리오 ${blocked.length}건 — 변경 밖의 한계로 실행하지 못했습니다. 판정은 이 시나리오들을 검증하지 않은 채 내려졌습니다: ${blocked.map((scenario) => escapeHtml(scenario.title ?? scenario.id)).join(" · ")}</p>`
+		: "";
+	const rerunBanner = rerunBlocked
+		? `<p class="gap waive-banner">반복 검사 검증 불가 — ${escapeHtml(rerunBlocked.obstacle)}. 같은 시나리오를 다시 돌려 결과가 같은지는 확인하지 못했습니다.</p>`
+		: "";
+	return scenarioBanner + rerunBanner;
 }
 
 const VERDICT_LABEL: Record<string, string> = { APPROVE: "승인 (APPROVE)", COMMENT: "의견과 함께 승인 (COMMENT)", REQUEST_CHANGES: "수정 요청 (REQUEST_CHANGES)" };

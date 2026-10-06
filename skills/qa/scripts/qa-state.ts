@@ -76,6 +76,7 @@ import {
 	type QaDriver,
 	type QaPhase,
 	type QaRunCheckHistory,
+	type QaRunCheck,
 	type QaRunChecks,
 	type QaStory,
 	type QaStoryContract,
@@ -990,7 +991,7 @@ export interface RecordScenarioOpts extends ScenarioFieldOpts, EvidenceSlotOpts 
 	caseRun?: string;
 }
 
-function blockedRecord(opts: RecordScenarioOpts): QaBlocked {
+function blockedRecord(opts: Pick<RecordScenarioOpts, "obstacle" | "attempts" | "deepestReachable" | "attemptLog">): QaBlocked {
 	let attempts: unknown;
 	try {
 		attempts = JSON.parse(nonEmpty(opts.attempts, "attempts"));
@@ -1235,12 +1236,19 @@ export interface RecordRunCheckOpts {
 	check: string;
 	result: string;
 	note?: string;
+	obstacle?: string;
+	attempts?: string;
+	deepestReachable?: string;
+	attemptLog?: string;
 }
 
 export function recordRunCheck(sessionId: string, opts: RecordRunCheckOpts): void {
 	if (!isOneOf(opts.check, CHECKS)) throw new Error(`check must be one of ${CHECKS.join("|")}`);
-	if (!isOneOf(opts.result, BINARY_RESULTS)) throw new Error("result must be pass or fail");
+	const blocked = opts.result === "blocked";
+	if (blocked && opts.check !== "flaky-rerun") throw new Error("only flaky-rerun can be blocked: the environment kept the rerun from running");
+	if (!blocked && !isOneOf(opts.result, BINARY_RESULTS)) throw new Error("result must be pass, fail, or blocked (flaky-rerun only)");
 	if (opts.result === "fail" && !opts.note?.trim()) throw new Error("fail result requires note");
+	const blockedFields = blocked ? { blocked: blockedRecord(opts) } : {};
 	const prior = readPrior(sessionId);
 	const cycle = currentCycle(prior);
 	const key = opts.check;
@@ -1256,7 +1264,8 @@ export function recordRunCheck(sessionId: string, opts: RecordRunCheckOpts): voi
 	if (old && typeof old !== "string" && old.cycle !== cycle) {
 		history[key] = [...(history[key] ?? []), old];
 	}
-	existingChecks[field] = { result: opts.result, ...(opts.note !== undefined ? { note: opts.note } : {}), cycle };
+	const checkResult: QaRunCheck["result"] = blocked ? "blocked" : opts.result === "pass" ? "pass" : "fail";
+	existingChecks[field] = { result: checkResult, ...(opts.note !== undefined ? { note: opts.note } : {}), cycle, ...blockedFields };
 	mergeWrite(sessionId, { run_checks: existingChecks, ...(Object.keys(history).length ? { run_checks_history: history } : {}) });
 }
 
@@ -1268,7 +1277,7 @@ export function setVerdict(sessionId: string, verdict: string): void {
 		ensureSeed("qa", sessionId);
 		const prior = readPrior(sessionId);
 		if (verdict === "APPROVE" && !approveOk(prior, stateProbe)) {
-			throw new Error("set-verdict: APPROVE refused — approveOk is false; APPROVE needs every scenario pass. Execute and record every remaining scenario; a blocked scenario leaves its requirement unproven, so the verdict is COMMENT at most");
+			throw new Error("set-verdict: APPROVE refused — approveOk is false; APPROVE needs every scenario pass and a passing flaky-rerun. Execute and record every remaining scenario; a blocked scenario or blocked rerun leaves it unproven, so the verdict is COMMENT at most");
 		}
 		if (verdict === "COMMENT" && !commentOk(prior, stateProbe)) {
 			throw new Error("set-verdict: COMMENT refused — commentOk is false; every scenario must be recorded, and an H fail with a supported cause claim asks for REQUEST_CHANGES");
@@ -1714,6 +1723,10 @@ function main(): void {
 					check: requiredArg(args, "check"),
 					result: requiredArg(args, "result"),
 					note: str(args["note"]),
+					obstacle: str(args["obstacle"]),
+					attempts: str(args["attempts"]),
+					deepestReachable: str(args["deepest-reachable"]),
+					attemptLog: str(args["attempt-log"]),
 				});
 			} else if (subcommand === "set-verdict") {
 				const verdict = process.argv.slice(3).find((arg) => !arg.startsWith("--"));

@@ -285,10 +285,12 @@ export function caseRunBindingComplete(cell: QaScenario, probe: EvidenceProbe): 
 }
 
 export interface QaRunCheck {
-	result?: QaResult;
+	/** "blocked" is accepted only for flaky-rerun: the environment kept the rerun from running. */
+	result?: QaResult | "blocked";
 	status?: QaResult;
 	note?: string;
 	cycle?: number;
+	blocked?: QaBlocked;
 }
 
 export interface QaRunChecks {
@@ -425,7 +427,7 @@ export function scenariosMissingCase(state: QaChainState): QaScenario[] {
 	});
 }
 
-function result(value: QaRunCheck | QaResult | null | undefined): QaResult | null {
+function result(value: QaRunCheck | QaResult | null | undefined): QaResult | "blocked" | null {
 	if (typeof value === "string") return value;
 	if (!value) return null;
 	return value.result ?? value.status ?? null;
@@ -590,16 +592,23 @@ function verdictGround(state: QaChainState, probe: EvidenceProbe): boolean {
 		chainComplete(state) &&
 		recordComplete(state, probe) &&
 		result(checks.stale_state) === "pass" &&
-		result(checks.flaky_rerun) === "pass" &&
+		(result(checks.flaky_rerun) === "pass" || flakyRerunBlocked(checks, probe)) &&
 		(state.stories ?? []).every((story) => result(story.baseline) === "pass")
 	);
+}
+
+// A rerun the environment kept from running leaves stability unproven, like a blocked scenario.
+function flakyRerunBlocked(checks: QaRunChecks, probe: EvidenceProbe): boolean {
+	const check = checks.flaky_rerun;
+	return typeof check === "object" && check !== null && check.result === "blocked" && blockedRecordValid(check.blocked, probe);
 }
 
 // Priority orders execution; it never decides whether an unexecuted scenario may
 // pass the verdict gate. A `blocked` scenario resolves, and the report names it.
 export function approveOk(state: QaChainState, probe: EvidenceProbe): boolean {
 	// A blocked scenario leaves its requirement unproven: COMMENT at most, never APPROVE.
-	return verdictGround(state, probe) && currentScenarios(state).every((scenario) => scenario.status === "pass");
+	return verdictGround(state, probe) && result(state.run_checks?.flaky_rerun) === "pass" &&
+		currentScenarios(state).every((scenario) => scenario.status === "pass");
 }
 
 /** Soft pass: a failed non-H scenario (the 50-74 nitpick band) permits COMMENT. */

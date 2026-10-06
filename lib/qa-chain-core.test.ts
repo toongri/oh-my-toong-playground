@@ -373,6 +373,16 @@ describe("qa chain core", () => {
 		state.scenarios[0].blocked!.attempts = [];
 		expect(recordComplete(state, probe)).toBe(false);
 	});
+	test("반복 검사를 환경 때문에 못 돌리면 blocked로 기록하고 COMMENT만 허용함", () => {
+		const state = authoredState();
+		state.run_checks.flaky_rerun = { result: "blocked", cycle: 2, blocked: { obstacle: "에뮬레이터가 오류 보고 창에서 부팅을 멈춤", attempts: ["런처 재실행 → ADB 기기 없음"], deepest_reachable: "QEMU 프로세스 기동", attempt_log: "/missing" } };
+		expect(commentOk(state, probe)).toBe(false);
+		state.run_checks.flaky_rerun.blocked!.attempt_log = "/attempts.log";
+		expect(recordComplete(state, probe)).toBe(true);
+		expect(commentOk(state, probe)).toBe(true);
+		expect(approveOk(state, probe)).toBe(false);
+		expect(requestChangesOk(state, probe)).toBe(false);
+	});
 	test("M/L 시나리오가 blocked여도 APPROVE는 거부하고 COMMENT는 허용함", () => {
 		const state = authoredState();
 		const { evidence: _evidence, evidence_review: _review, ...rest } = state.scenarios[1];

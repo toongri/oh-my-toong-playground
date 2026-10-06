@@ -536,6 +536,14 @@ describe("qa-report renderer", () => {
 		expect(html.indexOf("검증 불가 시나리오 1건")).toBeLessThan(html.indexOf("<h2>기능 개요"));
 	});
 
+	test("막힌 반복 검사는 상단 배너에 막힌 이유와 함께 나온다", () => {
+		const view = baseView();
+		view.run_checks = { ...view.run_checks, flaky_rerun: { result: "blocked", cycle: view.cycle, blocked: { obstacle: "에뮬레이터가 부팅하지 못함", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } } };
+		const html = renderQaReport(view, {}, fakeReader)!;
+		expect(html).toContain("반복 검사 검증 불가 — 에뮬레이터가 부팅하지 못함");
+		expect(html.indexOf("반복 검사 검증 불가")).toBeLessThan(html.indexOf("<h2>판정"));
+	});
+
 	test("검증 불가 배너는 현재 사이클의 blocked 시나리오가 있을 때만, 개수와 제목과 함께 나온다", () => {
 		const blocked = (id: string, cycle: number) => scenario({ id, title: `막힌 ${id}`, status: "blocked", cycle, blocked: { obstacle: "o", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } });
 		const two = renderQaReport(baseView({ scenarios: [blocked("sc-a", 0), blocked("sc-b", 0), blocked("sc-old", 1)] }), {}, fakeReader)!;
