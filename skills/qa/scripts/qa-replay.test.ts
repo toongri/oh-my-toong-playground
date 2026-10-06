@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { QaCaseRunReceipt } from "@lib/qa-case-run.ts";
 import { configureQaCaseStore, disableQaCaseStore, saveQaCase, type QaCaseRecord } from "@lib/qa-case-store.ts";
+import { recordResource } from "@lib/session-resources.ts";
 import { replayFromCli } from "./qa-replay.ts";
 import { resolveStatePath, addActor, addStory, authorScenario, readQaState, recordScenario, setAcceptance, setQaState } from "./qa-state.ts";
 
@@ -134,6 +135,30 @@ describe("qa replay CLI", () => {
 		expect((receipt as { qa_result: string }).qa_result).toBe("not-recorded");
 		expect((receipt as { actor_id: string }).actor_id).toBe("actor");
 		expect((receipt as { actor_boundary: string }).actor_boundary).toBe("terminal");
+	});
+
+	test("이 세션이 확보하지 않은 기기로는 케이스를 재생하지 않는다", async () => {
+		const rawRoot = mkdtempSync(join(tmpdir(), "qa-replay-device-")); roots.push(rawRoot);
+		const root = realpathSync(rawRoot);
+		const store = join(root, "store");
+		process.env.OMT_DIR = join(root, "omt"); process.env.OMT_SESSION_ID = "device-session";
+		mkdirSync(process.env.OMT_DIR, { recursive: true });
+		const home = join(root, "home");
+		mkdirSync(home, { recursive: true });
+		const configured = configureQaCaseStore(store, { cwd: root, home, allowProjectStorage: true });
+		manifestDirs.push(join(configured.manifestPath, ".."));
+		readyChain("device-session");
+		setQaState("device-session", { phase: "BASELINE" });
+		const marker = join(root, "ran.txt");
+		const record: QaCaseRecord = { id: "device-case", title: "CLI", goal: "run", given: ["case exists"], when: ["run"], then: ["observed"], feature_refs: ["checkout"], surface: "bash", runner: [process.execPath, "-e", `require('fs').writeFileSync(${JSON.stringify(marker)}, process.argv[1])`, "{device}"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset" };
+		saveCase(root, record, home);
+		const args = ["--case", "device-case", "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset", "--device", "emulator-5554"];
+		await expect(replayFromCli(args, { home })).rejects.toThrow(/not a device this session holds/);
+		expect(() => readFileSync(marker, "utf8")).toThrow();
+		recordResource("device-session", { id: "emulator-5554", kind: "emulator", stop: "true" });
+		const receipt = await replayFromCli(args, { home });
+		expect((receipt as { qa_result: string }).qa_result).toBe("not-recorded");
+		expect(readFileSync(marker, "utf8")).toBe("emulator-5554");
 	});
 
 	test("CLI의 --timeout-ms가 timedout receipt를 기록한다", () => {

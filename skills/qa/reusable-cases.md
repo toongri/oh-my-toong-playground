@@ -176,7 +176,7 @@ example `agent-device replay <shared>.ad --keep-session && agent-device replay
    surface, exact runner, working directory, native files, reset instructions,
    and feature refs. A later cycle gets another device and may run in another
    worktree, so the runner names them by token: `{device}` (filled from
-   `qa-replay.ts --device`) and `{project}` (the `--project` directory). An
+   `qa-replay.ts --device`, which must be a device this session acquired with `acquire-device`) and `{project}` (the `--project` directory). An
    `agent-device` case runs in `{project}`, because the device session belongs
    to that workspace:
    `"runner": ["agent-device", "replay", "<store>/cases/<id>.ad", "--platform", "android", "--serial", "{device}", "--session", "qa-{device}"]`,

@@ -62,6 +62,11 @@ function writeAll(path: string, resources: SessionResource[]): void {
 	renameSync(tmp, path);
 }
 
+/** True when `resources` holds an unreleased simulator or emulator with this id (a device acquire-device gave this session). */
+export function heldDevice(resources: SessionResource[], id: string): boolean {
+	return resources.some((r) => r.id === id && (r.kind === "simulator" || r.kind === "emulator") && !r.released_at);
+}
+
 /**
  * Records a resource this run started. Re-recording an id replaces the entry
  * and marks it unreleased again (the resource was restarted).
@@ -73,7 +78,7 @@ export function recordResource(sessionId: string, input: { id: string; kind: str
 	const path = resolveResourcesPath(sessionId);
 	withStateLock(path, () => {
 		const all = readAll(path);
-		if (input.device !== undefined && !all.some((r) => r.id === input.device && (r.kind === "simulator" || r.kind === "emulator") && !r.released_at)) {
+		if (input.device !== undefined && !heldDevice(all, input.device)) {
 			throw new Error(`record-resource: refused — --device "${input.device}" is not a device this session holds; acquire it with acquire-device first`);
 		}
 		const next = all.filter((r) => r.id !== input.id);

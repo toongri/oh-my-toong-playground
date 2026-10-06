@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { BASELINE_INDEX, chainComplete, type QaScenario, type QaStory } from "@lib/qa-chain-core.ts";
 import { getQaCase, getQaCaseStoreStatus, resolveQaCaseContext, type QaCaseRecord, type QaCaseStoreOptions } from "@lib/qa-case-store.ts";
 import { runQaCase } from "@lib/qa-case-run.ts";
+import { heldDevice, unreleasedResources } from "@lib/session-resources.ts";
 import { resolveSessionIdOrThrow } from "@lib/state-core";
 import { readQaState, registerQaCaseRunReceipt } from "./qa-state.ts";
 
@@ -44,7 +45,7 @@ function help(): string {
 		"Runner start failures retain bounded logs and a failed receipt with start_error.",
 		"Native runners are not sandboxed; review intended output paths and flags/config before execution.",
 		"Relative native_files references resolve from --project; absolute references are accepted when present.",
-		"Runner tokens: {artifacts} is this run's directory, {project} is --project, {device} is --device (the device acquire-device gave this cycle).",
+		"Runner tokens: {artifacts} is this run's directory, {project} is --project, {device} is --device (the device acquire-device gave this session; any other serial is refused).",
 	].join("\n") + "\n";
 }
 function fail(message: string): never { throw new Error(`qa-replay: ${message}`); }
@@ -96,6 +97,8 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 	const storyFeatures = (story.provenance?.features ?? []).map((feature) => feature.id);
 	if (!storyFeatures.length) fail(`story "${storyId}" has no recorded provenance; record its feature with record-story-provenance (a case binds to a story through its features)`);
 	if (!record.feature_refs.some((id) => storyFeatures.includes(id))) fail(`case feature_refs [${record.feature_refs.join(", ")}] share no feature with story "${storyId}" provenance [${storyFeatures.join(", ")}]`);
+	const device = typeof parsed.device === "string" ? parsed.device : undefined;
+	if (device !== undefined && !heldDevice(unreleasedResources(sessionId), device)) fail(`--device "${device}" is not a device this session holds; use the serial acquire-device returned this session`);
 	const result = await runQaCase(record, {
 		casePath: caseResult.path,
 		caseRevision: caseResult.revision,
@@ -113,7 +116,7 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 		maxBuffer,
 		actorBoundary: actor.boundary,
 		allowProjectCwd: parsed["allow-project-cwd"] === true,
-		device: typeof parsed.device === "string" ? parsed.device : undefined,
+		device,
 	});
 	registerQaCaseRunReceipt(sessionId, result.receipt.artifact_paths.receipt, result.receipt.attempt_id, result.receiptSha256);
 	process.stdout.write(`${JSON.stringify(result.receipt)}\n`);
