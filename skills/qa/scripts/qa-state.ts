@@ -637,10 +637,15 @@ export function addActor(sessionId: string, opts: AddActorOpts): void {
 	if (!isOneOf(clientImpact, CLIENT_IMPACTS)) throw new Error(`client-impact must be one of ${CLIENT_IMPACTS.join("|")}: none (no client renders this actor's result), contract (a client renders it but its rendering code did not change), render (the client's rendering changed)`);
 	const reason = readerProse(clientImpactReason, "client-impact-reason");
 	let deviceProfiles = prior.device_profiles ?? [];
+	const redefinedProfileIds = new Set<string>();
 	if (clientImpact === "render") {
 		if (driver !== "agent-browser" && driver !== "agent-device") throw new Error("client-impact render needs a screen driver (agent-browser|agent-device): the proof is the rendered screen");
 		if (!profileIds.length) throw new Error("client-impact render requires --profiles: the device profiles this screen must stay usable on");
 		const resolved = resolveProfiles(profileIds, opts);
+		for (const next of resolved) {
+			const previous = deviceProfiles.find((profile) => profile.id === next.id);
+			if (previous && JSON.stringify(previous) !== JSON.stringify(next)) redefinedProfileIds.add(next.id);
+		}
 		deviceProfiles = [...deviceProfiles.filter((profile) => !resolved.some((next) => next.id === profile.id)), ...resolved];
 	} else if (profileIds.length) {
 		throw new Error(`--profiles applies only to client-impact render; a ${clientImpact} actor has no rendered screen under test`);
@@ -651,10 +656,15 @@ export function addActor(sessionId: string, opts: AddActorOpts): void {
 	const changedSurface = existing && (existing.boundary !== boundary || existing.driver !== driver || existing.client_impact !== clientImpact || JSON.stringify(existing.profiles ?? []) !== JSON.stringify(actor.profiles ?? []));
 	const cycle = currentCycle(prior);
 	const affectedStories = new Set((prior.stories ?? []).filter((story) => (story.actor ?? story.actor_id) === id).map((story) => story.id));
-	const scenarios = changedSurface
-		? (prior.scenarios ?? []).map((scenario) => (affectedStories.has(scenario.story) && scenario.cycle === cycle ? clearScenarioRecord(scenario) : scenario))
-		: prior.scenarios;
-	mergeWrite(sessionId, { actors, device_profiles: deviceProfiles, ...(changedSurface ? { scenarios } : {}) });
+	// A profile id keeps its name when its definition changes; profiles are shared by id, so every actor's scenarios on it lose their record.
+	const clearsRecords = changedSurface || redefinedProfileIds.size > 0;
+	const scenarios = (prior.scenarios ?? []).map((scenario) => {
+		if (scenario.cycle !== cycle) return scenario;
+		const onChangedSurface = changedSurface && affectedStories.has(scenario.story);
+		const onRedefinedProfile = scenario.profile !== undefined && redefinedProfileIds.has(scenario.profile);
+		return onChangedSurface || onRedefinedProfile ? clearScenarioRecord(scenario) : scenario;
+	});
+	mergeWrite(sessionId, { actors, device_profiles: deviceProfiles, ...(clearsRecords ? { scenarios } : {}) });
 }
 
 export interface AddStoryOpts {

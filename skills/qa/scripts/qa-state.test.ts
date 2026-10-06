@@ -461,6 +461,40 @@ describe("qa state: render actor device profiles", () => {
 		expect(() => recordScenario(S, { story: "story-1", scenario: "s1", status: "pass", evidencePath: log, evidenceSurface: "test", evidenceBefore: before, evidenceAction: log, evidenceAfter: after })).toThrow(/device profile "phone-small" is proven on the screen/);
 	});
 
+	test("같은 id의 기기 프로필 정의가 바뀌면 그 프로필 시나리오 기록을 지운다", () => {
+		const { cwd, home } = profileFixture([PHONE]);
+		setQaState(S, { phase: "PLAN" });
+		setAcceptance(S, ["home shows today supplements"]);
+		const opts = { ...renderActor, profiles: ["phone-small"], project: cwd, home };
+		addActor(S, opts);
+		addStory(S, { id: "story-1", actor: "actor-1", contract: CONTRACT });
+		authorScenario(S, scenarioOpts("s1", "H", [1, 2, 3, 4, 5, 6], "phone-small"));
+		const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6dAAAAABJRU5ErkJggg==", "base64");
+		const before = join(tmpDir, "before.png");
+		const after = join(tmpDir, "after.png");
+		const action = join(tmpDir, "action.txt");
+		writeFileSync(before, png);
+		writeFileSync(after, png);
+		writeFileSync(action, "tapped the today tab");
+		recordScenario(S, { story: "story-1", scenario: "s1", status: "pass", evidencePath: after, evidenceSurface: "agent-browser", evidenceBefore: before, evidenceAction: action, evidenceAfter: after });
+		expect(rawState().scenarios[0].status).toBe("pass");
+
+		// same definition: the record stays
+		addActor(S, opts);
+		expect(rawState().scenarios[0].status).toBe("pass");
+		expect(rawState().scenarios[0].evidence).toBeDefined();
+
+		// same id, new definition: the record is cleared and the new size is stored
+		saveDeviceProfiles([{ ...PHONE, platform: "android", width: 1920, height: 1080 }], { cwd, home });
+		addActor(S, opts);
+		const raw = rawState();
+		expect(raw.device_profiles[0]).toMatchObject({ id: "phone-small", platform: "android", width: 1920, height: 1080 });
+		expect(raw.scenarios[0].status).toBeUndefined();
+		expect(raw.scenarios[0].evidence).toBeUndefined();
+		expect(raw.scenarios[0].evidence_review).toBeUndefined();
+		expect(raw.scenarios[0].profile).toBe("phone-small");
+	});
+
 	test("profile 시나리오의 근거 검토는 잘림·겹침·가로 스크롤·줄바꿈을 점검한 layout claim이 있어야 한다", () => {
 		const { cwd, home } = profileFixture([PHONE]);
 		setQaState(S, { phase: "PLAN" });
