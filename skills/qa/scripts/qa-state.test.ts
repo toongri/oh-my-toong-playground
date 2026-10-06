@@ -622,6 +622,16 @@ describe("qa-state CLI wiring", () => {
 	const PASS_EVIDENCE = "--evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash";
 	const recordPass = (id: string) => run(`record-scenario --story story-1 --scenario ${id} --status pass ${PASS_EVIDENCE}`);
 
+	test("set-acceptance는 따옴표가 든 문장을 파일로 받아 그대로 기록하고 기록한 목록을 출력한다", () => {
+		run("set --phase PLAN");
+		const criteria = ["홈 메뉴에서 '주문 목록'을 직접 열면 줄 올리기가 적용되지 않는다.", "담은 영양제는 \"주문 필요\" 순서대로 보인다."];
+		const file = join(tmpDir, "acceptance.json");
+		writeFileSync(file, JSON.stringify(criteria));
+		const out = run(`set-acceptance --json-file ${file}`);
+		expect(rawState().acceptance_criteria).toEqual(criteria);
+		expect(out).toContain("적용되지 않는다.");
+	});
+
 	test("새 CLI story는 구조화 계약과 AC 링크가 없으면 거부한다", () => {
 		run("set --phase PLAN");
 		run("set-acceptance --json '[\"home shows today supplements\"]'");

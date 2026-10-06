@@ -1565,7 +1565,7 @@ const ROSTER: CliCommand[] = [
 	{ name: "set-verdict", authority: "ai", effect: "persists the cycle verdict" },
 	{ name: "await-user", authority: "ai", effect: "pauses at a human-decision gate; Stop-allowed, auto-cleared next write" },
 	{ name: "start", authority: "ai", effect: "creates or re-enters the guarded state for a target" },
-	{ name: "set-acceptance", authority: "ai", effect: "records the acceptance criteria array" },
+	{ name: "set-acceptance", authority: "ai", effect: "records the acceptance criteria array (--json-file PATH or --json '[...]') and prints what it recorded" },
 	{ name: "declare-inert", authority: "ai", effect: "declares a no-risk-surface cycle" },
 	{
 		name: "acquire-device",
@@ -1740,8 +1740,10 @@ function main(): void {
 			} else if (subcommand === "start") {
 				startQa(sessionId, requiredArg(args, "target"));
 			} else if (subcommand === "set-acceptance") {
-				const parsed = JSON.parse(requiredArg(args, "json"));
-				setAcceptance(sessionId, parsed);
+				// --json-file keeps quotes in the criteria away from shell quoting.
+				const source = typeof args["json-file"] === "string" ? readFileSync(args["json-file"], "utf8") : requiredArg(args, "json");
+				setAcceptance(sessionId, JSON.parse(source));
+				process.stdout.write(`${JSON.stringify(readPrior(sessionId).acceptance_criteria ?? [], null, 2)}\n`);
 			} else if (subcommand === "waive") {
 				// Retired: a reason-only exemption let an unexecuted cell pass the gate.
 				// Waives already persisted in state stay readable and keep resolving.
