@@ -1489,7 +1489,7 @@ const ROSTER: CliCommand[] = [
 	{ name: "record-story-provenance", authority: "ai", effect: "records JSON {features:[{id,revision,entrypoints,states}],code_ref}; features non-empty, entrypoints/states may be empty" },
 	{ name: "author-scenario", authority: "ai", effect: "authors one user scenario: --story --id --title --preconditions --steps '[…]' --expected --why-needed --priority H|M|L [--risks '[1..6]'] [--profile id]" },
 	{ name: "declare-risk-na", authority: "ai", effect: "declares an adversarial axis (--axis 1..6) that no scenario of this change can exercise, with --reason; once per cycle" },
-	{ name: "record-baseline", authority: "ai", effect: "records a story's BASELINE result" },
+	{ name: "record-baseline", authority: "ai", effect: "records a story's BASELINE result: fail only when the change adds a build/test/lint failure; a failure the base commit has too is pass with a --note" },
 	{ name: "record-scenario", authority: "ai", effect: "records one scenario's execution result (--story --scenario --status pass|fail|blocked); --evidence-surface accepts the actor's own driver or \"test\" for an automated test run that exercises the scenario; optional --case-run RECEIPT binds replay provenance" },
 	{
 		name: "review-evidence",

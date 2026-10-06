@@ -119,13 +119,12 @@ When project lacks build tools, tests, or linter:
 
 ---
 
-## BASELINE Failure = Immediate Stop
+## BASELINE Failure
 
-If ANY check fails:
-1. **Do NOT proceed to ADVERSARIAL E2E**
-2. Report the failure with specific output
-3. Issue `REQUEST_CHANGES` immediately
-4. Wait for fix and re-run BASELINE
+Run the failing check on the base commit too.
+
+- **The base commit fails the same way** → the failure is pre-existing, not this change's. Record the baseline `pass`, name the pre-existing failure in `--note`, and continue to ADVERSARIAL E2E.
+- **The change adds the failure** → do not proceed. Report it with its output, issue `REQUEST_CHANGES`, and re-run BASELINE after the fix.
 
 ---
 

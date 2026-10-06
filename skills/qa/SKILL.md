@@ -204,7 +204,7 @@ Build/test/lint green baseline.
 1. Discover project commands: check `~/.omt/{project}/project-commands.md` cache first, then `CLAUDE.md`/`README.md`/build files, then ask the user. Save discovered commands back to the cache.
 2. Run: Build (fast build/typecheck) → Tests → Lint. Slow native build (e.g. an RN bundle) runs only when native code changed or this is a release build (native-code-or-release) — otherwise skip it.
 3. Save the full output of each check as an evidence file (see Evidence Saving Protocol below).
-4. ANY failure = immediate REQUEST_CHANGES.
+4. A failure the change adds = immediate REQUEST_CHANGES. Run a failing check on the base commit too: a failure that is there as well is not this change's. Record the baseline `pass`, name the pre-existing failure in `--note`, and continue.
 
 **See** [stage1-commands.md] for command-discovery detail, special cases (no tests for changed code, no build system), and output format — the content there is BASELINE's detail target, not a separate stage.
 
