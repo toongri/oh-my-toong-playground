@@ -110,8 +110,10 @@ describe("기능 지도 배포 회귀", () => {
 					expect({ status: help.status, stderr: help.stderr }).toEqual({ status: 0, stderr: "" });
 					expect(help.stdout).toContain("feature-map");
 					const workflow = await runWorkflow(runtime, script, flowCwd, flowHome, flowStorage);
-					expect(workflow.bootstrap.reason).toBe("storage_not_configured");
+					expect(workflow.bootstrap).toMatchObject({ status: "ready" });
+					expect(workflow.bootstrap.storage.location).toMatch(/[\\/]store$/);
 					expect(workflow.configured.status).toBe("ready");
+					expect(workflow.configured.storage.location).toBe(flowStorage);
 					expect(workflow.saved.feature.metadata.id).toBe("stock.view");
 					expect(workflow.fetched.feature.revision).toBe(workflow.saved.feature.revision);
 					expect(workflow.queried.features[0].id).toBe("stock.view");

@@ -14,7 +14,7 @@ export const FEATURE_MAP_COMMANDS: FeatureMapCommand[] = [
 		usage: "query [--text TEXT] [--changed-by ID] [--project DIR]",
 		effect: "finds feature maps by text or state changer",
 		details:
-			"Returns matching summaries with the absolute source path and current revision. It first looks up the fixed manifest; an unconfigured store returns not_found with reason storage_not_configured and next_action ask_user_for_storage.",
+			"Returns matching summaries with the absolute source path and current revision. It first looks up the fixed manifest; a missing or unset store is turned on at the default location.",
 		examples: [
 			"bun skills/qa/scripts/feature-map/feature-map.ts query --text inventory --project .",
 			"bun skills/qa/scripts/feature-map/feature-map.ts query --changed-by product --project .",
@@ -26,7 +26,7 @@ export const FEATURE_MAP_COMMANDS: FeatureMapCommand[] = [
 		usage: "get <id> [--project DIR]",
 		effect: "reads one feature map",
 		details:
-			"Returns the complete Markdown document plus its absolute source path and current revision. A missing feature is not_found with reason feature_not_found; an unconfigured store is reported separately.",
+			"Returns the complete Markdown document plus its absolute source path and current revision. A missing feature is not_found with reason feature_not_found.",
 		examples: ["bun skills/qa/scripts/feature-map/feature-map.ts get stock.view --project ."],
 	},
 	{
@@ -56,7 +56,7 @@ export const FEATURE_MAP_COMMANDS: FeatureMapCommand[] = [
 		usage: "status [--project DIR]",
 		effect: "reports manifest and storage configuration status",
 		details:
-			"Uses the fixed ~/.feature-maps/<project-key>/manifest.yaml location. The first lookup bootstraps storage: null and returns not_found, reason storage_not_configured, next_action ask_user_for_storage. It checks the manifest and configured storage directory accessibility; an invalid manifest or unavailable configured directory is a runtime error and is never auto-reset. Invalid feature files are reported by validate, not status.",
+			"Uses the fixed ~/.feature-maps/<project-key>/manifest.yaml location. The first lookup turns the store on at ~/.feature-maps/<project-key>/store and returns ready. It checks the manifest and configured storage directory accessibility; an invalid manifest or unavailable configured directory is a runtime error and is never auto-reset. Invalid feature files are reported by validate, not status.",
 		examples: ["bun skills/qa/scripts/feature-map/feature-map.ts status --project ."],
 	},
 	{
@@ -78,10 +78,10 @@ Run the source CLI directly:
   bun skills/qa/scripts/feature-map/feature-map.ts --help
 
 Every non-help command accepts --project DIR. status, query, and get first look up
-the fixed ~/.feature-maps/<project-key>/manifest.yaml. The first lookup may create
-only that manifest with storage: null; report not_found, reason
-storage_not_configured, next_action ask_user_for_storage and ask the user to agree
-on a location before configure. A missing feature is not_found with reason
+the fixed ~/.feature-maps/<project-key>/manifest.yaml. The store is on by default:
+the first lookup writes that manifest with storage at
+~/.feature-maps/<project-key>/store. Run configure only when the user names another
+location. A missing feature is not_found with reason
 feature_not_found. Never auto-reset a configured corrupt or unreadable store.
 
 JSON output uses stable status/reason fields. Typical statuses include

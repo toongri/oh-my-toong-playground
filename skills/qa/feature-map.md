@@ -35,18 +35,17 @@ bun "${CLAUDE_SKILL_DIR}/scripts/feature-map/feature-map.ts" status --project .
 `~/.feature-maps/<project-key>/manifest.yaml`만 사용한다. 디렉터리를 훑어
 manifest나 파일 위치를 추측하지 않는다.
 
-1. `status` 또는 `query`/`get` 결과가 `status: "not_found"`,
-   `reason: "storage_not_configured"`, `next_action: "ask_user_for_storage"`면
-   저장 위치를 사용자에게 먼저 묻는다.
-2. 사용자가 위치에 동의한 뒤에만 다음처럼 설정한다. 상대 경로는 manifest
-   디렉터리 기준이다.
+1. 저장소는 기본으로 켜져 있다. 첫 `status`/`query`/`get`이 manifest를 만들고
+   `~/.feature-maps/<project-key>/store`를 저장 위치로 설정한다.
+2. 사용자가 다른 위치를 지정했을 때만 다음처럼 `configure`한다. 상대 경로는
+   manifest 디렉터리 기준이다.
 
    ```bash
    bun "${CLAUDE_SKILL_DIR}/scripts/feature-map/feature-map.ts" configure \
      --location ./docs/features --project .
    ```
 
-3. 다시 `query` 또는 정확한 ID의 `get`을 실행한다. `query`는 `--text TEXT`,
+3. `query` 또는 정확한 ID의 `get`을 실행한다. `query`는 `--text TEXT`,
    `--changed-by ID`를 지원한다.
 
    ```bash
