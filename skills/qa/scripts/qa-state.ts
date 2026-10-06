@@ -1114,6 +1114,14 @@ function recordScenarioUnlocked(sessionId: string, opts: RecordScenarioOpts): vo
 	if ((opts.status === "pass" || opts.status === "fail") && scenarioNeedsVisualProof({ evidence, profile: authored.profile }, driver) && !visualEvidenceComplete(evidence, stateProbe)) {
 		throw new Error(`visual scenario requires separate before/after screenshot files and an action record${authored.profile ? ` captured on device profile "${authored.profile}"` : ""}; capture the asserted screen, then record-scenario again`);
 	}
+	if (authored.profile && evidence && (opts.status === "pass" || opts.status === "fail")) {
+		const shots = new Set([evidence.before, evidence.after].map((p) => (p ? stateProbe(p).sha256 : undefined)));
+		for (const other of scenarios) {
+			if (other === authored || other.cycle !== cycle || !other.profile || other.profile === authored.profile) continue;
+			const clash = [other.evidence?.before, other.evidence?.after].find((p) => p && shots.has(stateProbe(p).sha256));
+			if (clash) throw new Error(`same screenshot is already evidence for scenario "${other.id}" of story "${other.story}" on another device profile "${other.profile}"; capture each profile's own screen`);
+		}
+	}
 	const binding = opts.caseRun ? caseRunBinding(prior, sessionId, selector, opts.status, evidence, opts.caseRun, driver) : undefined;
 	const { status: _status, blocked: _blocked, evidence: _evidence, evidence_review: _review, case_run: _caseRun, case: _case, ...record } = authored;
 	scenarios[index] = {

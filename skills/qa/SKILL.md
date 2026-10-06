@@ -140,7 +140,7 @@ A profile is a logical screen size, not a device model; its label only names it.
   - iOS simulator → an installed device type whose logical size equals the profile (`xcrun simctl list devicetypes`). A size no installed type has goes on the Android emulator.
 - Record the device and the size in `driven-at`. A model name that is not installed is not an obstacle; the size is what you prove.
 
-On each profile, the scenario's before/after screenshots must show that a person can read and use the changed screen: nothing clipped or overlapping, no horizontal scroll, no truncated Korean text, touch targets reachable. Its `review-evidence` carries one `kind: "layout"` claim that names each of those checks and what the capture shows for it ([presentation.md](presentation.md#claim-review-record)); the CLI refuses a profile review without it. A broken layout on one profile is a `fail` for that profile's scenario.
+On each profile, the scenario's before/after screenshots must show that a person can read and use the changed screen: nothing clipped or overlapping, no horizontal scroll, no truncated Korean text, touch targets reachable. Its `review-evidence` carries one `kind: "layout"` claim that names each of those checks and what the capture shows for it ([presentation.md](presentation.md#claim-review-record)); the CLI refuses a profile review without it. A broken layout on one profile is a `fail` for that profile's scenario. The same screenshot cannot be evidence for scenarios on different device profiles; the CLI refuses it.
 
 #### The cheapest proof
 
@@ -407,7 +407,7 @@ Every verification **command execution** (BASELINE, ADVERSARIAL E2E, RE-VERIFY) 
 
 ### Actor-Perspective Evidence (per executed scenario)
 
-**Required visual evidence contract — read [presentation.md](presentation.md) before recording and reporting.** For every pass or fail recorded with an `agent-browser`/`agent-device` evidence surface, and for every scenario that carries a device profile, `record-scenario` requires separate `--evidence-before` and `--evidence-after` screenshot files plus `--evidence-action`. The completion predicate rechecks these slots. Capture the actual actor's screen, at that scenario's profile size, immediately before the action and at the asserted outcome, in this scenario and cycle. The report additionally requires `scenarios["<story>:<scenario>"].observed` explaining the action, visible result, and expected result, **alongside both embedded images**. An observation is not a replacement for an image at a visual boundary.
+**Required visual evidence contract — read [presentation.md](presentation.md) before recording and reporting.** For every pass or fail recorded with an `agent-browser`/`agent-device` evidence surface, and for every scenario that carries a device profile, `record-scenario` requires separate `--evidence-before` and `--evidence-after` screenshot files plus `--evidence-action`. The completion predicate rechecks these slots. Capture the actual actor's screen, at that scenario's profile size, immediately before the action and at the asserted outcome, in this scenario and cycle. The same screenshot cannot be evidence for scenarios on different device profiles; the CLI refuses it. The report additionally requires `scenarios["<story>:<scenario>"].observed` explaining the action, visible result, and expected result, **alongside both embedded images**. An observation is not a replacement for an image at a visual boundary.
 
 | Surface actually exercised | Required proof |
 |---|---|
