@@ -144,6 +144,8 @@ surface is not `test`) becomes a case. A scenario proven by an automated test
 is already automated. `M` and `L` scenarios are not saved.
 
 One case is one scenario, from its precondition to its expected result.
+Scenarios that differ only by device profile share one case: replay it on each
+profile's screen size and link each of those scenarios to the same case id.
 Steps that many scenarios share (sign-in, reaching a screen) go in a shared
 script under the store's `cases/shared/`. The case's runner chains it first, for
 example `agent-device replay <shared>.ad --keep-session && agent-device replay
