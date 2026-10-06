@@ -14,7 +14,7 @@
  * console.log — process.stdout.write only), diagnostics on stderr, and a
  * non-zero exit code on failure.
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
 	copyFileSync,
@@ -35,24 +35,53 @@ import { resolveSessionIdOrThrow } from "@lib/state-core.ts";
 
 import {
 	checkNotes,
+	isRangeScanOfUnit,
+	mentionsMember,
+	rawFrameCaptions,
+	KEY_FRAME_TOLERANCE_SECONDS,
 	checkPlan,
 	checkRefsDraft,
 	checkSimilarChoices,
+	clockSeconds,
+	closeRosterNames,
+	joinWithWaGwa,
+	extractYoutubeVideoId,
+	dubeolsikReading,
+	formatTime,
+	commentAuthorName,
+	selfCritiqueMemberIds,
 	isValidTag,
 	localLinks,
+	matchGameVersion,
+	refVersionBadge,
+	publishedBadge,
 	normalizeUrl,
 	noteWarnings,
+	trailingUnassignedLineWarnings,
+	unmatchedTagReadingWarnings,
+	recurringCandidateWarnings,
+	recurringInferredActorWarnings,
+	searchKeywordWords,
 	parseRoster,
 	parseTaxonomy,
+	recurringPartialCoverageWarnings,
+	recurringProClubsWarnings,
+	refsMatchVersionErrors,
 	refId,
+	positionFromLegacyCode,
+	positionTagsFromLegacy,
+	positionTargetMembers,
+	groupMembers,
 	relatedMembers,
 	similarCandidates,
 	webpDimensions,
 	SID_PATTERN,
 	VID_PATTERN,
+	type Candidate,
 	type CurrentUnit,
 	type Line,
 	type NoteBlock,
+	type Lineup,
 	type NotesV2,
 	type PastUnit,
 	type Roster,
@@ -61,13 +90,17 @@ import {
 	type Taxonomy,
 	type ValidatedMatch,
 	type ValidatedPlan,
+	type ValidatedRecurring,
 	type ValidatedTopic,
 	type ValidatedUnit,
+	type ValidationError,
 } from "./core.ts";
 import {
 	MEDIA_CONSTANTS,
 	buildLines,
+	cwebpArgs,
 	ffmpegFrameArgs,
+	hasLibwebpEncoder,
 	ffmpegSheetArgs,
 	ffmpegWavArgs,
 	mergeCandidates,
@@ -81,9 +114,14 @@ import {
 	silencedetectArgs,
 	whisperArgs,
 	ytDlpArgs,
+	ytChannelSearchArgs,
+	ytChannelUrlArgs,
+	ytSearchArgs,
 	type AliasRule,
-	type Candidate,
+	type Candidate as ScannedCandidate,
 	type ParsedCaptions,
+	type SpeechMode,
+	type VideoComment,
 	type VideoInput,
 	type WhisperSegment,
 } from "./media.ts";
@@ -119,14 +157,34 @@ export const COMMANDS: readonly CommandSpec[] = [
 	{ name: "config set", usage: "fc config set --archive <dir> --roster <file> --pages-url <https://.../>", description: "아카이브/명단/공개 URL을 설정해 configured 모드로 전환한다" },
 	{ name: "config disable", usage: "fc config disable", description: "$OMT_DIR에만 렌더하는 disabled 모드로 전환한다(기존 경로는 유지)" },
 	{ name: "init-archive", usage: "fc init-archive [--archive <dir>]", description: "아카이브에 없는 파일만 생성한다(index.html/index.json/taxonomy.yaml/roster.yaml/.gitignore)" },
-	{ name: "fetch", usage: "fc fetch <url...> [--cookies]", description: "yt-dlp로 영상/오디오/자막을 내려받고 session.json을 쓴다" },
-	{ name: "transcribe", usage: "fc transcribe [--hq] [--captions-only]", description: "오디오를 wav로 변환하고 whisper/자막으로 lines.json을 만든다" },
+	{ name: "fetch", usage: "fc fetch <url...> [--cookies]", description: "yt-dlp로 영상/오디오/자막/댓글을 내려받고 session.json을 쓴다" },
+	{ name: "transcribe", usage: "fc transcribe [--hq] [--captions-only] [--no-speech]", description: "whisper/자막(음성)과 타임스탬프 댓글로 lines.json을 만든다(--no-speech는 음성을 건너뛰고 댓글만)" },
 	{ name: "scan", usage: "fc scan", description: "무음/장면 후보를 병합하고 미리보기·컨택트시트를 만든다" },
 	{ name: "add-frame", usage: "fc add-frame --video <VID> --t <sec>", description: "수동 프레임 후보를 candidates.json에 추가하고 미리보기를 뽑는다" },
+	{
+		name: "scan-range",
+		usage: "fc scan-range --video <VID> --from <sec> --to <sec> [--step 2]",
+		description: "구간을 step초마다 훑어 kind range 후보로 candidates.json에 추가하고 미리보기와 컨택트시트 한 장을 만든다",
+	},
 	{ name: "check plan", usage: "fc check plan", description: "plan.json을 검증한다(exit 0 유효+plan.validated.json 생성, 2 보류, 1 무효)" },
 	{ name: "check notes", usage: "fc check notes", description: "notes.json을 plan.validated.json 기준으로 검증한다(exit 0/1)" },
+	{
+		name: "notes next",
+		usage: "fc notes next",
+		description: "notes.json을 읽기만 해 다음 할 일(첫 미작성 유닛 또는 오류 유닛의 브리프, 끝났으면 완료 안내)을 낸다(exit 0, plan.validated.json 없으면 1)",
+	},
+	{
+		name: "notes submit",
+		usage: "fc notes submit <unit-id> --file <path>",
+		description: "한 유닛({ unit, marker_colors?, unmatched_name_tags? })을 검증해 notes.json에 쓰고 다음 브리프를 낸다(그 유닛·match 수준 오류만 exit 1로 막고 쓰지 않는다)",
+	},
 	{ name: "check similar", usage: "fc check similar", description: "similar-choices.json을 similar-candidates.json 기준으로 검증한다(exit 0/1)" },
 	{ name: "check refs", usage: "fc check refs", description: "refs-draft.json을 plan.validated.json 기준으로 검증한다(exit 0/1)" },
+	{
+		name: "refs-bundle",
+		usage: "fc refs-bundle [--no-search]",
+		description: "참고자료 리뷰용 refs-review.md를 쓴다(자료×유닛마다 원문 줄·relevance_ko·lesson_ko·video_starts 앞뒤 90초 자막, 붙은 채널의 같은 채널 후보 검색은 --no-search로 끈다)",
+	},
 	{ name: "taxonomy add", usage: "fc taxonomy add <tag...>", description: "taxonomy에 태그를 append-only·멱등으로 추가한다" },
 	{ name: "frames", usage: "fc frames", description: "검증된 유닛마다 시작 프레임과 notes의 핵심 프레임을 webp로 추출한다" },
 	{ name: "similar", usage: "fc similar", description: "아카이브 index.json을 기준으로 similar-candidates.json을 만든다" },
@@ -236,9 +294,11 @@ function printJson(value: unknown): void {
 
 // ── tool availability (config status) ───────────────────────────────────
 
-function toolAvailability(): { ffmpeg: boolean; uvx: boolean; git: boolean; deno: boolean } {
+function toolAvailability(): { ffmpeg: boolean; cwebp: boolean; uvx: boolean; git: boolean; deno: boolean } {
 	return {
 		ffmpeg: Bun.which("ffmpeg") !== null,
+		// frames가 ffmpeg에 libwebp 인코더가 없을 때 쓰는 대체 인코더
+		cwebp: Bun.which("cwebp") !== null,
 		uvx: Bun.which("uvx") !== null,
 		git: Bun.which("git") !== null,
 		deno: Bun.which("deno") !== null,
@@ -347,7 +407,7 @@ function emptyIndexHtml(): string {
 const ROSTER_TEMPLATE = `# fc-feedback roster.yaml
 # members: 각 항목은 id(소문자/숫자/하이픈 시작), name, gamertag(대소문자 무시 유일),
 # positions(최소 1개, 포지션 트리 태그: GK/DF/MF/FW 또는
-# CB/FB/LB/RB/LWB/RWB/CDM/CM/CAM/LM/RM/ST/CF/LW/RW/LF/RF),
+# CB/FB/WB/CDM/CM/CAM/SM/WF/ST — 좌우는 가리지 않는다),
 # aliases(옵션, 다른 멤버의 name/alias와 겹치면 안 됨)로 구성됩니다.
 #
 # 예시:
@@ -444,6 +504,7 @@ interface VideoFiles {
 	captions: string | null;
 	captions_format: "json3" | "vtt" | null;
 	wav: string | null;
+	comments: string | null;
 }
 
 interface SessionVideo {
@@ -477,12 +538,15 @@ function toVideoFiles(raw: unknown): VideoFiles {
 	}
 	const captions = raw.captions;
 	const wav = raw.wav;
+	// session.json written before comment support has no `comments` key: no comments file was fetched.
+	const comments = raw.comments;
 	return {
 		audio: str(raw.audio, "files.audio"),
 		video: str(raw.video, "files.video"),
 		captions: captions === null || captions === undefined ? null : str(captions, "files.captions"),
 		captions_format: captionsFormat,
 		wav: wav === null || wav === undefined ? null : str(wav, "files.wav"),
+		comments: comments === null || comments === undefined ? null : str(comments, "files.comments"),
 	};
 }
 
@@ -536,7 +600,7 @@ function parseYtDlpMeta(stdout: string): Record<string, unknown> {
 	return parsed;
 }
 
-/** The width/height of the best video-only stream at or below 480p (plan: "480p 스트림의 width/height"). */
+/** The width/height of the best video-only stream at or below `MEDIA_CONSTANTS.yt.maxVideoHeight` — the stream `fetch` downloads. */
 function pickVideoDims(meta: Record<string, unknown>): { width: number; height: number } {
 	const formats = Array.isArray(meta.formats) ? meta.formats : [];
 	let best: { width: number; height: number } | undefined;
@@ -549,7 +613,7 @@ function pickVideoDims(meta: Record<string, unknown>): { width: number; height: 
 		if (typeof height !== "number" || typeof width !== "number") {
 			continue;
 		}
-		if (height > 480) {
+		if (height > MEDIA_CONSTANTS.yt.maxVideoHeight) {
 			continue;
 		}
 		if (best === undefined || height > best.height) {
@@ -557,9 +621,32 @@ function pickVideoDims(meta: Record<string, unknown>): { width: number; height: 
 		}
 	}
 	if (best === undefined) {
-		throw new Error("fc-feedback: metadata에서 480p 이하 비디오 스트림을 찾을 수 없습니다");
+		throw new Error(`fc-feedback: metadata에서 ${MEDIA_CONSTANTS.yt.maxVideoHeight}p 이하 비디오 스트림을 찾을 수 없습니다`);
 	}
 	return best;
+}
+
+function toVideoComment(raw: unknown): VideoComment {
+	if (!isRecord(raw)) {
+		throw new Error("fc-feedback: yt-dlp 댓글 항목이 올바르지 않습니다");
+	}
+	return {
+		id: str(raw.id, "comment.id"),
+		parent: typeof raw.parent === "string" ? raw.parent : "root",
+		author: typeof raw.author === "string" ? raw.author : "",
+		text: typeof raw.text === "string" ? raw.text : "",
+	};
+}
+
+function readComments(workDir: string, file: string | null): VideoComment[] {
+	if (file === null) {
+		return [];
+	}
+	const raw: unknown = JSON.parse(readFileSync(join(workDir, file), "utf8"));
+	if (!Array.isArray(raw)) {
+		throw new Error(`fc-feedback: 댓글 파일 형식이 올바르지 않습니다: ${file}`);
+	}
+	return raw.map(toVideoComment);
 }
 
 function findMediaFile(dir: string, id: string): string | null {
@@ -607,7 +694,8 @@ async function cmdFetch(
 	const videoDir = join(mediaDir, "video");
 	const audioDir = join(mediaDir, "audio");
 	const capDir = join(mediaDir, "captions");
-	for (const dir of [videoDir, audioDir, capDir]) {
+	const commentsDir = join(mediaDir, "comments");
+	for (const dir of [videoDir, audioDir, capDir, commentsDir]) {
 		mkdirSync(dir, { recursive: true });
 	}
 
@@ -626,6 +714,7 @@ async function cmdFetch(
 		}
 		cookies = metaRun.usedCookies;
 		const meta = parseYtDlpMeta(metaRun.result.stdout);
+		const comments = (Array.isArray(meta.comments) ? meta.comments : []).map(toVideoComment);
 
 		const id = str(meta.id, "id");
 		if (!VID_PATTERN.test(id)) {
@@ -665,6 +754,8 @@ async function cmdFetch(
 		}
 
 		const dims = pickVideoDims(meta);
+		const commentsFile = join(commentsDir, `${id}.json`);
+		writeFileSync(commentsFile, `${JSON.stringify(comments, null, 2)}\n`);
 
 		videos.push({
 			id,
@@ -683,6 +774,7 @@ async function cmdFetch(
 				captions: captionFile !== null ? relative(workDir, captionFile.path) : null,
 				captions_format: captionFile !== null ? captionFile.format : null,
 				wav: null,
+				comments: relative(workDir, commentsFile),
 			},
 		});
 	}
@@ -742,17 +834,21 @@ function readWhisperSegments(path: string): WhisperSegment[] {
 }
 
 async function cmdTranscribe(
-	options: { hq: boolean; captionsOnly: boolean },
+	options: { hq: boolean; captionsOnly: boolean; noSpeech: boolean },
 	workDir: string,
 	status: FcStatus,
 ): Promise<unknown> {
 	ensureWorkDir(workDir, status);
+	if (options.noSpeech && (options.hq || options.captionsOnly)) {
+		throw new Error("fc-feedback: --no-speech는 음성을 건너뛰므로 --hq/--captions-only와 함께 쓸 수 없습니다");
+	}
 	const session = readSessionFile(workDir);
 
 	// darwin/arm64만 whisper를 실행한다(plan §4-A) — 그 외는 자막 전용 모드로 내려간다.
+	// --no-speech는 해설 음성이 없는 영상용이다: wav/whisper/자막을 모두 건너뛰고 댓글 줄만 만든다.
 	const isDarwinArm64 = process.platform === "darwin" && process.arch === "arm64";
-	const runWhisper = !options.captionsOnly && isDarwinArm64;
-	const mode: "asr" | "captions" = runWhisper ? "asr" : "captions";
+	const runWhisper = !options.noSpeech && !options.captionsOnly && isDarwinArm64;
+	const mode: SpeechMode = options.noSpeech ? "none" : runWhisper ? "asr" : "captions";
 
 	const wavDir = join(workDir, "media", "wav");
 	mkdirSync(wavDir, { recursive: true });
@@ -768,6 +864,12 @@ async function cmdTranscribe(
 	const updatedVideos: SessionVideo[] = [];
 
 	for (const video of session.videos) {
+		const comments = readComments(workDir, video.files.comments);
+		if (mode === "none") {
+			videos.push({ id: video.id, part: video.part, duration: video.duration, whisperSegments: null, captions: null, comments });
+			updatedVideos.push(video);
+			continue;
+		}
 		const audioPath = join(workDir, video.files.audio);
 		const wavPath = join(wavDir, `${video.id}.wav`);
 		const wavResult = await runCommand(ffmpegWavArgs(audioPath, wavPath));
@@ -790,7 +892,7 @@ async function cmdTranscribe(
 			captions = video.files.captions_format === "json3" ? parseJson3(captionText) : parseVtt(captionText);
 		}
 
-		videos.push({ id: video.id, part: video.part, whisperSegments, captions });
+		videos.push({ id: video.id, part: video.part, duration: video.duration, whisperSegments, captions, comments });
 		updatedVideos.push({ ...video, files: { ...video.files, wav: relative(workDir, wavPath) } });
 	}
 
@@ -804,8 +906,9 @@ async function cmdTranscribe(
 
 async function handleTranscribe(rest: readonly string[], workDir: string, status: FcStatus): Promise<unknown> {
 	const { value: hq, rest: r1 } = takeFlag(rest, "--hq");
-	const { value: captionsOnly } = takeFlag(r1, "--captions-only");
-	return cmdTranscribe({ hq, captionsOnly }, workDir, status);
+	const { value: captionsOnly, rest: r2 } = takeFlag(r1, "--captions-only");
+	const { value: noSpeech } = takeFlag(r2, "--no-speech");
+	return cmdTranscribe({ hq, captionsOnly, noSpeech }, workDir, status);
 }
 
 // ── scan ──────────────────────────────────────────────────────────────────
@@ -840,7 +943,9 @@ async function cmdScan(workDir: string, status: FcStatus): Promise<{ candidates:
 	mkdirSync(candDir, { recursive: true });
 	mkdirSync(sheetsDir, { recursive: true });
 
-	const perVideo: { video: string; part: number; candidates: Candidate[] }[] = [];
+	const perVideo: { video: string; part: number; candidates: ScannedCandidate[] }[] = [];
+	// 댓글 시각마다 그 순간의 프레임 후보를 둔다 — transcribe 전이면(lines.json 없음) 댓글 후보는 없다.
+	const lines = existsSync(join(workDir, "lines.json")) ? readLines(workDir) : [];
 
 	for (const video of session.videos) {
 		const videoPath = join(workDir, video.files.video);
@@ -848,8 +953,9 @@ async function cmdScan(workDir: string, status: FcStatus): Promise<{ candidates:
 		const silences = parseSilencedetect(silenceResult.stderr);
 		const sceneResult = await runCommand(sceneArgs(videoPath));
 		const scenes = parseShowinfo(sceneResult.stderr);
+		const comments = lines.filter((line) => line.video === video.id && line.source === "comment").map((line) => line.start);
 		const candidates = mergeCandidates(
-			{ silences, scenes, duration: video.duration, interval: CANDIDATE_INTERVAL_SECONDS },
+			{ silences, scenes, comments, duration: video.duration, interval: CANDIDATE_INTERVAL_SECONDS },
 			video.id,
 		);
 		perVideo.push({ video: video.id, part: video.part, candidates });
@@ -907,7 +1013,7 @@ function toCandidate(raw: unknown): Candidate {
 		throw new Error("fc-feedback: candidates.json 항목이 올바르지 않습니다");
 	}
 	const kind = raw.kind;
-	if (kind !== "silence" && kind !== "scene" && kind !== "interval" && kind !== "manual") {
+	if (kind !== "comment" && kind !== "silence" && kind !== "scene" && kind !== "interval" && kind !== "manual" && kind !== "range") {
 		throw new Error("fc-feedback: candidates.json의 kind가 올바르지 않습니다");
 	}
 	const dur = raw.dur;
@@ -924,13 +1030,15 @@ function toLine(raw: unknown): Line {
 	if (!isRecord(raw)) {
 		throw new Error("fc-feedback: lines.json 항목이 올바르지 않습니다");
 	}
-	return {
+	const base = {
 		i: num(raw.i, "line.i"),
 		video: str(raw.video, "line.video"),
 		start: num(raw.start, "line.start"),
 		end: num(raw.end, "line.end"),
 		text: str(raw.text, "line.text"),
 	};
+	// lines.json written before comment support has no `source`: every line then was speech.
+	return raw.source === "comment" ? { ...base, source: "comment", author: str(raw.author, "line.author") } : { ...base, source: "speech" };
 }
 
 /** lines.json is script-generated (transcribe) — this is structural coercion, not core.checkLines revalidation. */
@@ -959,7 +1067,7 @@ function readCandidates(workDir: string): Candidate[] {
 }
 
 async function cmdAddFrame(
-	options: { video: string; t: number },
+	options: { video: string; t: number; kind: "manual" | "range" },
 	workDir: string,
 	status: FcStatus,
 ): Promise<Candidate> {
@@ -982,7 +1090,7 @@ async function cmdAddFrame(
 		id: `c${String(existing.length + 1).padStart(3, "0")}`,
 		video: options.video,
 		t: options.t,
-		kind: "manual",
+		kind: options.kind,
 	};
 	writeFileSync(join(workDir, "candidates.json"), `${JSON.stringify([...existing, candidate], null, 2)}\n`);
 
@@ -1011,7 +1119,110 @@ async function handleAddFrame(rest: readonly string[], workDir: string, status: 
 	if (!Number.isFinite(t)) {
 		throw new Error(`fc-feedback: --t는 숫자여야 합니다: ${tRaw}`);
 	}
-	return cmdAddFrame({ video: videoId, t }, workDir, status);
+	return cmdAddFrame({ video: videoId, t, kind: "manual" }, workDir, status);
+}
+
+// ── scan-range ───────────────────────────────────────────────────────────
+//
+// `check notes` accepts "no frame shows this person" only when the unit's window was scanned: scan-range
+// pulls a frame every `step` seconds over [from, to] as `kind: "range"` candidates (the same extraction
+// as add-frame) and tiles the whole range into one contact sheet so an agent sees every frame at once.
+
+const MAX_RANGE_FRAMES = 36;
+const MAX_RANGE_SHEET_COLS = 6;
+const DEFAULT_RANGE_STEP_SECONDS = 2;
+
+function round3(value: number): number {
+	return Math.round(value * 1000) / 1000;
+}
+
+/** Frame times `from, from+step, …` that do not pass `to`. Throws on a bad range/step or more than `MAX_RANGE_FRAMES` frames. */
+export function rangeFrameTimes(from: number, to: number, step: number): number[] {
+	if (!Number.isFinite(from) || from < 0) {
+		throw new Error("fc-feedback: --from은 0 이상의 숫자여야 합니다");
+	}
+	if (!Number.isFinite(to) || to < from) {
+		throw new Error("fc-feedback: --to는 --from 이상의 숫자여야 합니다");
+	}
+	if (!Number.isFinite(step) || step <= 0) {
+		throw new Error("fc-feedback: --step은 0보다 큰 숫자여야 합니다");
+	}
+	const count = Math.floor((to - from) / step + 1e-9) + 1;
+	if (count > MAX_RANGE_FRAMES) {
+		throw new Error(`fc-feedback: 프레임이 ${count}장이라 한 장에 담을 수 없습니다(최대 ${MAX_RANGE_FRAMES}장) — --step을 키우거나 구간을 나눠 훑으세요`);
+	}
+	return Array.from({ length: count }, (_, k) => round3(from + k * step));
+}
+
+function rangeSheetLayout(count: number): { cols: number; rows: number } {
+	const cols = Math.min(count, MAX_RANGE_SHEET_COLS);
+	return { cols, rows: Math.ceil(count / cols) };
+}
+
+/** Contact-sheet argv for one range: seek to `from`, take a frame every `step` seconds, scale like the grid sheet, tile into one image. */
+export function rangeSheetArgs(video: string, from: number, to: number, step: number, out: string): string[] {
+	const { cols, rows } = rangeSheetLayout(rangeFrameTimes(from, to, step).length);
+	const filter = `fps=1/${step},scale=${MEDIA_CONSTANTS.sheet.grid.scale},tile=${cols}x${rows}`;
+	// `-t` runs half a step past `to` so a frame landing exactly on `to` is kept and the next one is not.
+	return ["ffmpeg", "-y", "-ss", String(from), "-t", String(round3(to - from + step / 2)), "-i", video, "-vf", filter, "-frames:v", "1", out];
+}
+
+async function cmdScanRange(
+	options: { video: string; from: number; to: number; step: number },
+	workDir: string,
+	status: FcStatus,
+): Promise<{ video: string; from: number; to: number; step: number; candidates: { id: string; t: number }[]; sheet: string; cols: number; rows: number }> {
+	ensureWorkDir(workDir, status);
+	if (!VID_PATTERN.test(options.video)) {
+		throw new Error(`fc-feedback: video id 형식이 아닙니다: ${options.video}`);
+	}
+	const times = rangeFrameTimes(options.from, options.to, options.step);
+	const session = readSessionFile(workDir);
+	const video = session.videos.find((entry) => entry.id === options.video);
+	if (video === undefined) {
+		throw new Error(`fc-feedback: session.json에 없는 video id입니다: ${options.video}`);
+	}
+	if (options.to > video.duration) {
+		throw new Error(`fc-feedback: --to ${options.to}초가 영상 길이(${video.duration}초)를 넘습니다`);
+	}
+
+	const candidates: { id: string; t: number }[] = [];
+	for (const t of times) {
+		// A range candidate already at this time (an earlier scan-range over an overlapping range) is reused, not added twice.
+		const known = readCandidates(workDir).find((candidate) => candidate.kind === "range" && candidate.video === video.id && candidate.t === t);
+		const candidate = known ?? (await cmdAddFrame({ video: video.id, t, kind: "range" }, workDir, status));
+		candidates.push({ id: candidate.id, t });
+	}
+
+	const sheetsDir = join(workDir, "sheets");
+	mkdirSync(sheetsDir, { recursive: true });
+	const sheetName = `${video.id}-range-${options.from}-${options.to}.jpg`;
+	const sheetResult = await runCommand(rangeSheetArgs(join(workDir, video.files.video), options.from, options.to, options.step, join(sheetsDir, sheetName)));
+	if (sheetResult.exitCode !== 0) {
+		throw new Error(`fc-feedback: 시트 생성 실패(${video.id}/range): ${sheetResult.stderr.trim()}`);
+	}
+	return { video: video.id, from: options.from, to: options.to, step: options.step, candidates, sheet: join("sheets", sheetName), ...rangeSheetLayout(times.length) };
+}
+
+async function handleScanRange(rest: readonly string[], workDir: string, status: FcStatus): Promise<unknown> {
+	const { value: videoId, rest: r1 } = takeOption(rest, "--video");
+	const { value: fromRaw, rest: r2 } = takeOption(r1, "--from");
+	const { value: toRaw, rest: r3 } = takeOption(r2, "--to");
+	const { value: stepRaw } = takeOption(r3, "--step");
+	if (videoId === undefined) {
+		throw new Error("fc-feedback: scan-range에는 --video가 필요합니다");
+	}
+	if (fromRaw === undefined) {
+		throw new Error("fc-feedback: scan-range에는 --from이 필요합니다");
+	}
+	if (toRaw === undefined) {
+		throw new Error("fc-feedback: scan-range에는 --to가 필요합니다");
+	}
+	return cmdScanRange(
+		{ video: videoId, from: Number(fromRaw), to: Number(toRaw), step: stepRaw === undefined ? DEFAULT_RANGE_STEP_SECONDS : Number(stepRaw) },
+		workDir,
+		status,
+	);
 }
 
 // ── plan.validated.json reading (plan §3) ───────────────────────────────
@@ -1019,6 +1230,22 @@ async function handleAddFrame(rest: readonly string[], workDir: string, status: 
 // plan.validated.json is our own output (written by `check plan`), but it is
 // still read back from disk as `unknown` — these are structural I/O readers,
 // not a `core.checkPlan` re-validation.
+
+/**
+ * Legacy conversion: a plan.validated.json written before `named_member_ids` existed has no such
+ * field. In that older data `member_ids` meant "names called in the source" (every named player),
+ * which is exactly what `named_member_ids` means now, so the older `member_ids` is the named list.
+ */
+function namedMemberIdsFromLegacyValidated(raw: Record<string, unknown>): string[] {
+	return raw.named_member_ids === undefined
+		? toStringArray(raw.member_ids, "unit.member_ids")
+		: toStringArray(raw.named_member_ids, "unit.named_member_ids");
+}
+
+/** Legacy conversion: a plan.validated.json written before `inferred_member_ids` existed has no such field; its units inferred no actor. */
+function inferredMemberIdsFromLegacyValidated(raw: Record<string, unknown>): string[] {
+	return raw.inferred_member_ids === undefined ? [] : toStringArray(raw.inferred_member_ids, "unit.inferred_member_ids");
+}
 
 function toValidatedUnit(raw: unknown): ValidatedUnit {
 	if (!isRecord(raw)) {
@@ -1032,11 +1259,16 @@ function toValidatedUnit(raw: unknown): ValidatedUnit {
 		start: num(raw.start, "unit.start"),
 		end: num(raw.end, "unit.end"),
 		title: str(raw.title, "unit.title"),
-		position_tags: toStringArray(raw.position_tags, "unit.position_tags"),
+		position_tags: positionTagsFromLegacy(toStringArray(raw.position_tags, "unit.position_tags")),
 		topic_tags: toStringArray(raw.topic_tags, "unit.topic_tags"),
 		member_ids: toStringArray(raw.member_ids, "unit.member_ids"),
+		named_member_ids: namedMemberIdsFromLegacyValidated(raw),
+		inferred_member_ids: inferredMemberIdsFromLegacyValidated(raw),
 		key_frame_candidate_ids: toStringArray(raw.key_frame_candidate_ids, "unit.key_frame_candidate_ids"),
 		addressed_to_all: optionalBool(raw.addressed_to_all, false),
+		group_positions: groupPositionsFromLegacyValidated(raw),
+		// plan.validated.json written before comment support has no `comment_authors`: its units held speech lines only.
+		comment_authors: raw.comment_authors === undefined ? [] : toStringArray(raw.comment_authors, "unit.comment_authors"),
 	};
 }
 
@@ -1052,6 +1284,16 @@ function toValidatedTopic(raw: unknown): ValidatedTopic {
 	};
 }
 
+/**
+ * Legacy conversion: a unit validated before `group_positions` existed addressed its whole `position_tags`
+ * as a group exactly when it named nobody to fix (`member_ids` empty) — the rule the viewer used then.
+ */
+function groupPositionsFromLegacyValidated(raw: Record<string, unknown>): string[] {
+	if (raw.group_positions !== undefined) return positionTagsFromLegacy(toStringArray(raw.group_positions, "unit.group_positions"));
+	const memberIds = raw.member_ids === undefined ? [] : toStringArray(raw.member_ids, "unit.member_ids");
+	return memberIds.length === 0 && raw.position_tags !== undefined ? positionTagsFromLegacy(toStringArray(raw.position_tags, "unit.position_tags")) : [];
+}
+
 function toValidatedMatch(raw: unknown): ValidatedMatch {
 	if (!isRecord(raw) || !Array.isArray(raw.topics)) {
 		throw new Error("fc-feedback: plan.validated.json의 match가 올바르지 않습니다");
@@ -1060,10 +1302,57 @@ function toValidatedMatch(raw: unknown): ValidatedMatch {
 		id: str(raw.id, "match.id"),
 		title: str(raw.title, "match.title"),
 		topics: raw.topics.map(toValidatedTopic),
+		lineup: lineupFromLegacyValidated(raw),
 	};
 }
 
-function toValidatedPlan(raw: unknown): ValidatedPlan {
+/**
+ * Legacy conversion: a match validated before `lineup` existed has no such field; its lineup reads as unknown (null).
+ * A lineup validated with the retired left/right position codes reads with the current codes (`positionFromLegacyCode`).
+ */
+function lineupFromLegacyValidated(raw: Record<string, unknown>): Lineup | null {
+	if (raw.lineup === undefined || raw.lineup === null) return null;
+	const lineup = toStringRecord(raw.lineup, "match.lineup");
+	return Object.fromEntries(Object.entries(lineup).map(([memberId, position]) => [memberId, positionFromLegacyCode(position) ?? position]));
+}
+
+function toValidatedRecurring(raw: unknown): ValidatedRecurring {
+	if (!isRecord(raw)) {
+		throw new Error("fc-feedback: plan.validated.json의 recurring이 올바르지 않습니다");
+	}
+	return {
+		label: str(raw.label, "recurring.label"),
+		unit_ids: toStringArray(raw.unit_ids, "recurring.unit_ids"),
+		member_ids: recurringMembersFromLegacyValidated(raw),
+	};
+}
+
+/**
+ * Legacy conversion: a recurring entry written before `member_ids` existed names no owner, so it reads as
+ * `[]` — "the label names a team unit" — which keeps the viewer's old per-card "내가 고칠 것" count.
+ */
+function recurringMembersFromLegacyValidated(raw: Record<string, unknown>): string[] {
+	return raw.member_ids === undefined ? [] : toStringArray(raw.member_ids, "recurring.member_ids");
+}
+
+/** Legacy conversion: a plan.validated.json written before `recurring` existed has no such field; it reads as "nothing repeats". */
+function recurringFromLegacyValidated(raw: Record<string, unknown>): ValidatedRecurring[] {
+	return raw.recurring === undefined ? [] : toRecurringArray(raw.recurring);
+}
+
+function toRecurringArray(raw: unknown): ValidatedRecurring[] {
+	if (!Array.isArray(raw)) {
+		throw new Error("fc-feedback: plan.validated.json의 recurring은 배열이어야 합니다");
+	}
+	return raw.map(toValidatedRecurring);
+}
+
+/** Legacy conversion: a plan.validated.json written before `matches_without_feedback` existed has no such field; it reads as "every match has feedback". */
+function matchesWithoutFeedbackFromLegacyValidated(raw: Record<string, unknown>): string[] {
+	return raw.matches_without_feedback === undefined ? [] : toStringArray(raw.matches_without_feedback, "matches_without_feedback");
+}
+
+export function toValidatedPlan(raw: unknown): ValidatedPlan {
 	if (!isRecord(raw) || !Array.isArray(raw.matches) || !Array.isArray(raw.units)) {
 		throw new Error("fc-feedback: plan.validated.json 형식이 올바르지 않습니다");
 	}
@@ -1072,6 +1361,8 @@ function toValidatedPlan(raw: unknown): ValidatedPlan {
 		session_title: str(raw.session_title, "session_title"),
 		matches: raw.matches.map(toValidatedMatch),
 		units: raw.units.map(toValidatedUnit),
+		recurring: recurringFromLegacyValidated(raw),
+		matches_without_feedback: matchesWithoutFeedbackFromLegacyValidated(raw),
 	};
 }
 
@@ -1094,6 +1385,13 @@ function handleCheckPlan(workDir: string, status: FcStatus): number {
 	if (result.errors.length > 0) {
 		throw new Error(JSON.stringify(result.errors));
 	}
+	for (const warning of [
+		...recurringCandidateWarnings(result.validated, roster),
+		...recurringInferredActorWarnings(result.validated, roster),
+		...trailingUnassignedLineWarnings(result.validated, lines),
+	]) {
+		process.stderr.write(`${warning}\n`);
+	}
 	if (result.pending) {
 		printJson({ ok: true, pending: true, tableMd: result.tableMd, proposed: result.proposed });
 		return 2;
@@ -1108,14 +1406,218 @@ function handleCheckNotes(workDir: string, status: FcStatus): number {
 	const validated = toValidatedPlan(readJsonFile(join(workDir, "plan.validated.json"), "plan.validated.json"));
 	const candidates = readCandidates(workDir);
 	const notes = readJsonFile(join(workDir, "notes.json"), "notes.json");
-	const result = checkNotes(notes, validated, candidates);
+	const roster = loadRoster(status);
+	const result = checkNotes(notes, validated, candidates, roster);
 	if (result.errors.length > 0) {
 		throw new Error(JSON.stringify(result.errors));
 	}
-	for (const warning of noteWarnings(readNotes(workDir))) {
+	const checkedNotes = readNotes(workDir);
+	for (const warning of [...noteWarnings(checkedNotes, roster), ...unmatchedTagReadingWarnings(checkedNotes.unmatched_name_tags ?? [], roster)]) {
 		process.stderr.write(`${warning}\n`);
 	}
 	printJson({ ok: true });
+	return 0;
+}
+
+// ── notes next | submit (유닛 단위 작성 루프) ────────────────────────────────
+//
+// notes.json 하나가 상태이자 산출물이다. `notes next`가 다음에 할 일을 정하고(브리프), `notes submit`이 한 유닛을
+// 전체 `checkNotes`로 검증한 뒤 그 유닛(과 match 수준 항목) 오류만 막는다. 다른 유닛의 오류는 `notes next`가 나중에 알린다.
+
+const FC_COMMAND = "bun ${CLAUDE_SKILL_DIR}/scripts/fc.ts";
+const BRIEF_MAX_CANDIDATES = 20;
+const NOTES_DONE_MESSAGE = "모든 유닛 노트가 작성됐고 `check notes`를 통과했습니다. 다음은 SOURCE REVIEW(원문 대조 리뷰)입니다.";
+
+type NotesDoc = Record<string, unknown> & { units: Record<string, unknown> };
+
+interface NotesLoop {
+	workDir: string;
+	validated: ValidatedPlan;
+	candidates: Candidate[];
+	lines: Line[];
+	roster: Roster | null;
+}
+
+function loadNotesLoop(workDir: string, status: FcStatus): NotesLoop {
+	ensureWorkDir(workDir, status);
+	return {
+		workDir,
+		validated: toValidatedPlan(readJsonFile(join(workDir, "plan.validated.json"), "plan.validated.json")),
+		candidates: readCandidates(workDir),
+		lines: readLines(workDir),
+		roster: loadRoster(status),
+	};
+}
+
+/** notes.json as raw JSON (so submit keeps every field it does not touch); absent means no units written yet. */
+function readNotesDoc(workDir: string): NotesDoc {
+	if (!existsSync(join(workDir, "notes.json"))) {
+		return { version: 2, units: {} };
+	}
+	const raw = readJsonFile(join(workDir, "notes.json"), "notes.json");
+	if (!isRecord(raw) || !isRecord(raw.units)) {
+		throw new Error("fc-feedback: notes.json 형식이 올바르지 않습니다");
+	}
+	return { ...raw, units: raw.units };
+}
+
+function isUnitErrorPath(path: string, unitId: string): boolean {
+	return path === `units.${unitId}` || path.startsWith(`units.${unitId}.`);
+}
+
+function isMatchLevelErrorPath(path: string): boolean {
+	return /^(marker_colors|unmatched_name_tags)(\[|$)/.test(path);
+}
+
+function formatErrors(errors: readonly ValidationError[]): string[] {
+	return errors.map((error) => `- ${error.path}: ${error.message}`);
+}
+
+/** The writer's whole context for one unit: only this unit's lines, people, legend and frames. */
+function notesBrief(unit: ValidatedUnit, loop: NotesLoop, notes: NotesDoc, errors: readonly ValidationError[]): string {
+	const { validated, roster, workDir } = loop;
+	const nameOf = (memberId: string): string => roster?.members.find((member) => member.id === memberId)?.name ?? memberId;
+	const matchNumber = Number(unit.match_id.slice(1));
+	const matchTitle = validated.matches.find((match) => match.id === unit.match_id)?.title ?? unit.match_id;
+	const index = validated.units.findIndex((candidate) => candidate.id === unit.id);
+	const out: string[] = [];
+
+	if (errors.length > 0) {
+		out.push("## 먼저 고칠 오류", ...formatErrors(errors), "");
+	}
+	out.push(`## ${unit.id} · ${unit.title} · ${matchTitle} · ${formatTime(unit.start)}–${formatTime(unit.end)} · ${index + 1}/${validated.units.length}`, "");
+
+	const fixers = unit.member_ids.map((id) => `${nameOf(id)}(${id})${unit.inferred_member_ids.includes(id) ? " 추정" : ""}`);
+	out.push(`고칠 사람: ${fixers.length > 0 ? fixers.join(", ") : "없음"}`);
+	const recurring = validated.recurring.filter((entry) => entry.unit_ids.includes(unit.id)).map((entry) => entry.label);
+	if (recurring.length > 0) {
+		out.push(`반복 지적: ${recurring.join(" / ")}`);
+	}
+
+	out.push("", "### 원문 줄");
+	for (const line of loop.lines.filter((candidate) => candidate.video === unit.video && candidate.start >= unit.start && candidate.end <= unit.end)) {
+		out.push(`- ${formatTime(line.start)} ${line.source === "comment" ? `[댓글 ${commentAuthorName(line.author, roster)}] ` : ""}${line.text}`);
+	}
+
+	const legend = [
+		...toMarkerColors(notes.marker_colors).filter((entry) => entry.match === matchNumber).map((entry) => `${nameOf(entry.member_id)} ${entry.color} 삼각형`),
+		...toUnmatchedNameTags(notes.unmatched_name_tags)
+			.filter((entry) => entry.match === matchNumber)
+			.map((entry) => {
+				const readings = dubeolsikReading(entry.tag);
+				const near = closeRosterNames(entry.tag, roster);
+				return `${entry.tag} 이름표(명단에 없음${readings.length === 0 ? "" : `; 한글 자판 "${readings.join(", ")}"`}${near.length === 0 ? "" : `, 명단 ${joinWithWaGwa(near)} 비슷`})${entry.color === undefined ? "" : ` ${entry.color} 삼각형`}`;
+			}),
+	];
+	out.push("", "### 이 경기 색 범례", ...(legend.length > 0 ? legend.map((entry) => `- ${entry}`) : ["없음"]));
+
+	const pointed = new Map<string, string[]>();
+	for (const other of validated.units.filter((candidate) => candidate.match_id === unit.match_id && candidate.id !== unit.id && candidate.id in notes.units)) {
+		const captions = rawFrameCaptions(notes.units[other.id]);
+		for (const member of roster?.members ?? []) {
+			if (captions.some((caption) => mentionsMember(caption, member))) {
+				pointed.set(member.name, [...(pointed.get(member.name) ?? []), other.id]);
+			}
+		}
+	}
+	out.push("", "### 같은 경기에서 이미 짚은 사람", ...(pointed.size > 0 ? [...pointed].map(([name, unitIds]) => `- ${name} (${unitIds.join(", ")})`) : ["없음"]));
+
+	const center = (unit.start + unit.end) / 2;
+	const inWindow = loop.candidates.filter(
+		(candidate) => candidate.video === unit.video && candidate.t >= unit.start - KEY_FRAME_TOLERANCE_SECONDS && candidate.t <= unit.end + KEY_FRAME_TOLERANCE_SECONDS,
+	);
+	const shown = [...inWindow].sort((a, b) => Math.abs(a.t - center) - Math.abs(b.t - center)).slice(0, BRIEF_MAX_CANDIDATES).sort((a, b) => a.t - b.t);
+	out.push("", `### 프레임 후보 (${formatTime(Math.max(0, unit.start - KEY_FRAME_TOLERANCE_SECONDS))}~${formatTime(unit.end + KEY_FRAME_TOLERANCE_SECONDS)})`);
+	out.push(...shown.map((candidate) => `- ${candidate.id} ${formatTime(candidate.t)} ${candidate.kind} cand/${candidate.id}.jpg`));
+	if (inWindow.length > shown.length) {
+		out.push(`- ${inWindow.length - shown.length}개 생략 (유닛 가운데 시각에서 먼 후보)`);
+	}
+	if (inWindow.some((candidate) => isRangeScanOfUnit(candidate, unit))) {
+		out.push("", "구간 훑기: range 후보가 이미 있음");
+	} else {
+		const step = Math.max(DEFAULT_RANGE_STEP_SECONDS, Math.ceil((unit.end - unit.start) / (MAX_RANGE_FRAMES - 1)));
+		const stepFlag = step === DEFAULT_RANGE_STEP_SECONDS ? "" : ` --step ${step}`;
+		out.push("", "구간 훑기: range 후보 없음 — 사람을 못 찾았다고 쓰려면 먼저 실행", `${FC_COMMAND} scan-range --video ${unit.video} --from ${unit.start} --to ${unit.end}${stepFlag} --work ${workDir}`);
+	}
+
+	out.push("", "### 다음", `${FC_COMMAND} notes submit ${unit.id} --file ${workDir}/notes-units/${unit.id}.json --work ${workDir}`, "파일을 직접 만든다. 형식은 references/contracts.md의 notes submit 절.");
+	return out.join("\n");
+}
+
+/** What to do now: brief of the first unit with no note, else of the first unit with check errors, else done. */
+function notesNextOutput(loop: NotesLoop, notes: NotesDoc): string {
+	const missing = loop.validated.units.find((unit) => !(unit.id in notes.units));
+	if (missing !== undefined) {
+		return notesBrief(missing, loop, notes, []);
+	}
+	const { errors } = checkNotes(notes, loop.validated, loop.candidates, loop.roster);
+	if (errors.length === 0) {
+		return NOTES_DONE_MESSAGE;
+	}
+	const failing = loop.validated.units.find((unit) => errors.some((error) => isUnitErrorPath(error.path, unit.id)));
+	const unitErrors = failing === undefined ? [] : errors.filter((error) => isUnitErrorPath(error.path, failing.id));
+	const otherErrors = errors.filter((error) => !unitErrors.includes(error));
+	const otherBlock =
+		otherErrors.length === 0
+			? []
+			: [
+					"## 유닛에 매이지 않은 오류",
+					...formatErrors(otherErrors),
+					"marker_colors·unmatched_name_tags 오류는 notes submit의 같은 이름 필드로 고친다 — 같은 경기·같은 사람(이름표)의 항목은 새 항목으로 바뀐다.",
+					"",
+				];
+	return [...otherBlock, ...(failing === undefined ? [] : [notesBrief(failing, loop, notes, unitErrors)])].join("\n");
+}
+
+function handleNotesNext(workDir: string, status: FcStatus): number {
+	const loop = loadNotesLoop(workDir, status);
+	process.stdout.write(`${notesNextOutput(loop, readNotesDoc(workDir))}\n`);
+	return 0;
+}
+
+function handleNotesSubmit(rest: readonly string[], workDir: string, status: FcStatus): number {
+	const { value: file, rest: positional } = takeOption(rest, "--file");
+	const unitId = positional[0];
+	if (unitId === undefined || file === undefined) {
+		throw new Error("fc-feedback: notes submit에는 <unit-id>와 --file이 필요합니다");
+	}
+	const loop = loadNotesLoop(workDir, status);
+	if (!loop.validated.units.some((unit) => unit.id === unitId)) {
+		throw new Error(`fc-feedback: 검증된 plan에 없는 unit id입니다: ${unitId}`);
+	}
+	const body = readJsonFile(file, "--file");
+	if (!isRecord(body) || !isRecord(body.unit)) {
+		throw new Error('fc-feedback: --file은 { "unit": { … } } 꼴의 JSON이어야 합니다(unit 객체가 없습니다)');
+	}
+	const current = readNotesDoc(workDir);
+	const appended: Record<string, unknown[]> = {};
+	for (const field of ["marker_colors", "unmatched_name_tags"] as const) {
+		const added = body[field];
+		if (added === undefined) continue;
+		if (!Array.isArray(added)) {
+			throw new Error(`fc-feedback: ${field}은(는) 배열이어야 합니다`);
+		}
+		// A submitted entry replaces the one for the same match and person (marker_colors) or tag (unmatched_name_tags), so a resubmit does not duplicate it.
+		const sameEntry = (old: unknown, fresh: unknown): boolean =>
+			isRecord(old) &&
+			isRecord(fresh) &&
+			old.match === fresh.match &&
+			(field === "marker_colors" ? old.member_id === fresh.member_id : String(old.tag).toLowerCase() === String(fresh.tag).toLowerCase());
+		const existing = Array.isArray(current[field]) ? current[field] : [];
+		appended[field] = [...existing.filter((old) => !added.some((fresh) => sameEntry(old, fresh))), ...added];
+	}
+	const next: NotesDoc = { ...current, units: { ...current.units, [unitId]: body.unit }, ...appended };
+
+	const errors = checkNotes(next, loop.validated, loop.candidates, loop.roster).errors.filter((error) => isUnitErrorPath(error.path, unitId) || isMatchLevelErrorPath(error.path));
+	if (errors.length > 0) {
+		throw new Error(JSON.stringify(errors));
+	}
+	writeFileSync(join(workDir, "notes.json"), `${JSON.stringify(next, null, 2)}\n`);
+	const submittedTags = toUnmatchedNameTags(body.unmatched_name_tags);
+	for (const warning of [...noteWarnings({ version: 2, units: { [unitId]: toNoteUnit(body.unit, unitId) } }, loop.roster), ...unmatchedTagReadingWarnings(submittedTags, loop.roster)]) {
+		process.stderr.write(`${warning}\n`);
+	}
+	process.stdout.write(`${notesNextOutput(loop, next)}\n`);
 	return 0;
 }
 
@@ -1129,7 +1631,7 @@ function toSimilarCandidate(raw: unknown): SimilarCandidate {
 		title: str(raw.title, "candidate.title"),
 		date: str(raw.date, "candidate.date"),
 		topic_tags: toStringArray(raw.topic_tags, "candidate.topic_tags"),
-		position_tags: toStringArray(raw.position_tags, "candidate.position_tags"),
+		position_tags: positionTagsFromLegacy(toStringArray(raw.position_tags, "candidate.position_tags")),
 	};
 }
 
@@ -1165,12 +1667,559 @@ function handleCheckRefs(workDir: string, status: FcStatus): number {
 	ensureWorkDir(workDir, status);
 	const validated = toValidatedPlan(readJsonFile(join(workDir, "plan.validated.json"), "plan.validated.json"));
 	const draft = readJsonFile(join(workDir, "refs-draft.json"), "refs-draft.json");
-	const result = checkRefsDraft(draft, validated);
-	if (result.errors.length > 0) {
-		throw new Error(JSON.stringify(result.errors));
+	const gameVersion = sessionMatchVersion(workDir);
+	const errors = [...checkRefsDraft(draft, validated, loadRoster(status)).errors, ...refsMatchVersionErrors(draft, gameVersion)];
+	if (errors.length > 0) {
+		throw new Error(JSON.stringify(errors));
+	}
+	const refsubsDir = join(workDir, "refsubs");
+	const recheckWarnings = attachedSubtitleRecheckWarnings(draft, existsSync(refsubsDir) ? readdirSync(refsubsDir) : [], (name) => readFileSync(join(refsubsDir, name), "utf8"));
+	for (const warning of [...recurringPartialCoverageWarnings(draft, validated), ...recurringProClubsWarnings(draft, validated), ...recheckWarnings]) {
+		process.stderr.write(`${warning}\n`);
 	}
 	printJson({ ok: true });
 	return 0;
+}
+
+// ── refs-bundle: the REFS REVIEW reviewer's input ──────────────────────────
+//
+// refs-review.md puts, for every ref × attached unit, the unit's source lines next to the ref's
+// relevance_ko and the subtitles within ±REFS_REVIEW_WINDOW_SECONDS of its video_starts, so an
+// independent reviewer can check each claim against the material without parsing VTT timestamps.
+
+const REFS_REVIEW_WINDOW_SECONDS = 90;
+
+/** Subtitle file names under refsubs/ for one YouTube id (`<id>.<lang>.vtt`), sorted. */
+function refSubtitleFiles(refsubsFiles: readonly string[], videoId: string): string[] {
+	return refsubsFiles.filter((name) => name.startsWith(`${videoId}.`) && name.endsWith(".vtt")).sort();
+}
+
+const NO_SUBTITLE_HIT = "자막 적중 없음";
+
+/** Most subtitle hit lines the bundle prints per unit or label; the rest is counted ("… N줄 더"). */
+const MAX_SUBTITLE_HIT_LINES = 40;
+
+interface SubtitleCue {
+	video: string;
+	t: number;
+	text: string;
+	/** Texts of the next `CUE_LOOKAHEAD` cues of the same subtitle file, so a phrase broken over a caption line break is still found. */
+	following: string[];
+}
+
+/** How many following cues a phrase may run into after the cue it starts in. lazy: a term spanning more than four caption lines is not found; raise if real terms need it. */
+const CUE_LOOKAHEAD = 3;
+
+/**
+ * The text of the cues a hit of `needle` (lowercase, single spaces) spans, or null. A hit is searched in the cue text joined with the following
+ * cues by single spaces and counts for the cue it STARTS in, so it is reported at that cue's start time. The result is the whole text of the
+ * cues the match touches (own cue first).
+ */
+function cueHitText(cue: SubtitleCue, needle: string): string | null {
+	const texts = [cue.text, ...cue.following];
+	const lowered = texts.map((text) => text.toLowerCase());
+	const at = lowered.join(" ").indexOf(needle);
+	if (at === -1 || at >= lowered[0].length) return null;
+	const end = at + needle.length;
+	let covered = 0;
+	for (let i = 0; i < lowered.length; i++) {
+		covered += lowered[i].length + 1;
+		if (end <= covered - 1) return texts.slice(0, i + 1).join(" ");
+	}
+	return texts.join(" ");
+}
+
+/** Every cue of every `refsubs/*.vtt` file: tags stripped and rolling repeats collapsed (`parseVtt`), then consecutive identical texts collapsed. */
+function allSubtitleCues(refsubsFiles: readonly string[], readSubtitle: (name: string) => string): SubtitleCue[] {
+	const cues: SubtitleCue[] = [];
+	for (const name of refsubsFiles.filter((file) => file.endsWith(".vtt")).sort()) {
+		const video = name.split(".")[0];
+		const lines: { t: number; text: string }[] = [];
+		for (const line of parseVtt(readSubtitle(name)).lines) {
+			if (line.text === lines[lines.length - 1]?.text) continue;
+			lines.push({ t: line.start, text: line.text });
+		}
+		lines.forEach((line, index) => {
+			cues.push({ video, t: line.t, text: line.text, following: lines.slice(index + 1, index + 1 + CUE_LOOKAHEAD).map((next) => next.text) });
+		});
+	}
+	return cues;
+}
+
+/**
+ * The bundle lines for one unit/label's `subtitle_terms`: cues where a term starts (case-insensitive, also across cue line breaks, `cueHitText`), capped; "자막 적중 없음" when none.
+ * A cue repeated with the same video, time and text (two .vtt files of one video) prints once. A cue whose video is already
+ * attached to a unit (`attachedByVideo`: video id → "u029 18:13, …") ends with "[이미 붙은 자료: …]" and sorts before the
+ * others; each group is ordered by video id then time.
+ */
+function subtitleHitLines(terms: readonly string[], cues: readonly SubtitleCue[], attachedByVideo: ReadonlyMap<string, string>): string[] {
+	const needles = terms.map((term) => term.toLowerCase().replace(/\s+/g, " ").trim());
+	const seen = new Set<string>();
+	const hits = cues
+		.flatMap((cue) => {
+			const text = needles.map((needle) => cueHitText(cue, needle)).find((hit) => hit !== null);
+			return text === undefined || text === null ? [] : [{ video: cue.video, t: cue.t, text }];
+		})
+		.filter((cue) => {
+			const key = JSON.stringify([cue.video, cue.t, cue.text]);
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		})
+		.sort((a, b) => Number(attachedByVideo.has(b.video)) - Number(attachedByVideo.has(a.video)) || (a.video < b.video ? -1 : a.video > b.video ? 1 : a.t - b.t));
+	if (hits.length === 0) return [NO_SUBTITLE_HIT];
+	const lines = hits.slice(0, MAX_SUBTITLE_HIT_LINES).map((cue) => {
+		const attached = attachedByVideo.get(cue.video);
+		return `> ${cue.video} ${formatTime(cue.t)} ${cue.text}${attached === undefined ? "" : ` [이미 붙은 자료: ${attached}]`}`;
+	});
+	if (hits.length > MAX_SUBTITLE_HIT_LINES) lines.push(`… ${hits.length - MAX_SUBTITLE_HIT_LINES}줄 더`);
+	return lines;
+}
+
+/**
+ * `check refs` warning for each `recurring_unfound`/`units_unfound` `subtitle_terms` term found in a subtitle file of a video ref that is already attached:
+ * the material the writer holds may already cover the item. One warning per term and attached video, at the earliest hit.
+ */
+function attachedSubtitleRecheckWarnings(draft: unknown, refsubsFiles: readonly string[], readSubtitle: (name: string) => string): string[] {
+	if (!isRecord(draft) || !Array.isArray(draft.refs)) return [];
+	const videos = [...new Set(draft.refs.map(toRefDraftEntry).flatMap((ref) => (ref.format === "video" ? [extractYoutubeVideoId(new URL(ref.url))] : [])).filter((id): id is string => id !== null))].sort();
+	const cues = allSubtitleCues(videos.flatMap((video) => refSubtitleFiles(refsubsFiles, video)), readSubtitle);
+	const unfound = [...(Array.isArray(draft.recurring_unfound) ? draft.recurring_unfound : []), ...(Array.isArray(draft.units_unfound) ? draft.units_unfound : [])];
+	const terms = [...new Set(unfound.flatMap((entry: unknown) => unfoundStrings(entry, "subtitle_terms")))];
+	return terms.flatMap((term) => {
+		const needle = term.toLowerCase().replace(/\s+/g, " ").trim();
+		// A one-word term ("press", "압박") hits nearly every attached video; only a phrase points at a segment worth rechecking.
+		if (!needle.includes(" ")) return [];
+		return videos.flatMap((video) => {
+			const hits = cues.filter((cue) => cue.video === video && cueHitText(cue, needle) !== null).map((cue) => cue.t);
+			return hits.length === 0 ? [] : [`fc-feedback: 경고 보유 자료 재확인: ${term} — ${video} ${formatTime(Math.min(...hits))}`];
+		});
+	});
+}
+
+/** Video id → "u029 18:13, u031 2:00": the units each attached video ref sits on and the start time it was attached at (unit id alone when the ref has no readable `video_starts` entry). */
+function attachedVideoUnits(refs: readonly RefDraftEntry[]): Map<string, string> {
+	const byVideo = new Map<string, string[]>();
+	for (const ref of refs) {
+		if (ref.format !== "video") continue;
+		const videoId = extractYoutubeVideoId(new URL(ref.url));
+		if (videoId === null) continue;
+		for (const unitId of ref.unit_ids) {
+			const start = ref.video_starts?.[unitId];
+			const seconds = start === undefined ? null : clockSeconds(start);
+			byVideo.set(videoId, [...(byVideo.get(videoId) ?? []), seconds === null ? unitId : `${unitId} ${formatTime(seconds)}`]);
+		}
+	}
+	return new Map([...byVideo].map(([videoId, entries]) => [videoId, entries.join(", ")]));
+}
+
+/** The cue printed next to a unit whose title asks for a "하지 않기" (negated to-do): a ref segment that teaches the opposite action must not be attached. */
+const NEGATED_TODO_CUE = "이 유닛은 '하지 않기' — 구간이 참는 쪽을 말하는지 확인";
+
+function negatedTodoCueLines(unit: ValidatedUnit): string[] {
+	return unit.title.includes("지 않기") ? [NEGATED_TODO_CUE] : [];
+}
+
+/** Words too generic to find a subtitle segment: the to-do/negation endings every title carries, and Hangul function words ("혼자", "말고") that say nothing about the topic. */
+const TITLE_KEYWORD_STOPS = new Set(["않기", "하기", "않는", "않고", "말고", "혼자", "대신", "보다", "계속", "너무", "바로", "하지"]);
+
+/**
+ * Game terms that coaches and subtitles spell differently ("오프사이드" / "옵사라인" / "offside"). A title that holds one spelling also searches the
+ * others, whole; the group only adds keywords — the stem of the title word is still searched as before.
+ */
+const GAME_TERM_SYNONYMS: readonly (readonly string[])[] = [
+	["오프사이드", "옵사", "offside"],
+	["슈퍼 캔슬", "슈캔", "super cancel"],
+	["크로스", "cross"],
+	["헤딩", "header"],
+	["프리킥", "free kick"],
+	["코너킥", "corner kick"],
+];
+
+/** The other spellings of every `GAME_TERM_SYNONYMS` group that has a spelling in `title` (lowercase compare); none when the title holds no such term. */
+function gameTermSynonyms(title: string): string[] {
+	const lower = title.toLowerCase();
+	return GAME_TERM_SYNONYMS.filter((group) => group.some((term) => lower.includes(term))).flat();
+}
+
+/**
+ * Search words of a unit title for `unitSubtitleHits`: the action text after each segment's "행위자: " (the actor names are people, not
+ * the topic), parenthetical hedge dropped, split on spaces and "·". A Hangul word of 3+ syllables keeps its first two syllables (the stem:
+ * "캔슬로" → "캔슬", "조정하기" → "조정") so the particle or ending does not hide a hit; a 2-syllable Hangul word and a Latin word of 3+
+ * letters stay whole; shorter words are dropped. Every spelling of a `GAME_TERM_SYNONYMS` group the action text holds is added whole.
+ */
+function titleKeywords(title: string): string[] {
+	const actions = title.split(" / ").map((segment) => {
+		const colon = segment.indexOf(": ");
+		return (colon === -1 ? segment : segment.slice(colon + 2)).replace(/\([^()]*\)/g, " ");
+	});
+	const words = actions.flatMap((action) => action.split(/[\s·]+/));
+	const keywords = words.flatMap((word) => {
+		const hangul = /^[가-힣]+$/u.test(word);
+		const keyword = hangul ? word.slice(0, 2) : /^[A-Za-z]{3,}$/.test(word) ? word.toLowerCase() : "";
+		return keyword.length >= 2 && !TITLE_KEYWORD_STOPS.has(word) && !TITLE_KEYWORD_STOPS.has(keyword) ? [keyword] : [];
+	});
+	return [...new Set([...keywords, ...gameTermSynonyms(actions.join(" "))])];
+}
+
+/** A title keyword that occurs in more than this share of the pro_clubs cues (min `MIN_KEYWORD_CUE_ALLOWANCE` cues) is generic ("수비", "상대") and finds nothing. */
+const MAX_KEYWORD_CUE_SHARE = 0.01;
+const MIN_KEYWORD_CUE_ALLOWANCE = 3;
+/** Most cues listed per unit by `unitSubtitleHitLines`, best score first. */
+const UNIT_SUBTITLE_HIT_LIMIT = 10;
+
+/**
+ * For each plan unit, the subtitle cues (all `refsubs/` files) of a `pro_clubs: true` video ref that is NOT attached to that unit and that contain
+ * a title keyword of the unit (`titleKeywords`) — material the writer may have missed. A keyword found in more than `MAX_KEYWORD_CUE_SHARE` of the
+ * pro_clubs cues is generic and dropped; a cue scores the sum of 1/frequency of the keywords it holds, so a rare word ("코너") outranks a common one,
+ * and the best `UNIT_SUBTITLE_HIT_LIMIT` cues are printed. Output: "- <unit> · <title>" followed by the `subtitleHitLines` of those cues; a unit with
+ * no such hit is omitted, and "- 없음" stands when no unit has one.
+ */
+function unitSubtitleHitLines(plan: ValidatedPlan, refs: readonly RefDraftEntry[], cues: readonly SubtitleCue[], attachedByVideo: ReadonlyMap<string, string>): string[] {
+	const attachedUnitsByVideo = new Map<string, Set<string>>();
+	const proClubsVideos = new Set<string>();
+	for (const ref of refs) {
+		const videoId = ref.format === "video" ? extractYoutubeVideoId(new URL(ref.url)) : null;
+		if (videoId === null) continue;
+		if (ref.pro_clubs === true) proClubsVideos.add(videoId);
+		attachedUnitsByVideo.set(videoId, new Set([...(attachedUnitsByVideo.get(videoId) ?? []), ...ref.unit_ids]));
+	}
+	const seen = new Set<string>();
+	const corpus = cues
+		.filter((cue) => proClubsVideos.has(cue.video))
+		.filter((cue) => {
+			const key = JSON.stringify([cue.video, cue.t, cue.text]);
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		})
+		.map((cue) => ({ cue, text: cue.text.toLowerCase() }));
+	const maxFrequency = Math.max(MIN_KEYWORD_CUE_ALLOWANCE, Math.floor(corpus.length * MAX_KEYWORD_CUE_SHARE));
+	const frequencies = new Map<string, number>();
+	const frequency = (keyword: string): number => {
+		if (!frequencies.has(keyword)) frequencies.set(keyword, corpus.filter((entry) => entry.text.includes(keyword)).length);
+		return frequencies.get(keyword) ?? 0;
+	};
+	const out: string[] = [];
+	for (const unit of plan.units) {
+		const keywords = titleKeywords(unit.title).filter((keyword) => frequency(keyword) <= maxFrequency);
+		const scored = corpus
+			.filter((entry) => !attachedUnitsByVideo.get(entry.cue.video)?.has(unit.id))
+			.map((entry) => ({ cue: entry.cue, score: keywords.filter((keyword) => entry.text.includes(keyword)).reduce((sum, keyword) => sum + 1 / frequency(keyword), 0) }))
+			.filter((entry) => entry.score > 0)
+			.sort((a, b) => b.score - a.score)
+			.slice(0, UNIT_SUBTITLE_HIT_LIMIT);
+		if (scored.length === 0) continue;
+		out.push(`- ${unit.id} · ${unit.title}`, ...subtitleHitLines(keywords, scored.map((entry) => entry.cue), attachedByVideo).map((hit) => `  ${hit}`));
+	}
+	return out.length === 0 ? ["- 없음"] : out;
+}
+
+/** The non-blank strings of `value[field]` (queries / subtitle_terms of an unfound entry); `[]` when it is not an array. */
+function unfoundStrings(entry: unknown, field: string): string[] {
+	return isRecord(entry) && Array.isArray(entry[field]) ? entry[field].filter((item: unknown): item is string => typeof item === "string" && item.trim() !== "") : [];
+}
+
+/** One YouTube search: its "<id> <title>" results, or why it failed. */
+type YtSearchResult = { ok: true; results: Array<{ id: string; title: string }> } | { ok: false; reason: string };
+
+/** The yt-dlp calls a refs-bundle makes: one video's channel URL (`null` when unavailable) and one flat search from a ready argv. */
+interface YtSearchRunner {
+	channelUrl: (videoUrl: string) => string | null;
+	search: (argv: readonly string[]) => YtSearchResult;
+}
+
+/** Most same-channel searches one refs-bundle runs; the rest is counted ("생략한 검색 N개"). */
+const MAX_CHANNEL_SEARCHES = 12;
+const YT_SEARCH_TIMEOUT_MS = 60_000;
+
+/**
+ * Runs a yt-dlp argv (`uvx yt-dlp ...`). `FC_FEEDBACK_YTDLP_BIN` replaces the `uvx yt-dlp` prefix with that executable (the test seam: no test reaches
+ * YouTube). A non-zero exit, a timeout, or a missing executable is a failure, never a thrown error — the bundle is still written.
+ */
+function runYtDlp(argv: readonly string[]): { ok: true; stdout: string } | { ok: false; reason: string } {
+	const override = process.env.FC_FEEDBACK_YTDLP_BIN;
+	const command = override === undefined || override === "" ? argv : [override, ...argv.slice(2)];
+	const result = spawnSync(command[0], command.slice(1), { encoding: "utf8", timeout: YT_SEARCH_TIMEOUT_MS });
+	if (result.error !== undefined) {
+		return { ok: false, reason: "code" in result.error && result.error.code === "ETIMEDOUT" ? "시간 초과" : result.error.message };
+	}
+	if (result.status !== 0) {
+		const firstStderrLine = result.stderr.split("\n").find((line) => line.trim() !== "");
+		return { ok: false, reason: firstStderrLine?.trim() ?? `종료 코드 ${String(result.status)}` };
+	}
+	return { ok: true, stdout: result.stdout };
+}
+
+const ytSearchRunner: YtSearchRunner = {
+	channelUrl: (videoUrl) => {
+		const result = runYtDlp(ytChannelUrlArgs(videoUrl));
+		const first = result.ok ? (result.stdout.split("\n").find((line) => line.trim() !== "")?.trim() ?? "") : "";
+		return /^https?:\/\/\S+$/.test(first) ? first.replace(/\/+$/, "") : null;
+	},
+	search: (argv) => {
+		const result = runYtDlp(argv);
+		if (!result.ok) return result;
+		const results = result.stdout
+			.split("\n")
+			.filter((line) => line.trim() !== "")
+			.map((line) => {
+				const space = line.indexOf(" ");
+				return space === -1 ? { id: line.trim(), title: "" } : { id: line.slice(0, space), title: line.slice(space + 1).trim() };
+			});
+		return { ok: true, results };
+	},
+};
+
+/** Most words of one search keyword (a label): more words make the YouTube search too narrow. */
+const MAX_KEYWORD_WORDS = 3;
+
+/** The unit title's first segment action (after "행위자: ", parenthetical dropped), cleaned by `searchKeywordWords`, its first two words. */
+function unitActionKeyword(title: string, roster: Roster | null): string {
+	const segment = title.split(" / ")[0];
+	const colon = segment.indexOf(": ");
+	return searchKeywordWords((colon === -1 ? segment : segment.slice(colon + 2)).replace(/\([^()]*\)/g, " "), roster).slice(0, 2).join(" ");
+}
+
+/** A material title with its series marker ("pt.4", "Part 2", "#3") removed — it names every part of the series; `null` when the title has no marker. */
+function seriesTitle(title: string): string | null {
+	const marker = /\b(?:pt|part)\.?\s*\d+\b|#\d+/gi;
+	if (!marker.test(title)) return null;
+	const stripped = title.replace(marker, " ").replace(/\s{2,}/g, " ").trim().replace(/[\s:|\-–—,.([]+$/u, "");
+	return stripped === "" ? null : stripped;
+}
+
+const isLatinTerm = (term: string): boolean => /^[\x20-\x7e]+$/.test(term);
+
+/**
+ * The search keywords one unfound record yields for a channel. A `recurring_unfound` record: its label. A `units_unfound` record: its unit's title
+ * action, then its `subtitle_terms` (first two, cleaned, as one keyword). Roster names, condition-clause words and particles are removed
+ * (`searchKeywordWords`). An English channel prefers the record's first Latin `subtitle_terms` entry and falls back to the Korean keywords.
+ */
+function unfoundKeywords(record: { label?: string; title?: string; terms: readonly string[] }, english: boolean, roster: Roster | null): string[] {
+	const latin = record.terms.find(isLatinTerm);
+	if (english && latin !== undefined) {
+		const keyword = searchKeywordWords(latin, roster).join(" ");
+		if (keyword !== "") return [keyword];
+	}
+	const keywords =
+		record.label !== undefined
+			? [searchKeywordWords(record.label, roster).slice(0, MAX_KEYWORD_WORDS).join(" ")]
+			: [unitActionKeyword(record.title ?? "", roster), record.terms.slice(0, 2).flatMap((term) => searchKeywordWords(term, roster)).join(" ")];
+	return keywords.filter((keyword) => keyword !== "");
+}
+
+/**
+ * "## 같은 채널 후보": for each channel (`source_name`) of an attached YouTube video ref, flat searches `"<channel> <keyword>"`. Channels are ordered by
+ * how many units their attached refs cover (most first), then channels with a `pro_clubs` ref first, then document order. A channel's own queries
+ * run in this order: a series-title search per attached ref title with a series marker (`seriesTitle`: surfaces the other parts), then the keywords of
+ * every unfound record (`unfoundKeywords`: `recurring_unfound` labels, then `units_unfound` units). The `MAX_CHANNEL_SEARCHES` cap is spent round-robin
+ * over the channels (each channel's first query, then each second query, ...) and the rest is counted. Each result prints "<id> <title>", with the
+ * ref's attachment marked when that video is already attached. `search === null` (`--no-search`) prints that nothing was searched.
+ * A search runs inside the channel (`<channel URL>/search?query=<keyword>`; the channel URL is fetched once per channel from its first attached ref). When
+ * the channel URL or the in-channel search fails, a global search `"<channel> <keyword> <football word>"` stands in ("축구" for a Korean channel, "football" otherwise).
+ */
+function channelCandidateLines(draft: { recurring_unfound?: unknown; units_unfound?: unknown }, plan: ValidatedPlan, refs: readonly RefDraftEntry[], roster: Roster | null, attachedByVideo: ReadonlyMap<string, string>, search: YtSearchRunner | null): string[] {
+	const out = ["## 같은 채널 후보", "", "붙은 YouTube 자료의 채널에서 못 찾은 label·유닛의 키워드로 다시 검색한 결과 — 이미 붙은 영상은 표시한다. 같은 행동을 다루는 영상이 있으면 붙이는 것을 검토한다.", ""];
+	if (search === null) {
+		return [...out, "- 검색 안 함(--no-search)", ""];
+	}
+	const records = [
+		...(Array.isArray(draft.recurring_unfound) ? draft.recurring_unfound : []).flatMap((entry: unknown) =>
+			isRecord(entry) && typeof entry.label === "string" ? [{ label: entry.label, terms: unfoundStrings(entry, "subtitle_terms") }] : [],
+		),
+		...(Array.isArray(draft.units_unfound) ? draft.units_unfound : []).flatMap((entry: unknown) => {
+			const unit = isRecord(entry) ? plan.units.find((candidate) => candidate.id === entry.unit_id) : undefined;
+			return unit === undefined ? [] : [{ title: unit.title, terms: unfoundStrings(entry, "subtitle_terms") }];
+		}),
+	];
+	const videoRefs = refs.filter((ref) => ref.format === "video" && extractYoutubeVideoId(new URL(ref.url)) !== null);
+	const channels = [...new Set(videoRefs.map((ref) => ref.source_name))]
+		.map((channel, order) => {
+			const own = videoRefs.filter((ref) => ref.source_name === channel);
+			return { channel, order, own, covered: new Set(own.flatMap((ref) => ref.unit_ids)).size, proClubs: own.some((ref) => ref.pro_clubs === true) };
+		})
+		.sort((a, b) => b.covered - a.covered || Number(b.proClubs) - Number(a.proClubs) || a.order - b.order);
+	const queriesByChannel = channels.map(({ channel, own }) => {
+		const english = own.every((ref) => ref.lang !== "ko");
+		const keywords = [...own.flatMap((ref) => seriesTitle(ref.title) ?? []), ...records.flatMap((record) => unfoundKeywords(record, english, roster))];
+		return [...new Set(keywords)].map((keyword) => ({ channel, keyword, english, videoUrl: own[0].url }));
+	});
+	const channelUrls = new Map<string, string | null>();
+	const pairs = Array.from({ length: Math.max(0, ...queriesByChannel.map((queries) => queries.length)) }, (_, index) => queriesByChannel.flatMap((queries) => (index < queries.length ? [queries[index]] : []))).flat();
+	if (pairs.length === 0) {
+		return [...out, "- 없음", ""];
+	}
+	for (const { channel, keyword, english, videoUrl } of pairs.slice(0, MAX_CHANNEL_SEARCHES)) {
+		out.push(`### ${channel} × ${keyword}`);
+		if (!channelUrls.has(channel)) channelUrls.set(channel, search.channelUrl(videoUrl));
+		const channelUrl = channelUrls.get(channel) ?? null;
+		let found = channelUrl === null ? null : search.search(ytChannelSearchArgs(channelUrl, keyword));
+		if (found === null || !found.ok) {
+			out.push("- 채널 안 검색 불가 — 전체 검색으로 대신함");
+			found = search.search(ytSearchArgs(`${channel} ${keyword} ${english ? "football" : "축구"}`));
+		}
+		if (!found.ok) {
+			out.push(`- 검색 실패: ${found.reason}`);
+		} else if (found.results.length === 0) {
+			out.push("- 결과 없음");
+		} else {
+			for (const result of found.results) {
+				const attached = attachedByVideo.get(result.id);
+				out.push(`- ${result.id} ${result.title}${attached === undefined ? "" : ` [이미 붙은 자료: ${attached}]`}`);
+			}
+		}
+		out.push("");
+	}
+	if (pairs.length > MAX_CHANNEL_SEARCHES) {
+		out.push(`생략한 검색 ${pairs.length - MAX_CHANNEL_SEARCHES}개(상한 ${MAX_CHANNEL_SEARCHES}개)`, "");
+	}
+	return out;
+}
+
+function refsReviewBundle(input: {
+	draft: unknown;
+	plan: ValidatedPlan;
+	lines: readonly Line[];
+	refsubsFiles: readonly string[];
+	readSubtitle: (name: string) => string;
+	roster: Roster | null;
+	search: YtSearchRunner | null;
+}): string {
+	const { draft, plan, lines, refsubsFiles, readSubtitle, roster, search } = input;
+	if (!isRecord(draft) || !Array.isArray(draft.refs)) {
+		throw new Error("fc-feedback: refs-draft.json 형식이 올바르지 않습니다");
+	}
+	const unitsById = new Map(plan.units.map((unit) => [unit.id, unit]));
+	const usedSubtitles = new Set<string>();
+	const out: string[] = ["# 참고자료 리뷰 번들", ""];
+	let cueCache: SubtitleCue[] | null = null;
+	const subtitleCues = (): SubtitleCue[] => (cueCache ??= allSubtitleCues(refsubsFiles, readSubtitle));
+	const attachedByVideo = attachedVideoUnits(draft.refs.map(toRefDraftEntry));
+
+	draft.refs.forEach((rawRef: unknown, refIndex) => {
+		const ref = toRefDraftEntry(rawRef);
+		const labels = isRecord(rawRef) && Array.isArray(rawRef.recurring_labels) ? toStringArray(rawRef.recurring_labels, "ref.recurring_labels") : [];
+		const videoId = ref.format === "video" ? extractYoutubeVideoId(new URL(ref.url)) : null;
+		const subtitleFiles = videoId === null ? [] : refSubtitleFiles(refsubsFiles, videoId);
+		for (const name of subtitleFiles) usedSubtitles.add(name);
+		const captions = subtitleFiles.length === 0 ? null : parseVtt(readSubtitle(subtitleFiles[0]));
+
+		out.push(`## 자료 ${refIndex + 1}: ${ref.title}`, "", `- url: ${ref.url}`, `- kind: ${ref.kind} · format: ${ref.format} · lang: ${ref.lang}`);
+		if (ref.kind === "eafc") {
+			out.push(`- game_version: ${ref.game_version ?? "null"} · published: ${ref.published ?? "없음"} · pro_clubs: ${String(ref.pro_clubs ?? false)}`);
+		}
+		if (ref.summary_ko !== undefined) out.push(`- summary_ko: ${ref.summary_ko}`);
+		for (const point of ref.key_points_ko ?? []) out.push(`- key_point: ${point}`);
+		out.push(`- recurring_labels: ${labels.length === 0 ? "[]" : labels.join(" | ")}`);
+		if (ref.format === "video") {
+			out.push(`- 자막: ${subtitleFiles.length === 0 ? "자막 없음" : subtitleFiles.map((name) => `refsubs/${name}`).join(", ")}`);
+		}
+		out.push("");
+
+		for (const unitId of ref.unit_ids) {
+			const unit = unitsById.get(unitId);
+			if (unit === undefined) throw new Error(`fc-feedback: refs-draft.json의 unit id가 plan에 없습니다: ${unitId}`);
+			out.push(`### ${unitId} · ${unit.title}`, "", ...negatedTodoCueLines(unit).flatMap((cueLine) => [cueLine, ""]), "원문:");
+			for (const line of lines) {
+				if (line.video === unit.video && line.start >= unit.start && line.end <= unit.end) {
+					out.push(`> [${formatTime(line.start)}]${line.source === "comment" ? ` (댓글 · ${line.author})` : ""} ${line.text}`);
+				}
+			}
+			out.push("", `relevance_ko: ${ref.relevance_ko[unitId] ?? ""}`);
+			const lesson = ref.lesson_ko?.[unitId];
+			if (lesson !== undefined) out.push(`lesson_ko: ${lesson}`);
+			const start = ref.video_starts?.[unitId];
+			if (start !== undefined) {
+				const seconds = clockSeconds(start);
+				out.push(`video_starts: ${start}`);
+				if (captions !== null && seconds !== null) {
+					const from = Math.max(0, seconds - REFS_REVIEW_WINDOW_SECONDS);
+					const to = seconds + REFS_REVIEW_WINDOW_SECONDS;
+					out.push(`자막 ${formatTime(from)}–${formatTime(to)}:`);
+					for (const caption of captions.lines) {
+						if (caption.start >= from && caption.start <= to) out.push(`> [${formatTime(caption.start)}] ${caption.text}`);
+					}
+				}
+			}
+			out.push("");
+		}
+	});
+
+	out.push("## 반복 지적", "");
+	const unfound = isRecord(draft) && Array.isArray(draft.recurring_unfound) ? draft.recurring_unfound : [];
+	for (const item of plan.recurring) {
+		const covering = draft.refs
+			.map((rawRef: unknown, refIndex) => ({ rawRef, refIndex }))
+			.filter(({ rawRef }) => isRecord(rawRef) && Array.isArray(rawRef.recurring_labels) && rawRef.recurring_labels.includes(item.label))
+			.map(({ refIndex }) => `자료 ${refIndex + 1}`);
+		const unfoundEntry = unfound.find((entry: unknown) => isRecord(entry) && entry.label === item.label);
+		const queries = unfoundStrings(unfoundEntry, "queries");
+		const attachedOnUnits = draft.refs.flatMap((rawRef: unknown, refIndex) =>
+			isRecord(rawRef) && Array.isArray(rawRef.unit_ids)
+				? rawRef.unit_ids.filter((id: unknown) => item.unit_ids.includes(String(id))).map((id: unknown) => `자료 ${refIndex + 1}(${String(id)})`)
+				: [],
+		);
+		const coverage =
+			covering.length > 0
+				? covering.join(", ")
+				: `못 찾음 — 검색어: ${queries.join(" | ")}${attachedOnUnits.length > 0 ? ` — 이 label 유닛에 붙은 자료: ${attachedOnUnits.join(", ")}` : ""}`;
+		out.push(`- ${item.label} (${item.unit_ids.join(", ")}): ${coverage}`);
+		if (covering.length === 0) {
+			const terms = unfoundStrings(unfoundEntry, "subtitle_terms");
+			out.push(`  - subtitle_terms: ${terms.join(", ")}`);
+			for (const hit of subtitleHitLines(terms, subtitleCues(), attachedByVideo)) out.push(`  ${hit}`);
+		}
+	}
+	if (plan.recurring.length === 0) out.push("- 없음");
+
+	const attachedUnitIds = new Set(
+		draft.refs.flatMap((rawRef: unknown) => (isRecord(rawRef) && Array.isArray(rawRef.unit_ids) ? rawRef.unit_ids.map(String) : [])),
+	);
+	const bare = plan.units.filter((unit) => !attachedUnitIds.has(unit.id));
+	out.push("", "## 자료 없는 유닛", "");
+	const unitsUnfound = Array.isArray(draft.units_unfound) ? draft.units_unfound : [];
+	for (const unit of bare) {
+		out.push(`- ${unit.id} · ${unit.title}`, ...negatedTodoCueLines(unit).map((cueLine) => `  - ${cueLine}`));
+		const entry = unitsUnfound.find((candidate: unknown) => isRecord(candidate) && candidate.unit_id === unit.id);
+		const terms = unfoundStrings(entry, "subtitle_terms");
+		out.push(`  - queries: ${unfoundStrings(entry, "queries").join(" | ")}`, `  - subtitle_terms: ${terms.join(", ")}`);
+		for (const hit of subtitleHitLines(terms, subtitleCues(), attachedByVideo)) out.push(`  ${hit}`);
+	}
+	if (bare.length === 0) out.push("- 없음");
+
+	out.push("", "## 유닛별 프로클럽 자막 적중", "", "유닛 제목 핵심어로 refsubs/ 전체를 훑은 결과 — 그 유닛에 안 붙은 pro_clubs 영상의 구간만, 흔한 낱말은 빼고 유닛마다 점수 상위 10줄까지 싣는다. 같은 행동을 다루면 그 유닛에 붙이는 것을 검토한다.", "");
+	out.push(...unitSubtitleHitLines(plan, draft.refs.map(toRefDraftEntry), subtitleCues(), attachedByVideo));
+
+	out.push("", ...channelCandidateLines(draft, plan, draft.refs.map(toRefDraftEntry), roster, attachedByVideo, search));
+
+	const unused = refsubsFiles.filter((name) => name.endsWith(".vtt") && !usedSubtitles.has(name)).sort();
+	out.push("## 붙이지 않은 자막", "");
+	for (const name of unused) out.push(`- refsubs/${name}`);
+	if (unused.length === 0) out.push("- 없음");
+	return `${out.join("\n")}\n`;
+}
+
+function handleRefsBundle(workDir: string, status: FcStatus, searchChannels: boolean): { path: string } {
+	ensureWorkDir(workDir, status);
+	const plan = toValidatedPlan(readJsonFile(join(workDir, "plan.validated.json"), "plan.validated.json"));
+	const draft = readJsonFile(join(workDir, "refs-draft.json"), "refs-draft.json");
+	const refsubsDir = join(workDir, "refsubs");
+	const refsubsFiles = existsSync(refsubsDir) ? readdirSync(refsubsDir) : [];
+	const path = join(workDir, "refs-review.md");
+	writeFileSync(
+		path,
+		refsReviewBundle({
+			draft,
+			plan,
+			lines: readLines(workDir),
+			refsubsFiles,
+			readSubtitle: (name) => readFileSync(join(refsubsDir, name), "utf8"),
+			roster: loadRoster(status),
+			search: searchChannels ? ytSearchRunner : null,
+		}),
+	);
+	return { path };
 }
 
 // ── taxonomy add (plan §13.1-2) ──────────────────────────────────────────
@@ -1227,16 +2276,63 @@ function toNoteBlock(raw: unknown, unitId: string, index: number): NoteBlock {
 			type: "frame",
 			candidate_id: str(raw.candidate_id, `${path}.candidate_id`),
 			caption: str(raw.caption, `${path}.caption`),
+			...(raw.focus_x !== undefined ? { focus_x: num(raw.focus_x, `${path}.focus_x`) } : {}),
 		};
 	}
 	throw new Error(`fc-feedback: notes.json의 ${path}.type이 올바르지 않습니다`);
 }
 
-function toNoteUnit(raw: unknown, unitId: string): { blocks: NoteBlock[] } {
+function toNoteUnit(raw: unknown, unitId: string): NotesV2["units"][string] {
 	if (!isRecord(raw) || !Array.isArray(raw.blocks)) {
 		throw new Error(`fc-feedback: notes.json의 units.${unitId}가 올바르지 않습니다`);
 	}
-	return { blocks: raw.blocks.map((block, index) => toNoteBlock(block, unitId, index)) };
+	return {
+		blocks: raw.blocks.map((block, index) => toNoteBlock(block, unitId, index)),
+		...(raw.unidentified_member_ids !== undefined
+			? { unidentified_member_ids: toStringArray(raw.unidentified_member_ids, `units.${unitId}.unidentified_member_ids`) }
+			: {}),
+		...(raw.look_at !== undefined ? { look_at: str(raw.look_at, `units.${unitId}.look_at`) } : {}),
+		...(raw.fault_scene !== undefined ? { fault_scene: str(raw.fault_scene, `units.${unitId}.fault_scene`) } : {}),
+		...(raw.direction_check_ko !== undefined ? { direction_check_ko: str(raw.direction_check_ko, `units.${unitId}.direction_check_ko`) } : {}),
+	};
+}
+
+/** The `marker_colors` of a notes.json that already passed `checkNotes`; absent when the file has none. */
+function toMarkerColors(raw: unknown): NonNullable<NotesV2["marker_colors"]> {
+	if (!Array.isArray(raw)) {
+		return [];
+	}
+	return raw.map((entry, index) => {
+		const path = `marker_colors[${index}]`;
+		if (!isRecord(entry)) {
+			throw new Error(`fc-feedback: notes.json의 ${path}가 올바르지 않습니다`);
+		}
+		return {
+			match: num(entry.match, `${path}.match`),
+			member_id: str(entry.member_id, `${path}.member_id`),
+			color: str(entry.color, `${path}.color`),
+			evidence_candidate_id: str(entry.evidence_candidate_id, `${path}.evidence_candidate_id`),
+		};
+	});
+}
+
+/** The `unmatched_name_tags` of a notes.json that already passed `checkNotes`; `[]` when the file has none. */
+function toUnmatchedNameTags(raw: unknown): NonNullable<NotesV2["unmatched_name_tags"]> {
+	if (!Array.isArray(raw)) {
+		return [];
+	}
+	return raw.map((entry, index) => {
+		const path = `unmatched_name_tags[${index}]`;
+		if (!isRecord(entry)) {
+			throw new Error(`fc-feedback: notes.json의 ${path}가 올바르지 않습니다`);
+		}
+		return {
+			match: num(entry.match, `${path}.match`),
+			tag: str(entry.tag, `${path}.tag`).trim(),
+			...(entry.color !== undefined ? { color: str(entry.color, `${path}.color`) } : {}),
+			evidence_candidate_id: str(entry.evidence_candidate_id, `${path}.evidence_candidate_id`),
+		};
+	});
 }
 
 function readNotes(workDir: string): NotesV2 {
@@ -1248,7 +2344,7 @@ function readNotes(workDir: string): NotesV2 {
 	for (const [unitId, entry] of Object.entries(raw.units)) {
 		units[unitId] = toNoteUnit(entry, unitId);
 	}
-	return { version: 2, units };
+	return { version: 2, units, marker_colors: toMarkerColors(raw.marker_colors), unmatched_name_tags: toUnmatchedNameTags(raw.unmatched_name_tags) };
 }
 
 interface FrameJob {
@@ -1286,6 +2382,11 @@ async function cmdFrames(workDir: string, status: FcStatus): Promise<{ frames: n
 
 	const imgDir = join(workDir, "img");
 	mkdirSync(imgDir, { recursive: true });
+	// ffmpeg에 libwebp 인코더가 없으면(Homebrew ffmpeg 9 bottle) png로 뽑아 cwebp로 바꾼다.
+	const viaCwebp = !hasLibwebpEncoder((await runCommand(["ffmpeg", "-hide_banner", "-encoders"])).stdout);
+	if (viaCwebp && Bun.which("cwebp") === null) {
+		throw new Error("fc-feedback: ffmpeg에 libwebp 인코더가 없고 cwebp도 없습니다 — `brew install webp`로 cwebp를 설치하세요");
+	}
 
 	for (const job of jobs) {
 		const video = session.videos.find((entry) => entry.id === job.video);
@@ -1294,9 +2395,17 @@ async function cmdFrames(workDir: string, status: FcStatus): Promise<{ frames: n
 		}
 		const videoPath = join(workDir, video.files.video);
 		const out = join(imgDir, `${job.id}.webp`);
-		const frameResult = await runCommand(ffmpegFrameArgs(videoPath, job.t, out));
+		const grab = viaCwebp ? join(imgDir, `${job.id}.png`) : out;
+		const frameResult = await runCommand(ffmpegFrameArgs(videoPath, job.t, grab));
 		if (frameResult.exitCode !== 0) {
 			throw new Error(`fc-feedback: 프레임 추출 실패(${job.id}): ${frameResult.stderr.trim()}`);
+		}
+		if (viaCwebp) {
+			const encodeResult = await runCommand(cwebpArgs(grab, out));
+			rmSync(grab, { force: true });
+			if (encodeResult.exitCode !== 0) {
+				throw new Error(`fc-feedback: webp 변환 실패(${job.id}): ${encodeResult.stderr.trim()}`);
+			}
 		}
 	}
 
@@ -1315,7 +2424,7 @@ function toPastUnit(raw: unknown): PastUnit {
 		title: str(raw.title, "unit.title"),
 		date: str(raw.date, "unit.date"),
 		topic_tags: toStringArray(raw.topic_tags, "unit.topic_tags"),
-		position_tags: toStringArray(raw.position_tags, "unit.position_tags"),
+		position_tags: positionTagsFromLegacy(toStringArray(raw.position_tags, "unit.position_tags")),
 		member_ids: toStringArray(raw.member_ids, "unit.member_ids"),
 	};
 }
@@ -1372,6 +2481,18 @@ interface RefDraftEntry {
 	lang: string;
 	kind: "eafc" | "tactics";
 	unit_ids: string[];
+	format: "video" | "article";
+	relevance_ko: Record<string, string>;
+	/** unit id → `m:ss` start of the segment that covers that unit's scene. */
+	video_starts?: Record<string, string>;
+	/** unit id → the action this material itself recommends for that unit's fault. Absent when the material gives none (and on entries written before this field). */
+	lesson_ko?: Record<string, string>;
+	/** eafc only: the version its material states ("FC 25"), or null when it states none. Absent on tactics refs and on verified entries written before this field. */
+	game_version?: string | null;
+	/** eafc only: the material covers Pro Clubs. Absent on tactics refs and on verified entries written before this field. */
+	pro_clubs?: boolean;
+	/** eafc only, when `game_version` is null: the year-month ("2023-01") the material was published. */
+	published?: string;
 	summary_ko?: string;
 	key_points_ko?: string[];
 	translations?: Translation[];
@@ -1382,6 +2503,20 @@ function toRefKind(value: unknown, path: string): "eafc" | "tactics" {
 		throw new Error(`fc-feedback: ${path}는 "eafc" 또는 "tactics"여야 합니다`);
 	}
 	return value;
+}
+
+function toRefFormat(value: unknown, path: string): "video" | "article" {
+	if (value !== "video" && value !== "article") {
+		throw new Error(`fc-feedback: ${path}는 "video" 또는 "article"이어야 합니다`);
+	}
+	return value;
+}
+
+function toStringRecord(value: unknown, path: string): Record<string, string> {
+	if (!isRecord(value)) {
+		throw new Error(`fc-feedback: ${path}는 객체여야 합니다`);
+	}
+	return Object.fromEntries(Object.entries(value).map(([unitId, sentence]) => [unitId, str(sentence, `${path}.${unitId}`)]));
 }
 
 function toTranslation(raw: unknown): Translation {
@@ -1405,6 +2540,11 @@ function toRefDraftEntry(raw: unknown): RefDraftEntry {
 		lang: str(raw.lang, "ref.lang"),
 		kind: toRefKind(raw.kind, "ref.kind"),
 		unit_ids: toStringArray(raw.unit_ids, "ref.unit_ids"),
+		format: toRefFormat(raw.format, "ref.format"),
+		relevance_ko: toStringRecord(raw.relevance_ko, "ref.relevance_ko"),
+		...(isRecord(raw.video_starts) ? { video_starts: toStringRecord(raw.video_starts, "ref.video_starts") } : {}),
+		...(isRecord(raw.lesson_ko) ? { lesson_ko: toStringRecord(raw.lesson_ko, "ref.lesson_ko") } : {}),
+		...refGameFields(raw),
 		...(typeof summaryKo === "string" ? { summary_ko: summaryKo } : {}),
 		...(Array.isArray(keyPointsKo) ? { key_points_ko: toStringArray(keyPointsKo, "ref.key_points_ko") } : {}),
 		...(Array.isArray(translations) ? { translations: translations.map(toTranslation) } : {}),
@@ -1455,7 +2595,7 @@ function isYoutubeWatchUrl(normalizedUrl: string): boolean {
 	return new URL(normalizedUrl).hostname === "www.youtube.com";
 }
 
-/** §4-E: YouTube verifies via oembed 200; everything else HEAD (GET on 403/405), redirects followed, 10s timeout. */
+/** §4-E: YouTube verifies via oembed 200; everything else HEAD, then GET whenever HEAD is not 2xx/3xx (some servers answer HEAD 404/403/405 for pages GET serves), redirects followed, 10s timeout. */
 async function verifyRefUrl(normalizedUrl: string): Promise<{ status: number; finalUrl: string }> {
 	if (isYoutubeWatchUrl(normalizedUrl)) {
 		const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(normalizedUrl)}&format=json`;
@@ -1467,7 +2607,7 @@ async function verifyRefUrl(normalizedUrl: string): Promise<{ status: number; fi
 		redirect: "follow",
 		signal: AbortSignal.timeout(HTTP_VERIFY_TIMEOUT_MS),
 	});
-	if (response.status === 405 || response.status === 403) {
+	if (!isVerifiedStatus(response.status, false)) {
 		response = await fetch(normalizedUrl, {
 			method: "GET",
 			redirect: "follow",
@@ -1494,6 +2634,18 @@ interface VerifiedRef {
 	lang: string;
 	kind: "eafc" | "tactics";
 	unit_ids: string[];
+	format: "video" | "article";
+	relevance_ko: Record<string, string>;
+	/** unit id → `m:ss` start of the segment that covers that unit's scene. */
+	video_starts?: Record<string, string>;
+	/** unit id → the action this material itself recommends for that unit's fault. Absent when the material gives none (and on entries written before this field). */
+	lesson_ko?: Record<string, string>;
+	/** eafc only: the version its material states ("FC 25"), or null when it states none. Absent on tactics refs and on verified entries written before this field. */
+	game_version?: string | null;
+	/** eafc only: the material covers Pro Clubs. Absent on tactics refs and on verified entries written before this field. */
+	pro_clubs?: boolean;
+	/** eafc only, when `game_version` is null: the year-month ("2023-01") the material was published. */
+	published?: string;
 	summary_ko?: string;
 	key_points_ko?: string[];
 	translations?: Translation[];
@@ -1504,8 +2656,15 @@ interface DroppedRef {
 	reason: string;
 }
 
-function draftMetadata(draft: RefDraftEntry): Pick<VerifiedRef, "summary_ko" | "key_points_ko" | "translations"> {
+function draftMetadata(
+	draft: RefDraftEntry,
+): Pick<VerifiedRef, "format" | "relevance_ko" | "video_starts" | "lesson_ko" | "game_version" | "pro_clubs" | "published" | "summary_ko" | "key_points_ko" | "translations"> {
 	return {
+		format: draft.format,
+		relevance_ko: draft.relevance_ko,
+		...(draft.video_starts !== undefined ? { video_starts: draft.video_starts } : {}),
+		...(draft.lesson_ko !== undefined ? { lesson_ko: draft.lesson_ko } : {}),
+		...refGameFields(draft),
 		...(draft.summary_ko !== undefined ? { summary_ko: draft.summary_ko } : {}),
 		...(draft.key_points_ko !== undefined ? { key_points_ko: draft.key_points_ko } : {}),
 		...(draft.translations !== undefined ? { translations: draft.translations } : {}),
@@ -1594,6 +2753,7 @@ function toVerifiedRef(raw: unknown): VerifiedRef {
 	const summaryKo = raw.summary_ko;
 	const keyPointsKo = raw.key_points_ko;
 	const translations = raw.translations;
+	const unitIds = toStringArray(raw.unit_ids, "ref.unit_ids");
 	return {
 		id: str(raw.id, "ref.id"),
 		url: str(raw.url, "ref.url"),
@@ -1606,11 +2766,67 @@ function toVerifiedRef(raw: unknown): VerifiedRef {
 		source_name: str(raw.source_name, "ref.source_name"),
 		lang: str(raw.lang, "ref.lang"),
 		kind: toRefKind(raw.kind, "ref.kind"),
-		unit_ids: toStringArray(raw.unit_ids, "ref.unit_ids"),
+		unit_ids: unitIds,
+		format: toRefFormat(raw.format, "ref.format"),
+		relevance_ko: toStringRecord(raw.relevance_ko, "ref.relevance_ko"),
+		...verifiedVideoStarts(raw, unitIds),
+		...(isRecord(raw.lesson_ko) ? { lesson_ko: toStringRecord(raw.lesson_ko, "ref.lesson_ko") } : {}),
+		...refGameFields(raw),
 		...(typeof summaryKo === "string" ? { summary_ko: summaryKo } : {}),
 		...(Array.isArray(keyPointsKo) ? { key_points_ko: toStringArray(keyPointsKo, "ref.key_points_ko") } : {}),
 		...(Array.isArray(translations) ? { translations: translations.map(toTranslation) } : {}),
 	};
+}
+
+/**
+ * `video_starts` of a refs.verified.json entry. Legacy conversion: an entry written before per-unit
+ * starts holds one `video_start` that every listed unit's link opened at, so it becomes that same start
+ * for each of `unitIds`.
+ */
+function verifiedVideoStarts(raw: Record<string, unknown>, unitIds: readonly string[]): Pick<VerifiedRef, "video_starts"> {
+	if (isRecord(raw.video_starts)) {
+		return { video_starts: toStringRecord(raw.video_starts, "ref.video_starts") };
+	}
+	if (typeof raw.video_start === "string") {
+		const legacyStart = raw.video_start;
+		return { video_starts: Object.fromEntries(unitIds.map((unitId) => [unitId, legacyStart])) };
+	}
+	return {};
+}
+
+/** `game_version`/`pro_clubs`/`published` of a draft or verified entry, each carried only when it holds its contract type. */
+function refGameFields(raw: { game_version?: unknown; pro_clubs?: unknown; published?: unknown }): Pick<VerifiedRef, "game_version" | "pro_clubs" | "published"> {
+	return {
+		...(raw.game_version === null || typeof raw.game_version === "string" ? { game_version: raw.game_version } : {}),
+		...(typeof raw.pro_clubs === "boolean" ? { pro_clubs: raw.pro_clubs } : {}),
+		...(typeof raw.published === "string" ? { published: raw.published } : {}),
+	};
+}
+
+/**
+ * Display fields for a ref's game badges. A tactics ref, or an eafc entry verified before `game_version`
+ * existed, has no version badge and no Pro Clubs badge. An eafc entry that states no version (`game_version: null`) has no version
+ * badge either; its upload month, when known, shows alone as `published_badge`.
+ */
+function refGameBadges(ref: VerifiedRef, matchVersion: string | null): { version_badge: string | null; published_badge: string | null; pro_clubs: boolean } {
+	return {
+		version_badge: ref.game_version === undefined ? null : refVersionBadge(ref.game_version, matchVersion),
+		published_badge: ref.game_version === null && ref.published !== undefined ? publishedBadge(ref.published) : null,
+		pro_clubs: ref.pro_clubs ?? false,
+	};
+}
+
+const clockSecondsOrNull = (value: string | undefined): number | null => (value === undefined ? null : clockSeconds(value));
+
+/**
+ * A ref page serves every unit the ref is attached to, and each unit's card opens the video at its own start. The
+ * page shows "m:ss부터 보기" only when all those units start at the same second; otherwise it has no single
+ * start to name and returns null (a plain link to the video).
+ */
+function refPageStartSeconds(ref: VerifiedRef): number | null {
+	const starts = new Set(ref.unit_ids.map((unitId) => clockSecondsOrNull(ref.video_starts?.[unitId])));
+	const [only] = starts;
+	return starts.size === 1 && only !== undefined ? only : null;
 }
 
 function readVerifiedRefs(workDir: string): VerifiedRef[] {
@@ -1666,7 +2882,7 @@ function toIndexUnitEntry(raw: unknown): IndexUnitEntry {
 		session: str(raw.session, "unit.session"),
 		title: str(raw.title, "unit.title"),
 		date: str(raw.date, "unit.date"),
-		position_tags: toStringArray(raw.position_tags, "unit.position_tags"),
+		position_tags: positionTagsFromLegacy(toStringArray(raw.position_tags, "unit.position_tags")),
 		topic_tags: toStringArray(raw.topic_tags, "unit.topic_tags"),
 		member_ids: toStringArray(raw.member_ids, "unit.member_ids"),
 		href: str(raw.href, "unit.href"),
@@ -1720,6 +2936,18 @@ interface BuildUnitContext {
 	similarChoices: Record<string, string[]>;
 	indexUnitByUid: Map<string, IndexUnitEntry>;
 	refsVerified: readonly VerifiedRef[];
+	matches: readonly ValidatedMatch[];
+	/** `matchGameVersion` of the session's video titles. */
+	matchVersion: string | null;
+}
+
+/** check refs guarantees one relevance sentence per listed unit; a missing one means refs.verified.json is stale against refs-draft.json. */
+function requireRelevance(ref: VerifiedRef, unitId: string): string {
+	const sentence = ref.relevance_ko[unitId];
+	if (sentence === undefined) {
+		throw new Error(`fc-feedback: refs.verified.json의 ${ref.id}에 ${unitId} 관련성 문장이 없습니다 — verify-refs를 다시 실행하세요`);
+	}
+	return sentence;
 }
 
 function buildSessionUnit(unit: ValidatedUnit, ctx: BuildUnitContext): SessionUnit {
@@ -1753,6 +2981,7 @@ function buildSessionUnit(unit: ValidatedUnit, ctx: BuildUnitContext): SessionUn
 			height: frameDims.height,
 			t: candidate.t,
 			caption: block.caption,
+			...(block.focus_x !== undefined ? { focus_x: block.focus_x } : {}),
 		};
 	});
 
@@ -1773,9 +3002,18 @@ function buildSessionUnit(unit: ValidatedUnit, ctx: BuildUnitContext): SessionUn
 			kind: ref.kind,
 			href: ref.page === null ? null : sessionRelativeHref(ctx.sessionId, ref.page),
 			orig_url: ref.final_url,
+			format: ref.format,
+			relevance_ko: requireRelevance(ref, unit.id),
+			start_seconds: clockSecondsOrNull(ref.video_starts?.[unit.id]),
+			source_name: ref.source_name,
+			lesson_ko: ref.lesson_ko?.[unit.id] ?? null,
+			...refGameBadges(ref, ctx.matchVersion),
 		}));
 
-	const relatedIds = ctx.roster !== null ? relatedMembers(unit, ctx.roster).map((member) => member.id) : [];
+	const lineup = ctx.matches.find((match) => match.id === unit.match_id)?.lineup ?? null;
+	const relatedIds = ctx.roster !== null ? relatedMembers(unit, ctx.roster, lineup).map((member) => member.id) : [];
+	const positionTargetIds = ctx.roster !== null ? positionTargetMembers(unit, ctx.roster, lineup).map((member) => member.id) : [];
+	const groupMemberIds = ctx.roster !== null ? groupMembers(unit, ctx.roster, lineup).map((member) => member.id) : [];
 
 	return {
 		id: unit.id,
@@ -1789,14 +3027,30 @@ function buildSessionUnit(unit: ValidatedUnit, ctx: BuildUnitContext): SessionUn
 		position_tags: unit.position_tags,
 		topic_tags: unit.topic_tags,
 		member_ids: unit.member_ids,
+		inferred_member_ids: unit.inferred_member_ids,
+		named_member_ids: unit.named_member_ids,
 		related_member_ids: relatedIds,
+		position_target_ids: positionTargetIds,
+		group_member_ids: groupMemberIds,
 		addressed_to_all: unit.addressed_to_all,
+		comment_author_names: [...new Set(unit.comment_authors.map((handle) => commentAuthorName(handle, ctx.roster)))],
+		self_critique_member_ids: selfCritiqueMemberIds(unit.member_ids, unit.comment_authors, ctx.roster),
 		body,
+		unidentified_member_ids: note.unidentified_member_ids ?? [],
+		look_at: note.look_at ?? null,
+		fault_scene: note.fault_scene ?? null,
+		direction_check_ko: note.direction_check_ko ?? null,
 		images: { start: startImage },
 		similar,
 		refs,
 		watch_url: `https://youtu.be/${unit.video}?t=${Math.floor(unit.start)}`,
 	};
+}
+
+/** Labels of the plan `recurring` entries whose reference search found nothing (`recurring_unfound[].label` of a refs-draft that passed `checkRefsDraft`). */
+function unfoundRecurringLabels(draft: unknown): Set<string> {
+	const entries = isRecord(draft) && Array.isArray(draft.recurring_unfound) ? draft.recurring_unfound : [];
+	return new Set(entries.flatMap((entry: unknown) => (isRecord(entry) && typeof entry.label === "string" ? [entry.label] : [])));
 }
 
 /** Re-validates plan/notes/similar-choices/refs-draft (throws on the first invalid one) and builds `SessionData`. */
@@ -1817,7 +3071,7 @@ function buildSessionData(workDir: string, status: FcStatus): SessionData {
 	const validated = planResult.validated;
 
 	const notesRaw = readJsonFile(join(workDir, "notes.json"), "notes.json");
-	const notesCheck = checkNotes(notesRaw, validated, candidates);
+	const notesCheck = checkNotes(notesRaw, validated, candidates, roster);
 	if (notesCheck.errors.length > 0) {
 		throw new Error(JSON.stringify(notesCheck.errors));
 	}
@@ -1834,11 +3088,12 @@ function buildSessionData(workDir: string, status: FcStatus): SessionData {
 	const similarChoices = toSimilarChoicesUnits(similarChoicesRaw);
 
 	const refsDraftRaw = readJsonFile(join(workDir, "refs-draft.json"), "refs-draft.json");
-	const refsCheck = checkRefsDraft(refsDraftRaw, validated);
+	const refsCheck = checkRefsDraft(refsDraftRaw, validated, roster);
 	if (refsCheck.errors.length > 0) {
 		throw new Error(JSON.stringify(refsCheck.errors));
 	}
 	const refsVerified = readVerifiedRefs(workDir);
+	const unfoundLabels = unfoundRecurringLabels(refsDraftRaw);
 
 	const session = readSessionFile(workDir);
 
@@ -1859,6 +3114,8 @@ function buildSessionData(workDir: string, status: FcStatus): SessionData {
 		similarChoices,
 		indexUnitByUid,
 		refsVerified,
+		matches: validated.matches,
+		matchVersion: matchGameVersion(session.videos.map((video) => video.title)),
 	};
 	const units = validated.units.map((unit) => buildSessionUnit(unit, ctx));
 
@@ -1871,8 +3128,14 @@ function buildSessionData(workDir: string, status: FcStatus): SessionData {
 		pages_base_url: status.mode === "configured" ? status.pages_base_url : "",
 		videos: session.videos.map((video) => ({ id: video.id, part: video.part, embeddable: video.embeddable })),
 		members: membersInfo,
-		matches: validated.matches,
+		matches: validated.matches.map((match) => ({
+			...match,
+			marker_legend: (notes.marker_colors ?? []).filter((entry) => `m${entry.match}` === match.id).map((entry) => ({ member_id: entry.member_id, color: entry.color })),
+			unmatched_name_tags: (notes.unmatched_name_tags ?? []).filter((entry) => `m${entry.match}` === match.id).map((entry) => ({ tag: entry.tag, ...(entry.color !== undefined ? { color: entry.color } : {}) })),
+		})),
 		units,
+		recurring: validated.recurring.map((entry) => ({ ...entry, refs_unfound: unfoundLabels.has(entry.label) })),
+		matches_without_feedback: validated.matches_without_feedback,
 	};
 }
 
@@ -1910,8 +3173,10 @@ function writeSessionDirAtomic(root: string, sessionId: string, build: (dir: str
 	}
 }
 
+const sessionMatchVersion = (workDir: string): string | null => matchGameVersion(readSessionFile(workDir).videos.map((video) => video.title));
+
 /** Writes a `refs/<id>.html` page per non-`ko` ref (skipping already-archived reused ones when `skipReused`). */
-function writeRefPages(root: string, refsVerified: readonly VerifiedRef[], skipReused: boolean): void {
+function writeRefPages(root: string, refsVerified: readonly VerifiedRef[], matchVersion: string | null, skipReused: boolean): void {
 	const nonKo = refsVerified.filter((ref) => ref.lang !== "ko" && !(skipReused && ref.reused));
 	if (nonKo.length === 0) {
 		return;
@@ -1924,7 +3189,10 @@ function writeRefPages(root: string, refsVerified: readonly VerifiedRef[], skipR
 			title: ref.title,
 			lang: ref.lang,
 			kind: ref.kind,
+			format: ref.format,
 			url: ref.final_url,
+			start_seconds: refPageStartSeconds(ref),
+			...refGameBadges(ref, matchVersion),
 			summary_ko: ref.summary_ko ?? "",
 			key_points_ko: ref.key_points_ko ?? [],
 			translations: ref.translations ?? [],
@@ -2123,7 +3391,7 @@ function renderToArchive(
 		writeFileSync(join(dir, "index.html"), sessionHtml);
 		copyWebpFiles(join(workDir, "img"), join(dir, "img"));
 	});
-	writeRefPages(archiveDir, refsVerified, true);
+	writeRefPages(archiveDir, refsVerified, sessionMatchVersion(workDir), true);
 	rewriteArchiveIndex(archiveDir, sessionData, refsVerified);
 
 	const broken = checkArchiveLinks(archiveDir);
@@ -2152,7 +3420,7 @@ function renderSiteOnly(workDir: string, sessionData: SessionData, sessionHtml: 
 	writeFileSync(join(sessionDir, "data.json"), `${JSON.stringify(sessionData, null, 2)}\n`);
 	writeFileSync(join(sessionDir, "index.html"), sessionHtml);
 	copyWebpFiles(join(workDir, "img"), join(sessionDir, "img"));
-	writeRefPages(siteDir, refsVerified, false);
+	writeRefPages(siteDir, refsVerified, sessionMatchVersion(workDir), false);
 
 	return {
 		ok: true,
@@ -2271,6 +3539,13 @@ async function main(argv: readonly string[]): Promise<number> {
 			printJson(await handleAddFrame(rest, workDir, status));
 			return 0;
 		}
+		case "scan-range": {
+			const { value: workOverride, rest } = takeOption(matched.rest, "--work");
+			const status = getFcStatus();
+			const workDir = resolveWorkDir(workOverride);
+			printJson(await handleScanRange(rest, workDir, status));
+			return 0;
+		}
 		case "check plan": {
 			const { value: workOverride } = takeOption(matched.rest, "--work");
 			const status = getFcStatus();
@@ -2281,6 +3556,16 @@ async function main(argv: readonly string[]): Promise<number> {
 			const status = getFcStatus();
 			return handleCheckNotes(resolveWorkDir(workOverride), status);
 		}
+		case "notes next": {
+			const { value: workOverride } = takeOption(matched.rest, "--work");
+			const status = getFcStatus();
+			return handleNotesNext(resolveWorkDir(workOverride), status);
+		}
+		case "notes submit": {
+			const { value: workOverride, rest } = takeOption(matched.rest, "--work");
+			const status = getFcStatus();
+			return handleNotesSubmit(rest, resolveWorkDir(workOverride), status);
+		}
 		case "check similar": {
 			const { value: workOverride } = takeOption(matched.rest, "--work");
 			const status = getFcStatus();
@@ -2290,6 +3575,13 @@ async function main(argv: readonly string[]): Promise<number> {
 			const { value: workOverride } = takeOption(matched.rest, "--work");
 			const status = getFcStatus();
 			return handleCheckRefs(resolveWorkDir(workOverride), status);
+		}
+		case "refs-bundle": {
+			const { value: noSearch, rest } = takeFlag(matched.rest, "--no-search");
+			const { value: workOverride } = takeOption(rest, "--work");
+			const status = getFcStatus();
+			printJson(handleRefsBundle(resolveWorkDir(workOverride), status, !noSearch));
+			return 0;
 		}
 		case "taxonomy add": {
 			const { value: workOverride, rest } = takeOption(matched.rest, "--work");

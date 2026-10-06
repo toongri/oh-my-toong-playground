@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "id": "c001",
+    "video": "XkM_tS2Id8Q",
+    "t": 40,
+    "kind": "manual"
+  },
+  {
+    "id": "c002",
+    "video": "XkM_tS2Id8Q",
+    "t": 220,
+    "kind": "manual"
+  },
+  {
+    "id": "c003",
+    "video": "XkM_tS2Id8Q",
+    "t": 900,
+    "kind": "manual"
+  }
+]

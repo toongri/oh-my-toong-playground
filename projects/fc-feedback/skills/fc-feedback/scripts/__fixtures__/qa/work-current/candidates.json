@@ -6,6 +6,18 @@
     "kind": "manual"
   },
   {
+    "id": "c010",
+    "video": "NUzEChn9EyI",
+    "t": 180,
+    "kind": "manual"
+  },
+  {
+    "id": "c011",
+    "video": "NUzEChn9EyI",
+    "t": 330,
+    "kind": "manual"
+  },
+  {
     "id": "c002",
     "video": "NUzEChn9EyI",
     "t": 480,
@@ -15,6 +27,24 @@
     "id": "c003",
     "video": "NUzEChn9EyI",
     "t": 483,
+    "kind": "manual"
+  },
+  {
+    "id": "c012",
+    "video": "NUzEChn9EyI",
+    "t": 630,
+    "kind": "manual"
+  },
+  {
+    "id": "c013",
+    "video": "NUzEChn9EyI",
+    "t": 780,
+    "kind": "manual"
+  },
+  {
+    "id": "c014",
+    "video": "NUzEChn9EyI",
+    "t": 930,
     "kind": "manual"
   },
   {
@@ -36,9 +66,27 @@
     "kind": "manual"
   },
   {
+    "id": "c015",
+    "video": "yn-qm7lM5p4",
+    "t": 30,
+    "kind": "manual"
+  },
+  {
+    "id": "c016",
+    "video": "yn-qm7lM5p4",
+    "t": 180,
+    "kind": "manual"
+  },
+  {
     "id": "c007",
     "video": "yn-qm7lM5p4",
     "t": 330,
+    "kind": "manual"
+  },
+  {
+    "id": "c017",
+    "video": "yn-qm7lM5p4",
+    "t": 480,
     "kind": "manual"
   },
   {
@@ -51,6 +99,18 @@
     "id": "c009",
     "video": "yn-qm7lM5p4",
     "t": 633,
+    "kind": "manual"
+  },
+  {
+    "id": "c018",
+    "video": "yn-qm7lM5p4",
+    "t": 780,
+    "kind": "manual"
+  },
+  {
+    "id": "c019",
+    "video": "yn-qm7lM5p4",
+    "t": 930,
     "kind": "manual"
   }
 ]

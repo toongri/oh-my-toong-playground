@@ -5,7 +5,9 @@ import { join } from "node:path";
 import {
 	MEDIA_CONSTANTS,
 	buildLines,
+	cwebpArgs,
 	ffmpegFrameArgs,
+	hasLibwebpEncoder,
 	ffmpegSheetArgs,
 	ffmpegWavArgs,
 	mergeCandidates,
@@ -19,6 +21,10 @@ import {
 	silencedetectArgs,
 	whisperArgs,
 	ytDlpArgs,
+	ytSearchArgs,
+	ytChannelSearchArgs,
+	ytChannelUrlArgs,
+	type VideoComment,
 	type WhisperSegment,
 } from "./media.ts";
 
@@ -97,7 +103,7 @@ describe("buildLines — 픽스처 필터 통계", () => {
 		const segments = loadWhisperSegments();
 		const captions = parseJson3(fixture("cap.json3"));
 		const result = buildLines({
-			videos: [{ id: "NUzEChn9EyI", part: 1, whisperSegments: segments, captions }],
+			videos: [{ id: "NUzEChn9EyI", part: 1, whisperSegments: segments, captions, duration: 1000, comments: [] }],
 			aliases: [],
 			mode: "asr",
 		});
@@ -133,14 +139,14 @@ describe("buildLines — 자막 없는 루프", () => {
 			{ start: 10, end: 12, text: "정상적인 발화입니다", compression_ratio: 1 },
 		];
 		const result = buildLines({
-			videos: [{ id: "V1", part: 1, whisperSegments: segments, captions: null }],
+			videos: [{ id: "V1", part: 1, whisperSegments: segments, captions: null, duration: 1000, comments: [] }],
 			aliases: [],
 			mode: "asr",
 		});
 		expect(result.stats.loops).toEqual([{ video: "V1", from: 0, to: 3, replaced: false }]);
 		expect(result.stats.replaced_by_caption).toBe(0);
 		expect(result.lines).toEqual([
-			{ i: 0, video: "V1", start: 10, end: 12, text: "정상적인 발화입니다" },
+			{ i: 0, video: "V1", start: 10, end: 12, text: "정상적인 발화입니다", source: "speech" },
 		]);
 	});
 });
@@ -152,7 +158,7 @@ describe("buildLines — 빈 결과", () => {
 		];
 		expect(() =>
 			buildLines({
-				videos: [{ id: "V1", part: 1, whisperSegments: segments, captions: null }],
+				videos: [{ id: "V1", part: 1, whisperSegments: segments, captions: null, duration: 1000, comments: [] }],
 				aliases: [],
 				mode: "asr",
 			}),
@@ -166,7 +172,7 @@ describe("buildLines — 별칭 정규화", () => {
 			{ start: 0, end: 2, text: "씨이에프 화이팅", compression_ratio: 1 },
 		];
 		const result = buildLines({
-			videos: [{ id: "V1", part: 1, whisperSegments: segments, captions: null }],
+			videos: [{ id: "V1", part: 1, whisperSegments: segments, captions: null, duration: 1000, comments: [] }],
 			aliases: [
 				{ alias: "씨이", name: "짧은" },
 				{ alias: "씨이에프", name: "C.E.F." },
@@ -181,7 +187,7 @@ describe("buildLines — 별칭 정규화", () => {
 			{ start: 0, end: 2, text: "파인드님 파인님", compression_ratio: 1 },
 		];
 		const result = buildLines({
-			videos: [{ id: "V1", part: 1, whisperSegments: segments, captions: null }],
+			videos: [{ id: "V1", part: 1, whisperSegments: segments, captions: null, duration: 1000, comments: [] }],
 			aliases: [{ alias: "파인", name: "파인드" }],
 			mode: "asr",
 		});
@@ -193,7 +199,7 @@ describe("buildLines — 별칭 정규화", () => {
 			{ start: 0, end: 2, text: "라마 나다", compression_ratio: 1 },
 		];
 		const result = buildLines({
-			videos: [{ id: "V1", part: 1, whisperSegments: segments, captions: null }],
+			videos: [{ id: "V1", part: 1, whisperSegments: segments, captions: null, duration: 1000, comments: [] }],
 			aliases: [
 				{ alias: "라마", name: "가나다" },
 				{ alias: "나다", name: "확정" },
@@ -215,8 +221,8 @@ describe("buildLines — 여러 영상 정렬", () => {
 		];
 		const result = buildLines({
 			videos: [
-				{ id: "B", part: 2, whisperSegments: videoB, captions: null },
-				{ id: "A", part: 1, whisperSegments: videoA, captions: null },
+				{ id: "B", part: 2, whisperSegments: videoB, captions: null, duration: 1000, comments: [] },
+				{ id: "A", part: 1, whisperSegments: videoA, captions: null, duration: 1000, comments: [] },
 			],
 			aliases: [],
 			mode: "asr",
@@ -241,11 +247,11 @@ describe("buildLines — captions 모드", () => {
 			}),
 		);
 		const result = buildLines({
-			videos: [{ id: "V1", part: 1, whisperSegments: null, captions }],
+			videos: [{ id: "V1", part: 1, whisperSegments: null, captions, duration: 1000, comments: [] }],
 			aliases: [],
 			mode: "captions",
 		});
-		expect(result.lines).toEqual([{ i: 0, video: "V1", start: 0, end: 1, text: "정상 발화" }]);
+		expect(result.lines).toEqual([{ i: 0, video: "V1", start: 0, end: 1, text: "정상 발화", source: "speech" }]);
 		expect(result.stats.removed).toEqual({ cr: 0, phrase: 1, unsupported: 0, empty: 1 });
 	});
 });
@@ -270,6 +276,7 @@ describe("mergeCandidates", () => {
 			{
 				silences: [{ start: 10, end: 12, dur: 3 }], // t = max(10, 12-1) = 11
 				scenes: [12.5, 61.0],
+				comments: [],
 				duration: 100,
 				interval: 30, // interval candidates at 0, 30, 60, 90
 			},
@@ -323,6 +330,31 @@ describe("sheetTimes", () => {
 	});
 });
 
+describe("ytSearchArgs", () => {
+	test("채널명과 키워드로 ytsearch10을 flat-playlist로 훑고 id와 제목만 출력한다", () => {
+		expect(ytSearchArgs("E GIL 풀백")).toEqual(["uvx", "yt-dlp", "ytsearch10:E GIL 풀백", "--flat-playlist", "--print", "%(id)s %(title)s"]);
+	});
+});
+
+describe("ytChannelUrlArgs / ytChannelSearchArgs", () => {
+	test("채널 URL은 영상 하나의 메타에서 channel_url만 출력한다", () => {
+		expect(ytChannelUrlArgs("https://www.youtube.com/watch?v=abc")).toEqual(["uvx", "yt-dlp", "https://www.youtube.com/watch?v=abc", "--skip-download", "--no-warnings", "--print", "channel_url"]);
+	});
+
+	test("채널 안 검색은 <채널 URL>/search?query=<인코딩한 키워드>를 flat-playlist로 상위 10개만 훑는다", () => {
+		expect(ytChannelSearchArgs("https://www.youtube.com/@egil", "올라가지 않음")).toEqual([
+			"uvx",
+			"yt-dlp",
+			`https://www.youtube.com/@egil/search?query=${encodeURIComponent("올라가지 않음")}`,
+			"--flat-playlist",
+			"--playlist-end",
+			"10",
+			"--print",
+			"%(id)s %(title)s",
+		]);
+	});
+});
+
 describe("ytDlpArgs", () => {
 	test("meta는 다운로드 없이 단일 json을 덤프한다", () => {
 		expect(ytDlpArgs("meta", "https://youtu.be/abc", "/tmp/work", false)).toEqual([
@@ -330,6 +362,7 @@ describe("ytDlpArgs", () => {
 			"yt-dlp",
 			"--skip-download",
 			"--dump-single-json",
+			"--write-comments",
 			"--no-warnings",
 			"https://youtu.be/abc",
 		]);
@@ -354,12 +387,12 @@ describe("ytDlpArgs", () => {
 		]);
 	});
 
-	test("video는 480p 이하로 제한한다", () => {
+	test("video는 540p 이하로 제한한다(16:9는 480p, 32:9 울트라와이드는 1920x540)", () => {
 		expect(ytDlpArgs("video", "https://youtu.be/abc", "/tmp/work", false)).toEqual([
 			"uvx",
 			"yt-dlp",
 			"-f",
-			"bv*[height<=480]",
+			"bv*[height<=540]",
 			"-P",
 			"/tmp/work",
 			"-o",
@@ -544,6 +577,156 @@ describe("ffmpeg argv", () => {
 			"-f",
 			"null",
 			"-",
+		]);
+	});
+});
+
+function comment(text: string, author = "@석상용-h2t", parent = "root"): VideoComment {
+	return { id: `c-${text.length}`, parent, author, text };
+}
+
+describe("buildLines — 댓글 피드백", () => {
+	test("댓글 하나의 타임스탬프마다 줄을 만들고 작성자를 남긴다", () => {
+		const result = buildLines({
+			videos: [
+				{
+					id: "V1",
+					part: 1,
+					whisperSegments: null,
+					captions: null,
+					duration: 4000,
+					comments: [comment("07:48 수비 라인 안 맞음\n1:01:48 우사가 사이드로 벌림,\n  뎁스차저 수비 공간이 넓어짐")],
+				},
+			],
+			aliases: [],
+			mode: "none",
+		});
+		expect(result.lines).toEqual([
+			{ i: 0, video: "V1", start: 468, end: 468 + MEDIA_CONSTANTS.commentSceneSeconds, text: "수비 라인 안 맞음", source: "comment", author: "@석상용-h2t" },
+			{
+				i: 1,
+				video: "V1",
+				start: 3708,
+				end: 3708 + MEDIA_CONSTANTS.commentSceneSeconds,
+				text: "우사가 사이드로 벌림, 뎁스차저 수비 공간이 넓어짐",
+				source: "comment",
+				author: "@석상용-h2t",
+			},
+		]);
+		expect(result.stats.mode).toBe("none");
+	});
+
+	test("내용 없는 타임스탬프, 타임스탬프 없는 댓글, 영상 길이를 넘는 시각은 줄이 되지 않고 개수만 남는다", () => {
+		const result = buildLines({
+			videos: [
+				{
+					id: "V1",
+					part: 1,
+					whisperSegments: null,
+					captions: null,
+					duration: 600,
+					comments: [
+						comment("7:45\n8:15", "@maker654"),
+						comment("잘 봤습니다", "@viewer"),
+						comment("총평: 수비가 아쉬움\n09:30 마크 놓침"),
+						comment("59:02 영상 밖 시각"),
+					],
+				},
+			],
+			aliases: [],
+			mode: "none",
+		});
+		expect(result.lines.map((line) => line.text)).toEqual(["마크 놓침"]);
+		expect(result.stats.comments).toEqual({ lines: 1, empty: 2, untimed: 2, out_of_range: 1 });
+	});
+
+	test("4:3 같은 수적 비율과 1:1 구도는 타임스탬프로 읽지 않는다", () => {
+		const result = buildLines({
+			videos: [
+				{
+					id: "V1",
+					part: 1,
+					whisperSegments: null,
+					captions: null,
+					duration: 5000,
+					comments: [comment("1:08:26 수비 매치가 크게는 6:4 작게는 4:3, 1:1 구도")],
+				},
+			],
+			aliases: [],
+			mode: "none",
+		});
+		expect(result.lines.map((line) => [line.start, line.text])).toEqual([[4106, "수비 매치가 크게는 6:4 작게는 4:3, 1:1 구도"]]);
+	});
+
+	test("장면 길이는 영상 끝을 넘지 않는다", () => {
+		const result = buildLines({
+			videos: [{ id: "V1", part: 1, whisperSegments: null, captions: null, duration: 475, comments: [comment("07:48 마지막 장면")] }],
+			aliases: [],
+			mode: "none",
+		});
+		expect([result.lines[0].start, result.lines[0].end]).toEqual([468, 475]);
+	});
+
+	test("댓글 본문에도 별칭 정규화를 적용하고 음성 줄과 시각순으로 섞는다", () => {
+		const result = buildLines({
+			videos: [
+				{
+					id: "V1",
+					part: 1,
+					whisperSegments: [{ start: 100, end: 102, text: "켐벨 라인 맞춰", compression_ratio: 1 }],
+					captions: null,
+					duration: 1000,
+					comments: [comment("00:50 켐벨 빠르게 벌려야 함")],
+				},
+			],
+			aliases: [{ alias: "켐벨", name: "뎁스차저" }],
+			mode: "asr",
+		});
+		expect(result.lines.map((line) => [line.i, line.source, line.text])).toEqual([
+			[0, "comment", "뎁스차저 빠르게 벌려야 함"],
+			[1, "speech", "뎁스차저 라인 맞춰"],
+		]);
+	});
+
+	test("음성을 건너뛰고 댓글 피드백도 없으면 비어 있다는 에러를 던진다", () => {
+		expect(() =>
+			buildLines({
+				videos: [{ id: "V1", part: 1, whisperSegments: null, captions: null, duration: 100, comments: [comment("7:45", "@maker654")] }],
+				aliases: [],
+				mode: "none",
+			}),
+		).toThrow("전사 결과가 비어 있습니다");
+	});
+});
+
+describe("mergeCandidates — 댓글 시각", () => {
+	test("댓글 시각 후보는 3초 이내 다른 후보보다 우선해 정확한 시각을 지킨다", () => {
+		const candidates = mergeCandidates(
+			{ silences: [{ start: 466, end: 470, dur: 4 }], scenes: [], comments: [468], duration: 500, interval: 1000 },
+			"V1",
+		);
+		expect(candidates).toEqual([
+			{ id: "c001", video: "V1", t: 0, kind: "interval" },
+			{ id: "c002", video: "V1", t: 468, kind: "comment" },
+		]);
+	});
+});
+
+describe("webp 인코딩 경로", () => {
+	test("ffmpeg -encoders 출력에 libwebp가 있을 때만 ffmpeg로 바로 webp를 쓴다", () => {
+		expect(hasLibwebpEncoder(" V....D libwebp_anim         libwebp WebP image (codec webp)\n V....D libwebp              libwebp WebP image (codec webp)\n")).toBe(true);
+		expect(hasLibwebpEncoder(" V....D png                  PNG (Portable Network Graphics) image\n")).toBe(false);
+	});
+
+	test("cwebpArgs는 ffmpeg libwebp 기본 품질(75)로 png를 webp로 바꾼다", () => {
+		expect(cwebpArgs("/w/img/u001-start.png", "/w/img/u001-start.webp")).toEqual([
+			"cwebp",
+			"-quiet",
+			"-q",
+			"75",
+			"/w/img/u001-start.png",
+			"-o",
+			"/w/img/u001-start.webp",
 		]);
 	});
 });
