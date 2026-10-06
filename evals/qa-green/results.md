@@ -8,7 +8,7 @@ PR 하나나 둘씩 한다. 모델은 codex `gpt-6-luna`, 추론 강도 `max`, �
 | 축 | PR | 변경 | 기대하는 액터 판정 |
 |---|---|---|---|
 | mobile | [#4442](https://github.com/algo-care/algocare-home/pull/4442) | 한 번에 담기로 들어온 영양제 목록이 남은 일수 순서를 지킨다 | 모바일 앱 사용자 `render` |
-| dispenser | [#4345](https://github.com/algo-care/algocare-home/pull/4345) | stg 페어링 QR이 stg 앱을 열게 한다 | 디스펜서 화면 `render`, QR을 찍는 앱 사용자 |
+| dispenser | [#4345](https://github.com/algo-care/algocare-home/pull/4345) | stg 페어링 QR이 stg 앱을 열게 한다 | 디스펜서 `contract`(QR에 싣는 링크 값만 바뀜), QR을 찍는 폰 사용자(링크가 보내는 곳) |
 | backend | [#4444](https://github.com/algo-care/algocare-home/pull/4444) | 섭취 원장 대조 작업의 매일 04:50 예약 제거 | 작업 큐 운영자 `none` |
 | commerce | [#4413](https://github.com/algo-care/algocare-home/pull/4413) | 가구 초대 하단 버튼을 visualViewport 맞춤 레이아웃으로 | 초대받은 사용자 `render`, 키보드 상태 |
 | admin | [#4438](https://github.com/algo-care/algocare-home/pull/4438) | 자가섭취 보유분 카테고리를 응답 맵에서 조회 | 어드민 운영자 `render` |
