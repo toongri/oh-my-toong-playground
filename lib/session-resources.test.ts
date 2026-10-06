@@ -97,6 +97,11 @@ describe("session resources", () => {
 		expect(() => recordResource(SID, { id: "reverse", kind: "adb-reverse", stop: "true", device: "emulator-5560" })).toThrow("not a device this session holds");
 	});
 
+	test("기기가 아닌 자원에는 다른 자원을 걸 수 없다", () => {
+		recordResource(SID, { id: "srv", kind: "server", stop: "true" });
+		expect(() => recordResource(SID, { id: "reverse", kind: "adb-reverse", stop: "true", device: "srv" })).toThrow("not a device this session holds");
+	});
+
 	test("빈 필드 기록과 없는 id 해제는 거부된다", () => {
 		expect(() => recordResource(SID, { id: "x", kind: "emulator", stop: " " })).toThrow("--stop is required");
 		expect(() => releaseResource(SID, "missing")).toThrow("no recorded resource");

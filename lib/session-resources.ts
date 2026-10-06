@@ -73,7 +73,7 @@ export function recordResource(sessionId: string, input: { id: string; kind: str
 	const path = resolveResourcesPath(sessionId);
 	withStateLock(path, () => {
 		const all = readAll(path);
-		if (input.device !== undefined && !all.some((r) => r.id === input.device && !r.released_at)) {
+		if (input.device !== undefined && !all.some((r) => r.id === input.device && (r.kind === "simulator" || r.kind === "emulator") && !r.released_at)) {
 			throw new Error(`record-resource: refused — --device "${input.device}" is not a device this session holds; acquire it with acquire-device first`);
 		}
 		const next = all.filter((r) => r.id !== input.id);
