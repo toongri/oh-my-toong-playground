@@ -106,7 +106,7 @@ Enumerate every actor whose observable behavior this change alters and pin where
 - **client impact** — how far the change reaches this actor's client, with a one-line reason grounded in the diff:
   - `none` — no client reads what changed (a job, an operator CLI, a server-internal path).
   - `contract` — a client reads changed data or a changed API, but its rendering code did not change. Prove it at the request that client really sends (its auth, its route, its parameters). No screenshot is needed.
-  - `render` — the client's rendering code changed, or what the screen shows changes. Prove it on the screen, on every device profile the actor's client runs on.
+  - `render` — the client's rendering code changed, or what a person reads on the screen changes (text, layout, images). A changed value the screen only encodes — the link inside a QR — is `contract`. Prove `render` on the screen, on every device profile the actor's client runs on.
 - **profiles** — for `render` only: the device profile ids from the project manifest (see *Device profiles*).
 - **reachable** — `yes`, or the named obstacle plus the deepest point toward the surface that IS reachable (see *Boundary substitution*).
 
@@ -149,7 +149,7 @@ Let the diff decide. Go outward only as far as the changed code reaches.
 - **Server-only change** → the API as the client calls it (`curl`). A client whose code did not change needs no screen.
 - **UI change** → that screen, in one browser or on one device. A second platform only for native or platform-branching code.
 - **An automated test that runs the scenario's path and asserts its expected outcome is proof.** Run it this cycle, read its assertions, record it with `--evidence-surface test` and the test named in `driven-at`. Do not re-drive it by hand. For a `contract` actor, the test must send the request that client sends, through its real route and auth; a test that calls a router or function in-process, or replaces the auth or a store with a stand-in, proves a service, not the actor.
-- **Prove what the change changed, not the whole journey around it.** A scenario covers the steps the diff alters and the first place their effect shows. Steps the diff does not touch — a store sign-in, release signing, real hardware, a setting in another service's console — are not this change's to prove: do not drive through them, and do not record them as `blocked`. Example: a diff that swaps the link a QR carries is proven by the link the build actually uses and by where that link sends a phone (request it the way a phone does and read the redirect). It is not proven by scanning a real QR on real hardware.
+- **Prove what the change changed, not the whole journey around it.** A scenario covers the steps the diff alters and the first place their effect shows. Steps the diff does not touch — a store sign-in, release signing, real hardware, a setting in another service's console — are not this change's to prove: do not drive through them, and do not record them as `blocked`. Example: a diff that swaps the link a QR carries is proven by the link the build actually uses and by where that link sends a phone (request it the way a phone does and read the redirect). Bringing up the QR screen, on hardware or on an emulator, proves nothing more.
 - **A device is the costliest tool.** Acquire one only when a claim needs a rendered screen; release it the moment those scenarios are recorded.
 
 If the cheapest proof needs a local stack or seeded data, set it up.
