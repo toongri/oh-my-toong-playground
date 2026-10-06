@@ -106,7 +106,7 @@ Enumerate every actor whose observable behavior this change alters and pin where
 - **client impact** — how far the change reaches this actor's client, with a one-line reason grounded in the diff:
   - `none` — no client reads what changed (a job, an operator CLI, a server-internal path).
   - `contract` — a client reads changed data or a changed API, but its rendering code did not change. Prove it at the request that client really sends (its auth, its route, its parameters). No screenshot is needed.
-  - `render` — the client's rendering code changed, or what a person reads on the screen changes (text, layout, images). A changed value the screen only encodes — the link inside a QR — is `contract`. Prove `render` on the screen, on every device profile the actor's client runs on.
+  - `render` — the client's rendering code changed, or what a person reads on the screen changes. Prove it on the screen, on every device profile the actor's client runs on.
 - **profiles** — for `render` only: the device profile ids from the project manifest (see *Device profiles*).
 - **reachable** — `yes`, or the named obstacle plus the deepest point toward the surface that IS reachable (see *Boundary substitution*).
 
@@ -149,7 +149,7 @@ Let the diff decide. Go outward only as far as the changed code reaches.
 - **Server-only change** → the API as the client calls it (`curl`). A client whose code did not change needs no screen.
 - **UI change** → that screen, in one browser or on one device. A second platform only for native or platform-branching code.
 - **An automated test that runs the scenario's path and asserts its expected outcome is proof.** Run it this cycle, read its assertions, record it with `--evidence-surface test` and the test named in `driven-at`. Do not re-drive it by hand. For a `contract` actor, the test must send the request that client sends, through its real route and auth; a test that calls a router or function in-process, or replaces the auth or a store with a stand-in, proves a service, not the actor.
-- **Prove what the change changed, not the whole journey around it.** A scenario covers the steps the diff alters and the first place their effect shows. Steps the diff does not touch — a store sign-in, release signing, real hardware, a setting in another service's console — are not this change's to prove: do not drive through them, and do not record them as `blocked`. Example: a diff that swaps the link a QR carries is proven by the link the build actually uses and by where that link sends a phone (request it the way a phone does and read the redirect). Bringing up the QR screen, on hardware or on an emulator, proves nothing more.
+- **Prove what the change changed, not the whole journey around it.** A scenario covers the steps the diff alters and the first place their effect shows. Steps the diff does not touch (a store sign-in, release signing, real hardware, another service's settings) are not this change's to prove: do not drive through them, and do not record them as `blocked`.
 - **A device is the costliest tool.** Acquire one only when a claim needs a rendered screen; release it the moment those scenarios are recorded.
 
 If the cheapest proof needs a local stack or seeded data, set it up.
@@ -160,7 +160,7 @@ Record the roster in state before authoring scenarios. First capture the accepta
 
 **A step only a person can do is not an obstacle.** A pairing code shown on a physical dispenser, an OTP sent to a real phone, a consent tap on a production account: ask the user for it in plain text, run `await-user`, and end the turn. Never leave `reachable` at "waiting for input" and close the cycle, and never record the scenario `blocked` for it.
 
-**A limit you set yourself is not an obstacle either.** When a runbook makes you ask before you build, install or run, put into that one request every action the H scenarios need, and name the data each one writes and how long it lives: "open the pairing screen on STG, which issues pairing nonces that expire in 10 minutes and refresh while the screen stays open". Ask for the kind of write, not a count. A count you guess turns into a stop mid-run. Before you send it, name for each H scenario the action in the request that lets you see its `expected` outcome at the client (the screen, the app the link opens). A scenario with no such action is missing from the request. A scenario blocked by a scope you proposed is a question you did not ask. Ask it with `await-user`. The approval covers the actions and the data they write. A serial, port or file path that `acquire-device` or a tool picks is not part of it, so a different one needs no new approval.
+When a runbook asks for approval before you build, install or run, ask once for everything the H scenarios need, then proceed.
 
 After each story exists, record the feature-map lookup as planning context (not execution-verified fact), before BASELINE begins:
 
@@ -238,7 +238,7 @@ A **caller-provided** scenario runs verbatim at whatever layer it enters; record
 
 **Bootstrap only what the surface needs.** A missing precondition is work, not an obstacle. Verify an undeployed change on an isolated local instance you own, supplying any missing env config yourself. Take accounts and data from the project's documented QA provisioning first (see [stage1-commands.md] Discovery Order); only when none exists, seed rows, sign up, or mint a token. Install a missing tool outside the worktree. When the QA REQUEST verifies the deployment itself, the deployed environment is the surface and its failure is the FAIL.
 
-**Boundary substitution.** Fake only a hop you cannot reach — absent hardware, an off-network third party — and record it in `driven-at`. For absent hardware, first look for the simulator the repo ships for it (a virtual mainboard, a mock device server, a `scripts/emulator/` directory and its README) and run its setup on your acquired device; that is the project's own substitute. A step a person can do for you (a pairing code, an OTP) is not such a hop: ask for it with `await-user`. If even substitution is impossible, record the scenario `blocked` — never PASS — with the structural limit and the attempts that hit it:
+**Boundary substitution.** Fake only a hop you cannot reach — absent hardware, an off-network third party — and record it in `driven-at`. Prefer a substitute the repo ships. A step a person can do for you (a pairing code, an OTP) is not such a hop: ask for it with `await-user`. If even substitution is impossible, record the scenario `blocked` — never PASS — with the structural limit and the attempts that hit it:
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts record-scenario --story … --scenario … --status blocked \
@@ -259,8 +259,8 @@ bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts record-scenario --story … --scenar
 | "Only the server changed, but users see it on the app — boot a simulator" | `curl` the API. The app is not under test. |
 | "It's React Native — check iOS and Android" | One platform, unless native or platform-branching code changed. Device profiles still cover every size the app ships to: size that one platform's device to each. |
 | "The iPhone Duo / newest model isn't installed, so that profile is blocked" | A profile is a size. Use an installed device of that size, or size the Android emulator to it. |
-| "My setup hit an obstacle (build config or signing, a forced update, a busy device, a stalled download, a system dialog, a missing seed or hardware ID, a limit I set myself), so the scenario is blocked" | Setup is your work, not a limit outside the change. Find the cause and change the approach: the repo's own tools, simulators and docs, another build or device, a mirror, a platform command. A limit you set yourself (a count, a tool, a serial) is not an approval boundary. Record `blocked` only after a few different attempts, and `await-user` only for a person's identity or decision. |
-| "The screen or response is not what I expected, so it fails" | First show it is the product: read the client's own log or the code that consumes the value, tell apart the causes you can measure, check that `expected` is what the PR or spec promised, and compare the base commit. A setup cause is setup work. |
+| "My setup hit an obstacle, so the scenario is blocked" | Setup is your work, not a limit outside the change. Find the cause and try another approach. Record `blocked` only after a few different attempts, and `await-user` only for a person's identity or decision. |
+| "The screen or response is not what I expected, so it fails" | First show it is the product: check that `expected` is what the PR or spec promised, find the product code that causes it, and compare the base commit. A setup cause is setup work. |
 | "A test already asserts this, but I'll drive it by hand too" | Cite the test. Spend the effort on what it doesn't cover. |
 | "The flag lives in the admin web — launch it" | Set it through the API, a seed, or the DB. |
 | "Keep the device up until CLEANUP" | Release it now. |
@@ -558,7 +558,7 @@ A risk that nothing on the changed surface can carry is not a scenario state: it
 | CHECK soft-passes: every scenario recorded; the only failures are self-authored `M`/`L` rows in the 50–74 nitpick band | **COMMENT** (never APPROVE — the failed row stays FAIL in the roster) |
 | Every scenario `pass`; baseline and run checks green | **APPROVE** (or **COMMENT** to surface LOW notes) |
 | Any scenario `blocked`, no failure | **COMMENT**: its requirement is unproven, so the CLI refuses APPROVE. Each `blocked` scenario is named in the report banner and in your final message |
-| An H scenario `fail` whose product cause you could not show (setup, signing or an external service may explain it) | **COMMENT**: report the failure as an open finding and say its cause is unproven. Fix the setup and re-drive first when you can |
+| An H scenario `fail` whose product cause you could not show (your setup or an external service may explain it) | **COMMENT**: report the failure as an open finding and say its cause is unproven. Fix the setup and re-drive first when you can |
 | Any scenario unrecorded and no recorded failure | **No verdict.** Execute the remaining scenarios, cheapest proof first. A request to hurry or wrap up means execute faster, not stop. Only when the user explicitly says to stop verifying or to defer the rest: say which scenarios remain and why, show `force-complete`, run `await-user`, and end the turn |
 
 REQUEST_CHANGES is a request to change the product. Work you did not do is not a product defect: the CLI refuses REQUEST_CHANGES without a recorded failure, and refuses APPROVE and COMMENT while a scenario is unrecorded. The verdict never describes the cycle as end-to-end unless the roster's `driven-at` values say it was.

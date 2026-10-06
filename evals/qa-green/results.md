@@ -8,7 +8,7 @@ PR 하나나 둘씩 한다. 모델은 codex `gpt-6-luna`, 추론 강도 `max`, �
 | 축 | PR | 변경 | 기대하는 액터 판정 |
 |---|---|---|---|
 | mobile | [#4442](https://github.com/algo-care/algocare-home/pull/4442) | 한 번에 담기로 들어온 영양제 목록이 남은 일수 순서를 지킨다 | 모바일 앱 사용자 `render` |
-| dispenser | [#4345](https://github.com/algo-care/algocare-home/pull/4345) | stg 페어링 QR이 stg 앱을 열게 한다 | 디스펜서 `contract`(QR에 싣는 링크 값만 바뀜), QR을 찍는 폰 사용자(링크가 보내는 곳) |
+| dispenser | [#4530](https://github.com/algo-care/algocare-home/pull/4530) | 배송지 재조회 실패 시 주소 유지, 배송지·가구 정보 실패 안내를 원인별로 구분 | 디스펜서 설정 화면 사용자 `render` |
 | backend | [#4444](https://github.com/algo-care/algocare-home/pull/4444) | 섭취 원장 대조 작업의 매일 04:50 예약 제거 | 작업 큐 운영자 `none` |
 | commerce | [#4413](https://github.com/algo-care/algocare-home/pull/4413) | 가구 초대 하단 버튼을 visualViewport 맞춤 레이아웃으로 | 초대받은 사용자 `render`, 키보드 상태 |
 | admin | [#4438](https://github.com/algo-care/algocare-home/pull/4438) | 자가섭취 보유분 카테고리를 응답 맵에서 조회 | 어드민 운영자 `render` |
@@ -591,3 +591,14 @@ REQUEST_CHANGES, 기존 결함을 PR 탓으로 돌림, 해제하지 않은 자�
   r7은 같은 환경에서 v1·v2 QR을 실제로 발급해 확인했다. 막힘 사유가 변경 밖의 구조적 한계가 아니라 준비 단계다.
   채점자가 재개 답변에서 "없으면 막힌 것으로 기록"하라고 한 것이 이 선택을 부추겼다(하네스 원인 일부).
   → 스킬 수정 없음. 통합한 준비 단계 원칙(684f66dd)이 이 경우를 다룬다. 재개 답변은 막힘을 권하지 않게 한다.
+
+## 디스펜서 대상 교체 (2026-10-06)
+
+#4345(stg 페어링 QR 링크)는 대상에서 뺐다. 검증할 값이 STG·prd 환경별 외부 링크 설정이라, 로컬에서 끝나지 않고
+매번 외부 서비스·하드웨어·스토어에 걸렸다(r2~r12). 사용자 결정: 환경별 QA는 하지 않고, 로컬에서 검증할 수 있는
+디스펜서 PR로 바꾼다. 새 대상은 #4530이다. 설정 화면의 실패 안내가 바뀌는 변경이라, 로컬 백엔드를 끊거나 오류를
+돌려주게 해서 재현할 수 있다.
+
+#4345를 끝내려고 넣었던 지침은 원칙만 남기고 걷었다: QR 예시, 런북 승인 요청의 세부 절차, 가상 메인보드 대체
+방법, 설정 장애 목록, 에뮬레이터 실행 옵션 설명.
+
