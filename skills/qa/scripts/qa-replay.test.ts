@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import type { QaCaseRunReceipt } from "@lib/qa-case-run.ts";
 import { configureQaCaseStore, disableQaCaseStore, saveQaCase, type QaCaseRecord } from "@lib/qa-case-store.ts";
 import { replayFromCli } from "./qa-replay.ts";
-import { addActor, addStory, authorScenario, readQaState, recordScenario, setAcceptance, setQaState } from "./qa-state.ts";
+import { resolveStatePath, addActor, addStory, authorScenario, readQaState, recordScenario, setAcceptance, setQaState } from "./qa-state.ts";
 
 const roots: string[] = [];
 const manifestDirs: string[] = [];
@@ -26,6 +26,15 @@ function readyChain(session: string): void {
 	addActor(session, { id: "actor", name: "User", boundary: "terminal", driver: "bash", reachable: "yes", clientImpact: "none", clientImpactReason: "terminal output only; no client renders it" });
 	addStory(session, { id: "story", actor: "actor", contract: { goal: "Run the boundary", given: ["The case exists"], when: ["The user runs it"], then: ["The result is observed"], acceptance_criteria: [0] } });
 	authorScenario(session, { story: "story", id: "s1", title: "Run the saved case", preconditions: "The case exists", steps: ["Run the runner"], expected: "The result is observed", whyNeeded: "covers the runner boundary", priority: "H", risks: [1, 2, 3, 4, 5, 6] });
+	setStoryProvenance(session, ["checkout"]);
+}
+
+/** Writes story provenance directly; recordStoryProvenance needs a live feature map. */
+function setStoryProvenance(session: string, featureIds: string[]): void {
+	const path = resolveStatePath(session);
+	const state = JSON.parse(readFileSync(path, "utf8"));
+	for (const story of state.stories) story.provenance = featureIds.length ? { features: featureIds.map((id) => ({ id, revision: "rev", entrypoints: [], states: [] })), code_ref: "code", cycle: 1 } : undefined;
+	writeFileSync(path, JSON.stringify(state));
 }
 
 function saveCase(root: string, record: QaCaseRecord, home: string): void {
@@ -210,7 +219,7 @@ describe("qa replay CLI", () => {
 		expect(readQaState(session)?.scenarios?.find((scenario) => scenario.story === "story" && scenario.id === "s1")?.status).toBeUndefined();
 	});
 
-	test("surface와 AC mismatch는 runner 실행 전에 거부하고 disabled store는 실행하지 않는다", async () => {
+	test("surface와 기능 불일치는 runner 실행 전에 거부하고 disabled store는 실행하지 않는다", async () => {
 		const rawRoot = mkdtempSync(join(tmpdir(), "qa-replay-gates-")); roots.push(rawRoot);
 		const root = realpathSync(rawRoot);
 		const store = join(root, "store");
@@ -225,7 +234,10 @@ describe("qa replay CLI", () => {
 		await expect(replayFromCli(["--case", "gate-case", "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home })).rejects.toThrow(/surface/);
 		const otherFeatureRecord = { ...base, id: "other-feature-case", surface: "bash" as const, feature_refs: ["unrelated-feature"] };
 		saveQaCase({ record: otherFeatureRecord, expectedRevision: null }, { cwd: root, home });
-		await expect(replayFromCli(["--case", "other-feature-case", "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home })).resolves.toMatchObject({ case_id: "other-feature-case" });
+		await expect(replayFromCli(["--case", "other-feature-case", "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home })).rejects.toThrow(/share no feature/);
+		setStoryProvenance("gate-session", []);
+		await expect(replayFromCli(["--case", "other-feature-case", "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home })).rejects.toThrow(/no recorded provenance/);
+		setStoryProvenance("gate-session", ["checkout"]);
 		disableQaCaseStore({ cwd: root, home });
 		const disabled = await replayFromCli(["--case", "gate-case", "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home });
 		expect(disabled).toMatchObject({ status: "disabled" });

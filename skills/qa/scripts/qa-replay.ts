@@ -37,6 +37,7 @@ function help(): string {
 		"Usage: qa-replay.ts --case ID --story ID --scenario ID --project DIR --code-ref STR --reset-confirmed STR [--timeout-ms N] [--max-buffer N] [--allow-project-cwd] [--device SERIAL]",
 		"",
 		"Runs the saved native case only after the active QA actor→story→scenario chain is complete.",
+		"The case's feature_refs must include a feature recorded in the story's provenance.",
 		"The reset confirmation must exactly equal the saved reset_description.",
 		"Runner success creates a receipt but never records a QA scenario PASS.",
 		"A disabled store or missing case prints structured status and exits nonzero; --help exits zero.",
@@ -92,6 +93,9 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 	if (storeStatus.status !== "configured") fail(`case store is ${storeStatus.status}`);
 	const record: QaCaseRecord = caseResult.record;
 	if (record.surface !== actor.driver) fail(`case surface "${record.surface}" does not match actor driver "${actor.driver}"`);
+	const storyFeatures = (story.provenance?.features ?? []).map((feature) => feature.id);
+	if (!storyFeatures.length) fail(`story "${storyId}" has no recorded provenance; record its feature with record-story-provenance (a case binds to a story through its features)`);
+	if (!record.feature_refs.some((id) => storyFeatures.includes(id))) fail(`case feature_refs [${record.feature_refs.join(", ")}] share no feature with story "${storyId}" provenance [${storyFeatures.join(", ")}]`);
 	const result = await runQaCase(record, {
 		casePath: caseResult.path,
 		caseRevision: caseResult.revision,
