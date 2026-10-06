@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -82,6 +82,22 @@ describe("qa case native replay", () => {
 		expect(result.receipt.cwd).toBe(result.runDirectory);
 		expect(result.receipt.argv.at(-1)).toBe(join(result.runDirectory, "created.txt"));
 		expect(readFileSync(join(result.runDirectory, "created.txt"), "utf8")).toBe(result.runDirectory);
+	});
+
+	test("project cwd 토큰을 재생 시점의 제품 루트로 확장하고 opt-in을 요구한다", async () => {
+		const root = tempDir();
+		const value = { ...record(root, [process.execPath, "-e", "process.stdout.write(process.cwd())"]), execution_cwd: "{project}" };
+		await expect(runQaCase(value, context(root))).rejects.toThrow(/allow-project-cwd/);
+		const result = await runQaCase(value, context(root, { allowProjectCwd: true }));
+		expect(readFileSync(result.receipt.artifact_paths.stdout, "utf8")).toBe(realpathSync(root));
+	});
+
+	test("device 토큰을 재생 시점의 기기로 확장하고, 기기가 없으면 거부한다", async () => {
+		const root = tempDir();
+		const value = record(root, [process.execPath, "-e", "process.stdout.write(process.argv[1])", "qa-{device}"]);
+		await expect(runQaCase(value, context(root))).rejects.toThrow(/--device/);
+		const result = await runQaCase(value, context(root, { device: "emulator-5560" }));
+		expect(readFileSync(result.receipt.artifact_paths.stdout, "utf8")).toBe("qa-emulator-5560");
 	});
 
 	test("명시적 opt-in 없는 제품 cwd를 거부한다", async () => {

@@ -20,6 +20,8 @@ export interface QaCaseRunContext {
 	timeoutMs?: number;
 	maxBuffer?: number;
 	allowProjectCwd?: boolean;
+	/** The device acquired this cycle; expands `{device}` in the saved runner. */
+	device?: string;
 	actorId?: string;
 	actorBoundary?: string;
 }
@@ -71,12 +73,16 @@ function ensureNativeFile(projectRoot: string, reference: string): { path: strin
 	if (!stat.isFile()) throw new Error(`qa replay: native file is not a regular file: ${path}`);
 	return { path, sha256: sha256(readFileSync(path)) };
 }
-function expand(value: string, runDirectory: string): string { return value.replaceAll("{artifacts}", runDirectory); }
+// A saved case names this cycle's run directory, product root and device by token, so it replays in any later cycle.
+function expand(value: string, runDirectory: string, context: QaCaseRunContext): string {
+	if (value.includes("{device}") && !context.device) throw new Error("qa replay: the case runner uses {device}; pass the acquired device with --device");
+	return value.replaceAll("{artifacts}", runDirectory).replaceAll("{project}", context.projectRoot).replaceAll("{device}", context.device ?? "");
+}
 function resolveCwd(record: QaCaseRecord, context: QaCaseRunContext, runDirectory: string): string {
 	const requested = record.execution_cwd;
-	const expanded = expand(requested, runDirectory);
-	if (requested === "project-root") throw new Error("qa replay: legacy execution_cwd=project-root is unsupported; save an absolute path and use --allow-project-cwd when it is the product cwd");
-	if (!isAbsolute(expanded)) throw new Error(`qa replay: execution_cwd must be an absolute path or {artifacts}; got ${requested}`);
+	const expanded = expand(requested, runDirectory, context);
+	if (requested === "project-root") throw new Error("qa replay: legacy execution_cwd=project-root is unsupported; save {project} and use --allow-project-cwd");
+	if (!isAbsolute(expanded)) throw new Error(`qa replay: execution_cwd must be an absolute path, {artifacts} or {project}; got ${requested}`);
 	const cwd = resolve(expanded);
 	try { if (!statSync(cwd).isDirectory()) throw new Error(`qa replay: execution cwd is not a directory: ${cwd}`); }
 	catch (error) { throw new Error(`qa replay: execution cwd is not a directory: ${cwd}`, { cause: error }); }
@@ -123,7 +129,7 @@ export async function runQaCase(record: QaCaseRecord, context: QaCaseRunContext)
 	const stderrPath = join(runDirectory, "stderr.log");
 	const receiptPath = join(runDirectory, "receipt.json");
 	const cwd = resolveCwd(record, context, runDirectory);
-	const argv = record.runner.map((item) => expand(item, runDirectory));
+	const argv = record.runner.map((item) => expand(item, runDirectory, context));
 	const startedAt = new Date().toISOString();
 	const maxBuffer = context.maxBuffer ?? 1024 * 1024;
 	const timeoutMs = context.timeoutMs ?? 120_000;

@@ -34,7 +34,7 @@ function optionalPositiveNumber(args: Record<string, string | boolean>, key: str
 }
 function help(): string {
 	return [
-		"Usage: qa-replay.ts --case ID --story ID --scenario ID --project DIR --code-ref STR --reset-confirmed STR [--timeout-ms N] [--max-buffer N] [--allow-project-cwd]",
+		"Usage: qa-replay.ts --case ID --story ID --scenario ID --project DIR --code-ref STR --reset-confirmed STR [--timeout-ms N] [--max-buffer N] [--allow-project-cwd] [--device SERIAL]",
 		"",
 		"Runs the saved native case only after the active QA actor→story→scenario chain is complete.",
 		"The reset confirmation must exactly equal the saved reset_description.",
@@ -43,6 +43,7 @@ function help(): string {
 		"Runner start failures retain bounded logs and a failed receipt with start_error.",
 		"Native runners are not sandboxed; review intended output paths and flags/config before execution.",
 		"Relative native_files references resolve from --project; absolute references are accepted when present.",
+		"Runner tokens: {artifacts} is this run's directory, {project} is --project, {device} is --device (the device acquire-device gave this cycle).",
 	].join("\n") + "\n";
 }
 function fail(message: string): never { throw new Error(`qa-replay: ${message}`); }
@@ -108,6 +109,7 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 		maxBuffer,
 		actorBoundary: actor.boundary,
 		allowProjectCwd: parsed["allow-project-cwd"] === true,
+		device: typeof parsed.device === "string" ? parsed.device : undefined,
 	});
 	registerQaCaseRunReceipt(sessionId, result.receipt.artifact_paths.receipt, result.receipt.attempt_id, result.receiptSha256);
 	process.stdout.write(`${JSON.stringify(result.receipt)}\n`);

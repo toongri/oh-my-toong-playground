@@ -158,7 +158,11 @@ example `agent-device replay <shared>.ad --keep-session && agent-device replay
    its id in the case's `feature_refs`.
 2. **Record while you drive.** The recording is made during the scenario's own
    run, not in a separate pass. The form follows the driver:
-   - `agent-device`: record with `--save-script` (example below).
+   - `agent-device`: record with `--save-script` (example below). A debug build
+     shows warning overlays at launch and later. When one appears, run
+     `agent-device react-native dismiss-overlay` so the dismissal is in the
+     script. Press elements by label or id; an unlabeled `role="viewgroup"`
+     matches whatever is on top.
    - `agent-browser`: it records video and HAR only, not a script. Write the
      commands you ran into a shell script as you go. Replace each `@eN` ref,
      which changes on every snapshot, with a `find role|text|label …` command.
@@ -166,7 +170,15 @@ example `agent-device replay <shared>.ad --keep-session && agent-device replay
 3. **Record the scenario** as usual with `record-scenario`.
 4. **Save the case** with `qa-cases.ts save`: goal, Given/When/Then, actor
    surface, exact runner, working directory, native files, reset instructions,
-   and feature refs.
+   and feature refs. A later cycle gets another device and may run in another
+   worktree, so the runner names them by token: `{device}` (filled from
+   `qa-replay.ts --device`) and `{project}` (the `--project` directory). An
+   `agent-device` case runs in `{project}`, because the device session belongs
+   to that workspace:
+   `"runner": ["agent-device", "replay", "<store>/cases/<id>.ad", "--platform", "android", "--serial", "{device}", "--session", "qa-{device}"]`,
+   `"execution_cwd": "{project}"`, replayed with `--device <serial> --allow-project-cwd`.
+   Keep drafts in the run's own evidence directory. Only the saved case's
+   files go in the store.
 5. **Replay it as the flaky-rerun check.** Reset the application and
    independently rerun the saved recipe through `qa-replay.ts`, with the
    same assertions from the real boundary. This replay is the check that the
