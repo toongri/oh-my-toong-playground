@@ -16,7 +16,7 @@ HUD는 Claude Code의 statusLine에 Oh-My-Toong 운영 상태를 실시간으로
 
 ### read-db
 
-PostgreSQL의 실제 데이터를 읽기 전용으로 조회할 때 쓰는 스킬입니다. 조회는 모두 래퍼 스크립트 `scripts/read-db.ts <service> "<sql>"`를 거칩니다. 접속 대상은 `~/.pg_service.conf`의 서비스 이름으로만 받고 비밀번호는 `~/.pgpass`에서 libpq가 직접 읽으므로, 접속 문자열이 명령 인자·환경·출력 어디에도 나타나지 않습니다. 래퍼는 이름이 `-ro`로 끝나는 서비스만 받고, 세션을 `default_transaction_read_only=on`으로 열며, 호출당 SELECT 계열 한 문장만 허용합니다. `statement_timeout` 15초와 출력 200행 상한도 래퍼가 겁니다. `--list`는 이 머신에서 조회 가능한 서비스를 출력합니다. 서비스 정의와 비밀번호는 머신별 파일이라 이 저장소에 들어가지 않습니다. `psql`은 루트 `sync.yaml`의 provision 항목이 Homebrew `libpq`로 설치합니다.
+PostgreSQL의 실제 데이터를 읽기 전용으로 조회할 때 쓰는 스킬입니다. 조회는 모두 래퍼 스크립트 `scripts/read-db.ts <service> "<sql>"`를 거칩니다. 접속 대상은 `~/.pg_service.conf`의 서비스 이름으로만 받고 비밀번호는 `~/.pgpass`에서 libpq가 직접 읽으므로, 접속 문자열이 명령 인자·환경·출력 어디에도 나타나지 않습니다. 래퍼는 이름이 `-ro`로 끝나는 서비스만 받고, 세션을 `default_transaction_read_only=on`으로 열며, 호출당 SELECT 계열 한 문장만 허용합니다. `statement_timeout` 15초와 출력 200행 상한도 래퍼가 겁니다. `--list`는 이 머신에서 조회 가능한 서비스를 출력합니다. 이 규칙은 공유 DB(운영·스테이징)를 위한 것이라, 이 머신의 로컬 스택이 띄운 DB는 `psql`로 직접 조회합니다. 서비스 정의와 비밀번호는 머신별 파일이라 이 저장소에 들어가지 않습니다. `psql`은 루트 `sync.yaml`의 provision 항목이 Homebrew `libpq`로 설치합니다.
 
 ### E2E 드라이버
 
