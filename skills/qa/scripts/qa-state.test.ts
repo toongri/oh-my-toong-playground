@@ -663,6 +663,13 @@ describe("qa-state CLI wiring", () => {
 		`author-scenario --story story-1 --id ${id} --title "scenario ${id}" --preconditions "program exists" --steps '["open home"]' --expected "supplements shown" --why-needed "covers ${id}" --priority ${priority} --risks '${JSON.stringify(risks)}' ${extra}`;
 	// Three scenarios under one story: one H, two L, jointly covering every adversarial axis 1..6.
 	const SCENARIOS: Array<[string, string, number[]]> = [["s1", "H", [1, 2]], ["s2", "L", [3, 4]], ["s3", "L", [5, 6]]];
+	// The strict report refuses a pass/fail scenario without observed prose.
+	const observedNarrative = () => {
+		const path = join(tmpDir, "observed-narrative.json");
+		const scenarios = Object.fromEntries(["s1", "s2", "s3"].map((id) => [`story-1:${id}`, { observed: "명령을 실행했더니 기대한 결과가 출력됐다." }]));
+		writeFileSync(path, JSON.stringify({ scenarios }));
+		return path;
+	};
 	const startChain = () => {
 		run("set --phase PLAN");
 		run("set-acceptance --json '[\"home shows today supplements\"]'");
@@ -1023,13 +1030,13 @@ describe("qa-state CLI wiring", () => {
 		run("set-verdict REQUEST_CHANGES");
 		expect(() => run("complete")).toThrow("report");
 		const report = join(tmpDir, "report.html");
-		execSync(`bun ${join(import.meta.dir, "qa-report.ts")} --session ${S} --out ${report}`, { env: process.env });
+		execSync(`bun ${join(import.meta.dir, "qa-report.ts")} --session ${S} --out ${report} --narrative ${observedNarrative()}`, { env: process.env });
 		expect(() => run("complete")).toThrow("report");
 		run(`review-report --path ${report}`);
 		writeFileSync(report, readFileSync(report, "utf8") + "<!-- changed -->");
 		expect(() => run("complete")).toThrow("report");
 		expect(() => run(`review-report --path ${report}`)).toThrow("current report");
-		execSync(`bun ${join(import.meta.dir, "qa-report.ts")} --session ${S} --out ${report}`, { env: process.env });
+		execSync(`bun ${join(import.meta.dir, "qa-report.ts")} --session ${S} --out ${report} --narrative ${observedNarrative()}`, { env: process.env });
 		run(`review-report --path ${report}`);
 		run("complete");
 		expect(rawState().active).toBe(false);
@@ -1070,7 +1077,7 @@ describe("qa-state CLI wiring", () => {
 		run("set-verdict APPROVE");
 		expect(rawState().verdict).toBe("APPROVE");
 		const report = join(tmpDir, "inert-report.html");
-		execSync(`bun ${join(import.meta.dir, "qa-report.ts")} --session ${S} --out ${report}`, { env: process.env });
+		execSync(`bun ${join(import.meta.dir, "qa-report.ts")} --session ${S} --out ${report} --narrative ${observedNarrative()}`, { env: process.env });
 		run(`review-report --path ${report}`);
 		run("complete");
 		expect(rawState().active).toBe(false);

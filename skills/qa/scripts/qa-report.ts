@@ -915,8 +915,11 @@ export function renderQaReport(
 			const actor = actorFor(view, story);
 			for (const scenario of scenariosForStory(view, story.id)) {
 				if (scenario.status !== "pass" && scenario.status !== "fail") continue;
-				if (!scenarioNeedsVisualProof(scenario, actor?.driver)) continue;
 				const key = scenarioKey(scenario);
+				if (!scenarioNeedsVisualProof(scenario, actor?.driver)) {
+					if (!narrative.scenarios?.[key]?.observed?.trim()) throw new Error(`observation required for ${key}`);
+					continue;
+				}
 				for (const source of scenario.evidence_review?.claims.flatMap((claim) => claim.sources) ?? []) {
 					const embed = readEvidence(source.path);
 					if (embed.kind === "missing" || embed.kind === "too-large") throw new Error(`visual claim evidence not embeddable for ${key}: ${source.path}; record a bounded source and review again`);
