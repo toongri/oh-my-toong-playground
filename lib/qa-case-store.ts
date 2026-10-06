@@ -27,7 +27,6 @@ export interface QaCaseContext { projectKey: string; projectRoot: string; manife
 export type QaCaseManifest = { version: 1; project: string; mode: "unconfigured" | "disabled" | "configured"; location?: string; allow_project_storage?: boolean };
 export type QaCaseStoreOptions = FeatureMapOptions;
 export type QaCaseStatus =
-	| { status: "unconfigured"; mode: "unconfigured"; project: string; manifestPath: string }
 	| { status: "disabled"; mode: "disabled"; project: string; manifestPath: string; location?: string }
 	| { status: "configured"; mode: "configured"; project: string; manifestPath: string; location: string };
 export type QaCaseStoreResult = QaCaseStatus | { status: "ok"; record: QaCaseRecord; path: string; revision: string } | { status: "ok"; cases: Array<{ id: string; title: string; path: string; revision: string }> } | { status: "not_found"; reason: "case_not_found" } | { status: "conflict"; reason: "revision_mismatch"; expectedRevision: string | null; actualRevision: string | null; path: string };
@@ -61,19 +60,28 @@ function writeAtomic(path: string, content: string): void {
 	const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
 	try { writeFileSync(temporary, content, "utf8"); renameSync(temporary, path); } finally { try { unlinkSync(temporary); } catch { /* renamed */ } }
 }
+// 저장소는 기본으로 켜진다. 조회할 때 manifest가 없거나 unconfigured(예전 기본값, 묻기 전 상태)면
+// configured로 바꾸고, 기억된 위치가 없으면 manifest 옆 cases/를 쓴다. configure/disable은 직접 쓴다.
 function ensureManifest(context: QaCaseContext): { context: QaCaseContext; manifest: QaCaseManifest; raw: Record<string, unknown> } {
 	assertNoSymlinkComponents("/", context.manifestPath);
 	mkdirSync(dirname(context.manifestPath), { recursive: true });
 	return withStateLock(context.manifestPath, () => {
-		return readOrCreateManifest(context);
+		const result = readOrNewManifest(context);
+		if (result.manifest.mode !== "unconfigured") return result;
+		const location = result.manifest.location ?? join(dirname(context.manifestPath), "cases");
+		assertNoSymlinkComponents("/", location);
+		mkdirSync(location, { recursive: true });
+		validatePresentLocation(context, location, result.manifest.allow_project_storage === true);
+		const raw = { ...result.raw, mode: "configured", location };
+		writeAtomic(context.manifestPath, stringify(raw));
+		return { context, manifest: validateManifest(raw, context), raw };
 	});
 }
-function readOrCreateManifest(context: QaCaseContext): { context: QaCaseContext; manifest: QaCaseManifest; raw: Record<string, unknown> } {
+function readOrNewManifest(context: QaCaseContext): { context: QaCaseContext; manifest: QaCaseManifest; raw: Record<string, unknown> } {
 		try { const raw = readRaw(context); return { context, manifest: validateManifest(raw, context), raw }; }
 		catch (error) {
 			if (!isMissing(error)) throw error;
 			const raw: Record<string, unknown> = { version: 1, project: context.projectKey, mode: "unconfigured" };
-			writeAtomic(context.manifestPath, stringify(raw));
 			return { context, manifest: { version: 1, project: context.projectKey, mode: "unconfigured" }, raw };
 		}
 }
@@ -90,11 +98,10 @@ function validatePresentLocation(context: QaCaseContext, location: string, allow
 	if (!allowProjectStorage && inside(context.projectRoot, actual)) throw new Error("qa-cases: persisted project-local storage requires explicit approval");
 	return actual;
 }
-function statusFrom(result: ReturnType<typeof ensureManifest>): QaCaseStatus {
+function statusFrom(result: ReturnType<typeof readOrNewManifest>): QaCaseStatus {
 	const base = { project: result.context.projectKey, manifestPath: result.context.manifestPath };
 	if (result.manifest.mode === "disabled") return { ...base, status: "disabled", mode: "disabled", ...(result.manifest.location ? { location: result.manifest.location } : {}) };
 	const location = result.manifest.location ? validatePresentLocation(result.context, result.manifest.location, result.manifest.allow_project_storage === true) : undefined;
-	if (result.manifest.mode === "unconfigured") return { ...base, status: "unconfigured", mode: "unconfigured" };
 	if (!location) throw new Error("qa-cases: configured manifest has no location");
 	return { ...base, status: "configured", mode: "configured", location };
 }
@@ -141,7 +148,7 @@ export function configureQaCaseStore(location: string, options: QaCaseStoreOptio
 	const actual = assertDirectory(location, true);
 	mkdirSync(dirname(context.manifestPath), { recursive: true });
 	withStateLock(context.manifestPath, () => {
-		const ensured = readOrCreateManifest(context);
+		const ensured = readOrNewManifest(context);
 		if (ensured.manifest.mode !== "disabled" && ensured.manifest.location) validatePresentLocation(ensured.context, ensured.manifest.location, ensured.manifest.allow_project_storage === true);
 		const raw = ensured.raw;
 		raw.mode = "configured";
@@ -160,10 +167,10 @@ export function disableQaCaseStore(options: QaCaseStoreOptions = {}): QaCaseStat
 	let result: QaCaseStatus | undefined;
 	mkdirSync(dirname(context.manifestPath), { recursive: true });
 	withStateLock(context.manifestPath, () => {
-		const ensured = readOrCreateManifest(context);
+		const ensured = readOrNewManifest(context);
 		ensured.raw.mode = "disabled";
 		writeAtomic(ensured.context.manifestPath, stringify(ensured.raw));
-		result = statusFrom(readOrCreateManifest(ensured.context));
+		result = statusFrom(readOrNewManifest(ensured.context));
 	});
 	if (!result) throw new Error("qa-cases: disable did not produce a status");
 	return result;

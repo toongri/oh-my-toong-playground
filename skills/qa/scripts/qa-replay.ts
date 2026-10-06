@@ -39,7 +39,7 @@ function help(): string {
 		"Runs the saved native case only after the active QA actor→story→scenario chain is complete.",
 		"The reset confirmation must exactly equal the saved reset_description.",
 		"Runner success creates a receipt but never records a QA scenario PASS.",
-		"Unconfigured, disabled, or missing cases print structured status and exit nonzero; --help exits zero.",
+		"A disabled store or missing case prints structured status and exits nonzero; --help exits zero.",
 		"Runner start failures retain bounded logs and a failed receipt with start_error.",
 		"Native runners are not sandboxed; review intended output paths and flags/config before execution.",
 		"Relative native_files references resolve from --project; absolute references are accepted when present.",

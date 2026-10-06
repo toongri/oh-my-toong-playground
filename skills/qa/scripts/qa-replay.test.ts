@@ -49,7 +49,7 @@ describe("qa replay CLI", () => {
 
 	test("CLI exit wrapper는 lookup 상태를 실패로 전달하고 help/null은 성공으로 둔다", () => {
 		const script = "import { replayExitCode } from './skills/qa/scripts/qa-replay.ts'; const value = JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify(value)+'\\n'); process.exit(replayExitCode(value));";
-		for (const status of ["unconfigured", "disabled", "not_found"]) {
+		for (const status of ["disabled", "not_found"]) {
 			const value = JSON.stringify({ status });
 			expect(() => execFileSync("bun", ["-e", script, value], { encoding: "utf8", cwd: process.cwd() })).toThrow();
 		}

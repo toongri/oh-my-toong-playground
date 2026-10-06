@@ -86,7 +86,7 @@ describe("Feature Map provenance 계약", () => {
 	test("STATE 유지보수는 검증된 관찰만 기록하고 초안을 보존함", () => {
 		expect(skillMd).toContain("STATE/post-run");
 		expect(skillMd).toContain("only verified observations");
-		expect(skillMd).toContain("keep the draft");
+		expect(skillMd).toContain("current-run draft");
 		expect(skillMd).toContain("save --expect");
 		expect(skillMd).toContain("re-`get` before reconciling a conflict");
 		expect(skillMd).toContain("reusable regression recipe");
@@ -152,11 +152,10 @@ describe("reusable case guidance contract", () => {
 		expect(handsOn).toBeGreaterThan(plan);
 	});
 
-	test("optional storage has remembered unconfigured, configured, and disabled states", () => {
-		expect(reusableCasesMd).toContain("unconfigured");
+	test("storage is on by default and disabled only on the user's request", () => {
+		expect(reusableCasesMd).toContain("The store is on by default");
 		expect(reusableCasesMd).toContain("configured");
-		expect(reusableCasesMd).toContain("disabled");
-		expect(reusableCasesMd).toContain("ask once");
+		expect(reusableCasesMd).toContain("Disable only when the user asks for it");
 		expect(reusableCasesMd).toContain("does not ask again");
 		expect(reusableCasesMd).toContain("getQaCaseStoreStatus");
 		expect(reusableCasesMd).toContain("configureQaCaseStore");

@@ -9,7 +9,7 @@ const roots: string[] = [];
 function repo(): string { const root = realpathSync(mkdtempSync(join(tmpdir(), "qa-cases-cli-"))); roots.push(root); const project = join(root, "repo"); mkdirSync(project); execFileSync("git", ["init", "-q", project]); return project; }
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 describe("qa-cases CLI", () => {
-	test("help and status return JSON-compatible operational output", () => { const cwd = repo(); const home = realpathSync(mkdtempSync(join(tmpdir(), "qa-cases-home-"))); roots.push(home); expect(runQaCasesCli(["help"]).stdout).toContain("configure --location ABSOLUTE_PATH"); const status = runQaCasesCli(["status", "--project", cwd], { cwd, home }); expect(status.exitCode).toBe(0); expect(JSON.parse(status.stdout).status).toBe("unconfigured"); });
+	test("help and status return JSON-compatible operational output", () => { const cwd = repo(); const home = realpathSync(mkdtempSync(join(tmpdir(), "qa-cases-home-"))); roots.push(home); expect(runQaCasesCli(["help"]).stdout).toContain("configure --location ABSOLUTE_PATH"); const status = runQaCasesCli(["status", "--project", cwd], { cwd, home }); expect(status.exitCode).toBe(0); expect(JSON.parse(status.stdout).status).toBe("configured"); });
 	test("configure는 project-local 저장을 거부하고 명시적 opt-in 후 save는 실행하지 않는다", () => {
 		const cwd = repo(); const home = realpathSync(mkdtempSync(join(tmpdir(), "qa-cases-home-"))); roots.push(home);
 		const rejected = runQaCasesCli(["configure", "--location", join(cwd, "qa-cases"), "--project", cwd], { cwd, home });

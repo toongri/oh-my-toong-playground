@@ -35,9 +35,9 @@ cycle. Keep every risk covered by a scenario or declared not applicable, and
 record evidence from the actor boundary. A trace, recording, or JUnit XML may support diagnosis but is not executable proof or
 real-boundary evidence.
 
-## Optional persistence and three states
+## Persistence, on by default
 
-Persistence is optional and must use the QA case functions. Do not create
+Persistence must use the QA case functions. Do not create
 project-local product files, hidden QA directories, caches, reports, or
 `.gitignore` entries implicitly. The fixed external manifest is resolved by
 `resolveQaCaseContext`; helper functions own case metadata reads/writes. Native
@@ -45,19 +45,18 @@ runner scripts are authored by the driver at the explicitly resolved,
 user-authorized asset path; callers do not scan for storage or write metadata
 files directly.
 
-When the manifest is `unconfigured`, ask once and offer exactly these choices:
-an external absolute location, a project-local location only with explicit
-opt-in, or `disabled`. Keep a draft in the current QA report/state until the
-user chooses; do not choose a default.
+The store is on by default. The first lookup for a project turns a missing (or
+legacy `unconfigured`) manifest into `configured` at `~/.qa-cases/<projectKey>/cases`,
+outside the project. There is nothing to ask.
 
-- `configured`: use the approved external location. A project-local path is
-  allowed only when the user explicitly opts in (`allowProjectStorage`).
-- `disabled`: remember the opt-out. Ordinary QA continues without case
-  persistence and does not ask again.
+- `configured`: use that location, or another one the user chose. A project-local
+  path is allowed only when the user explicitly opts in (`allowProjectStorage`).
+- `disabled`: the user's opt-out. Ordinary QA continues without case
+  persistence and does not ask again. Disable only when the user asks for it.
 
 Use `getQaCaseStoreStatus` to inspect state (or `qa-cases status`),
-`configureQaCaseStore` after an
-explicit location decision, and `disableQaCaseStore` after an explicit opt-out.
+`configureQaCaseStore` when the user names another location, and
+`disableQaCaseStore` when the user asks to opt out.
 When configured, use `saveQaCase` with the observed revision (or `null` for a
 new case), then `getQaCase`/`listQaCases`; handle a `revision_mismatch` as a
 conflict and re-read before reconciling. Resolver helpers keep run/output/assets
@@ -133,10 +132,7 @@ valid when no saved case is being replayed.
 the reset. Native runners remain unsandboxed, so inspect their flags/output and
 configuration before replay.
 
-If the manifest is awaiting a storage decision, ask once and remember the
-approved external or explicitly opted-in project location, or remember
-`disabled`; an invalid configured manifest is an error, not an automatic reset
-or fallback.
+An invalid configured manifest is an error, not an automatic reset or fallback.
 
 ## Curating a case
 

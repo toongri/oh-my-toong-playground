@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
 	configureQaCaseStore,
@@ -50,14 +50,25 @@ function sample(id = "checkout-happy-path"): QaCaseRecord {
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
 describe("qa case store", () => {
-	test("처음 조회는 unconfigured manifest를 만들고 다시 읽어도 유지한다", () => {
+	test("처음 조회는 manifest 옆 cases/를 저장소로 켜고 다시 읽어도 유지한다", () => {
 		const cwd = repo();
 		const home = tempDir();
 		const first = getQaCaseStoreStatus({ cwd, home });
 		const second = getQaCaseStoreStatus({ cwd, home });
-		expect(first.status).toBe("unconfigured");
+		const manifestPath = resolveQaCaseContext({ cwd, home }).manifestPath;
+		expect(first).toMatchObject({ status: "configured", location: join(dirname(manifestPath), "cases") });
 		expect(second).toEqual(first);
-		expect(readFileSync(resolveQaCaseContext({ cwd, home }).manifestPath, "utf8")).toContain("mode: unconfigured");
+		expect(readFileSync(manifestPath, "utf8")).toContain("mode: configured");
+	});
+
+	test("예전 기본값 unconfigured manifest는 조회할 때 기본 위치로 켜고 다른 키를 보존한다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const context = resolveQaCaseContext({ cwd, home });
+		mkdirSync(dirname(context.manifestPath), { recursive: true });
+		writeFileSync(context.manifestPath, `version: 1\nproject: ${context.projectKey}\nmode: unconfigured\nextra: kept\n`);
+		expect(getQaCaseStoreStatus({ cwd, home })).toMatchObject({ status: "configured", location: join(dirname(context.manifestPath), "cases") });
+		expect(readFileSync(context.manifestPath, "utf8")).toContain("extra: kept");
 	});
 
 	test("configure는 절대 경로만 허용하고 project 내부는 명시적 opt-in 없이는 거부한다", () => {
@@ -116,7 +127,7 @@ describe("qa case store", () => {
 		expect(() => configureQaCaseStore(join(parent, "nested"), { cwd, home, allowProjectStorage: true })).toThrow(/symlink/);
 	});
 
-	test("unconfigured manifest의 remembered symlink location은 검증 오류를 낸다", () => {
+	test("예전 unconfigured manifest의 remembered symlink location은 켜기 전에 검증 오류를 낸다", () => {
 		const cwd = repo();
 		const home = tempDir();
 		const target = tempDir();
