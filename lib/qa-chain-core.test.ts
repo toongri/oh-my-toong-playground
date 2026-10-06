@@ -340,7 +340,7 @@ describe("qa chain core", () => {
 		expect(recordComplete(state, probe)).toBe(false);
 		expect(requestChangesOk(state, probe)).toBe(true);
 	});
-	test("blocked 시나리오는 시도 로그가 읽히고 시도 내역이 있을 때만 기록 완결로 인정되고 H이면 APPROVE 대신 COMMENT만 허용", () => {
+	test("blocked 시나리오는 시도 로그가 읽히고 시도 내역이 있을 때만 기록 완결로 인정되고 우선순위와 무관하게 APPROVE 대신 COMMENT만 허용", () => {
 		const state = serverState();
 		const { evidence: _evidence, ...rest } = state.scenarios[0];
 		state.scenarios[0] = { ...rest, status: "blocked", blocked: { obstacle: "페어링 코드 입력 필요", attempts: ["pairing → 코드 입력 대기"], deepest_reachable: "서비스 테스트", attempt_log: "/missing" } };
@@ -352,6 +352,14 @@ describe("qa chain core", () => {
 		expect(commentOk(state, probe)).toBe(true);
 		state.scenarios[0].blocked!.attempts = [];
 		expect(recordComplete(state, probe)).toBe(false);
+	});
+	test("M/L 시나리오가 blocked여도 APPROVE는 거부하고 COMMENT는 허용함", () => {
+		const state = authoredState();
+		const { evidence: _evidence, evidence_review: _review, ...rest } = state.scenarios[1];
+		expect(rest.priority).not.toBe("H");
+		state.scenarios[1] = { ...rest, status: "blocked", blocked: { obstacle: "외부 결제 샌드박스 응답 없음", attempts: ["결제 요청 → 30초 무응답"], deepest_reachable: "결제 요청 직전", attempt_log: "/attempts.log" } };
+		expect(approveOk(state, probe)).toBe(false);
+		expect(commentOk(state, probe)).toBe(true);
 	});
 	test("commentOk는 M/L 실패와 원인 미증명 H 실패를 허용하고 원인이 증명된 H 실패는 거부함", () => {
 		const state = authoredState();

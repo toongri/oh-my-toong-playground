@@ -905,7 +905,7 @@ describe("qa-state CLI wiring", () => {
 		expect(rawState().verdict ?? null).toBeNull();
 	});
 
-	test("blocked requires obstacle, attempts, deepest-reachable, and a readable attempt log, then resolves APPROVE", () => {
+	test("blocked requires obstacle, attempts, deepest-reachable, and a readable attempt log, then caps the verdict at COMMENT", () => {
 		authorCompleteChain();
 		recordAllPass();
 		const log = writeAttemptLog();
@@ -919,8 +919,9 @@ describe("qa-state CLI wiring", () => {
 		expect(scenario.evidence).toBeUndefined();
 		expect(scenario.blocked).toEqual({ obstacle: "PGlite has one connection", attempts: ["docker compose up → daemon down"], deepest_reachable: "PGlite", attempt_log: log });
 		expect(() => run("set-verdict REQUEST_CHANGES")).toThrow();
-		run("set-verdict APPROVE");
-		expect(rawState().verdict).toBe("APPROVE");
+		expect(() => run("set-verdict APPROVE")).toThrow(/APPROVE refused/);
+		run("set-verdict COMMENT");
+		expect(rawState().verdict).toBe("COMMENT");
 	});
 
 	test("start resets a completed cycle and refuses to launder active work", () => {

@@ -1222,7 +1222,7 @@ export function setVerdict(sessionId: string, verdict: string): void {
 		ensureSeed("qa", sessionId);
 		const prior = readPrior(sessionId);
 		if (verdict === "APPROVE" && !approveOk(prior, stateProbe)) {
-			throw new Error("set-verdict: APPROVE refused — approveOk is false; execute and record every remaining scenario (pass/fail), or record-scenario --status blocked with the attempts that failed");
+			throw new Error("set-verdict: APPROVE refused — approveOk is false; APPROVE needs every scenario pass. Execute and record every remaining scenario; a blocked scenario leaves its requirement unproven, so the verdict is COMMENT at most");
 		}
 		if (verdict === "COMMENT" && !commentOk(prior, stateProbe)) {
 			throw new Error("set-verdict: COMMENT refused — commentOk is false; every scenario must be recorded, and an H fail with a supported cause claim asks for REQUEST_CHANGES");
