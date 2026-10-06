@@ -1216,7 +1216,7 @@ describe("qa-report presentation layer", () => {
 	});
 
 	test("maps each recorded acceptance criterion to a satisfaction badge and evidence prose", () => {
-		const view = baseView({ acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
+		const view = baseView({ stories: [linkedStory("story-1", [0])], acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
 		const html = renderQaReport(view, fullPresentation(), fakeReader, fakeMermaid)!;
 		const mapping = acSection(html);
 		expect(mapping).toContain("flag ON이면 v2 재고 화면");
@@ -1226,7 +1226,7 @@ describe("qa-report presentation layer", () => {
 	});
 
 	test("공백만 있는 요구사항 충족 근거는 누락 gap으로 렌더한다", () => {
-		const view = baseView({ acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
+		const view = baseView({ stories: [linkedStory("story-1", [0])], acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
 		const narrative: QaReportNarrative = {
 			presentation: {
 				requirementMapping: {
@@ -1244,6 +1244,7 @@ describe("qa-report presentation layer", () => {
 	const passScenario = (id: string): QaScenario => scenario({ id, evidence: { path: "/evidence/after.png", surface: "agent-device", after: "/evidence/after.png" } });
 	const failScenario = (id: string): QaScenario => scenario({ id, status: "fail", evidence: { path: "/evidence/after.png", surface: "agent-device", after: "/evidence/after.png" } });
 	const ref = (id: string) => ({ story: "story-1", scenario: id });
+	const linkedStory = (id: string, acs: number[]) => ({ id, actor: "actor-1", contract: { goal: "재고를 한눈에 확인한다", given: ["g"], when: ["w"], then: ["t"], acceptance_criteria: acs } });
 
 	test("accepts yes, no, partial, and unverified mappings when their current-cycle scenario refs match the claimed status", () => {
 		const cases = [
@@ -1255,7 +1256,7 @@ describe("qa-report presentation layer", () => {
 		];
 
 		for (const candidate of cases) {
-			const view = baseView({ acceptance_criteria: [candidate.satisfied], scenarios: candidate.scenarios });
+			const view = baseView({ stories: [linkedStory("story-1", [0])], acceptance_criteria: [candidate.satisfied], scenarios: candidate.scenarios });
 			const narrative: QaReportNarrative = {
 				presentation: { requirementMapping: { "0": { satisfied: candidate.satisfied, scenarioRefs: candidate.refs, evidence: "상태에 맞는 설명" } } },
 			};
@@ -1273,8 +1274,8 @@ describe("qa-report presentation layer", () => {
 				{ id: "actor-2", name: "Admin", boundary: "Admin Console", driver: "agent-browser", reachable: "yes", client_impact: "contract", client_impact_reason: "c" },
 			],
 			stories: [
-				{ id: "story-1", actor: "actor-1" },
-				{ id: "story-2", actor: "actor-2" },
+				linkedStory("story-1", [0]),
+				linkedStory("story-2", [0]),
 			],
 			scenarios: [failScenario("sc-1"), { ...passScenario("sc-1"), story: "story-2" }],
 		});
@@ -1284,6 +1285,20 @@ describe("qa-report presentation layer", () => {
 		const mapping = acSection(renderQaReport(view, narrative, fakeReader, fakeMermaid)!);
 		expect(mapping).toContain("미판정");
 		expect(mapping).toContain('class="gap"');
+		expect(mapping).not.toContain("satisfied-yes");
+	});
+
+	test("AC를 연결하지 않은 스토리의 시나리오로는 그 AC를 충족으로 표시하지 않는다", () => {
+		const view = baseView({
+			acceptance_criteria: ["story-A 경로가 성공한다", "story-B 경로가 성공한다"],
+			stories: [linkedStory("story-A", [0]), linkedStory("story-B", [1])],
+			scenarios: [{ ...passScenario("s1"), story: "story-B" }],
+		});
+		const narrative: QaReportNarrative = {
+			presentation: { requirementMapping: { "0": { satisfied: "yes", scenarioRefs: [{ story: "story-B", scenario: "s1" }], evidence: "B만 연결된 시나리오" } } },
+		};
+		const mapping = acSection(renderQaReport(view, narrative, fakeReader, fakeMermaid)!);
+		expect(mapping).toContain("미판정");
 		expect(mapping).not.toContain("satisfied-yes");
 	});
 
@@ -1314,7 +1329,8 @@ describe("qa-report presentation layer", () => {
 
 		for (const candidate of cases) {
 			const narrative = { presentation: { requirementMapping: { "0": candidate.mapping } } } as QaReportNarrative;
-			const mapping = acSection(renderQaReport(candidate.view, narrative, fakeReader, fakeMermaid)!);
+			const view = { ...candidate.view, stories: [linkedStory("story-1", [0])] };
+			const mapping = acSection(renderQaReport(view, narrative, fakeReader, fakeMermaid)!);
 			if (!mapping.includes("미판정") || !mapping.includes('class="gap"') || /satisfied-(yes|no|partial|unverified)/.test(mapping)) {
 				throw new Error(`${candidate.label}: expected a neutral fail-closed AC mapping`);
 			}
@@ -1332,6 +1348,7 @@ describe("qa-report presentation layer", () => {
 	test("renders an unverified requirement LOUDLY (미검증 — 검증 불가 시나리오에 걸림), never as a quiet partial", () => {
 		const view = baseView({
 			acceptance_criteria: ["flag ON이면 v2 재고 화면"],
+			stories: [linkedStory("story-1", [0])],
 			scenarios: [...baseView().scenarios!, blockedScenario("sc-3")],
 		});
 		const narrative: QaReportNarrative = {
@@ -1348,7 +1365,7 @@ describe("qa-report presentation layer", () => {
 	});
 
 	test("연결된 시나리오의 주장 검토가 없으면 매핑이 유효해도 AC는 근거 미검증 gap으로 렌더함", () => {
-		const view = baseView({ acceptance_criteria: ["ac"], scenarios: [passScenario("sc-1")] });
+		const view = baseView({ stories: [linkedStory("story-1", [0])], acceptance_criteria: ["ac"], scenarios: [passScenario("sc-1")] });
 		delete view.scenarios![0].evidence_review;
 		const narrative: QaReportNarrative = { presentation: { requirementMapping: { "0": { satisfied: "yes", scenarioRefs: [ref("sc-1")], evidence: "통과" } } } };
 		const mapping = acSection(renderQaReport(view, narrative, fakeReader, fakeMermaid)!);

@@ -233,8 +233,8 @@ there is no separate actor-roster table).
   현황** board near the top of the report (the AC text alone is no longer a
   separate section). Each entry must include a non-empty `scenarioRefs` array of
   `{story, scenario}` selectors. The renderer validates every ref against
-  exactly one recorded current-cycle scenario and its recorded status (`pass`,
-  `fail`, or `blocked`). The grounded status invariants are: `yes` requires
+  exactly one recorded current-cycle scenario, requires the ref's story to link that
+  AC, and checks its recorded status (`pass`, `fail`, or `blocked`). The grounded status invariants are: `yes` requires
   every referenced scenario to be `pass`; `no` requires every referenced scenario to be
   `fail`; `partial` requires at least one `pass` and one `fail` and no
   `blocked`; `unverified` requires at least one valid `blocked`. Missing/legacy/malformed/duplicate/stale/unknown/ineligible
