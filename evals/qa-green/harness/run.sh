@@ -8,7 +8,7 @@
 #                                             continue that run on the runtime it started with
 #
 # The PR is checked out detached at its merge commit in its own algocare-home
-# worktree (~/repos/algocare-home/qa-green-<pr>), with the developer's root
+# worktree ($QA_GREEN_REPO_ROOT/qa-green-<pr>; default ~/repos/algocare-home), with the developer's root
 # .env.local copied in. Everything else (install, local stack, seeds) is the qa
 # skill's own bootstrap work, so it is graded rather than prepared here.
 #
@@ -24,7 +24,7 @@ if [ "${3:-}" = "--resume" ]; then
 	resume_answer="${4:?--resume needs the answer text}"
 fi
 
-repo_root="$HOME/repos/algocare-home"
+repo_root="${QA_GREEN_REPO_ROOT:-$HOME/repos/algocare-home}"
 source_worktree="$repo_root/main"
 worktree="$repo_root/qa-green-$pr"
 run_dir="$HOME/.omt/qa-green/$pr/$label"
