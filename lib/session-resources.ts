@@ -22,6 +22,8 @@ export interface SessionResource {
 	kind: string;
 	/** Shell command that stops this resource; run by releaseResource. */
 	stop: string;
+	/** The recorded device this resource lives on (an adb reverse, a device setting); it ends with that device. */
+	device?: string;
 	recorded_at: string;
 	/** Set only after the stop command exited 0. */
 	released_at?: string;
@@ -60,18 +62,28 @@ function writeAll(path: string, resources: SessionResource[]): void {
 	renameSync(tmp, path);
 }
 
+/** True when `resources` holds an unreleased simulator or emulator with this id (a device acquire-device gave this session). */
+export function heldDevice(resources: SessionResource[], id: string): boolean {
+	return resources.some((r) => r.id === id && (r.kind === "simulator" || r.kind === "emulator") && !r.released_at);
+}
+
 /**
  * Records a resource this run started. Re-recording an id replaces the entry
  * and marks it unreleased again (the resource was restarted).
  */
-export function recordResource(sessionId: string, input: { id: string; kind: string; stop: string }): void {
+export function recordResource(sessionId: string, input: { id: string; kind: string; stop: string; device?: string }): void {
 	for (const [flag, value] of Object.entries(input)) {
-		if (value.trim() === "") throw new Error(`record-resource: refused — --${flag} is required`);
+		if (value !== undefined && value.trim() === "") throw new Error(`record-resource: refused — --${flag} is required`);
 	}
 	const path = resolveResourcesPath(sessionId);
 	withStateLock(path, () => {
-		const next = readAll(path).filter((r) => r.id !== input.id);
-		next.push({ ...input, recorded_at: new Date().toISOString() });
+		const all = readAll(path);
+		if (input.device !== undefined && !heldDevice(all, input.device)) {
+			throw new Error(`record-resource: refused — --device "${input.device}" is not a device this session holds; acquire it with acquire-device first`);
+		}
+		const next = all.filter((r) => r.id !== input.id);
+		const { device, ...rest } = input;
+		next.push({ ...rest, ...(device === undefined ? {} : { device }), recorded_at: new Date().toISOString() });
 		writeAll(path, next);
 	});
 }
@@ -106,6 +118,11 @@ export function releaseResource(sessionId: string, id: string): SessionResource 
 		const current = all.find((r) => r.id === id && r.recorded_at === target.recorded_at);
 		if (!current) return target;
 		current.released_at ??= new Date().toISOString();
+		// What lived on the device ended with it. Running those stop commands now
+		// would fail, or reach whichever device next takes the same serial.
+		for (const dependent of all) {
+			if (dependent.device === id && !dependent.released_at) dependent.released_at = current.released_at;
+		}
 		writeAll(path, all);
 		return current;
 	});
@@ -184,7 +201,7 @@ const systemDeps: DeviceDeps = {
 		return { status: r.status, stdout: r.stdout ?? "", stderr: `${r.stderr ?? ""}${r.error ? String(r.error) : ""}` };
 	},
 	launchDetached(cmd, args, logPath) {
-		const fd = openSync(logPath, "a");
+		const fd = openSync(logPath, "w");
 		spawn(cmd, args, { detached: true, stdio: ["ignore", fd, fd] }).unref();
 		closeSync(fd);
 	},
@@ -192,6 +209,19 @@ const systemDeps: DeviceDeps = {
 		spawnSync("sleep", [String(ms / 1000)]);
 	},
 };
+
+export function emulatorLogPath(serial: string, sessionId: string): string {
+	return join(tmpdir(), `omt-${serial}-${sessionId}.log`);
+}
+
+function logTail(path: string): string {
+	try {
+		const lines = readFileSync(path, "utf8").trimEnd().split("\n");
+		return lines.slice(-15).map((line) => `  ${line}`).join("\n") || "  (empty)";
+	} catch {
+		return "  (no output was written)";
+	}
+}
 
 function androidTool(sub: string, name: string): string {
 	const sdk = process.env.ANDROID_HOME ?? process.env.ANDROID_SDK_ROOT;
@@ -213,13 +243,15 @@ function failed(step: string, r: { status: number | null; stdout: string; stderr
  * - Android: a -read-only instance of the AVD whose host process carries
  *   `-prop qemu.omt.session=<session>` in argv (the guest drops custom props on
  *   current images, the host argv keeps it); stop kills the emulator only when
- *   a process with that port and tag still exists.
+ *   a process with that port and tag still exists. `emulatorArgs` are the extra
+ *   flags a project's documented launcher boots with (`-writable-system`,
+ *   `-qemu …`); they go after the tag, so a trailing `-qemu` block stays last.
  *
  * Returns the UDID (iOS) or serial (Android).
  */
 export function acquireDevice(
 	sessionId: string,
-	req: { platform: string; base: string; runtime?: string },
+	req: { platform: string; base: string; runtime?: string; emulatorArgs?: string[] },
 	deps: DeviceDeps = systemDeps,
 ): string {
 	if (req.platform !== "ios" && req.platform !== "android") {
@@ -245,6 +277,9 @@ export function acquireDevice(
 		return udid;
 	}
 
+	const extra = req.emulatorArgs ?? [];
+	const owned_flag = extra.find((arg) => ["-avd", "-port", "-prop", "-read-only"].includes(arg));
+	if (owned_flag) throw new Error(`acquire-device: refused — --emulator-args may not set ${owned_flag}; acquire-device owns it`);
 	const adb = androidTool("platform-tools", "adb");
 	const listed = deps.run(adb, ["devices"]);
 	if (listed.status !== 0) throw failed("adb devices", listed);
@@ -258,10 +293,11 @@ export function acquireDevice(
 	// collision shows up in practice.
 	const serial = `emulator-${port}`;
 	const tag = `qemu.omt.session=${sessionId}`;
+	const logPath = emulatorLogPath(serial, sessionId);
 	deps.launchDetached(
 		androidTool("emulator", "emulator"),
-		["-avd", req.base, "-read-only", "-no-boot-anim", "-port", String(port), "-prop", tag],
-		join(tmpdir(), `omt-${serial}-${sessionId}.log`),
+		["-avd", req.base, "-read-only", "-no-boot-anim", "-port", String(port), "-prop", tag, ...extra],
+		logPath,
 	);
 	// `[-]port` keeps pgrep from matching this bash -c command line itself.
 	recordResource(sessionId, {
@@ -277,7 +313,8 @@ export function acquireDevice(
 		const booted = deps.run(adb, ["-s", serial, "shell", "getprop", "sys.boot_completed"]).stdout.trim() === "1";
 		if (!owned()) {
 			throw new Error(
-				`acquire-device: this session's emulator on port ${port} exited before booting (another session likely took the port). ` +
+				`acquire-device: this session's emulator on port ${port} exited before booting. Its last output (${logPath}):\n${logTail(logPath)}\n` +
+					`Find the cause there (a port another session took, a full disk, low memory, a broken AVD) and remove it. ` +
 					`Run release-resource --id ${serial} (it stops nothing that is not ours), then run acquire-device again.`,
 			);
 		}

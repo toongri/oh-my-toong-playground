@@ -8,22 +8,19 @@ import { parseFeature, serializeFeature, validateFeature, type FeatureDocument, 
 
 export type FeatureSummary = { id: string; title: string; path: string; revision: string; metadata: FeatureMetadata };
 export type StoredFeature = FeatureDocument & { path: string; revision: string };
-export type StorageNotConfigured = { status: "not_found"; reason: "storage_not_configured"; next_action: "ask_user_for_storage"; project: string; manifestPath: string };
 export type FeatureNotFound = { status: "not_found"; reason: "feature_not_found" };
 export type ReadyStatus = { status: "ready"; project: string; manifestPath: string; storage: { format: "markdown-frontmatter-v1"; location: string } };
-export type FeatureMapStatus = StorageNotConfigured | ReadyStatus;
+export type FeatureMapStatus = ReadyStatus;
 
-function configured(options: FeatureMapOptions = {}): { context: ReturnType<typeof ensureFeatureMapManifest>["context"]; manifest: ReturnType<typeof ensureFeatureMapManifest>["manifest"]; location?: string } {
+function configured(options: FeatureMapOptions = {}): { context: ReturnType<typeof ensureFeatureMapManifest>["context"]; location: string } {
   const result = ensureFeatureMapManifest(options);
-  if (result.manifest.storage === null) return result;
   const location = isAbsolute(result.manifest.storage.location)
     ? result.manifest.storage.location
     : resolve(dirname(result.context.manifestPath), result.manifest.storage.location);
-  return { ...result, location };
+  return { context: result.context, location };
 }
 
 function requireRoot(value: ReturnType<typeof configured>, writable = false): string {
-  if (!value.location) throw new Error("feature-map: storage is not configured");
   let stats: ReturnType<typeof statSync>;
   try { stats = statSync(value.location); accessSync(value.location, writable ? constants.R_OK | constants.W_OK : constants.R_OK); }
   catch (error) { throw new Error(`feature-map: storage location is unavailable: ${value.location}`, { cause: error }); }
@@ -58,22 +55,17 @@ function readRecords(root: string): ReadRecord[] {
   return records.sort((a, b) => a.document.metadata.id.localeCompare(b.document.metadata.id));
 }
 
-function notConfigured(result: ReturnType<typeof configured>): StorageNotConfigured {
-  return { status: "not_found", reason: "storage_not_configured", next_action: "ask_user_for_storage", project: result.context.projectKey, manifestPath: result.context.manifestPath };
-}
 function summary(record: ReadRecord): FeatureSummary { return { id: record.document.metadata.id, title: record.document.metadata.title, path: record.path, revision: record.revision, metadata: record.document.metadata }; }
 function stored(record: ReadRecord): StoredFeature { return { ...record.document, path: record.path, revision: record.revision }; }
 
 export function getFeatureMapStatus(options: FeatureMapOptions = {}): FeatureMapStatus {
   const result = configured(options);
-  if (!result.location) return notConfigured(result);
   const root = requireRoot(result);
   return { status: "ready", project: result.context.projectKey, manifestPath: result.context.manifestPath, storage: { format: "markdown-frontmatter-v1", location: root } };
 }
 
 export function queryFeatureMap(criteria: { text?: string; changedBy?: string } = {}, options: FeatureMapOptions = {}): { status: "ok"; features: FeatureSummary[] } | FeatureMapStatus | FeatureNotFound {
   const result = configured(options);
-  if (!result.location) return notConfigured(result);
   const root = requireRoot(result);
   const text = criteria.text?.toLocaleLowerCase();
   const records = readRecords(root).filter((record) => {
@@ -87,7 +79,6 @@ export function queryFeatureMap(criteria: { text?: string; changedBy?: string } 
 export function getFeature(id: string, options: FeatureMapOptions = {}): { status: "ok"; feature: StoredFeature } | FeatureMapStatus | FeatureNotFound {
 	assertFeatureId(id);
 	const result = configured(options);
-	if (!result.location) return notConfigured(result);
 	return getFeatureAtRoot(id, requireRoot(result));
 }
 
@@ -117,19 +108,17 @@ type Synchronous<T> = T extends PromiseLike<unknown> ? never : T;
 export function withFeatureMapReadLock<T>(
 	options: FeatureMapOptions = {},
 	callback: (readFeature: (id: string) => GetFeatureResult) => Synchronous<T>,
-): T | StorageNotConfigured {
+): T {
 	const result = configured(options);
-	if (!result.location) return notConfigured(result);
 	const root = requireRoot(result);
 	return withStateLock(join(root, ".feature-map-state"), () => callback((id) => getFeatureAtRoot(id, root)));
 }
 
-export function saveFeature(input: FeatureDocument & { expectedRevision: string | null }, options: FeatureMapOptions = {}): { status: "ok"; feature: StoredFeature } | StorageNotConfigured | { status: "conflict"; reason: "revision_mismatch"; expectedRevision: string | null; actualRevision: string | null; path: string } {
+export function saveFeature(input: FeatureDocument & { expectedRevision: string | null }, options: FeatureMapOptions = {}): { status: "ok"; feature: StoredFeature } | { status: "conflict"; reason: "revision_mismatch"; expectedRevision: string | null; actualRevision: string | null; path: string } {
   if (!input || typeof input !== "object" || !("expectedRevision" in input)) throw new Error("feature-map: expectedRevision is required");
   validateFeature(input);
   if (input.expectedRevision !== null && (typeof input.expectedRevision !== "string" || !/^[a-f0-9]{64}$/.test(input.expectedRevision))) throw new Error("feature-map: expectedRevision must be null or a SHA-256 hex string");
   const result = configured(options);
-  if (!result.location) return notConfigured(result);
   const root = requireRoot(result, true);
   const path = featurePath(root, input.metadata.id);
   return withStateLock(join(root, ".feature-map-state"), () => {
@@ -146,9 +135,8 @@ export function saveFeature(input: FeatureDocument & { expectedRevision: string 
   });
 }
 
-export function validateFeatureMap(options: FeatureMapOptions = {}): { status: "valid" | "invalid"; issues: Array<{ path?: string; id?: string; message: string }>; feature_count: number } | StorageNotConfigured {
+export function validateFeatureMap(options: FeatureMapOptions = {}): { status: "valid" | "invalid"; issues: Array<{ path?: string; id?: string; message: string }>; feature_count: number } {
   const result = configured(options);
-  if (!result.location) return notConfigured(result);
   const root = requireRoot(result);
   const issues: Array<{ path?: string; id?: string; message: string }> = [];
   const records: ReadRecord[] = [];

@@ -14,13 +14,14 @@ export interface QaCaseRunContext {
 	resetConfirmed: string;
 	sessionId?: string;
 	storyId?: string;
-	cellClass?: number;
-	cellSub?: "hang-timeout" | "flaky-green";
+	scenarioId?: string;
 	cycle: number;
 	storyContractSha256?: string;
 	timeoutMs?: number;
 	maxBuffer?: number;
 	allowProjectCwd?: boolean;
+	/** The device acquired this cycle; expands `{device}` in the saved runner. */
+	device?: string;
 	actorId?: string;
 	actorBoundary?: string;
 }
@@ -48,6 +49,9 @@ export interface QaCaseRunReceipt {
 	artifact_paths: { stdout: string; stderr: string; receipt: string; stdout_sha256: string; stderr_sha256: string };
 	session_id?: string;
 	story_id?: string;
+	/** The QA scenario this run belongs to. */
+	scenario_id?: string;
+	/** Legacy receipts (before scenarios) named an adversarial-axis cell; readable, never bindable. */
 	cell?: { cls: number; sub?: "hang-timeout" | "flaky-green" };
 	story_contract_sha256?: string;
 	start_error?: { message: string; code?: string };
@@ -69,12 +73,16 @@ function ensureNativeFile(projectRoot: string, reference: string): { path: strin
 	if (!stat.isFile()) throw new Error(`qa replay: native file is not a regular file: ${path}`);
 	return { path, sha256: sha256(readFileSync(path)) };
 }
-function expand(value: string, runDirectory: string): string { return value.replaceAll("{artifacts}", runDirectory); }
+// A saved case names this cycle's run directory, product root and device by token, so it replays in any later cycle.
+function expand(value: string, runDirectory: string, context: QaCaseRunContext): string {
+	if (value.includes("{device}") && !context.device) throw new Error("qa replay: the case runner uses {device}; pass the acquired device with --device");
+	return value.replaceAll("{artifacts}", runDirectory).replaceAll("{project}", context.projectRoot).replaceAll("{device}", context.device ?? "");
+}
 function resolveCwd(record: QaCaseRecord, context: QaCaseRunContext, runDirectory: string): string {
 	const requested = record.execution_cwd;
-	const expanded = expand(requested, runDirectory);
-	if (requested === "project-root") throw new Error("qa replay: legacy execution_cwd=project-root is unsupported; save an absolute path and use --allow-project-cwd when it is the product cwd");
-	if (!isAbsolute(expanded)) throw new Error(`qa replay: execution_cwd must be an absolute path or {artifacts}; got ${requested}`);
+	const expanded = expand(requested, runDirectory, context);
+	if (requested === "project-root") throw new Error("qa replay: legacy execution_cwd=project-root is unsupported; save {project} and use --allow-project-cwd");
+	if (!isAbsolute(expanded)) throw new Error(`qa replay: execution_cwd must be an absolute path, {artifacts} or {project}; got ${requested}`);
 	const cwd = resolve(expanded);
 	try { if (!statSync(cwd).isDirectory()) throw new Error(`qa replay: execution cwd is not a directory: ${cwd}`); }
 	catch (error) { throw new Error(`qa replay: execution cwd is not a directory: ${cwd}`, { cause: error }); }
@@ -121,7 +129,7 @@ export async function runQaCase(record: QaCaseRecord, context: QaCaseRunContext)
 	const stderrPath = join(runDirectory, "stderr.log");
 	const receiptPath = join(runDirectory, "receipt.json");
 	const cwd = resolveCwd(record, context, runDirectory);
-	const argv = record.runner.map((item) => expand(item, runDirectory));
+	const argv = record.runner.map((item) => expand(item, runDirectory, context));
 	const startedAt = new Date().toISOString();
 	const maxBuffer = context.maxBuffer ?? 1024 * 1024;
 	const timeoutMs = context.timeoutMs ?? 120_000;
@@ -173,7 +181,7 @@ export async function runQaCase(record: QaCaseRecord, context: QaCaseRunContext)
 		artifact_paths: { stdout: stdoutPath, stderr: stderrPath, receipt: receiptPath, stdout_sha256: sha256(stdout), stderr_sha256: sha256(stderr) },
 		...(context.sessionId ? { session_id: context.sessionId } : {}),
 		...(context.storyId ? { story_id: context.storyId } : {}),
-		...(context.cellClass !== undefined ? { cell: { cls: context.cellClass, ...(context.cellSub ? { sub: context.cellSub } : {}) } } : {}),
+		...(context.scenarioId ? { scenario_id: context.scenarioId } : {}),
 		...(context.storyContractSha256 ? { story_contract_sha256: context.storyContractSha256 } : {}),
 		...(context.actorId ? { actor_id: context.actorId } : {}),
 		...(context.actorBoundary ? { actor_boundary: context.actorBoundary } : {}),
@@ -209,6 +217,7 @@ export function validateQaCaseRunReceipt(value: unknown): asserts value is QaCas
 	if (value.actor_id !== undefined && !nonblank(value.actor_id)) throw new Error("qa replay: invalid run receipt");
 	if (value.actor_boundary !== undefined && !nonblank(value.actor_boundary)) throw new Error("qa replay: invalid run receipt");
 	if (value.story_id !== undefined && !nonblank(value.story_id)) throw new Error("qa replay: invalid run receipt");
+	if (value.scenario_id !== undefined && !nonblank(value.scenario_id)) throw new Error("qa replay: invalid run receipt");
 	if (value.cell !== undefined) {
 		if (!isRecord(value.cell) || typeof value.cell.cls !== "number" || !Number.isInteger(value.cell.cls) || value.cell.cls < 1 || value.cell.cls > 6 || (value.cell.sub !== undefined && value.cell.sub !== "hang-timeout" && value.cell.sub !== "flaky-green")) throw new Error("qa replay: invalid run receipt");
 	}

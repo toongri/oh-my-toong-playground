@@ -20,8 +20,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from "os";
 import { dirname, extname, join, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
-import { requiredCells, cellNeedsVisualProof, evidenceReviewComplete, type QaBaseline, type QaCell, type QaResult, type QaRunCheck, type QaStory } from "@lib/qa-chain-core";
-import { readQaView, recordRenderedReport, stateProbe, type QaView } from "./qa-state.ts";
+import { RISK_AXES, scenarioNeedsVisualProof, evidenceReviewComplete, type QaActor, type QaBaseline, type QaResult, type QaRunCheck, type QaScenario, type QaStory } from "@lib/qa-chain-core";
+import { CODE_IDENTIFIER, readQaView, recordRenderedReport, stateProbe, type QaView } from "./qa-state.ts";
 
 // Keep individual evidence files small enough to inspect, and cap the total
 // embedded payload so a full scenario matrix cannot produce an impractical
@@ -80,8 +80,8 @@ export interface QaReportScenarioNarrative {
 	 * real software rendered, in plain language. This IS the reader evidence for a
 	 * scenario verified at a non-visual boundary (API/CLI) — it stands in for the
 	 * raw transcript, which stays in the audit. For a UI scenario it narrates the
-	 * screenshots beside it. Required for every verified (pass/fail) cell that has
-	 * no screenshot; its absence there renders a loud gap.
+	 * screenshots beside it. Required for every verified (pass/fail) scenario that
+	 * has no screenshot; its absence there renders a loud gap.
 	 */
 	observed?: string;
 	expectedVsActual?: string;
@@ -96,11 +96,10 @@ export interface QaReportScenarioNarrative {
  */
 export interface QaReportAcMapping {
 	satisfied?: "yes" | "no" | "partial" | "unverified";
-	/** Structured current-cycle cell selectors; legacy prose-only mappings fail closed. */
-	cellRefs?: Array<{
+	/** Structured current-cycle scenario selectors; prose-only or cell-era mappings fail closed. */
+	scenarioRefs?: Array<{
 		story: string;
-		cls: number;
-		sub?: "hang-timeout" | "flaky-green";
+		scenario: string;
 	}>;
 	/** Which stories/scenarios/evidence prove (or fail) this criterion, in prose. */
 	evidence?: string;
@@ -136,8 +135,8 @@ export interface QaReportPresentation {
 }
 
 /**
- * The subjective half of the report — never persisted to qa-state. Keyed by
- * `${story}:${cls}:${sub ?? ""}` (matching qa-chain-core's cell key shape).
+ * The subjective half of the report — never persisted to qa-state. Scenario
+ * narratives are keyed by `${story}:${scenario id}`.
  */
 export interface QaReportNarrative {
 	/**
@@ -161,26 +160,12 @@ function escapeHtml(s: string): string {
 		.replace(/"/g, "&quot;");
 }
 
-function cellKey(cell: Pick<QaCell, "story" | "cls" | "sub">): string {
-	return `${cell.story}:${cell.cls}:${cell.sub ?? ""}`;
+export function scenarioKey(scenario: { story: string; id: string }): string {
+	return `${scenario.story}:${scenario.id}`;
 }
 
 function currentCycle(view: QaView): number {
 	return typeof view.cycle === "number" ? view.cycle : 0;
-}
-
-function isQuietInertNaRun(view: QaView): boolean {
-	if (view.inert?.declared !== true) return false;
-	const cycle = currentCycle(view);
-	if (view.inert.cycle !== undefined && view.inert.cycle !== cycle) return false;
-	const cells = view.cells ?? [];
-	const required = requiredCells(view);
-	return (
-		required.length > 0 &&
-		required.every((requiredCell) =>
-			cells.find((cell) => cell.cycle === cycle && cellKey(cell) === cellKey(requiredCell))?.status === "na",
-		)
-	);
 }
 
 /**
@@ -230,20 +215,20 @@ function recordedNote(value: RecordedCheck): string | undefined {
 	return typeof value === "string" || value === null || value === undefined ? undefined : value.note;
 }
 
-function actorFor(view: QaView, story: QaStory): { id: string; name?: string; boundary?: string; driver?: string } | undefined {
+function actorFor(view: QaView, story: QaStory): QaActor | undefined {
 	const id = story.actor ?? story.actor_id;
 	return (view.actors ?? []).find((actor) => actor.id === id);
 }
 
-function cellsForStory(view: QaView, storyId: string): QaCell[] {
-	return (view.cells ?? [])
-		.filter((cell) => cell.story === storyId)
-		.sort((a, b) => a.cls - b.cls || (a.sub ?? "").localeCompare(b.sub ?? ""));
+function scenariosForStory(view: QaView, storyId: string): QaScenario[] {
+	return (view.scenarios ?? []).filter((scenario) => scenario.story === storyId);
 }
 
-function statusBadge(status: QaCell["status"]): string {
+const STATUS_LABEL: Record<string, string> = { pass: "통과", fail: "실패", blocked: "검증 불가", unverified: "근거 미검증", unrecorded: "미실행" };
+
+function statusBadge(status: QaScenario["status"]): string {
 	const label = status ?? "unrecorded";
-	return `<span class="badge badge-${escapeHtml(String(label))}">${escapeHtml(String(label))}</span>`;
+	return `<span class="badge badge-${escapeHtml(String(label))}">${escapeHtml(STATUS_LABEL[label] ?? String(label))}</span>`;
 }
 
 interface EvidenceRenderContext {
@@ -291,7 +276,7 @@ function evidenceSlotHtml(label: string, path: string, inner: string): string {
 function imageSlot(label: string, path: string | undefined, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
 	if (!path) return "";
 	// Images are NOT de-duped against `renderedPaths`: a screenshot legitimately
-	// shared by two scenario cells must show on BOTH cards, so image display is
+	// shared by two scenarios must show on BOTH cards, so image display is
 	// per-card. (Text evidence still de-dupes via renderRawEvidence; images never
 	// enter the audit, so there is no reader/audit collision to guard here.)
 	const embed = readEvidence(path);
@@ -321,7 +306,7 @@ function imageSlot(label: string, path: string | undefined, readEvidence: Eviden
 
 /** A visible marker for a required presentation slot the author left unwritten. */
 function gap(what: string): string {
-	return `<p class="gap">${escapeHtml(what)} — <span class="gap-reference">presentation.md 참조</span></p>`;
+	return `<p class="gap">${escapeHtml(what)}</p>`;
 }
 
 /** A block of author prose, escaped; or a gap marker when it is absent. */
@@ -357,76 +342,47 @@ const SATISFIED_LABEL: Record<string, string> = {
 	yes: "충족",
 	no: "미충족",
 	partial: "부분 충족",
-	unverified: "미검증 — 유저 경계 미구동",
+	unverified: "미검증 — 검증 불가 시나리오에 걸림",
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-type ValidAcMapping = Omit<QaReportAcMapping, "satisfied" | "cellRefs"> & {
+type ValidAcMapping = Omit<QaReportAcMapping, "satisfied" | "scenarioRefs"> & {
 	satisfied: NonNullable<QaReportAcMapping["satisfied"]>;
-	cellRefs: NonNullable<QaReportAcMapping["cellRefs"]>;
+	scenarioRefs: NonNullable<QaReportAcMapping["scenarioRefs"]>;
 };
 
-function validateAcMapping(view: QaView, value: unknown): ValidAcMapping | null {
+function validateAcMapping(view: QaView, value: unknown, acIndex: number): ValidAcMapping | null {
 	if (!isRecord(value)) return null;
-	const mapping = value;
-	const satisfied = mapping.satisfied;
+	const satisfied = value.satisfied;
 	if (satisfied !== "yes" && satisfied !== "no" && satisfied !== "partial" && satisfied !== "unverified") return null;
-	if (!Array.isArray(mapping.cellRefs) || mapping.cellRefs.length === 0) return null;
-
-	const refs: NonNullable<QaReportAcMapping["cellRefs"]> = [];
+	if (!Array.isArray(value.scenarioRefs) || value.scenarioRefs.length === 0) return null;
+	const refs: NonNullable<QaReportAcMapping["scenarioRefs"]> = [];
 	const seen = new Set<string>();
-	const cells: QaCell[] = [];
-	for (const value of mapping.cellRefs) {
-		if (!isRecord(value)) return null;
-		const ref = value;
-		const story = ref.story;
-		const cls = ref.cls;
-		const sub = ref.sub;
-		if (
-			typeof story !== "string" ||
-			story.trim() === "" ||
-			typeof cls !== "number" ||
-			!Number.isInteger(cls) ||
-			cls < 1 ||
-			cls > 6 ||
-			(sub !== undefined && sub !== "hang-timeout" && sub !== "flaky-green") ||
-			(sub === "hang-timeout" && cls !== 1) ||
-			(sub === "flaky-green" && cls !== 5)
-		) {
-			return null;
-		}
-		const key = `${story}:${cls}:${sub ?? ""}`;
+	const statuses: string[] = [];
+	for (const ref of value.scenarioRefs) {
+		if (!isRecord(ref) || typeof ref.story !== "string" || ref.story.trim() === "" || typeof ref.scenario !== "string" || ref.scenario.trim() === "") return null;
+		const key = scenarioKey({ story: ref.story, id: ref.scenario });
 		if (seen.has(key)) return null;
 		seen.add(key);
-		const stories = (view.stories ?? []).filter((candidate) => candidate.id === story);
-		if (stories.length !== 1) return null;
-		const matches = (view.cells ?? []).filter(
-			(cell) => cell.story === story && cell.cls === cls && cell.sub === sub && cell.cycle === view.cycle,
-		);
+		const matches = (view.scenarios ?? []).filter((scenario) => scenario.story === ref.story && scenario.id === ref.scenario && scenario.cycle === view.cycle);
 		if (matches.length !== 1) return null;
-		const cell = matches[0];
-		if (cell.status !== "pass" && cell.status !== "fail" && cell.status !== "na" && cell.status !== "blocked") return null;
-		if (cell.status === "na" && (typeof cell.na_reason !== "string" || cell.na_reason.trim() === "")) return null;
-		refs.push({ story, cls, ...(sub !== undefined ? { sub } : {}) });
-		cells.push(cell);
+		const story = (view.stories ?? []).find((s) => s.id === ref.story);
+		if (!story?.contract?.acceptance_criteria?.includes(acIndex)) return null;
+		const status = matches[0].status;
+		if (status !== "pass" && status !== "fail" && status !== "blocked") return null;
+		refs.push({ story: ref.story, scenario: ref.scenario });
+		statuses.push(status);
 	}
-
-	const statuses = cells.map((cell) => cell.status);
 	const validStatus =
 		(satisfied === "yes" && statuses.every((status) => status === "pass")) ||
 		(satisfied === "no" && statuses.every((status) => status === "fail")) ||
-		(satisfied === "partial" && !statuses.includes("na") && !statuses.includes("blocked") && statuses.includes("pass") && statuses.includes("fail")) ||
-		(satisfied === "unverified" && (statuses.includes("na") || statuses.includes("blocked")));
+		(satisfied === "partial" && !statuses.includes("blocked") && statuses.includes("pass") && statuses.includes("fail")) ||
+		(satisfied === "unverified" && statuses.includes("blocked"));
 	if (!validStatus) return null;
-
-	return {
-		satisfied,
-		cellRefs: refs,
-		...(typeof mapping.evidence === "string" ? { evidence: mapping.evidence } : {}),
-	};
+	return { satisfied, scenarioRefs: refs, ...(typeof value.evidence === "string" ? { evidence: value.evidence } : {}) };
 }
 
 /**
@@ -452,15 +408,30 @@ function renderOverview(narrative: QaReportNarrative): string {
  * QA-technical / implementation-flavored (URLs, tRPC procedures, service methods)
  * and live in the record-faithful Actor Roster audit table below.
  */
+const CLIENT_IMPACT_LABEL: Record<string, string> = {
+	none: "클라이언트 영향 없음 — 이 변경을 읽어 화면에 그리는 클라이언트가 없음",
+	contract: "클라이언트가 받는 값이 바뀜 — 클라이언트 화면 코드는 그대로",
+	render: "클라이언트 화면이 바뀜 — 기기 프로필마다 화면으로 확인",
+};
+
+function profileLabel(view: QaView, id: string): string {
+	const profile = (view.device_profiles ?? []).find((candidate) => candidate.id === id);
+	return profile ? `${profile.label} (${profile.width}×${profile.height})` : id;
+}
+
 function renderActors(view: QaView, narrative: QaReportNarrative): string {
 	const p = narrative.presentation;
 	const blocks = (view.actors ?? [])
 		.map((actor) => {
 			const r = String(actor.reachable ?? "");
-			const reach = r ? ` <span class="badge ${r === "yes" ? "badge-pass" : "badge-fail"}">도달 ${escapeHtml(r)}</span>` : "";
+			const reach = r === "yes" ? ` <span class="badge badge-pass">도달함</span>` : r ? ` <span class="badge badge-fail">도달 막힘: ${escapeHtml(r)}</span>` : "";
+			const impact = actor.client_impact
+				? `<p class="client-impact"><strong>${escapeHtml(CLIENT_IMPACT_LABEL[actor.client_impact] ?? actor.client_impact)}</strong>${actor.client_impact_reason ? ` · ${escapeHtml(actor.client_impact_reason)}` : ""}</p>`
+				: gap("이 유저의 클라이언트 영향 판단이 기록되지 않았습니다");
+			const profiles = actor.profiles?.length ? `<p class="evidence-note">확인할 기기: ${actor.profiles.map((id) => escapeHtml(profileLabel(view, id))).join(" · ")}</p>` : "";
 			return (
 				`<div class="affected-user"><h3>${escapeHtml(actor.name ?? actor.id)}${reach}</h3>` +
-				`${proseOrGap(p?.affectedUsers?.[actor.id], "이 유저의 사용·영향 서사가 없습니다")}</div>`
+				`${proseOrGap(p?.affectedUsers?.[actor.id], "이 유저의 사용·영향 서사가 없습니다")}${impact}${profiles}</div>`
 			);
 		})
 		.join("");
@@ -482,8 +453,8 @@ function renderRequirementFulfillment(view: QaView, narrative: QaReportNarrative
 	const acRows = acItems
 		.map((criterion, i) => {
 			const m = p?.requirementMapping?.[String(i)];
-			const valid = validateAcMapping(view, m);
-			if (valid?.cellRefs.some((ref) => unverified.has(cellKey(ref)))) return `<div class="ac-map"><h3><span class="badge satisfied-unverified">미검증</span> ${escapeHtml(criterion)}</h3>${gap("근거 미검증 — 연결된 시나리오의 주장 검토가 없거나 부족하거나 오래되었습니다")}</div>`;
+			const valid = validateAcMapping(view, m, i);
+			if (valid?.scenarioRefs.some((ref) => unverified.has(scenarioKey({ story: ref.story, id: ref.scenario })))) return `<div class="ac-map"><h3><span class="badge satisfied-unverified">미검증</span> ${escapeHtml(criterion)}</h3>${gap("근거 미검증 — 연결된 시나리오의 주장 검토가 없거나 부족하거나 오래되었습니다")}</div>`;
 			const badge = valid
 				? `<span class="badge satisfied-${escapeHtml(valid.satisfied)}">${escapeHtml(SATISFIED_LABEL[valid.satisfied])}</span>`
 				: `<span class="badge">미판정</span>`;
@@ -494,199 +465,172 @@ function renderRequirementFulfillment(view: QaView, narrative: QaReportNarrative
 		})
 		.join("");
 	return (
-		`<h2>Acceptance Criteria · 충족 현황</h2>` +
-		(acRows || `<p class="evidence-note">no acceptance-criteria recorded in qa-state</p>`)
+		`<h2>요구사항(AC) 충족 현황</h2>` +
+		(acRows || `<p class="evidence-note">기록된 요구사항이 없습니다</p>`)
 	);
 }
 
-// The six adversarial coverage axes, in plain reader language. The renderer
-// shows the axis NAME, never the internal `cls` number — a PO reads "입력 경계"
-// not "cls 2". Source of truth for the axes: skills/qa/scenario-authoring.md.
-const CLS_LABEL: Record<number, string> = {
+// The six adversarial axes, in plain reader language. Source of truth for the
+// axes: skills/qa/scenario-authoring.md. The reader sees the name, never a number.
+const RISK_LABEL: Record<number, string> = {
 	1: "실패 경로",
-	2: "입력 경계·악성 입력",
+	2: "입력 경계·잘못된 입력",
 	3: "주입",
-	4: "중단·재개",
-	5: "오도된 성공 방지",
-	6: "멱등성",
+	4: "중단·동시 실행",
+	5: "가짜 성공 방지",
+	6: "중복 실행",
 };
 
-const COVERAGE_MARK: Record<string, string> = { pass: "확인", fail: "실패", na: "해당없음", not_applicable: "해당 없음", blocked: "검증 불가", unverified: "미검증" };
-const NOT_RUN_LABEL = "미검증 — 유저 경계 미구동 (NOT-RUN)";
+function riskTags(scenario: QaScenario): string {
+	const risks = scenario.risks ?? [];
+	return risks.length
+		? `<p class="sc-risks">다룬 위험: ${risks.map((axis) => escapeHtml(RISK_LABEL[axis] ?? String(axis))).join(" · ")}</p>`
+		: `<p class="sc-risks">정상 흐름</p>`;
+}
+
+/** One reader card for one user scenario: what the user did, what they should see, what QA saw. */
+function renderScenarioCard(view: QaView, scenario: QaScenario, actor: QaActor | undefined, narrative: QaReportNarrative, readEvidence: EvidenceReader, context: EvidenceRenderContext, unverified: Set<string>): string {
+	const key = scenarioKey(scenario);
+	const evidenceGap = unverified.has(key);
+	const status = evidenceGap ? "unverified" : String(scenario.status ?? "unrecorded");
+	const profile = scenario.profile ? `<span class="sc-profile">${escapeHtml(profileLabel(view, scenario.profile))}</span>` : "";
+	const head =
+		`<div class="sc-head"><span class="sc-title">${escapeHtml(scenario.title ?? scenario.id)}</span>` +
+		`<span class="sc-meta">${profile}<span class="cov cov-${escapeHtml(status)}">${escapeHtml(STATUS_LABEL[status] ?? status)}</span></span></div>`;
+	const plan =
+		`<p class="sc-expected"><strong>기대 결과</strong> ${escapeHtml(scenario.expected ?? "")}</p>` +
+		`<details class="sc-steps"><summary>전제와 단계</summary><p>${escapeHtml(scenario.preconditions ?? "")}</p>` +
+		`<ol>${(scenario.steps ?? []).map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ol></details>` +
+		riskTags(scenario);
+	const observed = narrative.scenarios?.[key]?.observed;
+	if (scenario.status === "blocked") {
+		return `<div class="scenario-card sc-blocked">${head}<div class="sc-body">${plan}<p class="gap">${escapeHtml(`검증 불가 — ${scenario.blocked?.obstacle ?? ""}`)}</p>` +
+			`<p class="sc-observed">확인한 가장 깊은 지점: ${escapeHtml(scenario.blocked?.deepest_reachable ?? "")}</p>` +
+			(observed?.trim() ? `<p class="sc-observed">${escapeHtml(observed)}</p>` : "") +
+			`</div></div>`;
+	}
+	if (scenario.status !== "pass" && scenario.status !== "fail") {
+		return `<div class="scenario-card sc-unrecorded">${head}<div class="sc-body">${plan}${gap("아직 실행 결과가 기록되지 않은 시나리오입니다")}</div></div>`;
+	}
+	const observedBlock = observed?.trim() ? `<p class="sc-observed">${evidenceGap ? "검토 전 실행자 서술: " : ""}${escapeHtml(observed)}</p>` : "";
+	const e = scenario.evidence;
+	// De-dupe evidence paths WITHIN this one card so the same file is not
+	// rendered — and budget-counted — twice. A screenshot shared by a DIFFERENT
+	// card still renders there (imageSlot is per-card, not de-duped globally).
+	const claims = scenarioNeedsVisualProof(scenario, actor?.driver) ? scenario.evidence_review?.claims : undefined;
+	const beforeBlock = imageSlot("행동 전 화면", e?.before, readEvidence, context);
+	const primaryPaths = new Set([e?.before, e?.action, e?.after, e?.path]);
+	const claimImage = (path: string, label: string): string => {
+		if (primaryPaths.has(path)) return "";
+		primaryPaths.add(path);
+		return imageSlot(label, path, readEvidence, context);
+	};
+	const claimBlocks = Array.isArray(claims) ? claims.map((claim) => `<div class="evidence-slot"><p><strong>${escapeHtml(claim.claim)}</strong> · ${escapeHtml(claim.verdict === "supported" && !evidenceGap ? "입증" : "근거 미검증")}</p><p>${escapeHtml(claim.observation)}</p>${claim.gap ? gap(claim.gap) : ""}${(claim.sources ?? []).map((source) => `<p>${escapeHtml(source.location)}</p>${claimImage(source.path, `${claim.claim} — ${source.location}`)}`).join("")}</div>`).join("") : "";
+	const shots = e
+		? [...new Set([e.action, e.after, e.path])].filter((path) => path !== e.before).map((path) => imageSlot(path === e.after ? "행동 후 화면" : "행동 기록", path, readEvidence, context)).filter(Boolean).join("")
+		: "";
+	const shotBlock = (shots ? `<div class="sc-shots">${shots}</div>` : "") + claimBlocks;
+	const body =
+		beforeBlock || observedBlock || shotBlock
+			? beforeBlock + observedBlock + shotBlock
+			: gap("이 시나리오의 실제 소프트웨어 관찰 근거가 없습니다 — qa는 검증 시나리오에 근거를 필수로 요구합니다 (raw 로그만으로는 리더 근거가 되지 않습니다)");
+	return `<div class="scenario-card sc-${escapeHtml(status)}">${head}<div class="sc-body">${plan}${evidenceGap ? gap("근거 미검증 — 제품 실패나 미실행을 뜻하지 않습니다. 주장별 근거를 보완하고 다시 검토해야 합니다.") : ""}${body}</div></div>`;
+}
+
+/** For a story whose screen changed: one line per device profile with the worst scenario result on it. */
+function renderProfileCoverage(view: QaView, actor: QaActor | undefined, scenarios: QaScenario[], unverified: Set<string>): string {
+	if (actor?.client_impact !== "render" || !actor.profiles?.length) return "";
+	const rank = ["fail", "unverified", "blocked", "unrecorded", "pass"];
+	const items = actor.profiles.map((id) => {
+		const statuses = scenarios.filter((scenario) => scenario.profile === id).map((scenario) => (unverified.has(scenarioKey(scenario)) ? "unverified" : String(scenario.status ?? "unrecorded")));
+		const worst = rank.find((status) => statuses.includes(status)) ?? "unrecorded";
+		return `<li><span class="cov cov-${escapeHtml(worst)}">${escapeHtml(profileLabel(view, id))} — ${escapeHtml(STATUS_LABEL[worst] ?? worst)}</span></li>`;
+	});
+	return `<div class="profile-coverage"><p><strong>기기별 확인</strong></p><ul>${items.join("")}</ul></div>`;
+}
+
+/** Adversarial axes nobody can exercise in this change, folded so they never read as unfinished work. */
+function renderRiskNotApplicable(view: QaView): string {
+	const entries = (view.risk_not_applicable ?? []).filter((entry) => entry.cycle === currentCycle(view)).sort((a, b) => a.axis - b.axis);
+	const covered = RISK_AXES.filter((axis) => (view.scenarios ?? []).some((scenario) => (scenario.risks ?? []).includes(axis)));
+	const coveredLine = covered.length ? `<p class="coverage">시나리오가 다룬 위험: ${covered.map((axis) => escapeHtml(RISK_LABEL[axis])).join(" · ")}</p>` : "";
+	if (!entries.length) return coveredLine;
+	return coveredLine + `<details class="risk-na"><summary>이 변경에 해당하지 않는 위험 ${entries.length}가지 — 펼쳐 보기</summary><ul>` +
+		entries.map((entry) => `<li><strong>${escapeHtml(RISK_LABEL[entry.axis] ?? String(entry.axis))}</strong> — ${escapeHtml(entry.reason)}</li>`).join("") +
+		`</ul></details>`;
+}
 
 /**
- * The reader-facing scenario section. Per story (a story is the user scenario;
- * cells are QA coverage axes against it) it shows the actor's name, a short
- * "which scenarios were checked" intro (`scenarioFlows`), then ONE card per
- * scenario (cell) — each with its coverage axis, its result, its authored
- * real-software observation and/or its own screenshots — and a plain-language
- * coverage summary (axis name + result, never the `cls` number). Every verified
- * scenario card is forced to carry a reader-visible record: an observation or a
- * screenshot, else a loud gap. This is what lets a PO see, per scenario, whether
- * the software drew the UX correctly and whether every requirement was met.
- *
- * It deliberately renders NONE of the cell record's implementation-flavored
- * fields — `driven_at`, `why_needed`, `na_reason`, `attack_point`, the boundary
- * code path — because those are audit-layer facts the QA engineer writes
- * technically on purpose; surfacing them here would leak implementation into a
- * view meant for a context-free PO. The full per-cell record lives in the
- * record-faithful "시나리오 상세 기록" audit section below.
+ * The reader-facing scenario section. Per story it shows the actor, the story's
+ * goal, a short overview (`scenarioFlows`), then ONE card per user scenario —
+ * title, expected outcome, the authored real-software observation and/or its own
+ * screenshots, and the risks it exercises. Implementation-flavored fields
+ * (`driven_at`, `why_needed`, the boundary code path) stay in the audit below.
  */
 function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidence: EvidenceReader, context: EvidenceRenderContext, unverified: Set<string>): string {
 	const p = narrative.presentation;
-	const quietInertNaRun = isQuietInertNaRun(view);
 	const stories = (view.stories ?? [])
 		.map((story) => {
 			const actor = actorFor(view, story);
 			const heading = `<h3>${escapeHtml(actor?.name ?? actor?.id ?? story.id)}</h3>`;
-			// The intro is now a short "who + which scenarios" overview, not the whole
-			// account — each scenario's own observation lives on its card below.
-			const flow = `<div class="scenario-flow">${proseOrGap(p?.scenarioFlows?.[story.id], "이 액터가 어떤 시나리오들을 검증했는지에 대한 개요 서사가 없습니다")}</div>`;
-			const cells = cellsForStory(view, story.id);
-
-			// One card PER scenario (cell), each carrying its own reader-visible
-			// real-software record tied to that scenario — never a merged evidence wall.
-			// A verified (pass/fail) scenario MUST show an authored observation (the
-			// reader form of an API/CLI transcript, whose raw bytes stay in the audit)
-			// OR a screenshot; neither → a loud gap, never a silent hole. `na` is the
-			// one evidence-free status. Raw text (curl/HTTP/JSON/logs) and baseline
-			// build/test logs never appear here — they are audit-only.
-			const cards = cells
-				.map((cell) => {
-					const st = String(cell.status ?? "");
-					const evidenceGap = unverified.has(cellKey(cell));
-					const readerStatus = evidenceGap || (st === "na" && !quietInertNaRun) ? "unverified" : st;
-					const axis = escapeHtml(CLS_LABEL[cell.cls] ?? `축 ${cell.cls}`) + (cell.sub === "hang-timeout" ? " · 응답 지연" : cell.sub === "flaky-green" ? " · 반복 확인" : "");
-					const head =
-						`<div class="sc-head"><span class="sc-axis">${axis}</span>` +
-						`<span class="cov cov-${escapeHtml(readerStatus)}">${escapeHtml(COVERAGE_MARK[readerStatus] ?? readerStatus)}</span></div>`;
-					if (st === "not_applicable") {
-						return `<div class="scenario-card sc-not_applicable">${head}<div class="sc-body sc-muted">${escapeHtml(cell.not_applicable_reason ?? "")}</div></div>`;
-					}
-					if (st === "blocked") {
-						const observed = narrative.scenarios?.[cellKey(cell)]?.observed;
-						return `<div class="scenario-card sc-blocked">${head}<div class="sc-body">${gap(`검증 불가 — ${cell.blocked?.obstacle ?? ""}`)}` +
-							`<p class="sc-observed">확인한 가장 깊은 지점: ${escapeHtml(cell.blocked?.deepest_reachable ?? "")}</p>` +
-							(observed?.trim() ? `<p class="sc-observed">${escapeHtml(observed)}</p>` : "") +
-							`</div></div>`;
-					}
-					if (st === "na") {
-						if (quietInertNaRun) return `<div class="scenario-card sc-na">${head}<div class="sc-body sc-muted">해당없음</div></div>`;
-						return `<div class="scenario-card sc-unverified">${head}<div class="sc-body">${gap(NOT_RUN_LABEL)}</div></div>`;
-					}
-					const observed = narrative.scenarios?.[cellKey(cell)]?.observed;
-					const observedBlock = observed?.trim() ? `<p class="sc-observed">${evidenceGap ? "검토 전 실행자 서술: " : ""}${escapeHtml(observed)}</p>` : "";
-					const e = cell.evidence;
-					// De-dupe evidence paths WITHIN this one card (e.g. evidence.action ===
-					// evidence.path for CLI/API scenarios with no separate before/after) so
-					// the same file is not rendered — and budget-counted — twice on one
-					// card. Card-local only: the same screenshot shared by a DIFFERENT card
-					// still renders there (imageSlot is per-card, not de-duped globally).
-					const claims = cellNeedsVisualProof(cell, actor?.driver) ? cell.evidence_review?.claims : undefined;
-					const beforeBlock = imageSlot("행동 전 화면", e?.before, readEvidence, context);
-					const primaryPaths = new Set([e?.before, e?.action, e?.after, e?.path]);
-					const claimImage = (path: string, label: string): string => {
-						if (primaryPaths.has(path)) return "";
-						primaryPaths.add(path);
-						return imageSlot(label, path, readEvidence, context);
-					};
-					const claimBlocks = Array.isArray(claims) ? claims.map((claim) => `<div class="evidence-slot"><p><strong>${escapeHtml(claim.claim)}</strong> · ${escapeHtml(claim.verdict === "supported" && !evidenceGap ? "입증" : "근거 미검증")}</p><p>${escapeHtml(claim.observation)}</p>${claim.gap ? gap(claim.gap) : ""}${(claim.sources ?? []).map((source) => `<p>${escapeHtml(source.location)}</p>${claimImage(source.path, `${claim.claim} — ${source.location}`)}`).join("")}</div>`).join("") : "";
-					const shots = e
-						? [...new Set([e.action, e.after, e.path])].filter((path) => path !== e.before).map((path) => imageSlot(path === e.after ? "행동 후 화면" : "행동 기록", path, readEvidence, context)).filter(Boolean).join("")
-						: "";
-					const shotBlock = (shots ? `<div class="sc-shots">${shots}</div>` : "") + claimBlocks;
-					const body =
-						beforeBlock || observedBlock || shotBlock
-							? beforeBlock + observedBlock + shotBlock
-							: gap("이 시나리오의 실제 소프트웨어 관찰 근거가 없습니다 — qa는 검증 시나리오에 근거를 필수로 요구합니다 (raw 로그만으로는 리더 근거가 되지 않습니다)");
-					return `<div class="scenario-card sc-${escapeHtml(readerStatus)}">${head}<div class="sc-body">${evidenceGap ? gap("근거 미검증 — 제품 실패나 미실행을 뜻하지 않습니다. 주장별 근거를 보완하고 다시 검토해야 합니다.") : ""}${body}</div></div>`;
-				})
-				.join("");
-			const evidenceBlock = cards ? `<div class="scenarios">${cards}</div>` : "";
-
-			// Plain coverage summary: one entry per distinct axis, its result the worst
-			// across that axis's cells (fail > unverified > pass > quiet 해당없음).
-			const axes = [...new Set(cells.map((cell) => cell.cls))].sort((a, b) => a - b);
-			const worst = (cl: number): string => {
-				const ss = cells.filter((cell) => cell.cls === cl).map((cell) => unverified.has(cellKey(cell)) ? "unverified" : cell.status);
-				const pick = ss.includes("fail")
-					? "fail"
-					: ss.includes("unverified") || (ss.includes("na") && !quietInertNaRun)
-						? "unverified"
-						: ss.includes("blocked")
-							? "blocked"
-							: ss.includes("pass")
-							? "pass"
-							: (ss.find((s) => s) ?? "na");
-				return String(pick);
-			};
-			const coverage = axes.length
-				? `<p class="coverage">확인한 관점: ` +
-					axes
-						.map((cl) => {
-							const st = worst(cl);
-							return `<span class="cov cov-${escapeHtml(st)}">${escapeHtml(CLS_LABEL[cl] ?? `축 ${cl}`)} ${escapeHtml(COVERAGE_MARK[st] ?? st)}</span>`;
-						})
-						.join(" · ") +
-					`</p>`
-				: "";
-
-			return `<div class="story-block">${heading}${flow}${evidenceBlock}${coverage}</div>`;
+			const goal = story.contract?.goal ? `<p class="story-goal"><strong>목표</strong> ${escapeHtml(story.contract.goal)}</p>` : "";
+			const flow = `<div class="scenario-flow">${proseOrGap(p?.scenarioFlows?.[story.id], "이 스토리에서 어떤 시나리오들을 검증했는지에 대한 개요 서사가 없습니다")}</div>`;
+			const scenarios = scenariosForStory(view, story.id);
+			const cards = scenarios.map((scenario) => renderScenarioCard(view, scenario, actor, narrative, readEvidence, context, unverified)).join("");
+			return `<div class="story-block">${heading}${goal}${flow}${cards ? `<div class="scenarios">${cards}</div>` : ""}${renderProfileCoverage(view, actor, scenarios, unverified)}</div>`;
 		})
 		.join("");
-	return `<h2>유저 시나리오 · 근거</h2>` + (stories || `<p class="evidence-note">기록된 story 없음</p>`);
+	const inert = view.inert?.declared && (view.inert.cycle === undefined || view.inert.cycle === currentCycle(view))
+		? `<p class="evidence-note">동작이 바뀌지 않는 변경으로 선언됨: ${escapeHtml(view.inert.reason ?? "")}</p>`
+		: "";
+	return `<h2>유저 시나리오 · 근거</h2>` + inert + (stories || `<p class="evidence-note">기록된 story 없음</p>`) + renderRiskNotApplicable(view);
 }
 
 /**
- * The record-faithful audit of every scenario cell — the technical trail a QA
- * engineer or reviewer traces: coverage axis (`cls`), the hostile probe
- * (`attack_point`), where and with what tool it was driven (`driven_at` + the
- * evidence `surface`, i.e. the driver), the result with any na-reason /
- * expected-vs-actual / oracle diagnosis, and the recorded evidence paths. This is
- * the one place `cls` and implementation-level fields belong (including the
- * per-scenario boundary + driver — there is no separate actor-roster table); the
- * reader-facing section above stays clean of them.
+ * The record-faithful audit of every scenario — the technical trail a QA
+ * engineer or reviewer traces: the risks it exercises, why it exists, where and
+ * with what tool it was driven (`driven_at` + evidence surface), the result with
+ * blocked detail / expected-vs-actual / oracle diagnosis, and evidence paths.
  */
 function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
-	const cells = (view.stories ?? []).flatMap((story) => cellsForStory(view, story.id));
+	const scenarios = (view.stories ?? []).flatMap((story) => scenariosForStory(view, story.id));
 	const storyAnchors = new Set<string>();
-	const rows = cells
-		.map((cell) => {
-			const n = narrative.scenarios?.[cellKey(cell)];
-			const e = cell.evidence;
-			const story = (view.stories ?? []).find((candidate) => candidate.id === cell.story);
+	const rows = scenarios
+		.map((scenario) => {
+			const n = narrative.scenarios?.[scenarioKey(scenario)];
+			const e = scenario.evidence;
+			const story = (view.stories ?? []).find((candidate) => candidate.id === scenario.story);
 			const actor = story ? actorFor(view, story) : undefined;
-			const boundary = cell.driven_at ?? actor?.boundary;
+			const boundary = scenario.driven_at ?? actor?.boundary;
 			const driver = e?.surface ?? actor?.driver;
-			const paths = e ? [e.path, e.before, e.action, e.after].filter((p): p is string => Boolean(p)) : [];
+			const paths = e ? [...new Set([e.before, e.action, e.after, e.path].filter((p): p is string => Boolean(p)))] : [];
 			const result =
-				statusBadge(cell.status) +
-				(cell.na_reason ? `<br><span class="audit-note">${escapeHtml(cell.na_reason)}</span>` : "") +
-				(cell.not_applicable_reason ? `<br><span class="audit-note">${escapeHtml(cell.not_applicable_reason)}</span>` : "") +
-				(cell.blocked
-					? `<br><span class="audit-note">obstacle: ${escapeHtml(cell.blocked.obstacle)}</span>` +
-						`<br><span class="audit-note">attempts: ${cell.blocked.attempts.map((attempt) => escapeHtml(attempt)).join(" / ")}</span>` +
-						`<br><span class="audit-note">deepest reachable: ${escapeHtml(cell.blocked.deepest_reachable)}</span>` +
-						`<br><span class="audit-note">attempt log: <code>${escapeHtml(cell.blocked.attempt_log)}</code></span>`
+				statusBadge(scenario.status) +
+				(scenario.blocked
+					? `<br><span class="audit-note">obstacle: ${escapeHtml(scenario.blocked.obstacle)}</span>` +
+						`<br><span class="audit-note">attempts: ${scenario.blocked.attempts.map((attempt) => escapeHtml(attempt)).join(" / ")}</span>` +
+						`<br><span class="audit-note">deepest reachable: ${escapeHtml(scenario.blocked.deepest_reachable)}</span>` +
+						`<br><span class="audit-note">attempt log: <code>${escapeHtml(scenario.blocked.attempt_log)}</code></span>`
 					: "") +
 				(n?.expectedVsActual ? `<br><span class="audit-note">${escapeHtml(n.expectedVsActual)}</span>` : "") +
 				(n?.oracleDiagnosis ? `<br><span class="audit-note">${escapeHtml(n.oracleDiagnosis)}</span>` : "");
-			const storyAnchor = storyAnchors.has(cell.story) ? "" : ` id="audit-story-${escapeHtml(cell.story)}"`;
-			storyAnchors.add(cell.story);
+			const storyAnchor = storyAnchors.has(scenario.story) ? "" : ` id="audit-story-${escapeHtml(scenario.story)}"`;
+			storyAnchors.add(scenario.story);
+			const risks = (scenario.risks ?? []).map((axis) => `${axis} ${RISK_LABEL[axis] ?? ""}`).join(", ") || "정상 흐름";
 			return (
-					`<tr${storyAnchor}><td class="audit-story"><code>${escapeHtml(cell.story)}</code></td>` +
-					`<td class="audit-coverage">cls ${escapeHtml(String(cell.cls))}${cell.sub ? `/${escapeHtml(cell.sub)}` : ""} — ${escapeHtml(CLS_LABEL[cell.cls] ?? "")}</td>` +
-					`<td>${escapeHtml(cell.attack_point ?? "")}${cell.why_needed ? `<br><span class="audit-note">${escapeHtml(cell.why_needed)}</span>` : ""}</td>` +
-					`<td class="audit-boundary">${escapeHtml(boundary ?? "")}${driver ? `<br><span class="audit-note">${escapeHtml(driver)}</span>` : ""}</td>` +
-				`<td>${result}</td>` +
-				`<td>${paths.map((pth) => `<code>${escapeHtml(pth)}</code>`).join("<br>") || "—"}</td></tr>`
+				`<tr${storyAnchor}><td class="audit-story"><code>${escapeHtml(scenario.story)}</code><br><code>${escapeHtml(scenario.id)}</code>${scenario.profile ? `<br><span class="audit-note">${escapeHtml(scenario.profile)}</span>` : ""}</td>` +
+				`<td class="audit-coverage">${escapeHtml(scenario.priority ?? "")} · ${escapeHtml(risks)}</td>` +
+				`<td>${escapeHtml(scenario.title ?? "")}${scenario.why_needed ? `<br><span class="audit-note">${escapeHtml(scenario.why_needed)}</span>` : ""}</td>` +
+				`<td class="audit-boundary">${escapeHtml(boundary ?? "")}${driver ? `<br><span class="audit-note">${escapeHtml(driver)}</span>` : ""}</td>` +
+				// Evidence paths sit under the result: a sixth column would overflow the reading width and hide behind an invisible scrollbar.
+				`<td>${result}${paths.length ? `<span class="audit-evidence">${paths.map((pth) => `<code>${escapeHtml(pth)}</code>`).join("")}</span>` : ""}</td></tr>`
 			);
 		})
 		.join("");
 	const table = rows
-		? `<table tabindex="0"><thead><tr><th class="audit-story">story</th><th class="audit-coverage">coverage (cls)</th><th>attack point</th><th class="audit-boundary">driven at</th><th>result</th><th>evidence</th></tr></thead><tbody>${rows}</tbody></table>`
-		: `<p class="evidence-note">기록된 시나리오 셀 없음</p>`;
-	return `<h2>시나리오 상세 기록 (감사)</h2>${table}${renderStoryProvenance(view, storyAnchors)}${renderRawEvidence(cells, readEvidence, context)}${renderBaselineAudit(view, readEvidence, context)}`;
+		? `<table tabindex="0"><thead><tr><th class="audit-story">story / scenario</th><th class="audit-coverage">priority · risks</th><th>scenario · why needed</th><th class="audit-boundary">driven at</th><th>result · evidence</th></tr></thead><tbody>${rows}</tbody></table>`
+		: `<p class="evidence-note">기록된 시나리오 없음</p>`;
+	return `<h2>시나리오 상세 기록 (감사)</h2>${table}${renderStoryProvenance(view, storyAnchors)}${renderRawEvidence(scenarios, readEvidence, context)}${renderBaselineAudit(view, readEvidence, context)}`;
 }
 
 /**
@@ -767,13 +711,13 @@ function embedTextEvidence(path: string | undefined, label: string, readEvidence
 	);
 }
 
-function renderRawEvidence(cells: QaCell[], readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
+function renderRawEvidence(scenarios: QaScenario[], readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
 	const blocks: string[] = [];
-	const requiredPaths = new Set(cells.flatMap((cell) => cell.evidence_review?.claims.flatMap((claim) => claim.sources.map((source) => source.path)) ?? []));
-	for (const cell of cells) {
-		const e = cell.evidence;
+	const requiredPaths = new Set(scenarios.flatMap((scenario) => scenario.evidence_review?.claims.flatMap((claim) => claim.sources.map((source) => source.path)) ?? []));
+	for (const scenario of scenarios) {
+		const e = scenario.evidence;
 		if (!e) continue;
-		for (const path of [e.before, e.action, e.after, e.path, ...(cell.evidence_review?.claims.flatMap((claim) => claim.sources.map((source) => source.path)) ?? [])]) {
+		for (const path of [e.before, e.action, e.after, e.path, ...(scenario.evidence_review?.claims.flatMap((claim) => claim.sources.map((source) => source.path)) ?? [])]) {
 			const block = embedTextEvidence(path, "", readEvidence, context, path !== undefined && requiredPaths.has(path));
 			if (block) blocks.push(block);
 		}
@@ -810,12 +754,9 @@ function renderBaselineAudit(view: QaView, readEvidence: EvidenceReader, context
 }
 
 function renderFailures(view: QaView, narrative: QaReportNarrative): string {
-	const failedCells = (view.cells ?? []).filter((cell) => cell.status === "fail");
-	const cellRows = failedCells
-		.map(
-			(cell) =>
-				`<li><code>${escapeHtml(cell.story)}</code> — ${escapeHtml(cell.attack_point ?? "")}</li>`,
-		)
+	const cellRows = (view.scenarios ?? [])
+		.filter((scenario) => scenario.status === "fail")
+		.map((scenario) => `<li><code>${escapeHtml(scenario.story)}/${escapeHtml(scenario.id)}</code> — ${escapeHtml(scenario.title ?? "")}</li>`)
 		.join("");
 	const baselineRows = (view.stories ?? [])
 		.map((story) => {
@@ -848,39 +789,36 @@ function renderFailures(view: QaView, narrative: QaReportNarrative): string {
 	const body =
 		cellRows || baselineRows || runCheckRows || issueRows
 			? `<ul>${cellRows}${baselineRows}${runCheckRows}${issueRows}</ul>`
-			: `<p class="evidence-note">no failures or mismatches recorded this cycle</p>`;
-	return `<h2>Failures &amp; Mismatches</h2>${body}`;
+			: `<p class="evidence-note">이번 사이클에 기록된 실패나 불일치가 없습니다</p>`;
+	return `<h2>실패 · 불일치</h2>${body}`;
 }
 
-// A verdict that passed with cells nobody could execute reads differently, so the
-// reader sees blocked cells (and legacy waives) before any finding.
-function renderWaiveBanner(view: QaView): string {
-	const waives = view.verdict_report?.waives?.length ?? 0;
-	const blocked = (view.cells ?? []).filter((cell) => cell.cycle === currentCycle(view) && cell.status === "blocked").length;
-	return (
-		(blocked === 0
-			? ""
-			: `<p class="gap waive-banner">검증 불가 셀 ${blocked}건 — 구조적 한계로 실행하지 못한 시나리오입니다. 판정은 이 셀들을 검증하지 않은 채 내려졌습니다. 시도 내역과 한계는 시나리오 상세 기록에 있습니다.</p>`) +
-		(waives === 0
-			? ""
-			: `<p class="gap waive-banner">면제된 셀 ${waives}건 — 이 셀들은 검증하지 않고 판정에서 제외했습니다. 셀별 사유는 Verdict 섹션의 Waives 목록에 있습니다.</p>`)
-	);
+// A verdict that passed with scenarios nobody could execute reads differently,
+// so the reader sees blocked scenarios before any finding.
+function renderBlockedBanner(view: QaView): string {
+	const blocked = (view.scenarios ?? []).filter((scenario) => scenario.cycle === currentCycle(view) && scenario.status === "blocked");
+	if (!blocked.length) return "";
+	return `<p class="gap waive-banner">검증 불가 시나리오 ${blocked.length}건 — 변경 밖의 한계로 실행하지 못했습니다. 판정은 이 시나리오들을 검증하지 않은 채 내려졌습니다: ${blocked.map((scenario) => escapeHtml(scenario.title ?? scenario.id)).join(" · ")}</p>`;
+}
+
+const VERDICT_LABEL: Record<string, string> = { APPROVE: "승인 (APPROVE)", COMMENT: "의견과 함께 승인 (COMMENT)", REQUEST_CHANGES: "수정 요청 (REQUEST_CHANGES)" };
+
+/** The one-line answer a PO reads first: the verdict and what it rests on. */
+function renderVerdictSummary(view: QaView, unverified: Set<string>): string {
+	const scenarios = view.scenarios ?? [];
+	const count = (status: string) => scenarios.filter((scenario) => (unverified.has(scenarioKey(scenario)) ? "unverified" : String(scenario.status ?? "unrecorded")) === status).length;
+	const parts = [["pass", "통과"], ["fail", "실패"], ["blocked", "검증 불가"], ["unverified", "근거 미검증"], ["unrecorded", "미실행"]]
+		.map(([status, label]) => [label, count(status)] as const)
+		.filter(([, n]) => n > 0)
+		.map(([label, n]) => `${label} ${n}`);
+	const verdict = unverified.size ? "판정 보류 — 근거 미검증 시나리오가 있음" : VERDICT_LABEL[view.verdict ?? ""] ?? "판정 전";
+	return `<p class="verdict-summary"><strong>${escapeHtml(verdict)}</strong> · 유저 시나리오 ${scenarios.length}개${parts.length ? ` (${escapeHtml(parts.join(" · "))})` : ""}</p>`;
 }
 
 function renderVerdict(view: QaView): string {
 	const report = view.verdict_report;
-	const waives = (report?.waives ?? [])
-		.map(
-			(waive) =>
-				`<li><code>${escapeHtml(waive.story)}/${escapeHtml(String(waive.cls))}${waive.sub ? `/${escapeHtml(waive.sub)}` : ""}</code> — ${escapeHtml(waive.reason ?? "")}</li>`,
-		)
-		.join("");
 	const inert = report?.inert?.declared ? `<p class="evidence-note">declared inert: ${escapeHtml(report.inert.reason ?? "")}</p>` : "";
-	return (
-		`<h2>Verdict</h2><p class="verdict">${escapeHtml(view.verdict ?? "—")}</p>` +
-		inert +
-		(waives ? `<h3>Waives</h3><ul>${waives}</ul>` : "")
-	);
+	return `<h2>판정</h2><p class="verdict">${escapeHtml(view.verdict ?? "—")}</p>` + inert;
 }
 
 function collectEvidencePaths(view: QaView): string[] {
@@ -889,10 +827,10 @@ function collectEvidencePaths(view: QaView): string[] {
 		const baseline = story.baseline?.evidence;
 		if (baseline?.path) paths.add(baseline.path);
 	}
-	for (const cell of view.cells ?? []) {
-		const e = cell.evidence;
+	for (const scenario of view.scenarios ?? []) {
+		const e = scenario.evidence;
 		if (!e) continue;
-		for (const p of [e.path, e.before, e.action, e.after, ...(cell.evidence_review?.claims.flatMap((claim) => claim.sources.map((source) => source.path)) ?? [])]) if (p) paths.add(p);
+		for (const p of [e.path, e.before, e.action, e.after, ...(scenario.evidence_review?.claims.flatMap((claim) => claim.sources.map((source) => source.path)) ?? [])]) if (p) paths.add(p);
 	}
 	return [...paths];
 }
@@ -901,8 +839,33 @@ function renderEvidenceFiles(view: QaView): string {
 	const paths = collectEvidencePaths(view);
 	const body = paths.length
 		? `<ul>${paths.map((p) => `<li><code>${escapeHtml(p)}</code></li>`).join("")}</ul>`
-		: `<p class="evidence-note">no evidence files recorded</p>`;
-	return `<h2>Evidence Files</h2>${body}`;
+		: `<p class="evidence-note">기록된 증거 파일이 없습니다</p>`;
+	return `<h2>증거 파일</h2>${body}`;
+}
+
+/**
+ * English words in the reader-facing prose, for the author and the presentation
+ * reviewer to check. Device and product names are fine; a CSS property, setting
+ * value or code word ("overflow", "fixed", "fetch") is not. Advisory only: the
+ * identifier shapes are already refused.
+ */
+export function readerEnglishWords(view: QaView, narrative: QaReportNarrative): string[] {
+	const p = narrative.presentation;
+	const texts = [
+		p?.overview,
+		...Object.values(p?.requirementMapping ?? {}).map((entry) => entry.evidence),
+		...Object.values(p?.affectedUsers ?? {}),
+		...Object.values(p?.scenarioFlows ?? {}),
+		...Object.values(narrative.scenarios ?? {}).map((entry) => entry.observed),
+		...(view.scenarios ?? []).flatMap((scenario) => [
+			scenario.title,
+			scenario.expected,
+			...(scenario.evidence_review?.claims ?? []).flatMap((claim) => [claim.claim, claim.observation]),
+		]),
+	];
+	const words = new Set<string>();
+	for (const text of texts) for (const word of text?.match(/[A-Za-z][A-Za-z-]*[A-Za-z]/g) ?? []) words.add(word);
+	return [...words].sort();
 }
 
 /**
@@ -926,44 +889,62 @@ export function renderQaReport(
 	};
 	for (const story of view.stories ?? []) {
 		const actor = actorFor(view, story);
-		for (const cell of cellsForStory(view, story.id)) {
-			if (!cellNeedsVisualProof(cell, actor?.driver)) continue;
-			if ((cell.status === "pass" || cell.status === "fail") && !evidenceReviewComplete(cell, probe)) unverified.add(cellKey(cell));
+		for (const scenario of scenariosForStory(view, story.id)) {
+			if (!scenarioNeedsVisualProof(scenario, actor?.driver)) continue;
+			if ((scenario.status === "pass" || scenario.status === "fail") && !evidenceReviewComplete(scenario, probe)) unverified.add(scenarioKey(scenario));
 		}
 	}
 	if (strictVisualEvidence) {
+		// The summary line, banner and AC board render the QA result; the overview describes the change itself.
+		const overviewResult = narrative.presentation?.overview?.match(/APPROVE|COMMENT|REQUEST_CHANGES|QA|판정|검증 불가|미검증|신뢰도/);
+		if (overviewResult) throw new Error(`기능 개요 (presentation.overview) must describe the change, not the QA result ("${overviewResult[0]}"); the summary line, banner and AC board already show it`);
+		// Reader prose names what the user sees; file and code names belong to the audit section.
+		const p = narrative.presentation;
+		const readerProse: [string, string | undefined][] = [
+			["presentation.overview", p?.overview],
+			...Object.entries(p?.requirementMapping ?? {}).map(([index, entry]): [string, string | undefined] => [`presentation.requirementMapping.${index}.evidence`, entry.evidence]),
+			...Object.entries(p?.affectedUsers ?? {}).map(([id, text]): [string, string | undefined] => [`presentation.affectedUsers.${id}`, text]),
+			...Object.entries(p?.scenarioFlows ?? {}).map(([id, text]): [string, string | undefined] => [`presentation.scenarioFlows.${id}`, text]),
+			...Object.entries(narrative.scenarios ?? {}).map(([key, entry]): [string, string | undefined] => [`scenarios.${key}.observed`, entry.observed]),
+		];
+		for (const [field, text] of readerProse) {
+			const identifier = text?.match(CODE_IDENTIFIER);
+			if (identifier) throw new Error(`${field} names the code identifier "${identifier[0]}"; write what the reader sees (a test is "보유분 표 화면 테스트", not its file name)`);
+		}
 		for (const story of view.stories ?? []) {
-			const actor = view.actors?.find((candidate) => candidate.id === (story.actor ?? story.actor_id));
-			for (const cell of cellsForStory(view, story.id)) {
-				if (cell.status !== "pass" && cell.status !== "fail") continue;
-				if (!cellNeedsVisualProof(cell, actor?.driver)) continue;
-				for (const source of cell.evidence_review?.claims.flatMap((claim) => claim.sources) ?? []) {
+			const actor = actorFor(view, story);
+			for (const scenario of scenariosForStory(view, story.id)) {
+				if (scenario.status !== "pass" && scenario.status !== "fail") continue;
+				if (!scenarioNeedsVisualProof(scenario, actor?.driver)) continue;
+				const key = scenarioKey(scenario);
+				for (const source of scenario.evidence_review?.claims.flatMap((claim) => claim.sources) ?? []) {
 					const embed = readEvidence(source.path);
-					if (embed.kind === "missing" || embed.kind === "too-large") throw new Error(`visual claim evidence not embeddable for ${cellKey(cell)}: ${source.path}; record a bounded source and review again`);
-					if (embed.kind === "image" && !hasValidImageSignature(embed.dataUri)) throw new Error(`visual claim evidence not embeddable for ${cellKey(cell)}: ${source.path}; record a bounded source and review again`);
+					if (embed.kind === "missing" || embed.kind === "too-large") throw new Error(`visual claim evidence not embeddable for ${key}: ${source.path}; record a bounded source and review again`);
+					if (embed.kind === "image" && !hasValidImageSignature(embed.dataUri)) throw new Error(`visual claim evidence not embeddable for ${key}: ${source.path}; record a bounded source and review again`);
 				}
-				for (const path of [cell.evidence?.before, cell.evidence?.after]) {
+				for (const path of [scenario.evidence?.before, scenario.evidence?.after]) {
 					const embed = path ? readEvidence(path) : undefined;
 					if (embed?.kind !== "image" || !/^data:image\/(png|jpeg|webp|gif);base64,/.test(embed.dataUri)) {
-						throw new Error(`visual evidence missing or not embeddable for ${cellKey(cell)}: ${path ?? "missing before/after screenshot"}`);
+						throw new Error(`visual evidence missing or not embeddable for ${key}: ${path ?? "missing before/after screenshot"}`);
 					}
 				}
-				if (!narrative.scenarios?.[cellKey(cell)]?.observed?.trim()) throw new Error(`visual observation required for ${cellKey(cell)}`);
+				if (!narrative.scenarios?.[key]?.observed?.trim()) throw new Error(`visual observation required for ${key}`);
 			}
 		}
 	}
-	const title = `QA Report — ${view.target || view.phase}`;
+	const title = `QA 보고서 — ${view.target || view.phase}`;
 	const evidenceContext: EvidenceRenderContext = { embeddedBytes: 0, renderedPaths: new Set(), strictVisualEvidence };
 	const body = [
 		`<h1>${escapeHtml(title)}</h1>`,
-		`<ul class="doc-meta"><li><strong>Target</strong> ${escapeHtml(view.target)}</li>` +
-			`<li><strong>Cycle</strong> ${escapeHtml(String(view.cycle))}</li>` +
-			`<li><strong>Generated</strong> ${escapeHtml(view.last_touched_at)}</li></ul>`,
+		`<ul class="doc-meta"><li><strong>검증 대상</strong> ${escapeHtml(view.target)}</li>` +
+			`<li><strong>사이클</strong> ${escapeHtml(String(view.cycle))}</li>` +
+			`<li><strong>생성 시각</strong> ${escapeHtml(view.last_touched_at)}</li></ul>`,
+		renderVerdictSummary(view, unverified),
 		// Reader-first order: what was asked (overview + AC·충족), how it flows (큰
 		// 그림), who is affected (액터), what we observed per scenario (시나리오·근거) —
 		// then the record-faithful audit below (per-cell detail, technical roster,
 		// failures, verdict, evidence files).
-		renderWaiveBanner(view),
+		renderBlockedBanner(view),
 		renderOverview(narrative),
 			renderRequirementFulfillment(view, narrative, unverified),
 		renderBigPicture(narrative.presentation, renderMermaid, onMermaidRenderError),
@@ -1031,16 +1012,15 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .badge { display: inline-block; padding: 0.1em 0.55em; border-radius: 999px; font-size: 0.8rem; border: 1px solid var(--rule); background: var(--code-bg); }
 .badge-pass { color: var(--pass); border-color: var(--pass); }
 .badge-fail { color: var(--fail); border-color: var(--fail); }
-.badge-na { color: var(--na); border-color: var(--na); }
+.badge-blocked { color: var(--fail); border-color: var(--fail); }
 .coverage { font-size: 0.88rem; color: var(--muted); margin: 0.75rem 0 0; }
 .cov { display: inline-block; margin: 0.15rem 0; }
 .cov::after { content: ""; }
 .cov-pass { color: var(--pass); }
 .cov-fail { color: var(--fail); font-weight: 600; }
 .cov-unverified { color: var(--fail); font-weight: 600; }
-.cov-na { color: var(--muted); }
-.cov-not_applicable { color: var(--muted); }
 .cov-blocked { color: var(--fail); font-weight: 600; }
+.cov-unrecorded { color: var(--fail); font-weight: 600; }
 .audit-note { color: var(--muted); font-size: 0.85rem; }
 .story-block { margin: 1.75rem 0; }
 .story-block > h3 { border-bottom: 1px solid var(--rule); padding-bottom: 0.3rem; }
@@ -1050,11 +1030,20 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .scenario-card.sc-fail { border-left-color: var(--fail); }
 .scenario-card.sc-unverified { border-left-color: var(--fail); }
 .scenario-card.sc-blocked { border-left-color: var(--fail); }
-.scenario-card.sc-not_applicable { border-left-color: var(--na); opacity: 0.75; }
-.scenario-card.sc-na { border-left-color: var(--na); opacity: 0.75; }
-.sc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.5rem; }
-.sc-axis { font-weight: 600; }
-.sc-body { }
+.scenario-card.sc-unrecorded { border-left-color: var(--fail); }
+.sc-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.3rem 0.6rem; margin-bottom: 0.5rem; }
+.sc-title { font-weight: 600; word-break: keep-all; overflow-wrap: break-word; }
+.sc-meta { display: inline-flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
+.sc-profile { font-size: 0.8rem; color: var(--muted); }
+.sc-expected { margin: 0 0 0.4rem; }
+.sc-steps summary, .risk-na summary { cursor: pointer; color: var(--accent); font-size: 0.88rem; }
+.sc-risks { font-size: 0.85rem; color: var(--muted); margin: 0.3rem 0 0.6rem; }
+.story-goal { margin: 0.4rem 0; }
+.profile-coverage { font-size: 0.9rem; }
+.profile-coverage ul { margin: 0.2rem 0; padding-left: 1.2rem; }
+.risk-na { margin: 0.75rem 0; border: 1px solid var(--rule); border-radius: 8px; padding: 0.5rem 0.75rem; }
+.client-impact { font-size: 0.92rem; }
+.verdict-summary { font-size: 1.05rem; padding: 0.7rem 1rem; border: 1px solid var(--rule); border-radius: 8px; }
 .sc-observed { margin: 0 0 0.6rem; }
 .sc-muted { color: var(--muted); font-size: 0.9rem; }
 .sc-shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem; }
@@ -1070,10 +1059,12 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .issue-LOW { color: var(--na); }
 .presentation { margin-bottom: 1rem; }
 .gap { color: var(--fail); background: var(--code-bg); border: 1px dashed var(--fail); border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.92rem; }
-.gap-reference { white-space: nowrap; }
-.audit-story { min-width: 6rem; white-space: nowrap; word-break: keep-all; }
-.audit-coverage { min-width: 11rem; word-break: keep-all; overflow-wrap: normal; }
-.audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: normal; }
+.audit-story { min-width: 6rem; }
+.audit-story code { white-space: normal; overflow-wrap: anywhere; }
+.audit-coverage { min-width: 8rem; word-break: keep-all; overflow-wrap: normal; }
+.audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: anywhere; }
+.audit-evidence { display: block; margin-top: 0.4rem; font-size: 0.8rem; }
+.audit-evidence code { display: block; word-break: break-all; margin-top: 0.2rem; }
 .audit-story-link { color: var(--accent); text-decoration: underline; }
 .audit-story-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .affected-user, .scenario-flow, .ac-map { margin: 1rem 0; padding: 0.85rem 1rem; border: 1px solid var(--rule); border-radius: 10px; }
@@ -1083,9 +1074,10 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .satisfied-partial { color: var(--na); border-color: var(--na); }
 /* unverified = the user boundary was never driven; render it LOUD, never quiet — a PO must read it as "not done", not as a mild partial */
 .satisfied-unverified { color: var(--bg); background: var(--fail); border-color: var(--fail); font-weight: 700; }
-.diagram { margin: 1rem 0; overflow-x: auto; }
+/* Mermaid draws with its light theme; a fixed light panel keeps arrows and edge labels legible in dark mode too. */
+.diagram { margin: 1rem 0; overflow-x: auto; background: #ffffff; color-scheme: light; border: 1px solid var(--rule); border-radius: 10px; padding: 1rem; }
 .diagram svg { max-width: none; height: auto; }
-.diagram figcaption { color: var(--muted); font-size: 0.88rem; margin-top: 0.4rem; }
+.diagram figcaption { color: #4a4a4a; font-size: 0.88rem; margin-top: 0.4rem; }
 `;
 
 // ---------------------------------------------------------------------------
@@ -1130,6 +1122,8 @@ function main(): void {
 	if (!view.report_source_snapshot) throw new Error("qa-report: missing source snapshot");
 	recordRenderedReport(session, out, view.report_source_snapshot);
 	process.stdout.write(`${out}\n`);
+	const english = readerEnglishWords(view, narrative);
+	if (english.length > 0) process.stdout.write(`English words in reader prose (keep device and product names; replace any code or setting word a PO would not know): ${english.join(", ")}\n`);
 }
 
 if (import.meta.main) {

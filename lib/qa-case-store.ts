@@ -15,22 +15,21 @@ export interface QaCaseRecord {
 	given: string[];
 	when: string[];
 	then: string[];
-	acceptance_criteria: string[];
 	surface: QaCaseSurface;
 	runner: string[];
 	execution_cwd: string;
 	native_files: string[];
 	reset_description: string;
-	feature_refs?: string[];
+	/** Feature ids this case exercises; cases are found by feature, never by acceptance-criteria text. */
+	feature_refs: string[];
 }
 export interface QaCaseContext { projectKey: string; projectRoot: string; manifestPath: string; }
 export type QaCaseManifest = { version: 1; project: string; mode: "unconfigured" | "disabled" | "configured"; location?: string; allow_project_storage?: boolean };
 export type QaCaseStoreOptions = FeatureMapOptions;
 export type QaCaseStatus =
-	| { status: "unconfigured"; mode: "unconfigured"; project: string; manifestPath: string }
 	| { status: "disabled"; mode: "disabled"; project: string; manifestPath: string; location?: string }
 	| { status: "configured"; mode: "configured"; project: string; manifestPath: string; location: string };
-export type QaCaseStoreResult = QaCaseStatus | { status: "ok"; record: QaCaseRecord; path: string; revision: string } | { status: "ok"; cases: Array<{ id: string; title: string; path: string; revision: string }> } | { status: "not_found"; reason: "case_not_found" } | { status: "conflict"; reason: "revision_mismatch"; expectedRevision: string | null; actualRevision: string | null; path: string };
+export type QaCaseStoreResult = QaCaseStatus | { status: "ok"; record: QaCaseRecord; path: string; revision: string } | { status: "ok"; cases: Array<{ id: string; title: string; feature_refs: string[]; path: string; revision: string }> } | { status: "not_found"; reason: "case_not_found" } | { status: "conflict"; reason: "revision_mismatch"; expectedRevision: string | null; actualRevision: string | null; path: string };
 
 export function resolveQaCaseContext(options: QaCaseStoreOptions = {}): QaCaseContext {
 	const feature = resolveFeatureMapContext(options);
@@ -61,19 +60,28 @@ function writeAtomic(path: string, content: string): void {
 	const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
 	try { writeFileSync(temporary, content, "utf8"); renameSync(temporary, path); } finally { try { unlinkSync(temporary); } catch { /* renamed */ } }
 }
+// 저장소는 기본으로 켜진다. 조회할 때 manifest가 없거나 unconfigured(예전 기본값, 묻기 전 상태)면
+// configured로 바꾸고, 기억된 위치가 없으면 manifest 옆 cases/를 쓴다. configure/disable은 직접 쓴다.
 function ensureManifest(context: QaCaseContext): { context: QaCaseContext; manifest: QaCaseManifest; raw: Record<string, unknown> } {
 	assertNoSymlinkComponents("/", context.manifestPath);
 	mkdirSync(dirname(context.manifestPath), { recursive: true });
 	return withStateLock(context.manifestPath, () => {
-		return readOrCreateManifest(context);
+		const result = readOrNewManifest(context);
+		if (result.manifest.mode !== "unconfigured") return result;
+		const location = result.manifest.location ?? join(dirname(context.manifestPath), "cases");
+		assertNoSymlinkComponents("/", location);
+		mkdirSync(location, { recursive: true });
+		validatePresentLocation(context, location, result.manifest.allow_project_storage === true);
+		const raw = { ...result.raw, mode: "configured", location };
+		writeAtomic(context.manifestPath, stringify(raw));
+		return { context, manifest: validateManifest(raw, context), raw };
 	});
 }
-function readOrCreateManifest(context: QaCaseContext): { context: QaCaseContext; manifest: QaCaseManifest; raw: Record<string, unknown> } {
+function readOrNewManifest(context: QaCaseContext): { context: QaCaseContext; manifest: QaCaseManifest; raw: Record<string, unknown> } {
 		try { const raw = readRaw(context); return { context, manifest: validateManifest(raw, context), raw }; }
 		catch (error) {
 			if (!isMissing(error)) throw error;
 			const raw: Record<string, unknown> = { version: 1, project: context.projectKey, mode: "unconfigured" };
-			writeAtomic(context.manifestPath, stringify(raw));
 			return { context, manifest: { version: 1, project: context.projectKey, mode: "unconfigured" }, raw };
 		}
 }
@@ -90,11 +98,10 @@ function validatePresentLocation(context: QaCaseContext, location: string, allow
 	if (!allowProjectStorage && inside(context.projectRoot, actual)) throw new Error("qa-cases: persisted project-local storage requires explicit approval");
 	return actual;
 }
-function statusFrom(result: ReturnType<typeof ensureManifest>): QaCaseStatus {
+function statusFrom(result: ReturnType<typeof readOrNewManifest>): QaCaseStatus {
 	const base = { project: result.context.projectKey, manifestPath: result.context.manifestPath };
 	if (result.manifest.mode === "disabled") return { ...base, status: "disabled", mode: "disabled", ...(result.manifest.location ? { location: result.manifest.location } : {}) };
 	const location = result.manifest.location ? validatePresentLocation(result.context, result.manifest.location, result.manifest.allow_project_storage === true) : undefined;
-	if (result.manifest.mode === "unconfigured") return { ...base, status: "unconfigured", mode: "unconfigured" };
 	if (!location) throw new Error("qa-cases: configured manifest has no location");
 	return { ...base, status: "configured", mode: "configured", location };
 }
@@ -141,7 +148,7 @@ export function configureQaCaseStore(location: string, options: QaCaseStoreOptio
 	const actual = assertDirectory(location, true);
 	mkdirSync(dirname(context.manifestPath), { recursive: true });
 	withStateLock(context.manifestPath, () => {
-		const ensured = readOrCreateManifest(context);
+		const ensured = readOrNewManifest(context);
 		if (ensured.manifest.mode !== "disabled" && ensured.manifest.location) validatePresentLocation(ensured.context, ensured.manifest.location, ensured.manifest.allow_project_storage === true);
 		const raw = ensured.raw;
 		raw.mode = "configured";
@@ -160,10 +167,10 @@ export function disableQaCaseStore(options: QaCaseStoreOptions = {}): QaCaseStat
 	let result: QaCaseStatus | undefined;
 	mkdirSync(dirname(context.manifestPath), { recursive: true });
 	withStateLock(context.manifestPath, () => {
-		const ensured = readOrCreateManifest(context);
+		const ensured = readOrNewManifest(context);
 		ensured.raw.mode = "disabled";
 		writeAtomic(ensured.context.manifestPath, stringify(ensured.raw));
-		result = statusFrom(readOrCreateManifest(ensured.context));
+		result = statusFrom(readOrNewManifest(ensured.context));
 	});
 	if (!result) throw new Error("qa-cases: disable did not produce a status");
 	return result;
@@ -181,9 +188,8 @@ export function validateQaCase(record: unknown): asserts record is QaCaseRecord 
 	for (const field of ["id", "title", "goal", "execution_cwd", "reset_description"]) if (typeof record[field] !== "string" || record[field].trim() === "") throw new Error(`qa-cases: ${field} must be nonblank`);
 	if (typeof record.id !== "string") throw new Error("qa-cases: id must be a string");
 	safeId(record.id);
-	for (const field of ["given", "when", "then", "acceptance_criteria"]) stringArray(record[field], field);
+	for (const field of ["given", "when", "then", "feature_refs"]) stringArray(record[field], field);
 	stringArray(record.native_files, "native_files", false);
-	if (record.feature_refs !== undefined) stringArray(record.feature_refs, "feature_refs", false);
 	if (typeof record.surface !== "string" || !["agent-browser", "agent-device", "curl", "bash"].includes(record.surface)) throw new Error("qa-cases: invalid surface");
 	stringArray(record.runner, "runner");
 }
@@ -216,11 +222,11 @@ export function getQaCase(id: string, options: QaCaseStoreOptions = {}): QaCaseS
 	try { const bytes = readFileSync(path); const record = JSON.parse(bytes.toString("utf8")); validateQaCase(record); if (record.id !== id) throw new Error(`qa-cases: filename/id mismatch: ${path}`); return { status: "ok", record, path, revision: revision(bytes) }; }
 	catch (error) { if (isMissing(error)) return { status: "not_found", reason: "case_not_found" }; throw error; }
 }
-export function listQaCases(options: QaCaseStoreOptions = {}): QaCaseStoreResult {
+export function listQaCases(options: QaCaseStoreOptions = {}, filter: { feature?: string } = {}): QaCaseStoreResult {
 	const root = rootFor(options); if (typeof root !== "string") return unavailable(root);
 	const directory = join(root, "cases");
 	assertNoSymlinkComponents(root, directory);
-	try { const ids = new Set<string>(); const cases = readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map((entry) => { const path = join(directory, entry.name); const bytes = readFileSync(path); const record = JSON.parse(bytes.toString("utf8")); validateQaCase(record); const expectedId = entry.name.slice(0, -5); if (record.id !== expectedId) throw new Error(`qa-cases: filename/id mismatch: ${path}`); if (ids.has(record.id)) throw new Error(`qa-cases: duplicate case id: ${record.id}`); ids.add(record.id); return { id: record.id, title: record.title, path, revision: revision(bytes) }; }).sort((a, b) => a.id.localeCompare(b.id)); return { status: "ok", cases }; }
+	try { const ids = new Set<string>(); const cases = readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map((entry) => { const path = join(directory, entry.name); const bytes = readFileSync(path); const record = JSON.parse(bytes.toString("utf8")); validateQaCase(record); const expectedId = entry.name.slice(0, -5); if (record.id !== expectedId) throw new Error(`qa-cases: filename/id mismatch: ${path}`); if (ids.has(record.id)) throw new Error(`qa-cases: duplicate case id: ${record.id}`); ids.add(record.id); return { id: record.id, title: record.title, feature_refs: record.feature_refs, path, revision: revision(bytes) }; }).filter((entry) => filter.feature === undefined || entry.feature_refs.includes(filter.feature)).sort((a, b) => a.id.localeCompare(b.id)); return { status: "ok", cases }; }
 	catch (error) { if (isMissing(error)) return { status: "ok", cases: [] }; throw error; }
 }
 

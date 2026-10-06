@@ -14,9 +14,16 @@ function doc(id = "alpha") { return { metadata: { schema_version: 1 as const, id
 afterEach(() => { for (const p of roots.splice(0)) rmSync(p, { recursive: true, force: true }); });
 
 describe("feature-map storage", () => {
-  test("미설정 상태를 bootstrap하고 저장 없이 반환한다", () => {
+  test("첫 조회는 기본 store를 설정하고 ready로 반환한다", () => {
     const cwd = repo(); const home = temp();
-    expect(getFeatureMapStatus({ cwd, home })).toEqual(expect.objectContaining({ status: "not_found", reason: "storage_not_configured", next_action: "ask_user_for_storage" }));
+    const status = getFeatureMapStatus({ cwd, home });
+    expect(status).toMatchObject({ status: "ready", storage: { format: "markdown-frontmatter-v1" } });
+    expect(status.storage.location.endsWith("/store")).toBe(true);
+    expect(existsSync(status.storage.location)).toBe(true);
+    expect(queryFeatureMap({}, { cwd, home })).toEqual({ status: "not_found", reason: "feature_not_found" });
+    expect(validateFeatureMap({ cwd, home })).toMatchObject({ status: "valid", feature_count: 0 });
+    const saved = saveFeature({ ...doc(), expectedRevision: null }, { cwd, home });
+    expect(saved).toMatchObject({ status: "ok", feature: { path: join(status.storage.location, "alpha.md") } });
   });
 
   test("미설정 상태에서도 잘못된 feature ID를 먼저 거부한다", () => {

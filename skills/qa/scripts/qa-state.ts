@@ -51,8 +51,14 @@ import {
 	cycleUntouched,
 	driverGateArmed,
 	recordComplete,
-	cellNeedsVisualProof,
+	scenarioNeedsVisualProof,
+	scenariosMissingCase,
 	visualEvidenceComplete,
+	CLIENT_IMPACTS,
+	RISK_AXES,
+	CAUSE_CHECKS,
+	LAYOUT_CHECKS,
+	isRiskAxis,
 	TEST_EVIDENCE_SURFACE,
 	evidenceReviewSnapshot,
 	qaReportSnapshot,
@@ -62,9 +68,10 @@ import {
 	type QaActor,
 	type QaBaseline,
 	type QaBlocked,
-	type QaCell,
-	type QaCellStatus,
+	type QaScenario,
+	type QaScenarioStatus,
 	type QaCaseRunBinding,
+	type QaScenarioCase,
 	type QaChainState,
 	type QaDriver,
 	type QaPhase,
@@ -73,13 +80,14 @@ import {
 	type QaStory,
 	type QaStoryContract,
 	type QaStoryProvenance,
-	type QaWaive,
 	type QaInert,
+	type QaDeviceProfile,
 	type QaEvidenceClaim,
 } from "@lib/qa-chain-core";
 import { withFeatureMapReadLock, type FeatureMapOptions } from "@lib/feature-map/index.ts";
-import { readQaCaseRunReceiptSnapshot } from "@lib/qa-case-run.ts";
-import { validateQaCase } from "@lib/qa-case-store.ts";
+import { readQaCaseRunReceiptSnapshot, type QaCaseRunReceipt } from "@lib/qa-case-run.ts";
+import { getQaCase, validateQaCase, type QaCaseStoreOptions } from "@lib/qa-case-store.ts";
+import { readDeviceProfiles } from "@lib/qa-device-profiles.ts";
 
 
 const DEFAULT_MAX_CYCLES = 5;
@@ -129,6 +137,28 @@ type CheckName = (typeof CHECKS)[number];
 function nonEmpty(value: unknown, field: string): string {
 	if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} is required`);
 	return value;
+}
+
+/**
+ * camelCase (`displayName`), snake_case (`deep_link_value`) or a three-part PascalCase
+ * component name (`JoinStepLayout`) — a code name, not something a reader sees.
+ * Two-part brand names (AlgoCare, OneLink) stay allowed.
+ */
+export const CODE_IDENTIFIER = /\b(?:[a-z]{2,}[A-Z][a-z]\w*|[a-z]+_[a-z]\w*|[A-Z][a-z]+(?:[A-Z][a-z]+){2,})/;
+
+/** Reader-facing prose: the report shows it to a PO, so it names what the user sees, never a code identifier. */
+function readerProse(value: unknown, field: string): string {
+	const text = nonEmpty(value, field);
+	const identifier = text.match(CODE_IDENTIFIER);
+	if (identifier) throw new Error(`${field} names the code identifier "${identifier[0]}"; write what the user or operator sees instead`);
+	return text;
+}
+
+/** A short reader-facing label (a claim's source location) is shown as is: a region in the report language, or a line/timestamp. */
+function readerLabel(value: unknown, field: string): string {
+	const text = readerProse(value, field);
+	if (!/[가-힣0-9]/.test(text)) throw new Error(`${field} "${text}" has no Korean; name the part of the screen or file the reader would look at ("보유분 표의 영양제 열") or its line/timestamp, not a heading copied from your notes`);
+	return text;
 }
 
 function currentCycle(state: Partial<ChainState>): number {
@@ -205,7 +235,7 @@ function assertTestReportUsesTestSurface(absolute: string): void {
 	if (NON_TEXT_EVIDENCE_EXT.has(extname(absolute).toLowerCase())) return;
 	let scanned: string;
 	try {
-		// Scan a bounded HEAD and TAIL — never the whole file. record-cell imposes no
+		// Scan a bounded HEAD and TAIL — never the whole file. record-scenario imposes no
 		// evidence-size limit, so decoding the entire capture (as readFileSync would)
 		// could exhaust memory. A test-runner BANNER sits at the head while its SUMMARY
 		// (`1 passed in ...`, `ok pkg`, `N passing`) sits at the tail, so a large log
@@ -239,32 +269,20 @@ function assertTestReportUsesTestSurface(absolute: string): void {
 
 const SCENARIO_SOURCES = ["self-authored", "caller-provided"] as const;
 
-/** Shared optional structured-scenario fields accepted by both author-cell and record-cell. */
+/** Optional provenance fields accepted by both author-scenario and record-scenario. */
 interface ScenarioFieldOpts {
 	drivenAt?: string;
-	whyNeeded?: string;
 	source?: string;
 }
 
-function scenarioFieldPatch(opts: ScenarioFieldOpts): Partial<QaCell> {
-	const patch: Partial<QaCell> = {};
+function scenarioFieldPatch(opts: ScenarioFieldOpts): Partial<QaScenario> {
+	const patch: Partial<QaScenario> = {};
 	if (opts.drivenAt !== undefined) patch.driven_at = opts.drivenAt;
-	if (opts.whyNeeded !== undefined) patch.why_needed = opts.whyNeeded;
 	if (opts.source !== undefined) {
 		if (!isOneOf(opts.source, SCENARIO_SOURCES)) throw new Error(`source must be one of ${SCENARIO_SOURCES.join("|")}`);
 		patch.source = opts.source;
 	}
 	return patch;
-}
-
-/** Carries forward an authored cell's scenario fields as defaults for record-cell to override. */
-function pickScenarioFields(cell: QaCell | undefined): Partial<QaCell> {
-	if (!cell) return {};
-	const out: Partial<QaCell> = {};
-	if (cell.driven_at !== undefined) out.driven_at = cell.driven_at;
-	if (cell.why_needed !== undefined) out.why_needed = cell.why_needed;
-	if (cell.source !== undefined) out.source = cell.source;
-	return out;
 }
 
 interface EvidenceSlotOpts {
@@ -576,6 +594,29 @@ export interface AddActorOpts {
 	boundary?: string;
 	driver?: string;
 	reachable: string;
+	clientImpact?: string;
+	clientImpactReason?: string;
+	/** Device profile ids from the project's device-profiles manifest; required for client impact `render`. */
+	profiles?: string[];
+	/** Project directory whose device-profiles manifest resolves the profile ids. */
+	project?: string;
+	home?: string;
+}
+
+/** Drops the execution record of a scenario whose actor or story changed, keeping what was authored. */
+function clearScenarioRecord(scenario: QaScenario): QaScenario {
+	const { status: _status, blocked: _blocked, evidence: _evidence, evidence_review: _review, case_run: _caseRun, case: _case, ...authored } = scenario;
+	return authored;
+}
+
+function resolveProfiles(ids: string[], opts: AddActorOpts): QaDeviceProfile[] {
+	const result = readDeviceProfiles({ cwd: opts.project, ...(opts.home ? { home: opts.home } : {}) });
+	if (result.status !== "ok") throw new Error(`add-actor: ${result.ask_user} Manifest: ${result.path}`);
+	return ids.map((id) => {
+		const profile = result.profiles.find((candidate) => candidate.id === id);
+		if (!profile) throw new Error(`add-actor: unknown device profile "${id}" in ${result.path}`);
+		return profile;
+	});
 }
 
 export function addActor(sessionId: string, opts: AddActorOpts): void {
@@ -588,21 +629,42 @@ export function addActor(sessionId: string, opts: AddActorOpts): void {
 	const name = opts.name ?? existing?.name;
 	const boundary = opts.boundary ?? existing?.boundary;
 	const driver = opts.driver ?? existing?.driver;
+	const clientImpact = opts.clientImpact ?? existing?.client_impact;
+	const clientImpactReason = opts.clientImpactReason ?? existing?.client_impact_reason;
+	const profileIds = opts.profiles ?? existing?.profiles ?? [];
 	if (!name || !boundary) throw new Error("name and boundary are required for a new actor");
 	if (!isOneOf(driver, DRIVERS)) throw new Error(`driver must be one of ${DRIVERS.join("|")}`);
-	const actor: QaActor = { id, name, boundary, driver, reachable };
+	if (!isOneOf(clientImpact, CLIENT_IMPACTS)) throw new Error(`client-impact must be one of ${CLIENT_IMPACTS.join("|")}: none (no client renders this actor's result), contract (a client renders it but its rendering code did not change), render (the client's rendering changed)`);
+	const reason = readerProse(clientImpactReason, "client-impact-reason");
+	let deviceProfiles = prior.device_profiles ?? [];
+	const redefinedProfileIds = new Set<string>();
+	if (clientImpact === "render") {
+		if (driver !== "agent-browser" && driver !== "agent-device") throw new Error("client-impact render needs a screen driver (agent-browser|agent-device): the proof is the rendered screen");
+		if (!profileIds.length) throw new Error("client-impact render requires --profiles: the device profiles this screen must stay usable on");
+		const resolved = resolveProfiles(profileIds, opts);
+		for (const next of resolved) {
+			const previous = deviceProfiles.find((profile) => profile.id === next.id);
+			if (previous && JSON.stringify(previous) !== JSON.stringify(next)) redefinedProfileIds.add(next.id);
+		}
+		deviceProfiles = [...deviceProfiles.filter((profile) => !resolved.some((next) => next.id === profile.id)), ...resolved];
+	} else if (profileIds.length) {
+		throw new Error(`--profiles applies only to client-impact render; a ${clientImpact} actor has no rendered screen under test`);
+	}
+	const actor: QaActor = { id, name, boundary, driver, reachable, client_impact: clientImpact, client_impact_reason: reason, ...(clientImpact === "render" ? { profiles: [...profileIds] } : {}) };
 	if (index >= 0) actors[index] = actor;
 	else actors.push(actor);
-	const changedBoundary = existing && (existing.boundary !== boundary || existing.driver !== driver);
+	const changedSurface = existing && (existing.boundary !== boundary || existing.driver !== driver || existing.client_impact !== clientImpact || JSON.stringify(existing.profiles ?? []) !== JSON.stringify(actor.profiles ?? []));
 	const cycle = currentCycle(prior);
 	const affectedStories = new Set((prior.stories ?? []).filter((story) => (story.actor ?? story.actor_id) === id).map((story) => story.id));
-	const cells = changedBoundary ? (prior.cells ?? []).map((cell) => {
-		if (!affectedStories.has(cell.story) || cell.cycle !== cycle) return cell;
-		if (cell.status === "not_applicable") return cell;
-		const { status: _status, na_reason: _naReason, blocked: _blocked, evidence: _evidence, evidence_review: _review, case_run: _caseRun, ...record } = cell;
-		return record;
-	}) : prior.cells;
-	mergeWrite(sessionId, { actors, ...(changedBoundary ? { cells } : {}) });
+	// A profile id keeps its name when its definition changes; profiles are shared by id, so every actor's scenarios on it lose their record.
+	const clearsRecords = changedSurface || redefinedProfileIds.size > 0;
+	const scenarios = (prior.scenarios ?? []).map((scenario) => {
+		if (scenario.cycle !== cycle) return scenario;
+		const onChangedSurface = changedSurface && affectedStories.has(scenario.story);
+		const onRedefinedProfile = scenario.profile !== undefined && redefinedProfileIds.has(scenario.profile);
+		return onChangedSurface || onRedefinedProfile ? clearScenarioRecord(scenario) : scenario;
+	});
+	mergeWrite(sessionId, { actors, device_profiles: deviceProfiles, ...(clearsRecords ? { scenarios } : {}) });
 }
 
 export interface AddStoryOpts {
@@ -627,7 +689,7 @@ function parseIntegerArray(value: unknown, field: string): number[] {
 
 function validateStoryContract(value: unknown, acceptanceCriteria: string[]): QaStoryContract {
 	if (!isRecord(value)) throw new Error("add-story: contract is required");
-	const goal = nonEmpty(value.goal, "goal");
+	const goal = readerProse(value.goal, "goal");
 	const given = parseContractArray(value.given, "given");
 	const when = parseContractArray(value.when, "when");
 	const then = parseContractArray(value.then, "then");
@@ -654,21 +716,18 @@ export function addStory(sessionId: string, opts: AddStoryOpts): void {
 		if (index >= 0) {
 			if (contract && JSON.stringify(existing?.contract) !== JSON.stringify(contract)) {
 				const cycle = currentCycle(prior);
-				const evidenced = existing?.baseline?.cycle === cycle || (prior.cells ?? []).some((cell) =>
-					cell.story === id && cell.cycle === cycle && (cell.status !== undefined || cell.evidence !== undefined));
+				const evidenced = existing?.baseline?.cycle === cycle || (prior.scenarios ?? []).some((scenario) =>
+					scenario.story === id && scenario.cycle === cycle && (scenario.status !== undefined || scenario.evidence !== undefined));
 				if (evidenced) throw new Error("add-story: cannot change an evidenced story contract; start the next FIX cycle");
 			}
 			stories[index] = { ...existing, ...next };
 		} else stories.push(next);
 		const changedActor = index >= 0 && (prior.stories?.[index]?.actor ?? prior.stories?.[index]?.actor_id) !== actor;
 		const cycle = currentCycle(prior);
-		const cells = changedActor ? (prior.cells ?? []).map((cell) => {
-			if (cell.story !== id || cell.cycle !== cycle) return cell;
-			if (cell.status === "not_applicable") return cell;
-			const { status: _status, na_reason: _naReason, blocked: _blocked, evidence: _evidence, evidence_review: _review, case_run: _caseRun, ...record } = cell;
-			return record;
-		}) : prior.cells;
-		mergeWriteUnlocked(sessionId, { stories, ...(changedActor ? { cells } : {}) });
+		const scenarios = changedActor
+			? (prior.scenarios ?? []).map((scenario) => (scenario.story === id && scenario.cycle === cycle ? clearScenarioRecord(scenario) : scenario))
+			: prior.scenarios;
+		mergeWriteUnlocked(sessionId, { stories, ...(changedActor ? { scenarios } : {}) });
 	});
 }
 
@@ -733,7 +792,7 @@ export function recordStoryProvenance(
 	const id = nonEmpty(storyId, "story");
 	const payload = provenanceInput(input);
 	withStateLock(resolveStatePath(sessionId), () => {
-		const locked = withFeatureMapReadLock(options, (readFeature) => {
+		withFeatureMapReadLock(options, (readFeature) => {
 			// Resolve every feature while both locks are held. This makes map errors
 			// fail atomically and prevents a revision from changing before persistence.
 			for (const ref of payload.features) {
@@ -755,17 +814,17 @@ export function recordStoryProvenance(
 			const cycle = currentCycle(prior);
 			const next: QaStoryProvenance = { ...payload, cycle };
 			if (existing.provenance && JSON.stringify(existing.provenance) === JSON.stringify(next)) return;
-			const currentCells = (prior.cells ?? []).some(
-				(cell) =>
-					cell.story === id &&
-					cell.cycle === cycle &&
-					cell.status !== undefined &&
-					cell.status !== null,
+			const currentScenarios = (prior.scenarios ?? []).some(
+				(scenario) =>
+					scenario.story === id &&
+					scenario.cycle === cycle &&
+					scenario.status !== undefined &&
+					scenario.status !== null,
 			);
 			const currentBaseline = existing.baseline?.cycle === cycle;
-			if (currentBaseline || currentCells) {
+			if (currentBaseline || currentScenarios) {
 				throw new Error(
-					"record-story-provenance: cannot change provenance after the current story baseline or recorded cells; start the next FIX cycle",
+					"record-story-provenance: cannot change provenance after the current story baseline or recorded scenarios; start the next FIX cycle",
 				);
 			}
 			const history = existing.provenance_history ? [...existing.provenance_history] : [];
@@ -781,60 +840,111 @@ export function recordStoryProvenance(
 			};
 			mergeWriteUnlocked(sessionId, { stories });
 		});
-		if (locked && locked.status === "not_found") {
-			throw new Error("record-story-provenance: feature map storage is not configured");
-		}
 	});
 }
 
-function validateCellSelector(story: string, cls: unknown, sub: string | undefined): { story: string; cls: number; sub?: "hang-timeout" | "flaky-green" } {
-	const storyId = nonEmpty(story, "story");
-	const classNumber = typeof cls === "number" ? cls : Number(cls);
-	if (!Number.isInteger(classNumber) || classNumber < 1 || classNumber > 6) throw new Error("cls must be an integer from 1 to 6");
-	if (sub !== undefined && sub !== "hang-timeout" && sub !== "flaky-green") throw new Error("invalid sub");
-	if (sub === "hang-timeout" && classNumber !== 1) throw new Error("hang-timeout requires cls 1");
-	if (sub === "flaky-green" && classNumber !== 5) throw new Error("flaky-green requires cls 5");
-	return { story: storyId, cls: classNumber, ...(sub ? { sub } : {}) };
+function sameScenario(left: Pick<QaScenario, "story" | "id">, right: Pick<QaScenario, "story" | "id">): boolean {
+	return left.story === right.story && left.id === right.id;
 }
 
-function sameCell(left: Pick<QaCell, "story" | "cls" | "sub">, right: Pick<QaCell, "story" | "cls" | "sub">): boolean {
-	return left.story === right.story && left.cls === right.cls && left.sub === right.sub;
+function storyActor(state: Partial<ChainState>, storyId: string): QaActor {
+	const story = (state.stories ?? []).find((candidate) => candidate.id === storyId);
+	if (!story) throw new Error(`unknown story "${storyId}"`);
+	const actorId = story.actor ?? story.actor_id;
+	const actor = (state.actors ?? []).find((candidate) => candidate.id === actorId);
+	if (!actor) throw new Error(`story "${storyId}" has no actor`);
+	return actor;
 }
 
-export interface AuthorCellOpts extends ScenarioFieldOpts {
-	story: string;
-	cls: number;
-	sub?: string;
-	attackPoint: string;
-	priority: string;
-	/** Why this axis does not exist on the story's surface. Accepted only on first authoring. */
-	notApplicable?: string;
-}
-
-export function authorCell(sessionId: string, opts: AuthorCellOpts): void {
-	const selector = validateCellSelector(opts.story, opts.cls, opts.sub);
-	const attackPoint = nonEmpty(opts.attackPoint, "attack-point");
-	if (!isOneOf(opts.priority, PRIORITIES)) throw new Error(`priority must be one of ${PRIORITIES.join("|")}`);
-	const prior = readPrior(sessionId);
-	if (!(prior.stories ?? []).some((story) => story.id === selector.story)) throw new Error(`author-cell: unknown story "${selector.story}"`);
-	const cycle = currentCycle(prior);
-	const cells = [...(prior.cells ?? [])];
-	const scenarioPatch = scenarioFieldPatch(opts);
-	let notApplicable: Partial<QaCell> = {};
-	if (opts.notApplicable !== undefined) {
-		const reason = nonEmpty(opts.notApplicable, "not-applicable");
-		// Applicability is fixed when the cell is first authored. A cell once authored
-		// as applicable (in any cycle) is executed or recorded blocked, never re-scoped.
-		if (cells.some((cell) => sameCell(cell, selector) && cell.status !== "not_applicable")) {
-			throw new Error("author-cell: --not-applicable is accepted only when the cell is first authored; this cell was authored as applicable — execute it, or record-cell --status blocked with the attempts that failed");
-		}
-		notApplicable = { status: "not_applicable", not_applicable_reason: reason };
+function parseJsonArray(value: string, field: string): unknown[] {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(value);
+	} catch (error) {
+		throw new Error(`${field} must be a JSON array`, { cause: error });
 	}
-	const next: QaCell = { ...selector, attack_point: attackPoint, priority: opts.priority, cycle, ...scenarioPatch, ...notApplicable };
-	const index = cells.findIndex((cell) => cell.cycle === cycle && sameCell(cell, selector));
-	if (index >= 0) cells[index] = next;
-	else cells.push(next);
-	mergeWrite(sessionId, { cells });
+	if (!Array.isArray(parsed)) throw new Error(`${field} must be a JSON array`);
+	return parsed;
+}
+
+function parseRisks(value: unknown[]): number[] {
+	if (!value.every(isRiskAxis)) {
+		throw new Error(`risks must be a JSON array of adversarial axes ${RISK_AXES.join("|")}: 1 failure path · 2 boundary/malformed input · 3 injection · 4 interruption/concurrency · 5 misleading success · 6 idempotency`);
+	}
+	if (new Set(value).size !== value.length) throw new Error("risks must not repeat an axis");
+	return [...value];
+}
+
+export interface AuthorScenarioOpts extends ScenarioFieldOpts {
+	story: string;
+	id: string;
+	title: string;
+	preconditions: string;
+	steps: unknown[];
+	expected: string;
+	whyNeeded: string;
+	priority: string;
+	risks?: unknown[];
+	profile?: string;
+}
+
+/** Authors one user scenario: who does what, in which state, and what they must observe. */
+export function authorScenario(sessionId: string, opts: AuthorScenarioOpts): void {
+	const story = nonEmpty(opts.story, "story");
+	const id = nonEmpty(opts.id, "id");
+	const priority = opts.priority;
+	if (!isOneOf(priority, PRIORITIES)) throw new Error(`priority must be one of ${PRIORITIES.join("|")}`);
+	const steps = opts.steps.map((step) => nonEmpty(step, "steps item"));
+	if (!steps.length) throw new Error("steps must be a non-empty JSON array of strings");
+	const risks = parseRisks(opts.risks ?? []);
+	withStateLock(resolveStatePath(sessionId), () => {
+		const prior = readPrior(sessionId);
+		if (!(prior.stories ?? []).some((candidate) => candidate.id === story)) throw new Error(`author-scenario: unknown story "${story}"`);
+		const actor = storyActor(prior, story);
+		if (actor.client_impact === "render") {
+			if (opts.profile !== undefined && !(actor.profiles ?? []).includes(opts.profile)) throw new Error(`author-scenario: --profile must be one of ${(actor.profiles ?? []).join("|")}, the device profiles of actor "${actor.id}"`);
+		} else if (opts.profile !== undefined) {
+			throw new Error(`author-scenario: --profile applies only to a client-impact render actor; "${actor.id}" is ${actor.client_impact ?? "unset"}`);
+		}
+		const cycle = currentCycle(prior);
+		const declared = (prior.risk_not_applicable ?? []).filter((entry) => entry.cycle === cycle && risks.includes(entry.axis));
+		if (declared.length) throw new Error(`author-scenario: axis ${declared.map((entry) => entry.axis).join(",")} was declared not applicable this cycle; a scenario cannot exercise it`);
+		const scenarios = [...(prior.scenarios ?? [])];
+		const index = scenarios.findIndex((candidate) => candidate.cycle === cycle && sameScenario(candidate, { story, id }));
+		if (index >= 0 && scenarios[index].status) throw new Error("author-scenario: this scenario already has a recorded result this cycle; changing it requires the next FIX cycle");
+		const next: QaScenario = {
+			story,
+			id,
+			title: readerProse(opts.title, "title"),
+			preconditions: nonEmpty(opts.preconditions, "preconditions"),
+			steps,
+			expected: readerProse(opts.expected, "expected"),
+			why_needed: nonEmpty(opts.whyNeeded, "why-needed"),
+			priority,
+			risks,
+			...(opts.profile !== undefined ? { profile: opts.profile } : {}),
+			cycle,
+			...scenarioFieldPatch(opts),
+		};
+		if (index >= 0) scenarios[index] = next;
+		else scenarios.push(next);
+		mergeWriteUnlocked(sessionId, { scenarios });
+	});
+}
+
+/** Declares, once per cycle, that no scenario of this change can exercise an adversarial axis. */
+export function declareRiskNotApplicable(sessionId: string, axis: number, reason: string): void {
+	if (!isRiskAxis(axis)) throw new Error(`axis must be one of ${RISK_AXES.join("|")}`);
+	const why = readerProse(reason, "reason");
+	withStateLock(resolveStatePath(sessionId), () => {
+		const prior = readPrior(sessionId);
+		const cycle = currentCycle(prior);
+		if ((prior.scenarios ?? []).some((scenario) => scenario.cycle === cycle && (scenario.risks ?? []).includes(axis))) {
+			throw new Error(`declare-risk-na: a current scenario already exercises axis ${axis}; it is applicable`);
+		}
+		const entries = (prior.risk_not_applicable ?? []).filter((entry) => !(entry.cycle === cycle && entry.axis === axis));
+		mergeWriteUnlocked(sessionId, { risk_not_applicable: [...entries, { axis, reason: why, cycle }] });
+	});
 }
 
 function actorDriver(state: QaChainState, storyId: string): QaDriver {
@@ -877,10 +987,9 @@ export function recordBaseline(sessionId: string, opts: RecordBaselineOpts): voi
 	mergeWrite(sessionId, { stories });
 }
 
-export interface RecordCellOpts extends ScenarioFieldOpts, EvidenceSlotOpts {
+export interface RecordScenarioOpts extends ScenarioFieldOpts, EvidenceSlotOpts {
 	story: string;
-	cls: number;
-	sub?: string;
+	scenario: string;
 	status: string;
 	obstacle?: string;
 	attempts?: string;
@@ -891,7 +1000,7 @@ export interface RecordCellOpts extends ScenarioFieldOpts, EvidenceSlotOpts {
 	caseRun?: string;
 }
 
-function blockedRecord(opts: RecordCellOpts): QaBlocked {
+function blockedRecord(opts: RecordScenarioOpts): QaBlocked {
 	let attempts: unknown;
 	try {
 		attempts = JSON.parse(nonEmpty(opts.attempts, "attempts"));
@@ -910,14 +1019,18 @@ function blockedRecord(opts: RecordCellOpts): QaBlocked {
 	return blocked;
 }
 
-function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector: { story: string; cls: number; sub?: "hang-timeout" | "flaky-green" }, status: QaCellStatus, evidence: QaCell["evidence"], path: string, driver: QaDriver): QaCaseRunBinding {
-	if (status !== "pass" && status !== "fail") throw new Error("case-run can be attached only to a pass or fail cell");
+function receiptExitClean(receipt: QaCaseRunReceipt): boolean {
+	return receipt.start_error === undefined && receipt.exit_status.code === 0 && receipt.exit_status.signal === null && !receipt.exit_status.timedout && !receipt.exit_status.max_buffer_exceeded;
+}
+
+function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector: { story: string; id: string }, status: QaScenarioStatus, evidence: QaScenario["evidence"], path: string, driver: QaDriver): QaCaseRunBinding {
+	if (status !== "pass" && status !== "fail") throw new Error("case-run can be attached only to a pass or fail scenario");
 	const absoluteReceipt = resolve(path);
 	const snapshot = readQaCaseRunReceiptSnapshot(absoluteReceipt);
 	const receipt = snapshot.receipt;
 	const canonicalReceipt = realpathSync(absoluteReceipt);
 	const story = (prior.stories ?? []).find((candidate) => candidate.id === selector.story);
-	if (receipt.session_id !== sessionId || receipt.story_id !== selector.story || receipt.cycle !== currentCycle(prior) || !receipt.cell || receipt.cell.cls !== selector.cls || (receipt.cell.sub ?? undefined) !== selector.sub) throw new Error("case-run receipt does not match the current session/story/cell/cycle");
+	if (receipt.session_id !== sessionId || receipt.story_id !== selector.story || receipt.cycle !== currentCycle(prior) || receipt.scenario_id !== selector.id) throw new Error("case-run receipt does not match the current session/story/scenario/cycle");
 	const actorId = story?.actor ?? story?.actor_id;
 	if (!actorId || receipt.actor_id !== actorId) throw new Error("case-run receipt actor does not match current story actor");
 	const actor = (prior.actors ?? []).find((candidate) => candidate.id === actorId);
@@ -929,8 +1042,6 @@ function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector:
 	const recordValue: unknown = JSON.parse(caseBytes.toString("utf8"));
 	validateQaCase(recordValue);
 	if (receipt.case_id !== recordValue.id || receipt.surface !== recordValue.surface || recordValue.surface !== driver) throw new Error("case-run case identity or surface does not match actor driver");
-	const linkedCriteria = (story?.contract?.acceptance_criteria ?? []).map((index) => prior.acceptance_criteria?.[index]).filter((value): value is string => typeof value === "string");
-	if (!recordValue.acceptance_criteria.every((criterion) => linkedCriteria.includes(criterion))) throw new Error("case-run acceptance criteria are not linked to the story");
 	const runRoot = realpathSync(dirname(receipt.artifact_paths.receipt));
 	const expectedNative = (recordValue.native_files ?? []).map((file) => resolve(receipt.project_root, file));
 	if (expectedNative.length !== receipt.native_files.length || expectedNative.some((file, index) => {
@@ -941,7 +1052,7 @@ function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector:
 	if (!trusted) throw new Error("case-run receipt has no trusted registration");
 	if (trusted.receipt_path !== canonicalReceipt || trusted.attempt_id !== receipt.attempt_id) throw new Error("case-run receipt trusted registration does not match canonical path or attempt");
 	if (trusted.sha256 !== snapshot.sha256) throw new Error("case-run receipt digest does not match trusted registration");
-	if (status === "pass" && (receipt.start_error !== undefined || receipt.exit_status.code !== 0 || receipt.exit_status.signal !== null || receipt.exit_status.timedout || receipt.exit_status.max_buffer_exceeded)) throw new Error("pass case-run requires a zero, non-timeout runner result");
+	if (status === "pass" && !receiptExitClean(receipt)) throw new Error("pass case-run requires a zero, non-timeout runner result");
 	const files: Record<string, string> = {};
 	const addFile = (filePath: string, expectedHash?: string) => {
 		const canonical = realpathSync(filePath);
@@ -966,27 +1077,27 @@ function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector:
 	return { case_id: receipt.case_id, attempt_id: receipt.attempt_id, code_ref: receipt.code_ref, receipt_path: resolve(receipt.artifact_paths.receipt), files, evidence_paths: evidencePaths };
 }
 
-function recordCellUnlocked(sessionId: string, opts: RecordCellOpts): void {
-	const selector = validateCellSelector(opts.story, opts.cls, opts.sub);
-	if (opts.status === "na") throw new Error("status na is retired: fix an absent axis at authoring with author-cell --not-applicable, or record-cell --status blocked with the attempts that failed; an unexecuted cell stays unrecorded until you execute it");
-	if (opts.status === "not_applicable") throw new Error("not_applicable is decided when the cell is first authored: author-cell --not-applicable \"<why this axis does not exist on the surface>\"");
+function recordScenarioUnlocked(sessionId: string, opts: RecordScenarioOpts): void {
+	const selector = { story: nonEmpty(opts.story, "story"), id: nonEmpty(opts.scenario, "scenario") };
 	if (!isOneOf(opts.status, RESULTS)) throw new Error(`status must be one of ${RESULTS.join("|")}`);
 	const prior = readPrior(sessionId);
 	const cycle = currentCycle(prior);
-	const authored = (prior.cells ?? []).find((cell) => cell.cycle === cycle && sameCell(cell, selector));
-	if (!authored || !authored.attack_point || !authored.priority) throw new Error("record-cell requires an authored current-cycle cell");
+	const scenarios = [...(prior.scenarios ?? [])];
+	const index = scenarios.findIndex((candidate) => candidate.cycle === cycle && sameScenario(candidate, selector));
+	const authored = scenarios[index];
+	if (!authored) throw new Error("record-scenario requires a scenario authored this cycle (author-scenario)");
+	const driver = actorDriver(prior, selector.story);
 	const blocked = opts.status === "blocked" ? blockedRecord(opts) : undefined;
-	const scenarioPatch = scenarioFieldPatch(opts);
-	let evidence: QaCell["evidence"];
+	let evidence: QaScenario["evidence"];
 	if (opts.status === "pass" || (opts.status === "fail" && opts.evidencePath && opts.evidenceSurface)) {
-		if (!opts.evidencePath || !opts.evidenceSurface) throw new Error("pass cell requires evidence-path and evidence-surface");
-		evidence = { path: probeEvidence(opts.evidencePath, opts.evidenceSurface, actorDriver(prior, selector.story)), surface: opts.evidenceSurface };
+		if (!opts.evidencePath || !opts.evidenceSurface) throw new Error("pass scenario requires evidence-path and evidence-surface");
+		evidence = { path: probeEvidence(opts.evidencePath, opts.evidenceSurface, driver), surface: opts.evidenceSurface };
 	}
 	const slots = buildEvidenceSlots(opts);
 	if (slots) {
 		evidence = {
 			path: evidence?.path ?? slots.path,
-			surface: evidence?.surface ?? opts.evidenceSurface ?? actorDriver(prior, selector.story),
+			surface: evidence?.surface ?? opts.evidenceSurface ?? driver,
 			...(slots.before !== undefined ? { before: slots.before } : {}),
 			...(slots.action !== undefined ? { action: slots.action } : {}),
 			...(slots.after !== undefined ? { after: slots.after } : {}),
@@ -997,54 +1108,105 @@ function recordCellUnlocked(sessionId: string, opts: RecordCellOpts): void {
 			if (p) assertTestReportUsesTestSurface(p);
 		}
 	}
-	if ((opts.status === "pass" || opts.status === "fail") && cellNeedsVisualProof({ evidence }, actorDriver(prior, selector.story)) && !visualEvidenceComplete(evidence, stateProbe)) {
-		throw new Error("visual cell requires separate before/after screenshot files and an action record; capture the asserted screen, then record-cell again");
+	if (authored.profile && evidence?.surface === TEST_EVIDENCE_SURFACE) {
+		throw new Error(`device profile "${authored.profile}" is proven on the screen at that size; an automated test run renders at no screen size. Drive this scenario on the screen, or author an off-screen scenario without --profile`);
 	}
-	const binding = opts.caseRun ? caseRunBinding(prior, sessionId, selector, opts.status, evidence, opts.caseRun, actorDriver(prior, selector.story)) : undefined;
-	const next: QaCell = {
-		...selector,
-		attack_point: authored.attack_point,
-		priority: authored.priority,
+	if ((opts.status === "pass" || opts.status === "fail") && scenarioNeedsVisualProof({ evidence, profile: authored.profile }, driver) && !visualEvidenceComplete(evidence, stateProbe)) {
+		throw new Error(`visual scenario requires separate before/after screenshot files and an action record${authored.profile ? ` captured on device profile "${authored.profile}"` : ""}; capture the asserted screen, then record-scenario again`);
+	}
+	const binding = opts.caseRun ? caseRunBinding(prior, sessionId, selector, opts.status, evidence, opts.caseRun, driver) : undefined;
+	const { status: _status, blocked: _blocked, evidence: _evidence, evidence_review: _review, case_run: _caseRun, case: _case, ...record } = authored;
+	scenarios[index] = {
+		...record,
 		status: opts.status,
-		cycle,
 		...(blocked ? { blocked } : {}),
-		...pickScenarioFields(authored),
-		...scenarioPatch,
+		...scenarioFieldPatch(opts),
 		...(evidence ? { evidence } : {}),
 		...(binding ? { case_run: binding } : {}),
 	};
-	const cells = [...(prior.cells ?? [])];
-	const index = cells.findIndex((cell) => cell.cycle === cycle && sameCell(cell, selector));
-	cells[index] = next;
-	mergeWriteUnlocked(sessionId, { cells });
+	mergeWriteUnlocked(sessionId, { scenarios });
 }
 
-export function recordCell(sessionId: string, opts: RecordCellOpts): void {
-	withStateLock(resolveStatePath(sessionId), () => recordCellUnlocked(sessionId, opts));
+export function recordScenario(sessionId: string, opts: RecordScenarioOpts): void {
+	withStateLock(resolveStatePath(sessionId), () => recordScenarioUnlocked(sessionId, opts));
+}
+
+export interface RecordCaseOpts {
+	story: string;
+	scenario: string;
+	/** Id of a saved case this scenario was replayed from; exclusive with `none`. */
+	caseId?: string;
+	/** Reason this passed scenario has no saved case; exclusive with `caseId`. */
+	none?: string;
+	store?: QaCaseStoreOptions;
+}
+
+/** Links a passed scenario to the saved case it was replayed from, or records why it has none. */
+export function recordCase(sessionId: string, opts: RecordCaseOpts): void {
+	const selector = { story: nonEmpty(opts.story, "story"), id: nonEmpty(opts.scenario, "scenario") };
+	if ((opts.caseId === undefined) === (opts.none === undefined)) throw new Error("record-case: exactly one of --case or --none is required");
+	withStateLock(resolveStatePath(sessionId), () => {
+		const prior = readPrior(sessionId);
+		const cycle = currentCycle(prior);
+		const scenarios = [...(prior.scenarios ?? [])];
+		const index = scenarios.findIndex((candidate) => candidate.cycle === cycle && sameScenario(candidate, selector));
+		const scenario = scenarios[index];
+		if (!scenario) throw new Error(`record-case: scenario ${selector.story}/${selector.id} is not authored in the current cycle`);
+		if (scenario.status !== "pass") throw new Error(`record-case: scenario ${selector.story}/${selector.id} must be pass (current status: ${scenario.status ?? "unrecorded"})`);
+		let link: QaScenarioCase;
+		if (opts.none !== undefined) {
+			if (opts.none.trim() === "") throw new Error("record-case: --none requires a nonblank reason");
+			link = { kind: "none", reason: opts.none.trim() };
+		} else {
+			const caseId = nonEmpty(opts.caseId, "case");
+			const saved = getQaCase(caseId, opts.store);
+			if (saved.status !== "ok" || !("record" in saved)) throw new Error(`record-case: case "${caseId}" is not in the case store (store status: ${saved.status})`);
+			const matching = (prior.trusted_receipts ?? []).flatMap((trusted) => {
+				try { return [{ trusted, snapshot: readQaCaseRunReceiptSnapshot(trusted.receipt_path) }]; } catch { return []; }
+			}).filter(({ snapshot }) => snapshot.receipt.session_id === sessionId && snapshot.receipt.story_id === selector.story && snapshot.receipt.scenario_id === selector.id && snapshot.receipt.cycle === cycle && snapshot.receipt.case_id === caseId);
+			const current = matching.filter(({ snapshot }) => snapshot.receipt.case_revision === saved.revision);
+			const latest = current.at(-1);
+			if (!latest) throw new Error(`record-case: no trusted replay receipt for case "${caseId}"${matching.length ? " at its current revision" : ""} on ${selector.story}/${selector.id} in this cycle; replay it with qa-replay.ts first`);
+			if (latest.snapshot.sha256 !== latest.trusted.sha256) throw new Error("record-case: receipt bytes changed since registration; replay the case again");
+			if (!receiptExitClean(latest.snapshot.receipt)) throw new Error(`record-case: the latest replay of case "${caseId}" did not exit cleanly (code 0, no signal, no timeout, no start error)`);
+			link = { kind: "saved", id: caseId, revision: saved.revision, receipt_path: latest.trusted.receipt_path, attempt_id: latest.trusted.attempt_id };
+		}
+		scenarios[index] = { ...scenario, case: link };
+		mergeWriteUnlocked(sessionId, { scenarios });
+	});
 }
 
 /** Store a judgment made by opening the raw evidence; never infer it from filenames. */
-export function reviewEvidence(sessionId: string, story: string, cls: number, sub: string | undefined, input: unknown): void {
-	const selector = validateCellSelector(story, cls, sub);
+export function reviewEvidence(sessionId: string, story: string, scenarioId: string, input: unknown): void {
+	const selector = { story: nonEmpty(story, "story"), id: nonEmpty(scenarioId, "scenario") };
 	withStateLock(resolveStatePath(sessionId), () => {
 		const prior = readPrior(sessionId);
-		const cells = [...(prior.cells ?? [])];
-		const index = cells.findIndex((cell) => cell.cycle === currentCycle(prior) && sameCell(cell, selector));
-		const cell = cells[index];
-		if (!cell || (cell.status !== "pass" && cell.status !== "fail") || !cell.evidence) throw new Error("review-evidence requires an executed current-cycle cell with evidence");
+		const scenarios = [...(prior.scenarios ?? [])];
+		const index = scenarios.findIndex((candidate) => candidate.cycle === currentCycle(prior) && sameScenario(candidate, selector));
+		const scenario = scenarios[index];
+		if (!scenario || (scenario.status !== "pass" && scenario.status !== "fail") || !scenario.evidence) throw new Error("review-evidence requires an executed current-cycle scenario with evidence");
 		if (!Array.isArray(input) || input.length === 0) throw new Error("review-evidence requires a nonempty claim array");
 		const claims: QaEvidenceClaim[] = input.map((item) => {
 			if (!item || typeof item !== "object") throw new Error("invalid evidence claim");
-			const claim = nonEmpty(item.claim, "claim");
-			const observation = nonEmpty(item.observation, "observation");
+			const claim = readerProse(item.claim, "claim");
+			const observation = readerProse(item.observation, "observation");
 			if (item.verdict !== "supported" && item.verdict !== "insufficient") throw new Error("claim verdict must be supported or insufficient");
 			if (typeof item.gap !== "string" || (item.verdict === "supported" ? item.gap !== "" : !item.gap.trim())) throw new Error("supported claims require empty gap; insufficient claims require recapture instructions");
 			if (!Array.isArray(item.sources) || item.sources.length === 0) throw new Error("claim requires inspected sources");
-			const sources = item.sources.map((source: { path?: unknown; location?: unknown }) => ({ path: probePlainFile(nonEmpty(source?.path, "source path")), location: nonEmpty(source?.location, "source location") }));
-			return { claim, observation, verdict: item.verdict, gap: item.gap, sources };
+			const sources = item.sources.map((source: { path?: unknown; location?: unknown }) => ({ path: probePlainFile(nonEmpty(source?.path, "source path")), location: readerLabel(source?.location, "source location") }));
+			if (item.kind === undefined) return { claim, observation, verdict: item.verdict, gap: item.gap, sources };
+			if (item.kind !== "layout" && item.kind !== "cause") throw new Error('claim kind must be "layout" or "cause" when given');
+			const required = item.kind === "layout" ? LAYOUT_CHECKS : CAUSE_CHECKS;
+			const checked: unknown[] = Array.isArray(item.checked) ? item.checked : [];
+			const missing = required.filter((check) => !checked.includes(check));
+			if (missing.length) throw new Error(`${item.kind} claim must record checked: ${missing.join(", ")}`);
+			return { claim, observation, verdict: item.verdict, gap: item.gap, sources, kind: item.kind, checked: [...required] };
 		});
+		if (scenario.profile && !claims.some((claim) => claim.kind === "layout")) {
+			throw new Error(`profile scenario needs a layout claim for "${scenario.profile}": {"kind":"layout","checked":${JSON.stringify(LAYOUT_CHECKS)}, …} observing that nothing is clipped or overlapping, the page does not scroll sideways, and text wraps without breaking`);
+		}
 		if (new Set(claims.map((claim) => claim.claim.trim())).size !== claims.length) throw new Error("duplicate evidence claims");
-		const paths = [cell.evidence.path, cell.evidence.before, cell.evidence.action, cell.evidence.after, ...claims.flatMap((claim) => claim.sources.map((source) => source.path))];
+		const paths = [scenario.evidence.path, scenario.evidence.before, scenario.evidence.action, scenario.evidence.after, ...claims.flatMap((claim) => claim.sources.map((source) => source.path))];
 		const files: Record<string, string> = {};
 		for (const path of paths) {
 			if (!path) continue;
@@ -1052,8 +1214,8 @@ export function reviewEvidence(sessionId: string, story: string, cls: number, su
 			if (!file.exists || !file.size || !file.sha256) throw new Error(`review-evidence: unreadable file ${path}`);
 			files[path] = file.sha256;
 		}
-		cells[index] = { ...cell, evidence_review: { claims, files, cell_snapshot: evidenceReviewSnapshot(cell) } };
-		mergeWriteUnlocked(sessionId, { cells });
+		scenarios[index] = { ...scenario, evidence_review: { claims, files, cell_snapshot: evidenceReviewSnapshot(scenario) } };
+		mergeWriteUnlocked(sessionId, { scenarios });
 	});
 }
 
@@ -1116,13 +1278,13 @@ export function setVerdict(sessionId: string, verdict: string): void {
 		ensureSeed("qa", sessionId);
 		const prior = readPrior(sessionId);
 		if (verdict === "APPROVE" && !approveOk(prior, stateProbe)) {
-			throw new Error("set-verdict: APPROVE refused — approveOk is false; execute and record every remaining cell (pass/fail), or record-cell --status blocked with the attempts that failed");
+			throw new Error("set-verdict: APPROVE refused — approveOk is false; APPROVE needs every scenario pass. Execute and record every remaining scenario; a blocked scenario leaves its requirement unproven, so the verdict is COMMENT at most");
 		}
 		if (verdict === "COMMENT" && !commentOk(prior, stateProbe)) {
-			throw new Error("set-verdict: COMMENT refused — commentOk is false; every cell must be recorded, and only a non-H fail may remain");
+			throw new Error("set-verdict: COMMENT refused — commentOk is false; every scenario must be recorded, and an H fail with a supported cause claim asks for REQUEST_CHANGES");
 		}
 		if (verdict === "REQUEST_CHANGES" && !cycleUntouched(prior) && !requestChangesOk(prior, stateProbe)) {
-			throw new Error("set-verdict: REQUEST_CHANGES refused — it requires a recorded failure (a fail cell, baseline, or run check). Unexecuted cells are your remaining work, not a product defect: execute them, or record-cell --status blocked with the attempts that failed");
+			throw new Error("set-verdict: REQUEST_CHANGES refused — it requires a recorded failure (a failed scenario, baseline, or run check); a failed scenario counts once its review-evidence carries a supported {\"kind\":\"cause\",\"checked\":[\"product-path\",\"base-commit\"]} claim citing the product's own log line or code location and the base commit run or diff hunk (and, on a screen, its screenshots). If you cannot show the cause, fix the setup and re-drive, or keep it as an open finding under COMMENT. Unexecuted scenarios are your remaining work, not a product defect: execute them, or record-scenario --status blocked with the attempts that failed");
 		}
 		mergeWriteUnlocked(sessionId, { verdict });
 	});
@@ -1130,7 +1292,8 @@ export function setVerdict(sessionId: string, verdict: string): void {
 
 /**
  * Marks a legitimate pause at a human-decision gate: the model posed a plain-text
- * question the user must answer (e.g. whether to waive a cell) and is about to yield
+ * question the user must answer (e.g. a question about the requirement, or a step
+ * only a person can perform such as entering a pairing code) and is about to yield
  * the turn. The Stop gate then allows the turn to end WITHOUT a verdict, and the next
  * progress write auto-clears the flag. Refuses when no live QA cycle exists — a pause
  * is meaningless without an in-flight verification.
@@ -1151,13 +1314,13 @@ export function setAcceptance(sessionId: string, criteria: string[]): void {
 	if (!criteria.every((item) => typeof item === "string")) {
 		throw new Error("set-acceptance: every acceptance item must be a string");
 	}
-	const cleaned = criteria.map((item) => nonEmpty(item, "acceptance item"));
+	const cleaned = criteria.map((item) => readerProse(item, "acceptance item"));
 	withStateLock(resolveStatePath(sessionId), () => {
 		const prior = readPrior(sessionId);
 		const cycle = currentCycle(prior);
 		for (const story of prior.stories ?? []) {
-			const evidenced = story.baseline?.cycle === cycle || (prior.cells ?? []).some((cell) =>
-				cell.story === story.id && cell.cycle === cycle && (cell.status !== undefined || cell.evidence !== undefined));
+			const evidenced = story.baseline?.cycle === cycle || (prior.scenarios ?? []).some((scenario) =>
+				scenario.story === story.id && scenario.cycle === cycle && (scenario.status !== undefined || scenario.evidence !== undefined));
 			if (evidenced && story.contract) {
 				for (const index of story.contract.acceptance_criteria) {
 					if (prior.acceptance_criteria?.[index] !== cleaned[index]) {
@@ -1194,9 +1357,10 @@ export function startQa(sessionId: string, target: string): void {
 			started_at: prior.started_at ?? seedStartedAt(),
 			actors: [],
 			stories: [],
-			cells: [],
+			scenarios: [],
+			risk_not_applicable: [],
+			device_profiles: [],
 			run_checks: null,
-			waives: [],
 			acceptance_criteria: [],
 			verdict: null,
 			trusted_receipts: [],
@@ -1233,6 +1397,10 @@ export function completeQa(sessionId: string): void {
 	withStateLock(resolveStatePath(sessionId), () => {
 		ensureSeed("qa", sessionId);
 		const prior = readPrior(sessionId);
+		const uncovered = scenariosMissingCase(prior);
+		if (uncovered.length) {
+			throw new Error(`complete: refused — ${uncovered.length} H scenario(s) passed by driving the boundary but have no saved case or reason. Save each as a reusable case (qa-cases.ts save), replay it (qa-replay.ts), then link it; if it cannot be a case, record why:\n${uncovered.map((scenario) => `  record-case --story ${scenario.story} --scenario ${scenario.id} (--case <id> | --none "<reason>")`).join("\n")}`);
+		}
 		if (!qaReportComplete(prior, stateProbe)) throw new Error("complete: report missing, changed, or not visually reviewed; render qa-report then review-report --path <html>");
 		const verdict = prior.verdict;
 		const canComplete =
@@ -1279,9 +1447,8 @@ export function forceCompleteQa(sessionId: string, reason: string): { id: string
 
 export type QaView = QaState & {
 	report_source_snapshot?: string;
-	prior_cycle_cells: QaCell[];
-	prior_cycle_waives: QaWaive[];
-	verdict_report: { verdict: QaState["verdict"]; cycle: number; waives: QaWaive[]; inert?: QaInert };
+	prior_cycle_scenarios: QaScenario[];
+	verdict_report: { verdict: QaState["verdict"]; cycle: number; inert?: QaInert };
 };
 
 function isPriorCycleRecord(value: unknown, cycle: number): boolean {
@@ -1298,9 +1465,7 @@ export function readQaView(sessionId: string): QaView | null {
 	const state = readQaState(sessionId);
 	if (!state) return null;
 	const cycle = currentCycle(state);
-	const cells = state.cells ?? [];
-	const waives = state.waives ?? [];
-	const currentWaives = waives.filter((waive) => waive.cycle === cycle);
+	const scenarios = state.scenarios ?? [];
 	const currentInert = state.inert?.cycle === undefined || state.inert.cycle === cycle ? state.inert : undefined;
 	const stories = (state.stories ?? []).map((story) => {
 		const currentProvenance = story.provenance?.cycle === cycle ? story.provenance : undefined;
@@ -1329,11 +1494,10 @@ export function readQaView(sessionId: string): QaView | null {
 		report_source_snapshot: qaReportSnapshot(state),
 		stories,
 		run_checks: runChecks,
-		cells: cells.filter((cell) => cell.cycle === cycle),
-		waives: currentWaives,
-		prior_cycle_cells: cells.filter((cell) => cell.cycle !== cycle),
-		prior_cycle_waives: waives.filter((waive) => waive.cycle !== cycle),
-		verdict_report: { verdict: state.verdict, cycle, waives: currentWaives, ...(currentInert ? { inert: currentInert } : {}) },
+		scenarios: scenarios.filter((scenario) => scenario.cycle === cycle),
+		risk_not_applicable: (state.risk_not_applicable ?? []).filter((entry) => entry.cycle === cycle),
+		prior_cycle_scenarios: scenarios.filter((scenario) => scenario.cycle !== cycle),
+		verdict_report: { verdict: state.verdict, cycle, ...(currentInert ? { inert: currentInert } : {}) },
 	};
 }
 
@@ -1374,23 +1538,24 @@ function requiredArg(args: Record<string, string | boolean>, name: string): stri
 /**
  * Single source of truth for this CLI's command roster: every subcommand `main()`
  * dispatches, tagged with who may run it. `help` prints this via renderHelp() so the
- * AI can see, before acting, which commands it may run itself. Every qa command is
- * AI-runnable; `waive` records its reason, and the report shows each waive at the top.
+ * AI can see, before acting, which commands it may run itself.
  */
 const ROSTER: CliCommand[] = [
 	{ name: "set", authority: "ai", effect: "writes phase/target state" },
 	{ name: "advance-phase", authority: "ai", effect: "advances to the named phase (chain-gated)" },
 	{ name: "inc-cycle", authority: "ai", effect: "increments the fix-loop cycle counter" },
-	{ name: "add-actor", authority: "ai", effect: "adds one actor to the roster" },
+	{ name: "add-actor", authority: "ai", effect: "adds one actor: --client-impact none|contract|render with --client-impact-reason; render needs a screen driver and --profiles '[ids]' from qa-device-profiles.ts" },
 	{ name: "add-story", authority: "ai", effect: "adds a story with goal, given/when/then JSON arrays, and acceptance-criteria index links" },
 	{ name: "record-story-provenance", authority: "ai", effect: "records JSON {features:[{id,revision,entrypoints,states}],code_ref}; features non-empty, entrypoints/states may be empty" },
-	{ name: "author-cell", authority: "ai", effect: "authors one scenario cell's attack plan" },
-	{ name: "record-baseline", authority: "ai", effect: "records a story's BASELINE result" },
-	{ name: "record-cell", authority: "ai", effect: "records one scenario cell's execution result; --evidence-surface accepts the actor's own driver or \"test\" for an automated test run that exercises the scenario; optional --case-run RECEIPT binds replay provenance" },
+	{ name: "author-scenario", authority: "ai", effect: "authors one user scenario: --story --id --title --preconditions --steps '[…]' --expected --why-needed --priority H|M|L [--risks '[1..6]'] [--profile id]" },
+	{ name: "declare-risk-na", authority: "ai", effect: "declares an adversarial axis (--axis 1..6) that no scenario of this change can exercise, with --reason; once per cycle" },
+	{ name: "record-baseline", authority: "ai", effect: "records a story's BASELINE result: fail only when the change adds a build/test/lint failure; a failure the base commit has too is pass with a --note" },
+	{ name: "record-scenario", authority: "ai", effect: "records one scenario's execution result (--story --scenario --status pass|fail|blocked); --evidence-surface accepts the actor's own driver or \"test\" for an automated test run that exercises the scenario; optional --case-run RECEIPT binds replay provenance" },
+	{ name: "record-case", authority: "ai", effect: "links a passed scenario to its saved, replayed case or records why it has none: --story --scenario (--case <id> | --none \"<reason>\") [--project DIR]; complete refuses an H scenario proven at its boundary that has neither" },
 	{
 		name: "review-evidence",
 		authority: "ai",
-		effect: "records the evidence-sufficiency review for a cell",
+		effect: "records the evidence-sufficiency review for a scenario (--story --scenario --json-file)",
 	},
 	{
 		name: "review-report",
@@ -1406,17 +1571,17 @@ const ROSTER: CliCommand[] = [
 	{
 		name: "acquire-device",
 		authority: "ai",
-		effect: "starts a simulator/emulator owned by this session (--platform ios|android --base <device type|AVD> [--runtime <id>]) and records it; prints IOS_UDID=/ANDROID_SERIAL=",
+		effect: "starts a simulator/emulator owned by this session (--platform ios|android --base <device type|AVD> [--runtime <id>] [--emulator-args '<JSON array>']) and records it; prints IOS_UDID=/ANDROID_SERIAL=",
 	},
 	{
 		name: "record-resource",
 		authority: "ai",
-		effect: "records a background resource this run started (--id --kind --stop <command>); complete refuses until it is released",
+		effect: "records a background resource this run started (--id --kind --stop <command> [--device <serial|UDID> when it lives on an acquired device]); complete refuses until it is released",
 	},
 	{
 		name: "release-resource",
 		authority: "ai",
-		effect: "runs the recorded stop command for --id and marks it released only when the command exits 0",
+		effect: "runs the recorded stop command for --id and marks it released only when the command exits 0; releasing a device also releases what was recorded with --device on it",
 	},
 	{
 		name: "complete",
@@ -1472,6 +1637,10 @@ function main(): void {
 					boundary: str(args["boundary"]),
 					driver: str(args["driver"]),
 					reachable: requiredArg(args, "reachable"),
+					clientImpact: str(args["client-impact"]),
+					clientImpactReason: str(args["client-impact-reason"]),
+					profiles: args["profiles"] === undefined ? undefined : parseJsonArray(requiredArg(args, "profiles"), "profiles").map((id) => nonEmpty(id, "profiles item")),
+					project: str(args["project"]),
 				});
 			} else if (subcommand === "add-story") {
 				const parseJsonArg = (name: string): unknown => {
@@ -1492,18 +1661,26 @@ function main(): void {
 			} else if (subcommand === "record-story-provenance") {
 				const input = JSON.parse(requiredArg(args, "json"));
 				recordStoryProvenance(sessionId, requiredArg(args, "story"), input, { cwd: str(args["project"]) });
-			} else if (subcommand === "author-cell") {
-				authorCell(sessionId, {
+			} else if (subcommand === "author-scenario") {
+				authorScenario(sessionId, {
 					story: requiredArg(args, "story"),
-					cls: Number(requiredArg(args, "cls")),
-					sub: str(args["sub"]),
-					attackPoint: requiredArg(args, "attack-point"),
+					id: requiredArg(args, "id"),
+					title: requiredArg(args, "title"),
+					preconditions: requiredArg(args, "preconditions"),
+					steps: parseJsonArray(requiredArg(args, "steps"), "steps"),
+					expected: requiredArg(args, "expected"),
+					whyNeeded: requiredArg(args, "why-needed"),
 					priority: requiredArg(args, "priority"),
-					notApplicable: str(args["not-applicable"]),
+					risks: args["risks"] === undefined ? undefined : parseJsonArray(requiredArg(args, "risks"), "risks"),
+					profile: str(args["profile"]),
 					drivenAt: str(args["driven-at"]),
-					whyNeeded: str(args["why-needed"]),
 					source: str(args["source"]),
 				});
+			} else if (subcommand === "declare-risk-na") {
+				declareRiskNotApplicable(sessionId, Number(requiredArg(args, "axis")), requiredArg(args, "reason"));
+			} else if (subcommand === "author-cell" || subcommand === "record-cell") {
+				// Retired: cells were one row per adversarial axis, not a user scenario.
+				throw new Error(`${subcommand} is retired: author user scenarios with author-scenario (tag the adversarial axes each one exercises with --risks), declare an axis no scenario can exercise with declare-risk-na, and record results with record-scenario`);
 			} else if (subcommand === "record-baseline") {
 				recordBaseline(sessionId, {
 					story: requiredArg(args, "story"),
@@ -1512,11 +1689,10 @@ function main(): void {
 					evidencePath: str(args["evidence-path"]),
 					evidenceSurface: str(args["evidence-surface"]),
 				});
-			} else if (subcommand === "record-cell") {
-				recordCell(sessionId, {
+			} else if (subcommand === "record-scenario") {
+				recordScenario(sessionId, {
 					story: requiredArg(args, "story"),
-					cls: Number(requiredArg(args, "cls")),
-					sub: str(args["sub"]),
+					scenario: requiredArg(args, "scenario"),
 					status: requiredArg(args, "status"),
 					obstacle: str(args["obstacle"]),
 					attempts: str(args["attempts"]),
@@ -1525,15 +1701,22 @@ function main(): void {
 					evidencePath: str(args["evidence-path"]),
 					evidenceSurface: str(args["evidence-surface"]),
 					drivenAt: str(args["driven-at"]),
-					whyNeeded: str(args["why-needed"]),
 					source: str(args["source"]),
 					evidenceBefore: str(args["evidence-before"]),
 					evidenceAction: str(args["evidence-action"]),
 					evidenceAfter: str(args["evidence-after"]),
 					caseRun: str(args["case-run"]),
 				});
+			} else if (subcommand === "record-case") {
+				recordCase(sessionId, {
+					story: requiredArg(args, "story"),
+					scenario: requiredArg(args, "scenario"),
+					caseId: str(args["case"]),
+					none: str(args["none"]),
+					store: { cwd: str(args["project"]) },
+				});
 			} else if (subcommand === "review-evidence") {
-				reviewEvidence(sessionId, requiredArg(args, "story"), Number(requiredArg(args, "cls")), str(args["sub"]), JSON.parse(readFileSync(requiredArg(args, "json-file"), "utf8")));
+				reviewEvidence(sessionId, requiredArg(args, "story"), requiredArg(args, "scenario"), JSON.parse(readFileSync(requiredArg(args, "json-file"), "utf8")));
 			} else if (subcommand === "review-report") {
 				reviewReport(sessionId, requiredArg(args, "path"));
 			} else if (subcommand === "record-run-check") {
@@ -1559,18 +1742,27 @@ function main(): void {
 			} else if (subcommand === "waive") {
 				// Retired: a reason-only exemption let an unexecuted cell pass the gate.
 				// Waives already persisted in state stay readable and keep resolving.
-				throw new Error("waive is retired: execute the cell, or record-cell --status blocked --obstacle … --attempts '[…]' --deepest-reachable … --attempt-log <file>");
+				throw new Error("waive is retired: execute the scenario, or record-scenario --status blocked --obstacle … --attempts '[…]' --deepest-reachable … --attempt-log <file>");
 			} else if (subcommand === "acquire-device") {
 				const platform = requiredArg(args, "platform");
-				const id = acquireDevice(sessionId, { platform, base: requiredArg(args, "base"), runtime: str(args["runtime"]) });
+				const rawEmulatorArgs = str(args["emulator-args"]);
+				const emulatorArgs: unknown = rawEmulatorArgs === undefined ? undefined : JSON.parse(rawEmulatorArgs);
+				if (emulatorArgs !== undefined && !(Array.isArray(emulatorArgs) && emulatorArgs.every((arg) => typeof arg === "string"))) {
+					throw new Error("acquire-device: --emulator-args must be a JSON array of strings");
+				}
+				const id = acquireDevice(sessionId, { platform, base: requiredArg(args, "base"), runtime: str(args["runtime"]), emulatorArgs });
+				const flags = `--platform ${platform} ${platform === "ios" ? "--udid" : "--serial"} ${id} --session qa-${id}`;
 				process.stdout.write(
-					`${platform === "ios" ? "IOS_UDID" : "ANDROID_SERIAL"}=${id}\nacquired and recorded: this device belongs to this session only. Export the line above, and release it with release-resource --id ${id} at cleanup.\n`,
+					`${platform === "ios" ? "IOS_UDID" : "ANDROID_SERIAL"}=${id}\nacquired and recorded: this device belongs to this session only. Export the line above, and release it with release-resource --id ${id} at cleanup.\n` +
+						`drive it with these flags on every agent-device command: ${flags} (a web page: agent-device open <url> ${flags}). ` +
+						`If a command reports the device held by a session you opened, run agent-device close --session <that name> and retry; that is a driver step, not a blocked reason.\n`,
 				);
 			} else if (subcommand === "record-resource") {
 				recordResource(sessionId, {
 					id: requiredArg(args, "id"),
 					kind: requiredArg(args, "kind"),
 					stop: requiredArg(args, "stop"),
+					device: str(args["device"]),
 				});
 				process.stdout.write("recorded: complete refuses until this resource is released with release-resource.\n");
 			} else if (subcommand === "release-resource") {

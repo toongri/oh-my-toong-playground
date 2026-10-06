@@ -7,6 +7,7 @@ import {
 	acquireDevice,
 	adoptResources,
 	type DeviceDeps,
+	emulatorLogPath,
 	recordResource,
 	releaseResource,
 	resolveResourcesPath,
@@ -81,6 +82,26 @@ describe("session resources", () => {
 		expect(unreleasedResources("src")).toEqual([]);
 	});
 
+	test("기기에 건 자원은 기기를 해제하면 stop 명령 없이 함께 해제된다", () => {
+		recordResource(SID, { id: "emulator-5560", kind: "emulator", stop: "true" });
+		recordResource(SID, { id: "reverse-8011", kind: "adb-reverse", stop: "exit 1", device: "emulator-5560" });
+		recordResource(SID, { id: "srv", kind: "server", stop: "true" });
+		releaseResource(SID, "emulator-5560");
+		expect(unreleasedResources(SID).map((r) => r.id)).toEqual(["srv"]);
+	});
+
+	test("이 세션이 쥐고 있지 않은 기기에는 자원을 걸 수 없다", () => {
+		expect(() => recordResource(SID, { id: "reverse", kind: "adb-reverse", stop: "true", device: "emulator-5560" })).toThrow("not a device this session holds");
+		recordResource(SID, { id: "emulator-5560", kind: "emulator", stop: "true" });
+		releaseResource(SID, "emulator-5560");
+		expect(() => recordResource(SID, { id: "reverse", kind: "adb-reverse", stop: "true", device: "emulator-5560" })).toThrow("not a device this session holds");
+	});
+
+	test("기기가 아닌 자원에는 다른 자원을 걸 수 없다", () => {
+		recordResource(SID, { id: "srv", kind: "server", stop: "true" });
+		expect(() => recordResource(SID, { id: "reverse", kind: "adb-reverse", stop: "true", device: "srv" })).toThrow("not a device this session holds");
+	});
+
 	test("빈 필드 기록과 없는 id 해제는 거부된다", () => {
 		expect(() => recordResource(SID, { id: "x", kind: "emulator", stop: " " })).toThrow("--stop is required");
 		expect(() => releaseResource(SID, "missing")).toThrow("no recorded resource");
@@ -122,6 +143,14 @@ describe("acquireDevice", () => {
 		expect(unreleasedResources(SID)[0].id).toBe("emulator-5556");
 	});
 
+	test("Android는 프로젝트 런북의 에뮬레이터 인자를 태그 뒤에 붙이고 소유 인자는 거부한다", () => {
+		const deps = fakeDeps({ "devices": { status: 0, stdout: "" }, "sys.boot_completed": { status: 0, stdout: "1\n" } });
+		acquireDevice(SID, { platform: "android", base: "Pixel", emulatorArgs: ["-writable-system", "-qemu", "-device", "virtio-serial-pci"] }, deps);
+		const launch = deps.calls.find((c) => c[0] === "launch") ?? [];
+		expect(launch.join(" ")).toEndWith(`-prop qemu.omt.session=${SID} -writable-system -qemu -device virtio-serial-pci`);
+		expect(() => acquireDevice(SID, { platform: "android", base: "Pixel", emulatorArgs: ["-port", "5560"] }, deps)).toThrow("may not set -port");
+	});
+
 	test("Android stop은 태그가 맞는 프로세스가 없으면 다른 세션 기기를 건드리지 않고 해제된다", () => {
 		const deps = fakeDeps({ "devices": { status: 0, stdout: "" }, "sys.boot_completed": { status: 0, stdout: "1" } });
 		acquireDevice(SID, { platform: "android", base: "Pixel" }, deps);
@@ -135,8 +164,10 @@ describe("acquireDevice", () => {
 			"sys.boot_completed": { status: 0, stdout: "1" },
 			"qemu.omt.session": { status: 1, stdout: "" },
 		});
-		expect(() => acquireDevice(SID, { platform: "android", base: "Pixel" }, deps)).toThrow("exited before booting");
+		writeFileSync(emulatorLogPath("emulator-5554", SID), "INFO boot\nFATAL: Not enough space to create userdata partition\n");
+		expect(() => acquireDevice(SID, { platform: "android", base: "Pixel" }, deps)).toThrow("Not enough space to create userdata partition");
 		expect(unreleasedResources(SID)[0].id).toBe("emulator-5554");
+		rmSync(emulatorLogPath("emulator-5554", SID));
 	});
 
 	test("잘못된 platform과 빈 base는 거부된다", () => {

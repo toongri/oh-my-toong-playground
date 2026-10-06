@@ -81,5 +81,5 @@ qa_driver_command_is_e2e() {
 }
 
 qa_driver_deny_reason() {
-    printf '%s\n' 'QA driver gate: author the actor roster and scenario cells before running agent-device, agent-browser, curl, or bash commands.'
+    printf '%s\n' 'QA driver gate: author the actor roster and user scenarios before running agent-device, agent-browser, curl, or bash commands.'
 }

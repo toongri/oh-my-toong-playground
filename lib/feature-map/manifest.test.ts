@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, statSync, rmSync, realpathSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync, statSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -30,14 +30,16 @@ function gitRepo(name = "repo"): string {
 }
 
 describe("feature-map manifest", () => {
-  test("처음 호출하면 null storage 매니페스트를 만들고 다시 호출해도 보존한다", () => {
+  test("처음 호출하면 manifest 옆 store를 기본 저장소로 설정하고 다시 호출해도 보존한다", () => {
     const cwd = gitRepo("my repo");
     const home = tempDir();
     const first = ensureFeatureMapManifest({ cwd, home });
     const before = readFileSync(first.context.manifestPath, "utf8");
     const second = ensureFeatureMapManifest({ cwd, home });
 
-    expect(first.manifest).toEqual({ version: 1, project: first.context.projectKey, storage: null });
+    const location = join(dirname(first.context.manifestPath), "store");
+    expect(first.manifest).toEqual({ version: 1, project: first.context.projectKey, storage: { format: "markdown-frontmatter-v1", location } });
+    expect(statSync(location).isDirectory()).toBe(true);
     expect(second).toEqual(first);
     expect(readFileSync(first.context.manifestPath, "utf8")).toBe(before);
   });
@@ -49,7 +51,28 @@ describe("feature-map manifest", () => {
     const result = ensureFeatureMapManifest({ cwd, home });
 
     expect(result.context.projectRoot).toBe(realpathSync(cwd));
-    expect(result.manifest.storage).toBeNull();
+    expect(result.manifest.storage?.location).toBe(join(dirname(result.context.manifestPath), "store"));
+  });
+
+  test("storage: null 기존 매니페스트는 기본 저장소로 전환하고 확장 필드를 보존한다", () => {
+    const cwd = gitRepo();
+    const home = tempDir();
+    const context = resolveFeatureMapContext({ cwd, home });
+    mkdirSync(dirname(context.manifestPath), { recursive: true });
+    writeFileSync(context.manifestPath, `version: 1\nproject: ${context.projectKey}\nstorage: null\nextra:\n  keep: true\n`);
+    const result = ensureFeatureMapManifest({ cwd, home });
+    expect(result.manifest.storage?.location).toBe(join(dirname(context.manifestPath), "store"));
+    const text = readFileSync(context.manifestPath, "utf8");
+    expect(text).toContain("keep: true");
+    expect(text).toContain("markdown-frontmatter-v1");
+  });
+
+  test("명시 configure는 기본 store 디렉터리를 만들지 않는다", () => {
+    const cwd = gitRepo();
+    const home = tempDir();
+    const result = configureFeatureMap("custom", { cwd, home });
+    expect(result.manifest.storage?.location).toBe(join(dirname(result.context.manifestPath), "custom"));
+    expect(existsSync(join(dirname(result.context.manifestPath), "store"))).toBe(false);
   });
 
   test("손상된 Git 설정 오류는 비저장소 fallback으로 숨기지 않는다", () => {

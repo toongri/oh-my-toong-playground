@@ -1504,7 +1504,7 @@ describe("qa seed chain parity", () => {
 		const state = readState(omtDir, "qa-state-S.json") as Record<string, any>;
 		expect(state.actors).toEqual([]);
 		expect(state.stories).toEqual([]);
-		expect(state.cells).toEqual([]);
+		expect(state.scenarios).toEqual([]);
 		expect(state.run_checks).toBeNull();
 		expect(state.phase_max).toBe(0);
 		expect(state.derived).toEqual({
@@ -1554,14 +1554,14 @@ describe("qa seed chain parity", () => {
 	test("touch preserves qa chain fields", () => {
 		const before = {
 			active: true, phase: "PLAN", phase_max: 1, cycle: 1, target: "app",
-			actors: [{ id: "dev" }], stories: [{ id: "s1", actor: "dev" }], cells: [],
+			actors: [{ id: "dev" }], stories: [{ id: "s1", actor: "dev" }], scenarios: [],
 			run_checks: { stale_state: { status: "pass", cycle: 1 } },
 			derived: { driver_gate_armed: true }, started_at: "x", last_touched_at: "x",
 		};
 		writeState(omtDir, "qa-state-S.json", before);
 		touchSessionStates("S");
 		const after = readState(omtDir, "qa-state-S.json") as Record<string, any>;
-		for (const key of ["phase_max", "actors", "stories", "cells", "run_checks", "derived"] as const) {
+		for (const key of ["phase_max", "actors", "stories", "scenarios", "run_checks", "derived"] as const) {
 			expect(after[key]).toEqual(before[key]);
 		}
 	});

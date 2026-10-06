@@ -1,9 +1,10 @@
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 
-import { BASELINE_INDEX, chainComplete, type QaCell, type QaStory } from "@lib/qa-chain-core.ts";
+import { BASELINE_INDEX, chainComplete, type QaScenario, type QaStory } from "@lib/qa-chain-core.ts";
 import { getQaCase, getQaCaseStoreStatus, resolveQaCaseContext, type QaCaseRecord, type QaCaseStoreOptions } from "@lib/qa-case-store.ts";
 import { runQaCase } from "@lib/qa-case-run.ts";
+import { heldDevice, unreleasedResources } from "@lib/session-resources.ts";
 import { resolveSessionIdOrThrow } from "@lib/state-core";
 import { readQaState, registerQaCaseRunReceipt } from "./qa-state.ts";
 
@@ -34,15 +35,17 @@ function optionalPositiveNumber(args: Record<string, string | boolean>, key: str
 }
 function help(): string {
 	return [
-		"Usage: qa-replay.ts --case ID --story ID --cls N [--sub SUB] --project DIR --code-ref STR --reset-confirmed STR [--timeout-ms N] [--max-buffer N] [--allow-project-cwd]",
+		"Usage: qa-replay.ts --case ID --story ID --scenario ID --project DIR --code-ref STR --reset-confirmed STR [--timeout-ms N] [--max-buffer N] [--allow-project-cwd] [--device SERIAL]",
 		"",
-		"Runs the saved native case only after the active QA actor→story→cell chain is complete.",
+		"Runs the saved native case only after the active QA actor→story→scenario chain is complete.",
+		"The case's feature_refs must include a feature recorded in the story's provenance.",
 		"The reset confirmation must exactly equal the saved reset_description.",
-		"Runner success creates a receipt but never records a QA cell PASS.",
-		"Unconfigured, disabled, or missing cases print structured status and exit nonzero; --help exits zero.",
+		"Runner success creates a receipt but never records a QA scenario PASS.",
+		"A disabled store or missing case prints structured status and exits nonzero; --help exits zero.",
 		"Runner start failures retain bounded logs and a failed receipt with start_error.",
 		"Native runners are not sandboxed; review intended output paths and flags/config before execution.",
 		"Relative native_files references resolve from --project; absolute references are accepted when present.",
+		"Runner tokens: {artifacts} is this run's directory, {project} is --project, {device} is --device (the device acquire-device gave this session; any other serial is refused).",
 	].join("\n") + "\n";
 }
 function fail(message: string): never { throw new Error(`qa-replay: ${message}`); }
@@ -52,8 +55,8 @@ export function replayExitCode(value: unknown): number {
 	if (!isRecord(value) || !isRecord(value.exit_status)) return 1;
 	return value.exit_status.code !== 0 || value.exit_status.signal !== null || value.exit_status.timedout === true || value.exit_status.max_buffer_exceeded === true ? 1 : 0;
 }
-function selectedCell(state: NonNullable<ReturnType<typeof readQaState>>, story: string, cls: number, sub: string | undefined): QaCell | undefined {
-	return (state.cells ?? []).find((cell) => cell.story === story && cell.cls === cls && (cell.sub ?? undefined) === sub && cell.cycle === state.cycle);
+function selectedScenario(state: NonNullable<ReturnType<typeof readQaState>>, story: string, id: string): QaScenario | undefined {
+	return (state.scenarios ?? []).find((scenario) => scenario.story === story && scenario.id === id && scenario.cycle === state.cycle);
 }
 function selectedStory(state: NonNullable<ReturnType<typeof readQaState>>, id: string): QaStory {
 	const story = (state.stories ?? []).find((candidate) => candidate.id === id);
@@ -71,17 +74,13 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 	const state = readQaState(sessionId);
 	if (!state || state.active !== true) fail("active QA state is required");
 	if ((state.phase_max ?? 0) < BASELINE_INDEX) fail("QA replay requires the active cycle to have left PLAN (BASELINE or later)");
-	if (!chainComplete(state)) fail("QA actor→story→cell chainComplete gate is not satisfied");
+	if (!chainComplete(state)) fail("QA actor→story→scenario chainComplete gate is not satisfied");
 	const storyId = required(parsed, "story");
 	const story = selectedStory(state, storyId);
-	const cls = Number(required(parsed, "cls"));
-	if (!Number.isInteger(cls) || cls < 1 || cls > 6) fail("--cls must be an integer from 1 to 6");
+	const scenarioId = required(parsed, "scenario");
 	const timeoutMs = optionalPositiveNumber(parsed, "timeout-ms");
 	const maxBuffer = optionalPositiveNumber(parsed, "max-buffer");
-	const sub = typeof parsed.sub === "string" ? parsed.sub : undefined;
-	if (sub !== undefined && sub !== "hang-timeout" && sub !== "flaky-green") fail("--sub must be hang-timeout or flaky-green");
-	const cell = selectedCell(state, storyId, cls, sub);
-	if (!cell) fail(`story/cell ${storyId}/${cls}${sub ? `/${sub}` : ""} is not authored in the current cycle`);
+	if (!selectedScenario(state, storyId, scenarioId)) fail(`story/scenario ${storyId}/${scenarioId} is not authored in the current cycle`);
 	const actorId = story.actor ?? story.actor_id;
 	const actor = (state.actors ?? []).find((candidate) => candidate.id === actorId);
 	if (!actor?.driver) fail(`story "${storyId}" has no driver-bound actor`);
@@ -95,8 +94,11 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 	if (storeStatus.status !== "configured") fail(`case store is ${storeStatus.status}`);
 	const record: QaCaseRecord = caseResult.record;
 	if (record.surface !== actor.driver) fail(`case surface "${record.surface}" does not match actor driver "${actor.driver}"`);
-	const linkedCriteria = (story.contract?.acceptance_criteria ?? []).map((index) => state.acceptance_criteria?.[index]).filter((value): value is string => typeof value === "string");
-	if (!record.acceptance_criteria.every((criterion) => linkedCriteria.includes(criterion))) fail("case acceptance criteria must be a subset of the story's linked session acceptance criteria");
+	const storyFeatures = (story.provenance?.features ?? []).map((feature) => feature.id);
+	if (!storyFeatures.length) fail(`story "${storyId}" has no recorded provenance; record its feature with record-story-provenance (a case binds to a story through its features)`);
+	if (!record.feature_refs.some((id) => storyFeatures.includes(id))) fail(`case feature_refs [${record.feature_refs.join(", ")}] share no feature with story "${storyId}" provenance [${storyFeatures.join(", ")}]`);
+	const device = typeof parsed.device === "string" ? parsed.device : undefined;
+	if (device !== undefined && !heldDevice(unreleasedResources(sessionId), device)) fail(`--device "${device}" is not a device this session holds; use the serial acquire-device returned this session`);
 	const result = await runQaCase(record, {
 		casePath: caseResult.path,
 		caseRevision: caseResult.revision,
@@ -107,14 +109,14 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 		sessionId,
 		storyId,
 		actorId: actor.id,
-		cellClass: cls,
-		cellSub: sub === "hang-timeout" || sub === "flaky-green" ? sub : undefined,
+		scenarioId,
 		cycle: state.cycle,
 		storyContractSha256: story.contract ? createHash("sha256").update(JSON.stringify(story.contract)).digest("hex") : undefined,
 		timeoutMs,
 		maxBuffer,
 		actorBoundary: actor.boundary,
 		allowProjectCwd: parsed["allow-project-cwd"] === true,
+		device,
 	});
 	registerQaCaseRunReceipt(sessionId, result.receipt.artifact_paths.receipt, result.receipt.attempt_id, result.receiptSha256);
 	process.stdout.write(`${JSON.stringify(result.receipt)}\n`);

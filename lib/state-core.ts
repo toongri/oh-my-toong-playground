@@ -578,7 +578,7 @@ export function isPristine(type: StateType, parsed: Record<string, unknown>): bo
 			parsed["target"] === "" &&
 			(!Array.isArray(parsed["actors"]) || parsed["actors"].length === 0) &&
 			(!Array.isArray(parsed["stories"]) || parsed["stories"].length === 0) &&
-			(!Array.isArray(parsed["cells"]) || parsed["cells"].length === 0) &&
+			(!Array.isArray(parsed["scenarios"]) || parsed["scenarios"].length === 0) &&
 			runChecksEmpty
 		);
 	}
@@ -881,7 +881,7 @@ function seedSkeleton(type: StateType, ts: string): Record<string, unknown> {
 		};
 	}
 	if (type === "qa") {
-		const empty: QaChainState = { actors: [], stories: [], cells: [], cycle: 0, phase_max: 0 };
+		const empty: QaChainState = { actors: [], stories: [], scenarios: [], cycle: 0, phase_max: 0 };
 		return {
 			active: true,
 			phase: "PRE-FLIGHT",
@@ -890,9 +890,10 @@ function seedSkeleton(type: StateType, ts: string): Record<string, unknown> {
 			target: "",
 			actors: [],
 			stories: [],
-			cells: [],
+			scenarios: [],
+			risk_not_applicable: [],
+			device_profiles: [],
 			run_checks: null,
-			waives: [],
 			inert: null,
 			verdict: null,
 			phase_max: 0,

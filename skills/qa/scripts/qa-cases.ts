@@ -11,17 +11,18 @@ import {
 	saveQaCase,
 	type QaCaseStoreOptions,
 } from "@lib/qa-case-store.ts";
+import { getFeature } from "@lib/feature-map/storage.ts";
 
 export type QaCasesCliResult = { exitCode: number; stdout: string; stderr: string };
 const commands = ["help", "status", "configure", "disable", "list", "get", "save"];
-const help = `qa-cases — reusable QA case metadata storage\n\nCommands:\n  status [--project DIR]\n  configure --location ABSOLUTE_PATH [--allow-project-storage] [--project DIR]\n  disable [--project DIR]\n  list [--project DIR]\n  get <id> [--project DIR]\n  save --file JSON_PATH --expect <new|sha256> [--project DIR]\n  help\n\nCase records store Given/When/Then strings, acceptance criteria, an explicit runner argv array, native file references, reset description, and optional feature refs. Saving never executes a runner or copies product files.\n`;
+const help = `qa-cases — reusable QA case metadata storage\n\nCommands:\n  status [--project DIR]\n  configure --location ABSOLUTE_PATH [--allow-project-storage] [--project DIR]\n  disable [--project DIR]\n  list [--feature ID] [--project DIR]\n  get <id> [--project DIR]\n  save --file JSON_PATH --expect <new|sha256> [--project DIR]\n  help\n\nCase records store Given/When/Then strings, a non-empty feature_refs list of feature-map ids (cases are found by feature; save refuses an id the feature map does not hold), an explicit runner argv array, native file references, and a reset description. Saving never executes a runner or copies product files.\n`;
 type Parsed = { command: string; positionals: string[]; values: Record<string, string>; flags: Set<string> };
 function parse(args: string[]): Parsed {
 	if (!args.length || args[0] === "help" || args[0] === "--help") return { command: "help", positionals: [], values: {}, flags: new Set() };
 	const command = args[0] ?? "";
 	if (!commands.includes(command) || command === "help") throw new Error(`Unknown qa-cases command '${command}'`);
 	const values: Record<string, string> = {}; const flags = new Set<string>(); const positionals: string[] = [];
-	const allowed: Record<string, string[]> = { status: ["project"], configure: ["location", "project"], disable: ["project"], list: ["project"], get: ["project"], save: ["file", "expect", "project"] };
+	const allowed: Record<string, string[]> = { status: ["project"], configure: ["location", "project"], disable: ["project"], list: ["feature", "project"], get: ["project"], save: ["file", "expect", "project"] };
 	for (let i = 1; i < args.length; i += 1) {
 		const token = args[i] ?? "";
 		if (!token.startsWith("--")) { positionals.push(token); continue; }
@@ -38,7 +39,13 @@ function parse(args: string[]): Parsed {
 	return { command, positionals, values, flags };
 }
 function options(values: Record<string, string>, base: QaCaseStoreOptions): QaCaseStoreOptions { return values.project ? { ...base, cwd: isAbsolute(values.project) ? values.project : resolve(base.cwd ?? process.cwd(), values.project) } : base; }
-function exitFor(value: unknown): number { if (typeof value === "object" && value !== null && "status" in value) { const status = Reflect.get(value, "status"); return status === "conflict" ? 1 : 0; } return 0; }
+// 케이스는 기능으로 찾으므로, 저장 전에 feature_refs가 모두 feature map에 있어야 한다.
+function unmappedFeature(record: unknown, op: QaCaseStoreOptions): string | undefined {
+	const refs = typeof record === "object" && record !== null ? Reflect.get(record, "feature_refs") : undefined;
+	if (!Array.isArray(refs)) return undefined;
+	return refs.find((ref) => typeof ref === "string" && getFeature(ref, op).status !== "ok");
+}
+function exitFor(value: unknown): number { if (typeof value === "object" && value !== null && "status" in value) { const status = Reflect.get(value, "status"); return status === "conflict" || Reflect.get(value, "reason") === "feature_not_in_map" ? 1 : 0; } return 0; }
 export function runQaCasesCli(args: string[], baseOptions: QaCaseStoreOptions = {}): QaCasesCliResult {
 	let parsed: Parsed; try { parsed = parse(args); } catch (error) { return { exitCode: 2, stdout: "", stderr: `${error instanceof Error ? error.message : String(error)}\nSee: qa-cases --help\n` }; }
 	if (parsed.command === "help") return { exitCode: 0, stdout: help, stderr: "" };
@@ -48,9 +55,9 @@ export function runQaCasesCli(args: string[], baseOptions: QaCaseStoreOptions = 
 			case "status": result = getQaCaseStoreStatus(op); break;
 			case "configure": result = configureQaCaseStore(parsed.values.location ?? "", { ...op, allowProjectStorage: parsed.flags.has("allow-project-storage") }); break;
 			case "disable": result = disableQaCaseStore(op); break;
-			case "list": result = listQaCases(op); break;
+			case "list": result = listQaCases(op, parsed.values.feature ? { feature: parsed.values.feature } : {}); break;
 			case "get": result = getQaCase(parsed.positionals[0] ?? "", op); break;
-			case "save": { const inputFile = parsed.values.file ?? ""; const expected = parsed.values.expect ?? ""; const path = isAbsolute(inputFile) ? inputFile : resolve(baseOptions.cwd ?? process.cwd(), inputFile); const record = JSON.parse(readFileSync(path, "utf8")); result = saveQaCase({ record, expectedRevision: expected === "new" ? null : expected }, op); break; }
+			case "save": { const inputFile = parsed.values.file ?? ""; const expected = parsed.values.expect ?? ""; const path = isAbsolute(inputFile) ? inputFile : resolve(baseOptions.cwd ?? process.cwd(), inputFile); const record = JSON.parse(readFileSync(path, "utf8")); const unmapped = unmappedFeature(record, op); result = unmapped ? { status: "not_found", reason: "feature_not_in_map", feature: unmapped, next_action: "add the feature with feature-map.ts save, then save the case" } : saveQaCase({ record, expectedRevision: expected === "new" ? null : expected }, op); break; }
 			default: throw new Error(`Unknown qa-cases command '${parsed.command}'`);
 		}
 		return { exitCode: exitFor(result), stdout: `${JSON.stringify(result)}\n`, stderr: "" };

@@ -24,9 +24,17 @@ bun ${CLAUDE_SKILL_DIR}/scripts/read-db.ts app-prd-ro \
 
 Output is CSV on stdout. Aggregate in SQL and select only the columns you need; the wrapper caps output at 200 rows and says so on stderr when it cuts.
 
+## A Local Stack's Database
+
+The wrapper guards shared databases. A database the project's local stack runs on this machine (a container you or your session started, reached on a loopback port) needs none of that: query it with `psql` directly. Take the port, database, user and password from the stack's own definition (its compose file, the port file it writes per worktree):
+
+```bash
+psql "postgresql://$DB_USER:$DB_PASSWORD@127.0.0.1:$PORT/$DB" -c "select count(*) from health_sync_windows"
+```
+
 ## What the Wrapper Already Does
 
-Do not re-add these by hand, and do not call `psql` directly to get around them.
+Do not re-add these by hand, and do not call `psql` directly on a shared database to get around them.
 
 | Guarantee | How |
 |---|---|
@@ -39,7 +47,7 @@ Do not re-add these by hand, and do not call `psql` directly to get around them.
 
 | Message | Meaning | Do |
 |---|---|---|
-| `service not in …` / `--list` is empty | This machine has no such read-only service | Tell the user; they add a `[name-ro]` section to `~/.pg_service.conf` and a matching `~/.pgpass` line (`--help` prints the exact format). Never build a connection string yourself |
+| `service not in …` / `--list` is empty | This machine has no such read-only service. A local stack's database needs none: see *A Local Stack's Database* | Tell the user; they add a `[name-ro]` section to `~/.pg_service.conf` and a matching `~/.pgpass` line (`--help` prints the exact format). Never build a connection string yourself |
 | `one statement per call` | SQL contains `;` | Split into separate calls |
 | `not a read-only statement` | Statement is not SELECT/WITH/EXPLAIN/SHOW/TABLE/VALUES | This skill does not write. Stop and tell the user |
 | `psql not found` | Client missing | `brew install libpq` (`make sync` provisions it) |

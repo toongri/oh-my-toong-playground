@@ -54,19 +54,31 @@ export function resolveFeatureMapContext(options: FeatureMapOptions = {}): Featu
 	return { projectKey, projectRoot, manifestPath: join(manifestDir, "manifest.yaml") };
 }
 
-export function ensureFeatureMapManifest(options: FeatureMapOptions = {}): ManifestResult {
+export type ReadyFeatureMapManifest = FeatureMapManifest & { storage: { format: "markdown-frontmatter-v1"; location: string } };
+
+// 저장소는 기본으로 켜진다. 조회할 때 manifest가 없거나 storage: null(예전 기본값)이면
+// manifest 옆 store/를 만들어 configured로 바꾼다. 명시 configure는 이 경로를 거치지 않는다.
+export function ensureFeatureMapManifest(options: FeatureMapOptions = {}): ManifestResult & { manifest: ReadyFeatureMapManifest } {
 	const context = resolveFeatureMapContext(options);
 	const parent = dirname(context.manifestPath);
 	mkdirSync(parent, { recursive: true });
 	return withStateLock(context.manifestPath, () => {
+		let raw: Record<string, unknown>;
 		try {
-			return { context, manifest: readAndValidate(context) };
+			raw = readAndValidateRaw(context);
+			const manifest = validateManifest(raw, context);
+			if (manifest.storage !== null) return { context, manifest: { ...manifest, storage: manifest.storage } };
 		} catch (error) {
 			if (!isMissingFile(error)) throw error;
+			raw = { version: 1, project: context.projectKey, storage: null };
 		}
-		const manifest: FeatureMapManifest = { version: 1, project: context.projectKey, storage: null };
-		writeAtomic(context.manifestPath, stringify(manifest));
-		return { context, manifest };
+		const location = join(parent, "store");
+		mkdirSync(location, { recursive: true });
+		assertReadableDirectory(location);
+		const storage = { format: "markdown-frontmatter-v1" as const, location };
+		raw.storage = storage;
+		writeAtomic(context.manifestPath, stringify(raw));
+		return { context, manifest: { version: 1, project: context.projectKey, storage } };
 	});
 }
 
@@ -99,10 +111,6 @@ export function configureFeatureMap(location: string, options: FeatureMapOptions
 		writeAtomic(context.manifestPath, stringify(raw));
 		return { context, manifest };
 	});
-}
-
-function readAndValidate(context: FeatureMapContext): FeatureMapManifest {
-	return validateManifest(readAndValidateRaw(context), context);
 }
 
 function readAndValidateRaw(context: FeatureMapContext): Record<string, unknown> {

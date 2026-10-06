@@ -35,18 +35,17 @@ bun "${CLAUDE_SKILL_DIR}/scripts/feature-map/feature-map.ts" status --project .
 `~/.feature-maps/<project-key>/manifest.yaml`만 사용한다. 디렉터리를 훑어
 manifest나 파일 위치를 추측하지 않는다.
 
-1. `status` 또는 `query`/`get` 결과가 `status: "not_found"`,
-   `reason: "storage_not_configured"`, `next_action: "ask_user_for_storage"`면
-   저장 위치를 사용자에게 먼저 묻는다.
-2. 사용자가 위치에 동의한 뒤에만 다음처럼 설정한다. 상대 경로는 manifest
-   디렉터리 기준이다.
+1. 저장소는 기본으로 켜져 있다. 첫 `status`/`query`/`get`이 manifest를 만들고
+   `~/.feature-maps/<project-key>/store`를 저장 위치로 설정한다.
+2. 사용자가 다른 위치를 지정했을 때만 다음처럼 `configure`한다. 상대 경로는
+   manifest 디렉터리 기준이다.
 
    ```bash
    bun "${CLAUDE_SKILL_DIR}/scripts/feature-map/feature-map.ts" configure \
      --location ./docs/features --project .
    ```
 
-3. 다시 `query` 또는 정확한 ID의 `get`을 실행한다. `query`는 `--text TEXT`,
+3. `query` 또는 정확한 ID의 `get`을 실행한다. `query`는 `--text TEXT`,
    `--changed-by ID`를 지원한다.
 
    ```bash
@@ -137,7 +136,7 @@ Feature Map은 기존 QA 절차에 연결한다. 새 프레임워크나 임의 a
 - actor-boundary evidence: [SKILL.md#evidence-saving-protocol](SKILL.md#evidence-saving-protocol) 및 [stage3-handson.md#adversarial-scenario-matrix](stage3-handson.md#adversarial-scenario-matrix)
 - cycle stop/cleanup: [SKILL.md#cleanup](SKILL.md#cleanup) 및 stage3-handson의 lifecycle failure/stop 지침
 
-story를 생성한 뒤, story baseline과 cell 결과를 기록하기 전에 Feature Map
+story를 생성한 뒤, story baseline과 시나리오 결과를 기록하기 전에 Feature Map
 provenance를 기록한다. `get`/`query` 직후의 최신 revision을 사용하고, 반환된
 revision은 도구가 현재 값인지 검증한다.
 
@@ -148,7 +147,7 @@ revision은 도구가 현재 값인지 검증한다.
 ```
 
 이 기록은 QA coverage/current-code discovery를 설명하며 Feature Map metadata의
-membership을 선언하지 않는다. 새로 발견한 path도 기록할 수 있다. baseline/cells
+membership을 선언하지 않는다. 새로 발견한 path도 기록할 수 있다. baseline/시나리오
 이전에 실행하고, 결과가 나온 뒤에는 rebind하지 않는다. 새 fix cycle이면 새
 provenance를 다시 기록한다. 맵을 사용할 수 없는 legacy/no-map 실행에서는
 feature ID를 꾸며내지 말고 일반 QA evidence에 discovery와 code-ref를 남긴다.

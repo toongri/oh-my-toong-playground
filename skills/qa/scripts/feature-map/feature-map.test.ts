@@ -62,12 +62,15 @@ describe("feature-map CLI", () => {
 		}
 	});
 
-	test("미설정 query는 manifest를 bootstrap하고 사용자 동의를 안내한다", () => {
+	test("첫 query는 기본 store를 설정하고 feature 없음으로 답한다", () => {
 		const cwd = repo();
 		const home = tempDir();
 		const result = runFeatureMapCli(["query"], { cwd, home });
 		expect(result.exitCode).toBe(0);
-		expect(json(result)).toMatchObject({ status: "not_found", reason: "storage_not_configured", next_action: "ask_user_for_storage" });
+		expect(json(result)).toEqual({ status: "not_found", reason: "feature_not_found" });
+		const status = json(runFeatureMapCli(["status"], { cwd, home }));
+		expect(status).toMatchObject({ status: "ready" });
+		expect(String((status.storage as Record<string, unknown>).location)).toMatch(/\/\.feature-maps\/[^/]+\/store$/);
 	});
 
 	test("--project는 invocation cwd와 다른 프로젝트의 injected home manifest를 사용한다", () => {
@@ -136,10 +139,10 @@ describe("feature-map CLI", () => {
 		expect(JSON.parse(invalid.stderr)).toMatchObject({ status: "error" });
 	});
 
-	test("누락 feature와 미설정 storage를 구분하고 invalid 문서를 보고한다", () => {
+	test("누락 feature를 보고하고 invalid 문서를 보고한다", () => {
 		const cwd = repo();
 		const home = tempDir();
-		expect(json(runFeatureMapCli(["get", "missing"], { cwd, home }))).toMatchObject({ reason: "storage_not_configured" });
+		expect(json(runFeatureMapCli(["get", "missing"], { cwd, home }))).toMatchObject({ status: "not_found", reason: "feature_not_found" });
 		const configured = json(runFeatureMapCli(["configure", "--location", "features"], { cwd, home }));
 		expect(json(runFeatureMapCli(["get", "missing"], { cwd, home }))).toMatchObject({ status: "not_found", reason: "feature_not_found" });
 		const bad = join(cwd, "bad.md");
