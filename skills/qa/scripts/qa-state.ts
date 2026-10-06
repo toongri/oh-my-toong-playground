@@ -52,6 +52,7 @@ import {
 	driverGateArmed,
 	recordComplete,
 	scenarioNeedsVisualProof,
+	scenariosMissingCase,
 	visualEvidenceComplete,
 	CLIENT_IMPACTS,
 	RISK_AXES,
@@ -70,6 +71,7 @@ import {
 	type QaScenario,
 	type QaScenarioStatus,
 	type QaCaseRunBinding,
+	type QaScenarioCase,
 	type QaChainState,
 	type QaDriver,
 	type QaPhase,
@@ -83,8 +85,8 @@ import {
 	type QaEvidenceClaim,
 } from "@lib/qa-chain-core";
 import { withFeatureMapReadLock, type FeatureMapOptions } from "@lib/feature-map/index.ts";
-import { readQaCaseRunReceiptSnapshot } from "@lib/qa-case-run.ts";
-import { validateQaCase } from "@lib/qa-case-store.ts";
+import { readQaCaseRunReceiptSnapshot, type QaCaseRunReceipt } from "@lib/qa-case-run.ts";
+import { getQaCase, validateQaCase, type QaCaseStoreOptions } from "@lib/qa-case-store.ts";
 import { readDeviceProfiles } from "@lib/qa-device-profiles.ts";
 
 
@@ -603,7 +605,7 @@ export interface AddActorOpts {
 
 /** Drops the execution record of a scenario whose actor or story changed, keeping what was authored. */
 function clearScenarioRecord(scenario: QaScenario): QaScenario {
-	const { status: _status, blocked: _blocked, evidence: _evidence, evidence_review: _review, case_run: _caseRun, ...authored } = scenario;
+	const { status: _status, blocked: _blocked, evidence: _evidence, evidence_review: _review, case_run: _caseRun, case: _case, ...authored } = scenario;
 	return authored;
 }
 
@@ -780,7 +782,7 @@ export function recordStoryProvenance(
 	const id = nonEmpty(storyId, "story");
 	const payload = provenanceInput(input);
 	withStateLock(resolveStatePath(sessionId), () => {
-		const locked = withFeatureMapReadLock(options, (readFeature) => {
+		withFeatureMapReadLock(options, (readFeature) => {
 			// Resolve every feature while both locks are held. This makes map errors
 			// fail atomically and prevents a revision from changing before persistence.
 			for (const ref of payload.features) {
@@ -828,9 +830,6 @@ export function recordStoryProvenance(
 			};
 			mergeWriteUnlocked(sessionId, { stories });
 		});
-		if (locked && locked.status === "not_found") {
-			throw new Error("record-story-provenance: feature map storage is not configured");
-		}
 	});
 }
 
@@ -1010,6 +1009,10 @@ function blockedRecord(opts: RecordScenarioOpts): QaBlocked {
 	return blocked;
 }
 
+function receiptExitClean(receipt: QaCaseRunReceipt): boolean {
+	return receipt.start_error === undefined && receipt.exit_status.code === 0 && receipt.exit_status.signal === null && !receipt.exit_status.timedout && !receipt.exit_status.max_buffer_exceeded;
+}
+
 function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector: { story: string; id: string }, status: QaScenarioStatus, evidence: QaScenario["evidence"], path: string, driver: QaDriver): QaCaseRunBinding {
 	if (status !== "pass" && status !== "fail") throw new Error("case-run can be attached only to a pass or fail scenario");
 	const absoluteReceipt = resolve(path);
@@ -1029,8 +1032,6 @@ function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector:
 	const recordValue: unknown = JSON.parse(caseBytes.toString("utf8"));
 	validateQaCase(recordValue);
 	if (receipt.case_id !== recordValue.id || receipt.surface !== recordValue.surface || recordValue.surface !== driver) throw new Error("case-run case identity or surface does not match actor driver");
-	const linkedCriteria = (story?.contract?.acceptance_criteria ?? []).map((index) => prior.acceptance_criteria?.[index]).filter((value): value is string => typeof value === "string");
-	if (!recordValue.acceptance_criteria.every((criterion) => linkedCriteria.includes(criterion))) throw new Error("case-run acceptance criteria are not linked to the story");
 	const runRoot = realpathSync(dirname(receipt.artifact_paths.receipt));
 	const expectedNative = (recordValue.native_files ?? []).map((file) => resolve(receipt.project_root, file));
 	if (expectedNative.length !== receipt.native_files.length || expectedNative.some((file, index) => {
@@ -1041,7 +1042,7 @@ function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector:
 	if (!trusted) throw new Error("case-run receipt has no trusted registration");
 	if (trusted.receipt_path !== canonicalReceipt || trusted.attempt_id !== receipt.attempt_id) throw new Error("case-run receipt trusted registration does not match canonical path or attempt");
 	if (trusted.sha256 !== snapshot.sha256) throw new Error("case-run receipt digest does not match trusted registration");
-	if (status === "pass" && (receipt.start_error !== undefined || receipt.exit_status.code !== 0 || receipt.exit_status.signal !== null || receipt.exit_status.timedout || receipt.exit_status.max_buffer_exceeded)) throw new Error("pass case-run requires a zero, non-timeout runner result");
+	if (status === "pass" && !receiptExitClean(receipt)) throw new Error("pass case-run requires a zero, non-timeout runner result");
 	const files: Record<string, string> = {};
 	const addFile = (filePath: string, expectedHash?: string) => {
 		const canonical = realpathSync(filePath);
@@ -1104,7 +1105,7 @@ function recordScenarioUnlocked(sessionId: string, opts: RecordScenarioOpts): vo
 		throw new Error(`visual scenario requires separate before/after screenshot files and an action record${authored.profile ? ` captured on device profile "${authored.profile}"` : ""}; capture the asserted screen, then record-scenario again`);
 	}
 	const binding = opts.caseRun ? caseRunBinding(prior, sessionId, selector, opts.status, evidence, opts.caseRun, driver) : undefined;
-	const { status: _status, blocked: _blocked, evidence: _evidence, evidence_review: _review, case_run: _caseRun, ...record } = authored;
+	const { status: _status, blocked: _blocked, evidence: _evidence, evidence_review: _review, case_run: _caseRun, case: _case, ...record } = authored;
 	scenarios[index] = {
 		...record,
 		status: opts.status,
@@ -1118,6 +1119,51 @@ function recordScenarioUnlocked(sessionId: string, opts: RecordScenarioOpts): vo
 
 export function recordScenario(sessionId: string, opts: RecordScenarioOpts): void {
 	withStateLock(resolveStatePath(sessionId), () => recordScenarioUnlocked(sessionId, opts));
+}
+
+export interface RecordCaseOpts {
+	story: string;
+	scenario: string;
+	/** Id of a saved case this scenario was replayed from; exclusive with `none`. */
+	caseId?: string;
+	/** Reason this passed scenario has no saved case; exclusive with `caseId`. */
+	none?: string;
+	store?: QaCaseStoreOptions;
+}
+
+/** Links a passed scenario to the saved case it was replayed from, or records why it has none. */
+export function recordCase(sessionId: string, opts: RecordCaseOpts): void {
+	const selector = { story: nonEmpty(opts.story, "story"), id: nonEmpty(opts.scenario, "scenario") };
+	if ((opts.caseId === undefined) === (opts.none === undefined)) throw new Error("record-case: exactly one of --case or --none is required");
+	withStateLock(resolveStatePath(sessionId), () => {
+		const prior = readPrior(sessionId);
+		const cycle = currentCycle(prior);
+		const scenarios = [...(prior.scenarios ?? [])];
+		const index = scenarios.findIndex((candidate) => candidate.cycle === cycle && sameScenario(candidate, selector));
+		const scenario = scenarios[index];
+		if (!scenario) throw new Error(`record-case: scenario ${selector.story}/${selector.id} is not authored in the current cycle`);
+		if (scenario.status !== "pass") throw new Error(`record-case: scenario ${selector.story}/${selector.id} must be pass (current status: ${scenario.status ?? "unrecorded"})`);
+		let link: QaScenarioCase;
+		if (opts.none !== undefined) {
+			if (opts.none.trim() === "") throw new Error("record-case: --none requires a nonblank reason");
+			link = { kind: "none", reason: opts.none.trim() };
+		} else {
+			const caseId = nonEmpty(opts.caseId, "case");
+			const saved = getQaCase(caseId, opts.store);
+			if (saved.status !== "ok" || !("record" in saved)) throw new Error(`record-case: case "${caseId}" is not in the case store (store status: ${saved.status})`);
+			const matching = (prior.trusted_receipts ?? []).flatMap((trusted) => {
+				try { return [{ trusted, snapshot: readQaCaseRunReceiptSnapshot(trusted.receipt_path) }]; } catch { return []; }
+			}).filter(({ snapshot }) => snapshot.receipt.session_id === sessionId && snapshot.receipt.story_id === selector.story && snapshot.receipt.scenario_id === selector.id && snapshot.receipt.cycle === cycle && snapshot.receipt.case_id === caseId);
+			const current = matching.filter(({ snapshot }) => snapshot.receipt.case_revision === saved.revision);
+			const latest = current.at(-1);
+			if (!latest) throw new Error(`record-case: no trusted replay receipt for case "${caseId}"${matching.length ? " at its current revision" : ""} on ${selector.story}/${selector.id} in this cycle; replay it with qa-replay.ts first`);
+			if (latest.snapshot.sha256 !== latest.trusted.sha256) throw new Error("record-case: receipt bytes changed since registration; replay the case again");
+			if (!receiptExitClean(latest.snapshot.receipt)) throw new Error(`record-case: the latest replay of case "${caseId}" did not exit cleanly (code 0, no signal, no timeout, no start error)`);
+			link = { kind: "saved", id: caseId, revision: saved.revision, receipt_path: latest.trusted.receipt_path, attempt_id: latest.trusted.attempt_id };
+		}
+		scenarios[index] = { ...scenario, case: link };
+		mergeWriteUnlocked(sessionId, { scenarios });
+	});
 }
 
 /** Store a judgment made by opening the raw evidence; never infer it from filenames. */
@@ -1341,6 +1387,10 @@ export function completeQa(sessionId: string): void {
 	withStateLock(resolveStatePath(sessionId), () => {
 		ensureSeed("qa", sessionId);
 		const prior = readPrior(sessionId);
+		const uncovered = scenariosMissingCase(prior);
+		if (uncovered.length) {
+			throw new Error(`complete: refused — ${uncovered.length} H scenario(s) passed by driving the boundary but have no saved case or reason. Save each as a reusable case (qa-cases.ts save), replay it (qa-replay.ts), then link it; if it cannot be a case, record why:\n${uncovered.map((scenario) => `  record-case --story ${scenario.story} --scenario ${scenario.id} (--case <id> | --none "<reason>")`).join("\n")}`);
+		}
 		if (!qaReportComplete(prior, stateProbe)) throw new Error("complete: report missing, changed, or not visually reviewed; render qa-report then review-report --path <html>");
 		const verdict = prior.verdict;
 		const canComplete =
@@ -1491,6 +1541,7 @@ const ROSTER: CliCommand[] = [
 	{ name: "declare-risk-na", authority: "ai", effect: "declares an adversarial axis (--axis 1..6) that no scenario of this change can exercise, with --reason; once per cycle" },
 	{ name: "record-baseline", authority: "ai", effect: "records a story's BASELINE result: fail only when the change adds a build/test/lint failure; a failure the base commit has too is pass with a --note" },
 	{ name: "record-scenario", authority: "ai", effect: "records one scenario's execution result (--story --scenario --status pass|fail|blocked); --evidence-surface accepts the actor's own driver or \"test\" for an automated test run that exercises the scenario; optional --case-run RECEIPT binds replay provenance" },
+	{ name: "record-case", authority: "ai", effect: "links a passed scenario to its saved, replayed case or records why it has none: --story --scenario (--case <id> | --none \"<reason>\") [--project DIR]; complete refuses an H scenario proven at its boundary that has neither" },
 	{
 		name: "review-evidence",
 		authority: "ai",
@@ -1645,6 +1696,14 @@ function main(): void {
 					evidenceAction: str(args["evidence-action"]),
 					evidenceAfter: str(args["evidence-after"]),
 					caseRun: str(args["case-run"]),
+				});
+			} else if (subcommand === "record-case") {
+				recordCase(sessionId, {
+					story: requiredArg(args, "story"),
+					scenario: requiredArg(args, "scenario"),
+					caseId: str(args["case"]),
+					none: str(args["none"]),
+					store: { cwd: str(args["project"]) },
 				});
 			} else if (subcommand === "review-evidence") {
 				reviewEvidence(sessionId, requiredArg(args, "story"), requiredArg(args, "scenario"), JSON.parse(readFileSync(requiredArg(args, "json-file"), "utf8")));

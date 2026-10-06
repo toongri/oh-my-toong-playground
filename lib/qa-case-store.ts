@@ -15,13 +15,13 @@ export interface QaCaseRecord {
 	given: string[];
 	when: string[];
 	then: string[];
-	acceptance_criteria: string[];
 	surface: QaCaseSurface;
 	runner: string[];
 	execution_cwd: string;
 	native_files: string[];
 	reset_description: string;
-	feature_refs?: string[];
+	/** Feature ids this case exercises; cases are found by feature, never by acceptance-criteria text. */
+	feature_refs: string[];
 }
 export interface QaCaseContext { projectKey: string; projectRoot: string; manifestPath: string; }
 export type QaCaseManifest = { version: 1; project: string; mode: "unconfigured" | "disabled" | "configured"; location?: string; allow_project_storage?: boolean };
@@ -29,7 +29,7 @@ export type QaCaseStoreOptions = FeatureMapOptions;
 export type QaCaseStatus =
 	| { status: "disabled"; mode: "disabled"; project: string; manifestPath: string; location?: string }
 	| { status: "configured"; mode: "configured"; project: string; manifestPath: string; location: string };
-export type QaCaseStoreResult = QaCaseStatus | { status: "ok"; record: QaCaseRecord; path: string; revision: string } | { status: "ok"; cases: Array<{ id: string; title: string; path: string; revision: string }> } | { status: "not_found"; reason: "case_not_found" } | { status: "conflict"; reason: "revision_mismatch"; expectedRevision: string | null; actualRevision: string | null; path: string };
+export type QaCaseStoreResult = QaCaseStatus | { status: "ok"; record: QaCaseRecord; path: string; revision: string } | { status: "ok"; cases: Array<{ id: string; title: string; feature_refs: string[]; path: string; revision: string }> } | { status: "not_found"; reason: "case_not_found" } | { status: "conflict"; reason: "revision_mismatch"; expectedRevision: string | null; actualRevision: string | null; path: string };
 
 export function resolveQaCaseContext(options: QaCaseStoreOptions = {}): QaCaseContext {
 	const feature = resolveFeatureMapContext(options);
@@ -188,9 +188,8 @@ export function validateQaCase(record: unknown): asserts record is QaCaseRecord 
 	for (const field of ["id", "title", "goal", "execution_cwd", "reset_description"]) if (typeof record[field] !== "string" || record[field].trim() === "") throw new Error(`qa-cases: ${field} must be nonblank`);
 	if (typeof record.id !== "string") throw new Error("qa-cases: id must be a string");
 	safeId(record.id);
-	for (const field of ["given", "when", "then", "acceptance_criteria"]) stringArray(record[field], field);
+	for (const field of ["given", "when", "then", "feature_refs"]) stringArray(record[field], field);
 	stringArray(record.native_files, "native_files", false);
-	if (record.feature_refs !== undefined) stringArray(record.feature_refs, "feature_refs", false);
 	if (typeof record.surface !== "string" || !["agent-browser", "agent-device", "curl", "bash"].includes(record.surface)) throw new Error("qa-cases: invalid surface");
 	stringArray(record.runner, "runner");
 }
@@ -223,11 +222,11 @@ export function getQaCase(id: string, options: QaCaseStoreOptions = {}): QaCaseS
 	try { const bytes = readFileSync(path); const record = JSON.parse(bytes.toString("utf8")); validateQaCase(record); if (record.id !== id) throw new Error(`qa-cases: filename/id mismatch: ${path}`); return { status: "ok", record, path, revision: revision(bytes) }; }
 	catch (error) { if (isMissing(error)) return { status: "not_found", reason: "case_not_found" }; throw error; }
 }
-export function listQaCases(options: QaCaseStoreOptions = {}): QaCaseStoreResult {
+export function listQaCases(options: QaCaseStoreOptions = {}, filter: { feature?: string } = {}): QaCaseStoreResult {
 	const root = rootFor(options); if (typeof root !== "string") return unavailable(root);
 	const directory = join(root, "cases");
 	assertNoSymlinkComponents(root, directory);
-	try { const ids = new Set<string>(); const cases = readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map((entry) => { const path = join(directory, entry.name); const bytes = readFileSync(path); const record = JSON.parse(bytes.toString("utf8")); validateQaCase(record); const expectedId = entry.name.slice(0, -5); if (record.id !== expectedId) throw new Error(`qa-cases: filename/id mismatch: ${path}`); if (ids.has(record.id)) throw new Error(`qa-cases: duplicate case id: ${record.id}`); ids.add(record.id); return { id: record.id, title: record.title, path, revision: revision(bytes) }; }).sort((a, b) => a.id.localeCompare(b.id)); return { status: "ok", cases }; }
+	try { const ids = new Set<string>(); const cases = readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map((entry) => { const path = join(directory, entry.name); const bytes = readFileSync(path); const record = JSON.parse(bytes.toString("utf8")); validateQaCase(record); const expectedId = entry.name.slice(0, -5); if (record.id !== expectedId) throw new Error(`qa-cases: filename/id mismatch: ${path}`); if (ids.has(record.id)) throw new Error(`qa-cases: duplicate case id: ${record.id}`); ids.add(record.id); return { id: record.id, title: record.title, feature_refs: record.feature_refs, path, revision: revision(bytes) }; }).filter((entry) => filter.feature === undefined || entry.feature_refs.includes(filter.feature)).sort((a, b) => a.id.localeCompare(b.id)); return { status: "ok", cases }; }
 	catch (error) { if (isMissing(error)) return { status: "ok", cases: [] }; throw error; }
 }
 

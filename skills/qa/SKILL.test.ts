@@ -45,12 +45,12 @@ describe("Feature Map provenance 계약", () => {
 		expect(skillMd).toContain("feature-map.ts help");
 	});
 
-	test("feature-map 조회가 미설정·부재·손상 저장소를 구분함", () => {
-		expect(skillMd).toContain("storage_not_configured");
+	test("feature-map 조회가 기본 저장소 켜짐·부재·손상 저장소를 구분함", () => {
+		expect(skillMd).not.toContain("storage_not_configured");
+		expect(skillMd).not.toContain("ask_user_for_storage");
+		expect(skillMd).toContain("~/.feature-maps/<project-key>/store");
 		expect(skillMd).toContain("feature_not_found");
 		expect(skillMd).toContain("corrupt");
-		expect(skillMd).toContain("ask_user_for_storage");
-		expect(skillMd).toContain("no default");
 	});
 
 	test("map 입력을 현재 코드/spec과 대조하고 범위 상한으로 쓰지 않음", () => {

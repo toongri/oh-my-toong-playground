@@ -99,7 +99,7 @@ describe("qa replay CLI", () => {
 		const configured = configureQaCaseStore(store, { cwd: root, home, allowProjectStorage: true });
 		manifestDirs.push(join(configured.manifestPath, ".."));
 		readyChain(session);
-		const record: QaCaseRecord = { id: "phase-guard-case", title: "CLI", goal: "run", given: ["case exists"], when: ["run"], then: ["observed"], acceptance_criteria: ["The runner boundary is observed"], surface: "bash", runner: [process.execPath, "-e", "process.stdout.write('ok')"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset" };
+		const record: QaCaseRecord = { id: "phase-guard-case", title: "CLI", goal: "run", given: ["case exists"], when: ["run"], then: ["observed"], feature_refs: ["checkout"], surface: "bash", runner: [process.execPath, "-e", "process.stdout.write('ok')"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset" };
 		saveCase(root, record, home);
 
 		await expect(replayFromCli(["--case", record.id, "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home })).rejects.toThrow(/left PLAN|BASELINE/);
@@ -119,7 +119,7 @@ describe("qa replay CLI", () => {
 		manifestDirs.push(join(configured.manifestPath, ".."));
 		readyChain("valid-session");
 		setQaState("valid-session", { phase: "BASELINE" });
-		const record: QaCaseRecord = { id: "cli-case", title: "CLI", goal: "run", given: ["case exists"], when: ["run"], then: ["observed"], acceptance_criteria: ["The runner boundary is observed"], surface: "bash", runner: [process.execPath, "-e", "process.stdout.write('ok')"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset" };
+		const record: QaCaseRecord = { id: "cli-case", title: "CLI", goal: "run", given: ["case exists"], when: ["run"], then: ["observed"], feature_refs: ["checkout"], surface: "bash", runner: [process.execPath, "-e", "process.stdout.write('ok')"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset" };
 		saveCase(root, record, home);
 		const receipt = await replayFromCli(["--case", "cli-case", "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home });
 		expect((receipt as { qa_result: string }).qa_result).toBe("not-recorded");
@@ -140,7 +140,7 @@ describe("qa replay CLI", () => {
 		readyChain(session); setQaState(session, { phase: "BASELINE" });
 		const record: QaCaseRecord = {
 			id: "cli-timeout-case", title: "CLI timeout", goal: "run", given: ["case exists"], when: ["run"], then: ["timed out"],
-			acceptance_criteria: ["The runner boundary is observed"], surface: "bash",
+			feature_refs: ["checkout"], surface: "bash",
 			runner: [process.execPath, "-e", "setTimeout(() => {}, 1000)"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset",
 		};
 		saveCase(root, record, home);
@@ -163,7 +163,7 @@ describe("qa replay CLI", () => {
 		readyChain(session); setQaState(session, { phase: "BASELINE" });
 		const record: QaCaseRecord = {
 			id: "cli-buffer-case", title: "CLI buffer", goal: "run", given: ["case exists"], when: ["run"], then: ["buffer exceeded"],
-			acceptance_criteria: ["The runner boundary is observed"], surface: "bash",
+			feature_refs: ["checkout"], surface: "bash",
 			runner: [process.execPath, "-e", "process.stdout.write('x'.repeat(1024))"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset",
 		};
 		saveCase(root, record, home);
@@ -187,7 +187,7 @@ describe("qa replay CLI", () => {
 		setQaState(session, { phase: "BASELINE" });
 		const record: QaCaseRecord = {
 			id: "trusted-receipt-case", title: "CLI", goal: "run", given: ["case exists"], when: ["run"], then: ["observed"],
-			acceptance_criteria: ["The runner boundary is observed"], surface: "bash",
+			feature_refs: ["checkout"], surface: "bash",
 			runner: [process.execPath, "-e", "require('fs').writeFileSync(process.env.QA_ARTIFACTS_DIR + '/boundary.txt', 'observed'); process.exit(19)"],
 			execution_cwd: "{artifacts}", native_files: [], reset_description: "reset",
 		};
@@ -220,12 +220,12 @@ describe("qa replay CLI", () => {
 		const configured = configureQaCaseStore(store, { cwd: root, home, allowProjectStorage: true });
 		manifestDirs.push(join(configured.manifestPath, "..")); readyChain("gate-session");
 		setQaState("gate-session", { phase: "BASELINE" });
-		const base: QaCaseRecord = { id: "gate-case", title: "CLI", goal: "run", given: ["case exists"], when: ["run"], then: ["observed"], acceptance_criteria: ["wrong AC"], surface: "curl", runner: [process.execPath, "-e", "process.exit(99)"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset" };
+		const base: QaCaseRecord = { id: "gate-case", title: "CLI", goal: "run", given: ["case exists"], when: ["run"], then: ["observed"], feature_refs: ["checkout"], surface: "curl", runner: [process.execPath, "-e", "process.exit(99)"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset" };
 		saveCase(root, base, home);
 		await expect(replayFromCli(["--case", "gate-case", "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home })).rejects.toThrow(/surface/);
-		const acRecord = { ...base, id: "ac-case", surface: "bash" as const };
-		saveQaCase({ record: acRecord, expectedRevision: null }, { cwd: root, home });
-		await expect(replayFromCli(["--case", "ac-case", "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home })).rejects.toThrow(/acceptance/);
+		const otherFeatureRecord = { ...base, id: "other-feature-case", surface: "bash" as const, feature_refs: ["unrelated-feature"] };
+		saveQaCase({ record: otherFeatureRecord, expectedRevision: null }, { cwd: root, home });
+		await expect(replayFromCli(["--case", "other-feature-case", "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home })).resolves.toMatchObject({ case_id: "other-feature-case" });
 		disableQaCaseStore({ cwd: root, home });
 		const disabled = await replayFromCli(["--case", "gate-case", "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home });
 		expect(disabled).toMatchObject({ status: "disabled" });

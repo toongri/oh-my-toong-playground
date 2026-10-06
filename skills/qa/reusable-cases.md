@@ -1,8 +1,10 @@
 # QA Reusable Cases
 
-Reusable cases are optional, executable QA recipes. They supplement the current
-QA cycle; they never replace the Actor Roster, six coverage classes, real
-boundary evidence, or the current story contract.
+A reusable case is one user scenario saved as an executable recipe: its
+precondition, actions and expected result, plus the native script that drives
+them. Cases are found by feature. They supplement the current QA cycle; they
+never replace the Actor Roster, six coverage classes, real boundary evidence,
+or the current story contract.
 
 ## Story contract first
 
@@ -21,14 +23,15 @@ not a substitute for this story-level contract.
 
 ## Selection and exploration
 
-At PLAN, use `listQaCases` and `getQaCase` through the QA case functions (or
-the repository `qa-cases.ts list` / `qa-cases.ts get <id>` commands) when the
-store is configured. Treat matching known cases as planning input: use their
+At PLAN, for each feature the change touches, list its cases with
+`listQaCases` (`qa-cases.ts list --feature <feature-id>`) and read them with
+`getQaCase` (`qa-cases.ts get <id>`). Treat matching known cases as planning input: use their
 paths, assertions, and reset details to author the complete current-cycle
 story/scenario chain, including new, failed, stale, or uncovered paths and the
 risk coverage of all six risks. Do not execute replay during PLAN. A case listing is not boundary
-proof; a case failure remains a failure and is recorded as such, never
-relabeled as expected, flaky, or pass.
+proof. A case failure remains a
+failure and is recorded as such until its cause is found (see *When a replay
+fails*); it is never relabeled as expected, flaky, or pass to close the cycle.
 
 Known cases are hints about an executable path, not permission to narrow the
 cycle. Keep every risk covered by a scenario or declared not applicable, and
@@ -99,8 +102,8 @@ that directory as `stdout.log`, `stderr.log`, and a new `receipt.json`; existing
 artifacts are never overwritten.
 Review the runner's flags/output/config first: native runners are not sandboxed.
 
-The wrapper checks the saved case revision, actor surface, linked acceptance
-criteria, reset confirmation, and current-cycle authored scenario. It requires the
+The wrapper checks the saved case revision, actor surface, reset confirmation,
+and current-cycle authored scenario. It requires the
 active `chainComplete` gate. A successful runner produces a receipt with
 `qa_result: "not-recorded"`; it never records a QA scenario PASS. A failed runner
 returns a non-zero exit status and remains a failure. Case metadata is saved
@@ -134,21 +137,66 @@ configuration before replay.
 
 An invalid configured manifest is an error, not an automatic reset or fallback.
 
-## Curating a case
+## Which scenarios become cases
 
-For first curation, author the native draft and independently rerun it with
-assertions from the real boundary **before** registering metadata with
-`saveQaCase`. For known saved cases, use the replay wrapper above. Curate only
-a useful, reproducible case: retain its
-goal, GWT, AC links, actor surface, exact runner, working directory, native
-files, reset instructions, and feature refs. Reset the application and
-independently rerun the saved recipe with the same assertions from the real
-boundary. Save it as reusable only after that fresh rerun passes. Never save a
-failed run as a successful case, and never turn a run artifact into a runner.
+An `H` scenario that passed by driving its actor's boundary (its evidence
+surface is not `test`) becomes a case. A scenario proven by an automated test
+is already automated. `M` and `L` scenarios are not saved.
 
-Native formats remain native: `.ad` scripts for `agent-device`, existing
-agent-browser/Playwright shell or CLI templates for web, and Maestro YAML
-with `runFlow`/`assertVisible` where that project uses Maestro. Do not install
+One case is one scenario, from its precondition to its expected result.
+Steps that many scenarios share (sign-in, reaching a screen) go in a shared
+script under the store's `cases/shared/`. The case's runner chains it first, for
+example `agent-device replay <shared>.ad --keep-session && agent-device replay
+<case>.ad`, and both files go in `native_files`.
+
+## Creating a case
+
+1. **Name the feature.** Find the feature in the feature map (`feature-map.ts
+   query`). If it is not there, add it first (`feature-map.ts save`), then put
+   its id in the case's `feature_refs`.
+2. **Record while you drive.** The recording is made during the scenario's own
+   run, not in a separate pass. The form follows the driver:
+   - `agent-device`: record with `--save-script` (example below).
+   - `agent-browser`: it records video and HAR only, not a script. Write the
+     commands you ran into a shell script as you go. Replace each `@eN` ref,
+     which changes on every snapshot, with a `find role|text|label …` command.
+   - `curl` / `bash`: the commands themselves are the script.
+3. **Record the scenario** as usual with `record-scenario`.
+4. **Save the case** with `qa-cases.ts save`: goal, Given/When/Then, actor
+   surface, exact runner, working directory, native files, reset instructions,
+   and feature refs.
+5. **Replay it as the flaky-rerun check.** Reset the application and
+   independently rerun the saved recipe through `qa-replay.ts`, with the
+   same assertions from the real boundary. This replay is the check that the
+   recording works; there is no separate rerun.
+6. **Link it** to the scenario:
+
+```sh
+bun "${CLAUDE_SKILL_DIR}/scripts/qa-state.ts" record-case \
+  --story STORY_ID --scenario SCENARIO_ID --case CASE_ID
+```
+
+`record-case --case` accepts only a case that replayed cleanly for that
+scenario in this cycle. When a scenario that qualifies cannot become a case
+(the driver cannot record that screen, for example), record why with
+`record-case … --none "<reason>"`. `complete` refuses while a qualifying
+scenario has neither, unless it was already proven by replaying a saved case
+(`record-scenario --case-run`).
+
+Never save a failed run as a successful case, and never turn a run artifact into
+a runner.
+
+## When a replay fails
+
+Find the cause before recording anything. If the diff intentionally changed
+the screen or element the script touches, the case is out of date: re-record
+it while driving the scenario and save it with `--expect <old revision>`. That
+is not a product failure. Otherwise drive the scenario by hand. Only a product
+cause shown there makes it a `fail`.
+
+Native formats remain native: `.ad` scripts for `agent-device`, shell scripts of
+`agent-browser` commands for web, and Maestro YAML with
+`runFlow`/`assertVisible` where that project uses Maestro. Do not install
 Cucumber or invent a universal DSL. Use the installed runtime's skill/help
 before operating a driver.
 

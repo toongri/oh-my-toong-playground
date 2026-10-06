@@ -176,6 +176,8 @@ export interface QaScenario {
 	evidence?: QaEvidence;
 	evidence_review?: QaEvidenceReview;
 	case_run?: QaCaseRunBinding;
+	/** The saved case this passed scenario is linked to, or why it has none (record-case). */
+	case?: QaScenarioCase;
 	cycle?: number;
 	driven_at?: string;
 	source?: "self-authored" | "caller-provided";
@@ -205,6 +207,10 @@ export function blockedRecordValid(blocked: QaBlocked | undefined, probe: Eviden
 		return file.exists && file.size > 0;
 	} catch { return false; }
 }
+
+export type QaScenarioCase =
+	| { kind: "saved"; id: string; revision: string; receipt_path: string; attempt_id: string }
+	| { kind: "none"; reason: string };
 
 export interface QaCaseRunBinding {
 	case_id: string;
@@ -403,6 +409,20 @@ function currentCycle(state: QaChainState): number {
 /** Scenarios authored for the current cycle; earlier cycles stay in the raw record for audit. */
 export function currentScenarios(state: QaChainState): QaScenario[] {
 	return (state.scenarios ?? []).filter((scenario) => scenario.cycle === currentCycle(state));
+}
+
+/**
+ * Current-cycle H scenarios that passed by driving their boundary (not an automated
+ * test run) and so must be saved as a reusable case: each needs a `case` link, a
+ * recorded reason for having none, or a `case_run` (it was proven by replaying a saved case).
+ */
+export function scenariosMissingCase(state: QaChainState): QaScenario[] {
+	return currentScenarios(state).filter((scenario) => {
+		if (scenario.priority !== "H" || scenario.status !== "pass" || scenario.evidence?.surface === TEST_EVIDENCE_SURFACE) return false;
+		if (scenario.case_run) return false;
+		if (scenario.case?.kind === "saved") return false;
+		return !(scenario.case?.kind === "none" && nonblank(scenario.case.reason));
+	});
 }
 
 function result(value: QaRunCheck | QaResult | null | undefined): QaResult | null {

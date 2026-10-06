@@ -1005,6 +1005,10 @@ describe("qa-state CLI wiring", () => {
 		expect(rawState().derived.chain_complete).toBe(true);
 		run("record-baseline --story story-1 --result pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
 		recordPass("s1");
+		expect(() => run("complete")).toThrow(/record-case --story story-1 --scenario s1/);
+		expect(() => run("record-case --story story-1 --scenario s1")).toThrow(/exactly one of --case or --none/);
+		run('record-case --story story-1 --scenario s1 --none "이름만 바꾼 리팩터링이라 재생할 사용자 경로가 없음"');
+		expect(rawState().scenarios[0].case).toEqual({ kind: "none", reason: "이름만 바꾼 리팩터링이라 재생할 사용자 경로가 없음" });
 		run("record-run-check --check stale-state --result pass");
 		run("record-run-check --check dirty-worktree --result pass");
 		run("record-run-check --check flaky-rerun --result pass");

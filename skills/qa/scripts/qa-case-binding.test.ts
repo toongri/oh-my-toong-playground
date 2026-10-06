@@ -32,7 +32,7 @@ test("실행 receipt를 현재 시나리오에 boundary evidence와 함께 바�
 	addStory(sid, { id: "story", actor: "actor", contract: { goal: "run", given: ["case exists"], when: ["run"], then: ["result observed"], acceptance_criteria: [0] } });
 	authorScenario(sid, { story: "story", id: "s1", title: "run the case", preconditions: "case exists", steps: ["run the runner"], expected: "result observed", whyNeeded: "covers the runner boundary", priority: "H", risks: [1] });
 	const casePath = join(root, "case.json");
-	const record: QaCaseRecord = { id: "case", title: "case", goal: "run", given: ["case exists"], when: ["run"], then: ["result observed"], acceptance_criteria: ["runner result observed"], surface: "bash", runner: [process.execPath, "-e", "require('fs').writeFileSync(process.env.QA_ARTIFACTS_DIR + '/boundary.txt', 'observed')"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset" };
+	const record: QaCaseRecord = { id: "case", title: "case", goal: "run", given: ["case exists"], when: ["run"], then: ["result observed"], feature_refs: ["checkout"], surface: "bash", runner: [process.execPath, "-e", "require('fs').writeFileSync(process.env.QA_ARTIFACTS_DIR + '/boundary.txt', 'observed')"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset" };
 	writeFileSync(casePath, JSON.stringify(record));
 	const state = JSON.parse(readFileSync(join(process.env.OMT_DIR!, `qa-state-${sid}.json`), "utf8"));
 	const storyHash = createHash("sha256").update(JSON.stringify(state.stories[0].contract)).digest("hex");
@@ -101,7 +101,7 @@ async function bindingFixture(register = true, exitCode = 0) {
 	authorScenario(sid, { story: "story", id: "s1", title: "run the case", preconditions: "case exists", steps: ["run the runner"], expected: "result observed", whyNeeded: "covers the runner boundary", priority: "H", risks: [1] });
 	const casePath = join(root, "case.json");
 	const nativePath = join(root, "native.txt"); writeFileSync(nativePath, "native");
-	const record: QaCaseRecord = { id: "case", title: "case", goal: "run", given: ["case exists"], when: ["run"], then: ["result observed"], acceptance_criteria: ["runner result observed"], surface: "bash", runner: [process.execPath, "-e", `require('fs').writeFileSync(process.env.QA_ARTIFACTS_DIR + '/boundary.txt', 'observed'); process.stdout.write('runner log'); process.exitCode=${exitCode}`], execution_cwd: "{artifacts}", native_files: [nativePath], reset_description: "reset" };
+	const record: QaCaseRecord = { id: "case", title: "case", goal: "run", given: ["case exists"], when: ["run"], then: ["result observed"], feature_refs: ["checkout"], surface: "bash", runner: [process.execPath, "-e", `require('fs').writeFileSync(process.env.QA_ARTIFACTS_DIR + '/boundary.txt', 'observed'); process.stdout.write('runner log'); process.exitCode=${exitCode}`], execution_cwd: "{artifacts}", native_files: [nativePath], reset_description: "reset" };
 	writeFileSync(casePath, JSON.stringify(record));
 	const state = readQaState(sid)!;
 	const storyHash = createHash("sha256").update(JSON.stringify(state.stories![0]!.contract)).digest("hex");
@@ -172,10 +172,10 @@ test("case와 native asset가 receipt 이후 변경되면 binding을 거부한�
 	}
 });
 
-test("현재 acceptance criteria가 바뀌면 receipt binding을 거부한다", async () => {
+test("현재 acceptance criteria 문구가 case와 달라도 receipt binding은 거부하지 않는다", async () => {
 	const fixture = await bindingFixture();
 	setAcceptance(sid, ["different criterion"]);
-	expect(() => recordScenario(sid, { story: "story", scenario: "s1", status: "pass", evidencePath: fixture.boundary, evidenceSurface: "bash", caseRun: fixture.receiptPath })).toThrow(/acceptance criteria/);
+	expect(() => recordScenario(sid, { story: "story", scenario: "s1", status: "pass", evidencePath: fixture.boundary, evidenceSurface: "bash", caseRun: fixture.receiptPath })).not.toThrow();
 });
 
 test("receipt artifact path가 run 밖을 가리키면 binding을 거부한다", async () => {

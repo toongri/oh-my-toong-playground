@@ -91,8 +91,6 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 	if (storeStatus.status !== "configured") fail(`case store is ${storeStatus.status}`);
 	const record: QaCaseRecord = caseResult.record;
 	if (record.surface !== actor.driver) fail(`case surface "${record.surface}" does not match actor driver "${actor.driver}"`);
-	const linkedCriteria = (story.contract?.acceptance_criteria ?? []).map((index) => state.acceptance_criteria?.[index]).filter((value): value is string => typeof value === "string");
-	if (!record.acceptance_criteria.every((criterion) => linkedCriteria.includes(criterion))) fail("case acceptance criteria must be a subset of the story's linked session acceptance criteria");
 	const result = await runQaCase(record, {
 		casePath: caseResult.path,
 		caseRevision: caseResult.revision,

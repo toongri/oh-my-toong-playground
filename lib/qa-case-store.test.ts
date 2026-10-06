@@ -37,7 +37,6 @@ function sample(id = "checkout-happy-path"): QaCaseRecord {
 		given: ["A cart contains one item"],
 		when: ["The shopper submits payment"],
 		then: ["An order confirmation is shown"],
-		acceptance_criteria: ["The order is created once"],
 		surface: "curl",
 		runner: ["curl", "-fsS", "http://localhost/checkout"],
 		execution_cwd: "project-root",
@@ -245,14 +244,35 @@ describe("qa case store", () => {
 		expect(saveQaCase({ record: { ...sample(), title: "changed" }, expectedRevision: "0".repeat(64) }, { cwd, home })).toMatchObject({ status: "conflict" });
 	});
 
-	test("given/when/then/acceptance_criteria/runner는 빈 배열을 허용하지 않는다", () => {
+	test("given/when/then/feature_refs/runner는 빈 배열을 허용하지 않는다", () => {
 		const cwd = repo();
 		const home = tempDir();
 		configureQaCaseStore(join(tempDir(), "cases"), { cwd, home });
-		for (const field of ["given", "when", "then", "acceptance_criteria", "runner"] as const) {
+		for (const field of ["given", "when", "then", "feature_refs", "runner"] as const) {
 			const record = { ...sample(), [field]: [] };
 			expect(() => saveQaCase({ record, expectedRevision: null }, { cwd, home })).toThrow(new RegExp(`${field}.*string array`));
 		}
+	});
+
+	test("feature_refs를 빼면 저장을 거부한다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		configureQaCaseStore(join(tempDir(), "cases"), { cwd, home });
+		const { feature_refs: _omitted, ...record } = sample();
+		expect(() => saveQaCase({ record: record as QaCaseRecord, expectedRevision: null }, { cwd, home })).toThrow(/feature_refs.*string array/);
+	});
+
+	test("list는 요약에 feature_refs를 담고 feature 필터로 걸러낸다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		configureQaCaseStore(join(tempDir(), "cases"), { cwd, home });
+		saveQaCase({ record: sample("a-checkout"), expectedRevision: null }, { cwd, home });
+		saveQaCase({ record: { ...sample("b-profile"), feature_refs: ["profile", "settings"] }, expectedRevision: null }, { cwd, home });
+		expect(listQaCases({ cwd, home })).toMatchObject({ status: "ok", cases: [{ id: "a-checkout", feature_refs: ["checkout"] }, { id: "b-profile", feature_refs: ["profile", "settings"] }] });
+		const filtered = listQaCases({ cwd, home }, { feature: "settings" });
+		expect(filtered).toMatchObject({ status: "ok", cases: [{ id: "b-profile" }] });
+		if (filtered.status === "ok" && "cases" in filtered) expect(filtered.cases).toHaveLength(1);
+		expect(listQaCases({ cwd, home }, { feature: "missing" })).toMatchObject({ status: "ok", cases: [] });
 	});
 
 	test("native_files는 direct runner case에서 빈 배열을 허용한다", () => {

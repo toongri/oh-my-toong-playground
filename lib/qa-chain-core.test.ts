@@ -11,6 +11,7 @@ import {
 	qaReportComplete,
 	qaReportSnapshot,
 	caseRunBindingComplete,
+	scenariosMissingCase,
 	recordComplete,
 	requestChangesOk,
 	riskCoverageComplete,
@@ -137,6 +138,25 @@ describe("qa chain core", () => {
 		delete state.stories[0].contract;
 		expect(chainComplete(state)).toBe(false);
 		expect(approveOk(state, probe)).toBe(false);
+	});
+	test("H pass 시나리오는 boundary로 증명됐으면 case 연결이나 사유 또는 case_run이 있어야 한다", () => {
+		const base = { story: "s", cycle: 0, priority: "H", status: "pass", evidence: { path: "/e", surface: "bash" } } as const;
+		const saved = { kind: "saved", id: "c", revision: "a".repeat(64), receipt_path: "/r", attempt_id: "att" } as const;
+		const state = {
+			cycle: 0,
+			scenarios: [
+				{ ...base, id: "bare" },
+				{ ...base, id: "linked", case: saved },
+				{ ...base, id: "no-case", case: { kind: "none", reason: "일회성 데이터라 재생 불가" } },
+				{ ...base, id: "blank-reason", case: { kind: "none", reason: "  " } },
+				{ ...base, id: "replayed", case_run: { case_id: "c", attempt_id: "att", code_ref: "code", receipt_path: "/r", files: { "/r": "a".repeat(64) }, evidence_paths: [] } },
+				{ ...base, id: "test-surface", evidence: { path: "/e", surface: "test" } },
+				{ ...base, id: "medium", priority: "M" },
+				{ ...base, id: "failed", status: "fail" },
+				{ ...base, id: "old-cycle", cycle: 1 },
+			],
+		} as unknown as QaChainState;
+		expect(scenariosMissingCase({ ...state, cycle: 0 }).map((scenario) => scenario.id)).toEqual(["bare", "blank-reason"]);
 	});
 	test("bound case-run files must remain present and hash-stable", () => {
 		const record: QaScenario = { story: "s", id: "x", status: "fail", cycle: 0, case_run: { case_id: "case", attempt_id: "attempt", code_ref: "code", receipt_path: "/receipt", files: { "/receipt": "a".repeat(64), "/evidence": "a".repeat(64) }, evidence_paths: ["/evidence"] } };

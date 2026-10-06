@@ -23,7 +23,7 @@ function record(root: string, runner: string[]): QaCaseRecord {
 		given: ["fixture exists"],
 		when: ["runner starts"],
 		then: ["receipt is written"],
-		acceptance_criteria: ["receipt exists"],
+		feature_refs: ["checkout"],
 		surface: "bash" as const,
 		runner,
 		execution_cwd: "{artifacts}",
