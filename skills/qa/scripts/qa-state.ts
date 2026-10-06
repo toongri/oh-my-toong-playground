@@ -1515,12 +1515,12 @@ const ROSTER: CliCommand[] = [
 	{
 		name: "record-resource",
 		authority: "ai",
-		effect: "records a background resource this run started (--id --kind --stop <command>); complete refuses until it is released",
+		effect: "records a background resource this run started (--id --kind --stop <command> [--device <serial|UDID> when it lives on an acquired device]); complete refuses until it is released",
 	},
 	{
 		name: "release-resource",
 		authority: "ai",
-		effect: "runs the recorded stop command for --id and marks it released only when the command exits 0",
+		effect: "runs the recorded stop command for --id and marks it released only when the command exits 0; releasing a device also releases what was recorded with --device on it",
 	},
 	{
 		name: "complete",
@@ -1693,6 +1693,7 @@ function main(): void {
 					id: requiredArg(args, "id"),
 					kind: requiredArg(args, "kind"),
 					stop: requiredArg(args, "stop"),
+					device: str(args["device"]),
 				});
 				process.stdout.write("recorded: complete refuses until this resource is released with release-resource.\n");
 			} else if (subcommand === "release-resource") {
