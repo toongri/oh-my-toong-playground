@@ -490,14 +490,25 @@ describe("qa-report renderer", () => {
 		const html = renderQaReport(view, {}, fakeReader)!;
 		const audit = auditSection(html);
 
-		expect(audit).toContain('<td class="audit-story"><code>story-1</code><br><code>sc-1</code></td>');
-		expect(audit).toContain('<td class="audit-coverage">H · 1 실패 경로</td>');
-		expect(audit).toContain('<td class="audit-boundary">브라우저 경계 미구동<br>');
+		expect(audit).toContain('<td class="audit-story" data-label="story / scenario"><code>story-1</code><br><code>sc-1</code></td>');
+		expect(audit).toContain('<td class="audit-coverage" data-label="priority · risks">H · 1 실패 경로</td>');
+		expect(audit).toContain('<td class="audit-boundary" data-label="driven at">브라우저 경계 미구동<br>');
 		expect(html).toContain("table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.94rem; display: block; overflow-x: auto; }");
 		expect(html).toContain(".audit-story { min-width: 6rem; }");
 		expect(html).toContain(".audit-story code { white-space: normal; overflow-wrap: anywhere; }");
 		expect(html).toContain(".audit-coverage { min-width: 8rem; word-break: keep-all; overflow-wrap: normal; }");
 		expect(html).toContain(".audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: anywhere; }");
+	});
+
+	test("좁은 화면에서는 감사 표의 행을 열 이름이 붙은 카드로 쌓는다", () => {
+		const view = baseView();
+		attachReviews(view);
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const audit = auditSection(html);
+
+		expect(audit).toContain('<table class="audit-table" tabindex="0">');
+		for (const label of ["story / scenario", "priority · risks", "scenario · why needed", "driven at", "result · evidence"]) expect(audit).toContain(`data-label="${label}"`);
+		expect(html).toMatch(/@media \(max-width: 40rem\) \{[^}]*\.audit-table tr \{ display: block;/);
 	});
 
 	test("동작이 바뀌지 않는 변경으로 선언된 inert는 시나리오 섹션 머리에 안내로 표시함", () => {

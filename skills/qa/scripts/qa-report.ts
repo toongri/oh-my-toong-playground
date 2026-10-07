@@ -616,17 +616,17 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
 			storyAnchors.add(scenario.story);
 			const risks = (scenario.risks ?? []).map((axis) => `${axis} ${RISK_LABEL[axis] ?? ""}`).join(", ") || "정상 흐름";
 			return (
-				`<tr${storyAnchor}><td class="audit-story"><code>${escapeHtml(scenario.story)}</code><br><code>${escapeHtml(scenario.id)}</code>${scenario.profile ? `<br><span class="audit-note">${escapeHtml(scenario.profile)}</span>` : ""}</td>` +
-				`<td class="audit-coverage">${escapeHtml(scenario.priority ?? "")} · ${escapeHtml(risks)}</td>` +
-				`<td>${escapeHtml(scenario.title ?? "")}${scenario.why_needed ? `<br><span class="audit-note">${escapeHtml(scenario.why_needed)}</span>` : ""}</td>` +
-				`<td class="audit-boundary">${escapeHtml(boundary ?? "")}${driver ? `<br><span class="audit-note">${escapeHtml(driver)}</span>` : ""}</td>` +
+				`<tr${storyAnchor}><td class="audit-story" data-label="story / scenario"><code>${escapeHtml(scenario.story)}</code><br><code>${escapeHtml(scenario.id)}</code>${scenario.profile ? `<br><span class="audit-note">${escapeHtml(scenario.profile)}</span>` : ""}</td>` +
+				`<td class="audit-coverage" data-label="priority · risks">${escapeHtml(scenario.priority ?? "")} · ${escapeHtml(risks)}</td>` +
+				`<td data-label="scenario · why needed">${escapeHtml(scenario.title ?? "")}${scenario.why_needed ? `<br><span class="audit-note">${escapeHtml(scenario.why_needed)}</span>` : ""}</td>` +
+				`<td class="audit-boundary" data-label="driven at">${escapeHtml(boundary ?? "")}${driver ? `<br><span class="audit-note">${escapeHtml(driver)}</span>` : ""}</td>` +
 				// Evidence paths sit under the result: a sixth column would overflow the reading width and hide behind an invisible scrollbar.
-				`<td>${result}${paths.length ? `<span class="audit-evidence">${paths.map((pth) => `<code>${escapeHtml(pth)}</code>`).join("")}</span>` : ""}</td></tr>`
+				`<td data-label="result · evidence">${result}${paths.length ? `<span class="audit-evidence">${paths.map((pth) => `<code>${escapeHtml(pth)}</code>`).join("")}</span>` : ""}</td></tr>`
 			);
 		})
 		.join("");
 	const table = rows
-		? `<table tabindex="0"><thead><tr><th class="audit-story">story / scenario</th><th class="audit-coverage">priority · risks</th><th>scenario · why needed</th><th class="audit-boundary">driven at</th><th>result · evidence</th></tr></thead><tbody>${rows}</tbody></table>`
+		? `<table class="audit-table" tabindex="0"><thead><tr><th class="audit-story">story / scenario</th><th class="audit-coverage">priority · risks</th><th>scenario · why needed</th><th class="audit-boundary">driven at</th><th>result · evidence</th></tr></thead><tbody>${rows}</tbody></table>`
 		: `<p class="evidence-note">기록된 시나리오 없음</p>`;
 	return `<h2>시나리오 상세 기록 (감사)</h2>${table}${renderStoryProvenance(view, storyAnchors)}${renderRawEvidence(scenarios, readEvidence, context)}${renderBaselineAudit(view, readEvidence, context)}`;
 }
@@ -1072,6 +1072,13 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .audit-evidence code { display: block; word-break: break-all; margin-top: 0.2rem; }
 .audit-story-link { color: var(--accent); text-decoration: underline; }
 .audit-story-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* A phone cannot fit five columns: each audit row becomes a card whose cells carry their column name. */
+@media (max-width: 40rem) {
+  .audit-table tr { display: block; border: 1px solid var(--rule); border-radius: 8px; margin: 0 0 0.75rem; padding: 0.35rem 0.6rem; }
+  .audit-table thead { display: none; }
+  .audit-table td { display: block; min-width: 0; border: 0; padding: 0.3rem 0; }
+  .audit-table td::before { content: attr(data-label); display: block; color: var(--muted); font-size: 0.75rem; }
+}
 .affected-user, .scenario-flow, .ac-map { margin: 1rem 0; padding: 0.85rem 1rem; border: 1px solid var(--rule); border-radius: 10px; }
 .affected-user h3, .scenario-flow h3, .ac-map h3 { margin-top: 0; }
 .satisfied-yes { color: var(--pass); border-color: var(--pass); }
