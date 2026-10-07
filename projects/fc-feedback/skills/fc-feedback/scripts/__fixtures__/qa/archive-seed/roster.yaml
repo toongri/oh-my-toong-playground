@@ -28,37 +28,35 @@ members:
   # 아래 7명은 FB 태그 유닛에서 relatedMembers가 6명 이상이 되게 하는 가상
   # 팀원이다 — 접힘 <details>(6명 이상) 마크업을 캡처로 검증하기 위한 픽스처
   # 전용 인원(실제 인물 아님).
-  # 포지션은 RB/LWB/RWB로만 한정한다: RB/LWB/RWB는 모두 FB의 자손이므로
-  # related() 규칙상 이 7명은 FB 태그 유닛 두 개, 곧 work-current의
-  # "우측 풀백 오버래핑"과 work-past의 "풀백 오버래핑 늦음"에만 관련으로
-  # 붙고, DF/CB/LB로 두었을 때처럼 다른 카드(코너킥 수비 위치 선정, 풀백
-  # 빌드업 참여 위치 등)로 새지 않는다.
+  # 포지션은 FB로만 한정한다: related() 규칙상 이 7명은 FB 태그 유닛에만
+  # 관련으로 붙고, DF/CB로 두었을 때처럼 다른 카드(코너킥 수비 위치 선정
+  # 등)로 새지 않는다.
   # 또한 이 7명이 각자 "내 피드백" pill 행을 하나씩 차지해 pill 목록이 늘어난다.
   - id: gang-rb
     name: 강태오
     gamertag: GangRB
-    positions: [RB]
+    positions: [FB]
   - id: oh-rb
     name: 오정민
     gamertag: OhRB
-    positions: [RB]
+    positions: [FB]
   - id: shin-lwb
     name: 신동재
     gamertag: ShinLWB
-    positions: [LWB]
+    positions: [FB]
   - id: joo-rwb
     name: 주성현
     gamertag: JooRWB
-    positions: [RWB]
+    positions: [FB]
   - id: kwon-rb
     name: 권민혁
     gamertag: KwonRB
-    positions: [RB]
+    positions: [FB]
   - id: bae-rwb
     name: 배준호
     gamertag: BaeRWB
-    positions: [RWB]
+    positions: [FB]
   - id: yang-lwb
     name: 양지훈
     gamertag: YangLWB
-    positions: [LWB]
+    positions: [FB]

@@ -25,7 +25,7 @@
  *   data-related-ids`: the per-video embeddable-placeholder switch (§9) has
  *   no other data hook to read from.
  */
-import { anc, boldSpans, formatTime, PARENT, posClosure } from "./core.ts";
+import { anc, boldSpans, formatTime, isFaultTitleSegment, PARENT, positionFromLegacyCode, positionTagsFromLegacy, posClosure } from "./core.ts";
 
 // ── input types (plan §3) ────────────────────────────────────────────────
 
@@ -68,6 +68,8 @@ export interface UnitBodyFrameBlock {
 	height: number;
 	t: number;
 	caption: string;
+	/** Horizontal position (0..1, left to right) of the caption's subject in the frame; absent when the notes gave none. */
+	focus_x?: number;
 }
 
 export type UnitBodyBlock = UnitBodyTextBlock | UnitBodyFrameBlock;
@@ -88,7 +90,31 @@ export interface UnitRef {
 	kind: "eafc" | "tactics";
 	href: string | null;
 	orig_url: string;
+	format: "video" | "article";
+	/** Why this reference matters for this unit's scene — one sentence. */
+	relevance_ko: string;
+	/** Where to start watching a video reference, in seconds; null for an article or a whole-video reference. */
+	start_seconds: number | null;
+	/** Ready-to-show version text ("FC 25 · 이전 버전", "FC 26"); null = show no version badge (non-game material, or a game material that states no version). */
+	version_badge: string | null;
+	/** Ready-to-show upload year-month ("2023년 1월") of a game material that states no version; null = show no date badge. */
+	published_badge: string | null;
+	/** The material is about Pro Clubs (one player, one position). */
+	pro_clubs: boolean;
+	/** Who published the material (channel or site name); names the reference that gives `lesson_ko`. */
+	source_name: string;
+	/** The action this material itself recommends for the unit's fault; `null` when it gives none for this unit. */
+	lesson_ko: string | null;
 }
+
+/** A ref as read from a data.json that may predate `version_badge`/`published_badge`/`pro_clubs`/`source_name`/`lesson_ko` (see `versionBadgeFromLegacyData`, `publishedBadgeFromLegacyData`, `proClubsFromLegacyData`, `sourceNameFromLegacyData`, `lessonFromLegacyData`). */
+export type UnitRefInput = Omit<UnitRef, "version_badge" | "published_badge" | "pro_clubs" | "source_name" | "lesson_ko"> & {
+	version_badge?: string | null;
+	published_badge?: string | null;
+	pro_clubs?: boolean;
+	source_name?: string;
+	lesson_ko?: string | null;
+};
 
 export interface SessionUnit {
 	id: string;
@@ -101,9 +127,30 @@ export interface SessionUnit {
 	title: string;
 	position_tags: string[];
 	topic_tags: string[];
+	/** Players the feedback asks to change behaviour (criticized or instructed). */
 	member_ids: string[];
+	/** Roster members whose name/alias/gamertag occurs in the unit's source lines (script-derived); may overlap `member_ids`. */
+	named_member_ids: string[];
 	related_member_ids: string[];
+	/** Members the unit addresses as part of its unnamed group (`group_positions`) by the position they played in the match; never overlaps `member_ids`. */
+	position_target_ids: string[];
+	/** Members who played a position of the unit's unnamed group (`group_positions`) in the match, fixers (`member_ids`) included; a superset of `position_target_ids`. */
+	group_member_ids: string[];
 	addressed_to_all: boolean;
+	/** Display names of the YouTube comment writers whose timestamped comments this unit is built from; empty for narrated feedback. */
+	comment_author_names: string[];
+	/** Roster ids of people to fix whom no photo of the card lets the writer identify. */
+	unidentified_member_ids: string[];
+	/** Where in the card's photos to look instead when the people to fix cannot be identified or a caption says the title's receiver is not visible; `null` otherwise. */
+	look_at: string | null;
+	/** How the fault looked in the card's frames (who stood where, how the shape split); `null` when the title has no -ㅁ (fault) segment. */
+	fault_scene: string | null;
+	/** One sentence saying the source's left/right and the card's frames disagree (notes `direction_check_ko`); `null` when they do not or the direction is unknown. */
+	direction_check_ko: string | null;
+	/** Members in `member_ids` who are also the writer of one of the unit's comments (self-critique); a subset of `member_ids`. */
+	self_critique_member_ids: string[];
+	/** Members in `member_ids` whose role as actor was inferred because the source sentence has no subject; a subset of `member_ids`. */
+	inferred_member_ids: string[];
 	body: UnitBodyBlock[];
 	images: UnitImages;
 	similar: UnitSimilar[];
@@ -118,10 +165,45 @@ export interface SessionTopic {
 	unit_ids: string[];
 }
 
+/**
+ * A problem that repeats across the session: the label and the units (document order) that each hit it once.
+ * `member_ids` are the roster ids whose own repeated behaviour the label names; `[]` means the label names a
+ * team unit or position, not specific people.
+ */
+export interface SessionRecurring {
+	label: string;
+	unit_ids: string[];
+	member_ids: string[];
+	/** The reference search for this label found nothing (the refs-draft lists it in `recurring_unfound`). */
+	refs_unfound: boolean;
+}
+
+/** A recurring entry as read from a data.json that may predate `member_ids`/`refs_unfound` (see `recurringFromLegacyData`, `refsUnfoundFromLegacyData`). */
+export type SessionRecurringInput = Omit<SessionRecurring, "member_ids" | "refs_unfound"> & { member_ids?: string[]; refs_unfound?: boolean };
+
 export interface SessionMatch {
 	id: string;
 	title: string;
 	topics: SessionTopic[];
+	/** Member id → the position that member played in this match; `null`/absent = the lineup is unknown (see `lineupFromLegacyData`). */
+	lineup?: Record<string, string> | null;
+	/** Triangle colour above each human-controlled player in this match, in notes order; absent in a data.json written before it existed (see `markerLegendFromLegacyData`). */
+	marker_legend?: SessionMarkerLegendEntry[];
+	/** Name tags seen in this match that match no roster member, in notes order; absent in a data.json written before it existed (see `unmatchedNameTagsFromLegacyData`). Never a roster `member_id`. */
+	unmatched_name_tags?: SessionUnmatchedNameTag[];
+}
+
+export interface SessionUnmatchedNameTag {
+	/** The name tag as seen, e.g. "SAMBA". */
+	tag: string;
+	/** Korean colour word of the marker seen with that tag, e.g. "자홍"; absent when no colour was seen. */
+	color?: string;
+}
+
+export interface SessionMarkerLegendEntry {
+	member_id: string;
+	/** Korean colour word, e.g. "분홍". */
+	color: string;
 }
 
 /** data.json (sessions/<sid>/data.json), plan §3. */
@@ -136,6 +218,161 @@ export interface SessionData {
 	members: SessionMemberInfo[];
 	matches: SessionMatch[];
 	units: SessionUnit[];
+	recurring: SessionRecurring[];
+	/** Titles of matches in the videos that have no feedback unit, e.g. "2경기 · LVT 대 AL". */
+	matches_without_feedback: string[];
+}
+
+/**
+ * Legacy conversion: a data.json written before `recurring` existed has no such field; it reads as "nothing
+ * repeats". An entry written before `member_ids` existed gets `member_ids: []`: no named owner, so
+ * "내가 고칠 것 k" (DESIGN §6a) counts nothing for it and only "내 포지션 대상" applies.
+ */
+export function recurringFromLegacyData(data: { recurring?: SessionRecurringInput[] }): SessionRecurring[] {
+	return (data.recurring ?? []).map((entry) => ({ ...entry, member_ids: entry.member_ids ?? [], refs_unfound: refsUnfoundFromLegacyData(entry) }));
+}
+
+/** Legacy conversion: a recurring entry written before `refs_unfound` existed reads as `false` (no "추천 자료 없음" marker). */
+export function refsUnfoundFromLegacyData(entry: { refs_unfound?: boolean }): boolean {
+	return entry.refs_unfound ?? false;
+}
+
+/** Legacy conversion: a data.json written before `matches_without_feedback` existed reads as `[]` (every match has feedback). */
+export function matchesWithoutFeedbackFromLegacyData(data: { matches_without_feedback?: string[] }): string[] {
+	return data.matches_without_feedback ?? [];
+}
+
+/** Legacy conversion: a match written before `marker_legend` existed reads as `[]` (no colour legend). */
+export function markerLegendFromLegacyData(match: { marker_legend?: SessionMarkerLegendEntry[] }): SessionMarkerLegendEntry[] {
+	return match.marker_legend ?? [];
+}
+
+/** Legacy conversion: a match written before `unmatched_name_tags` existed reads as `[]` (no name tag outside the roster). */
+export function unmatchedNameTagsFromLegacyData(match: { unmatched_name_tags?: SessionUnmatchedNameTag[] }): SessionUnmatchedNameTag[] {
+	return match.unmatched_name_tags ?? [];
+}
+
+/**
+ * Legacy conversion: a match written before `lineup` existed (or validated without one) has no lineup; it reads as
+ * `null` = unknown, and then an `addressed_to_all` unit of that match reaches every roster member. A lineup written
+ * with the retired left/right position codes reads with the side-agnostic code (`positionFromLegacyCode`).
+ */
+export function lineupFromLegacyData(match: { lineup?: Record<string, string> | null }): Record<string, string> | null {
+	if (match.lineup === undefined || match.lineup === null) return null;
+	return Object.fromEntries(Object.entries(match.lineup).map(([memberId, position]) => [memberId, positionFromLegacyCode(position) ?? position]));
+}
+
+/** Legacy conversion: a unit written before the side-agnostic position tree carries retired left/right codes (LB, RW, CF, ...); they read as the current codes, duplicates collapsed. */
+export function positionTagsFromLegacyData(unit: { position_tags: string[] }): string[] {
+	return positionTagsFromLegacy(unit.position_tags);
+}
+
+/**
+ * The roster members an `addressed_to_all` unit reaches: those who played its match — in the match's lineup, or named
+ * in the source of any unit of that match (`matchNamedIds`; a player heard in the match whose position is unknown is
+ * not in the lineup) — or every member when that lineup is unknown (`null`). A unit that is not `addressed_to_all`
+ * reaches nobody this way.
+ */
+function addressedMemberIds(unit: SessionUnit, lineup: Record<string, string> | null, matchNamedIds: ReadonlySet<string>, members: readonly SessionMemberInfo[]): string[] {
+	if (!unit.addressed_to_all) {
+		return [];
+	}
+	return members.filter((member) => lineup === null || Object.hasOwn(lineup, member.id) || matchNamedIds.has(member.id)).map((member) => member.id);
+}
+
+/** Legacy conversion: a unit written before `self_critique_member_ids` existed reads as `[]` (no self-critique marker). */
+/** Legacy conversion: a unit written before `inferred_member_ids` existed inferred no actor. */
+export function inferredMemberIdsFromLegacyData(unit: { inferred_member_ids?: string[] }): string[] {
+	return unit.inferred_member_ids ?? [];
+}
+
+export function selfCritiqueMemberIdsFromLegacyData(unit: { self_critique_member_ids?: string[] }): string[] {
+	return unit.self_critique_member_ids ?? [];
+}
+
+/**
+ * Legacy conversion: a data.json written before `named_member_ids` existed has no such field. In that
+ * older data `member_ids` meant "names called in the source", which is what `named_member_ids` means
+ * now, so the older `member_ids` is the named list.
+ */
+export function namedMemberIdsFromLegacyData(unit: { member_ids: string[]; named_member_ids?: string[] }): string[] {
+	return unit.named_member_ids === undefined ? unit.member_ids : unit.named_member_ids;
+}
+
+/** The closing words of the `version_badge` an older render wrote for a game material that states no version ("버전 미표기", or "2023년 1월 · 버전 미표기" when the upload month was known). */
+const LEGACY_UNSTATED_VERSION_TEXT = "버전 미표기";
+const LEGACY_UNSTATED_VERSION_SUFFIX = ` · ${LEGACY_UNSTATED_VERSION_TEXT}`;
+
+/**
+ * Legacy conversion: a ref written before `version_badge` existed reads as `null` (show no version badge); so does one whose older
+ * `version_badge` only said the version was not stated ("버전 미표기", "2023년 1월 · 버전 미표기") — that text is not a version.
+ */
+export function versionBadgeFromLegacyData(ref: { version_badge?: string | null }): string | null {
+	const text = ref.version_badge ?? null;
+	return text !== null && text.endsWith(LEGACY_UNSTATED_VERSION_TEXT) ? null : text;
+}
+
+/**
+ * Legacy conversion: a ref written before `published_badge` existed reads its upload month out of an older `version_badge` of the form
+ * "2023년 1월 · 버전 미표기" ("2023년 1월"); any other older `version_badge` carries no date (`null`). A `published_badge` already in the data wins.
+ */
+export function publishedBadgeFromLegacyData(ref: { version_badge?: string | null; published_badge?: string | null }): string | null {
+	if (ref.published_badge !== undefined) {
+		return ref.published_badge;
+	}
+	const text = ref.version_badge ?? null;
+	return text !== null && text.endsWith(LEGACY_UNSTATED_VERSION_SUFFIX) ? text.slice(0, -LEGACY_UNSTATED_VERSION_SUFFIX.length) : null;
+}
+
+/** Legacy conversion: a ref written before `pro_clubs` existed reads as `false` (not about Pro Clubs). */
+export function proClubsFromLegacyData(ref: { pro_clubs?: boolean }): boolean {
+	return ref.pro_clubs ?? false;
+}
+
+/** Legacy conversion: a ref written before `lesson_ko` existed gives no lesson (`null`, no "자료가 권하는 것" line). */
+export function lessonFromLegacyData(ref: { lesson_ko?: string | null }): string | null {
+	return ref.lesson_ko ?? null;
+}
+
+/** Legacy conversion: a ref written before `source_name` existed names its source by its own title. */
+export function sourceNameFromLegacyData(ref: { title: string; source_name?: string }): string {
+	return ref.source_name ?? ref.title;
+}
+
+/**
+ * Legacy conversion: a unit written before `position_target_ids` existed addressed its whole position unit exactly
+ * when it named nobody to fix (`member_ids` empty), and then `related_member_ids` held those members.
+ */
+export function positionTargetIdsFromLegacyData(unit: { member_ids: string[]; related_member_ids: string[]; position_target_ids?: string[] }): string[] {
+	return unit.position_target_ids ?? (unit.member_ids.length === 0 ? unit.related_member_ids : []);
+}
+
+/**
+ * Legacy conversion: a unit written before `group_member_ids` existed has no record of which fixers played in its group,
+ * so its group members are exactly the (legacy-read) position targets.
+ */
+export function groupMemberIdsFromLegacyData(unit: { member_ids: string[]; related_member_ids: string[]; position_target_ids?: string[]; group_member_ids?: string[] }): string[] {
+	return unit.group_member_ids ?? positionTargetIdsFromLegacyData(unit);
+}
+
+/** Legacy conversion: a unit written before `look_at` existed reads as `null` (no pointer to where to look). */
+export function lookAtFromLegacyData(unit: { look_at?: string | null }): string | null {
+	return unit.look_at ?? null;
+}
+
+/** Legacy conversion: a unit written before `direction_check_ko` existed reads as `null` (no "방향 확인 필요" line). */
+export function directionCheckFromLegacyData(unit: { direction_check_ko?: string | null }): string | null {
+	return unit.direction_check_ko ?? null;
+}
+
+/** Legacy conversion: a unit written before `fault_scene` existed reads as `null` (no scene line under the title). */
+export function faultSceneFromLegacyData(unit: { fault_scene?: string | null }): string | null {
+	return unit.fault_scene ?? null;
+}
+
+/** Legacy conversion: a unit written before `unidentified_member_ids` existed reads as `[]` (nobody unidentified). */
+export function unidentifiedMemberIdsFromLegacyData(unit: { unidentified_member_ids?: string[] }): string[] {
+	return unit.unidentified_member_ids ?? [];
 }
 
 export interface IndexSessionEntry {
@@ -189,7 +426,16 @@ export interface RefPageData {
 	title: string;
 	lang: string;
 	kind: "eafc" | "tactics";
+	format: "video" | "article";
 	url: string;
+	/** Where to start a video reference, in seconds; null for an article or a whole-video reference. */
+	start_seconds: number | null;
+	/** Ready-to-show version text; null = show no version badge. */
+	version_badge: string | null;
+	/** Ready-to-show upload year-month; null = show no date badge. */
+	published_badge: string | null;
+	/** The material is about Pro Clubs. */
+	pro_clubs: boolean;
 	summary_ko: string;
 	key_points_ko: string[];
 	translations: RefTranslation[];
@@ -240,14 +486,14 @@ const NATIVE_NUMERAL_WORDS = "반|한|두|세|네|다섯|여섯|일곱|여덟|�
 
 /** Counters a numeral glues to (round-6/round-7 CJK review) - a trailing particle on the counter (e.g. "걸음씩") is untouched: only the space before the counter needs gluing. */
 const COUNTER_WORDS =
-	"걸음|번|명|개|초|분|칸|발|미터|m|차례|경기|세트|골|골대|포인트|점|박자|발짝|뼘|터치|번째|바퀴|야드|라인";
+	"걸음|번|명|개|초|분|칸|발|미터|m|차례|경기|세트|골|골대|포인트|점|박자|발짝|뼘|터치|번째|바퀴|야드|라인|줄";
 
 /**
  * Matches each bound Korean grammatical construction this file glues (DESIGN §10/§15-1):
- * negation (-지 못/않), -기(도/만) 전/시작/위해/때문, -다 보니/보면, -을/를/(ㄹ batchim) 수 있/없
+ * negation (-지 못/않) and the prohibitive (-지 말고/말아/말라/말자), -기(도/만) 전/시작/위해/때문, -다 보니/보면, -을/를/(ㄹ batchim) 수 있/없
  * (both spaces), -고 있/싶, -아/어 주/보/버리/놓, dependent noun 것/게/거/걸/건/겁(것이/것/것을/
  * 것은의 축약형) after -는/은/을/(ㄴ or ㄹ batchim), and a numeral(숫자 또는 한/두/세... 고유어
- * 수사) glued to its counter(초/분/번/명/개/걸음/... ). `\S*` is bounded by whitespace on both
+ * 수사) glued to its counter(초/분/번/명/개/걸음/... ), and the standalone 양 glued to the noun after it (양 팀). `\S*` is bounded by whitespace on both
  * sides, so it never crosses into a neighboring word - an ordinary inter-word space between two
  * independent words (e.g. "수비 전환") matches none of these and stays breakable. An optional
  * `\*{0,2}` on EITHER side of the glued space tolerates a bold span's marker landing exactly at
@@ -257,14 +503,26 @@ const COUNTER_WORDS =
  * comment for the reason that ordering, not per-span application, is used.
  */
 const GLUE_PATTERNS: readonly RegExp[] = [
-	/\S*지\*{0,2} \*{0,2}(?:못|않)/g,
+	/\S*지\*{0,2} \*{0,2}(?:못|않|말(?:고|아|라|자))/g,
 	/\S*기(?:도|만)?\*{0,2} \*{0,2}(?:전|시작|위해|때문)/g,
 	/\S*다\*{0,2} \*{0,2}(?:보니|보면)/g,
 	new RegExp(`\\S*(?:을|를|[${RIEUL_BATCHIM}])\\*{0,2} \\*{0,2}수 \\*{0,2}(?:있|없)`, "g"),
 	/\S*고\*{0,2} \*{0,2}(?:있|싶)/g,
 	/\S*[아어]\*{0,2} \*{0,2}(?:주|보|버리|놓)/g,
 	new RegExp(`\\S*(?:는|은|을|[${RIEUL_BATCHIM}${NIEUN_BATCHIM}])\\*{0,2} \\*{0,2}(?:것|게|거|걸|건|겁)`, "g"),
+	// adnominal ending + 때 ("가졌을 때", "받을 때", "있는 때"); 때리-/때려-/때렸- (hit) is a verb, not 때(time).
+	new RegExp(`\\S*(?:는|은|을|[${RIEUL_BATCHIM}${NIEUN_BATCHIM}])\\*{0,2} \\*{0,2}때(?!리|릴|려|렸)`, "g"),
 	new RegExp(`(?:\\d+|${NATIVE_NUMERAL_WORDS})\\*{0,2} \\*{0,2}(?:${COUNTER_WORDS})`, "g"),
+	// "양 팀"/"양 쪽": the standalone prefix 양(both) + the Hangul noun it modifies (DESIGN §10).
+	/(?<![\uAC00-\uD7A3])양\*{0,2} \*{0,2}(?=[\uAC00-\uD7A3])/g,
+	// short negation "안"/"못" (a standalone word) + the verb after it ("안 된다며", "못 했다"); "안쪽"/"못지않게" are not standalone, so they never match.
+	/(?<![\uAC00-\uD7A3])(?:안|못)\*{0,2} \*{0,2}(?=[\uAC00-\uD7A3])/g,
+	// "서 있"(standing: "떨어져 서 있고"): the standalone verb 서 + 있; "에서 있"/"서로" are not standalone 서, so they never match.
+	/(?<![\uAC00-\uD7A3])서\*{0,2} \*{0,2}있/g,
+	// a standalone 쪽 stays with the word it follows ("우사 쪽", "좌측 쪽"); "위쪽"/"쪽지" are not standalone, so they never match.
+	/\S+\*{0,2} \*{0,2}쪽(?![\uAC00-\uD7A3])/g,
+	// a date "10월 2일" stays together (DESIGN §10).
+	/\d{1,2}월\*{0,2} \*{0,2}\d{1,2}일/g,
 ];
 
 // A chained construction ("찾기 시작하다 보니", "-지 못하고 있는 것") can glue several
@@ -277,6 +535,13 @@ const GLUE_PATTERNS: readonly RegExp[] = [
 // current type scale; revisit if §2's Body size or --measure changes.
 const MAX_GLUE_RUN = 14;
 const NBSP = "\u00a0";
+/** Longest run of capitalised Latin words `glueTitle` joins; a longer run stays breakable at its spaces, because one unbreakable chunk wider than the 390px column gets cut mid-word by `overflow-wrap: anywhere`. */
+const MAX_LATIN_GLUE_WORDS = 3;
+/** U+2060 WORD JOINER: forbids a line break at its position without adding a visible space (used before a spaceless "·"). */
+const WORD_JOINER = "\u2060";
+
+/** A ")" immediately followed by a Korean particle (longest first); the particle must end there so ")이름" (a noun starting with 이) is untouched. Matches only the ")" itself. */
+const PAREN_THEN_PARTICLE = /\)(?=(?:에서|으로|까지|부터|처럼|보다|이|가|은|는|을|를|의|에|로|와|과|도|만)(?![\uAC00-\uD7A3]))/g;
 
 /**
  * `**` bold markers never render as glyphs (`boldSpans()` strips them into a `<strong>`
@@ -337,7 +602,45 @@ export function glueKorean(text: string): string {
 		(acc, pattern) => acc.replace(pattern, (match) => match.replace(/ /g, NBSP)),
 		text,
 	);
-	return capGlueRunLength(glued);
+	return capGlueRunLength(glued)
+		.replace(/([\uAC00-\uD7A3])\(/g, `$1${WORD_JOINER}(`)
+		.replace(PAREN_THEN_PARTICLE, `)${WORD_JOINER}`)
+		.replace(/(\d)([\u2013-])(?=\d)/g, `$1${WORD_JOINER}$2${WORD_JOINER}`)
+		.replace(/([\uAC00-\uD7A3])·(?=[\uAC00-\uD7A3])/g, `$1·${WORD_JOINER}`);
+}
+
+/** The "행위자: " opening a card-title segment (at most 20 characters before the first colon): the colon is bound to the first word after it, so the actor never stands alone at a line end. */
+const TITLE_ACTOR_COLON = /^([^:\s][^:]{0,19}:) (?=\S)/;
+
+/** A one-syllable determiner or adverb (한/이/그/각/더 + space + the next word): a line must not end after it, leaving "한" alone at a line end. */
+const ONE_SYLLABLE_DETERMINER = /(?<![\uAC00-\uD7A3])([한이그각더]) (?=[\uAC00-\uD7A3A-Za-z0-9])/g;
+
+/** A parenthesis closing a title fragment (optionally followed by the clause's " /"), e.g. "(필요해 보임)": the preceding word is bound to it so the hedge never stands alone on a line. */
+const TRAILING_PAREN = /(\S) (\([^()]*\))(?= \/$|$)/;
+
+/** A parenthetical of at most 12 characters closing a title fragment, e.g. "(찬스가 있었을 듯)": its inner spaces are NBSP so a line never breaks inside it. */
+const SHORT_TRAILING_PAREN = /\(([^()]{1,12})\)(?= \/$|$)/;
+
+/**
+ * Title-only gluing on top of `glueKorean` (DESIGN §10): runs of 2-3 consecutive capitalised Latin words (a proper
+ * noun such as "Los Veteranos"; longer runs stay breakable) are joined with NBSP, and a " ·" separator is glued to the word before it
+ * so a line never starts with "·"; a parenthesis ending the fragment ("(필요해 보임)") is bound to the word before it; a "·" with no space before it gets a U+2060 WORD JOINER in front for the same reason. A game-version
+ * name ("FC 26", "FIFA 23" - family + number) is bound with NBSP so a line never breaks inside the version. Spaces inside parentheses stay
+ * breakable: gluing them made "이름(NAME 이름표)가" one chunk wider than a 390px caption column, which overflow-wrap cut mid-chunk. Runs after `glueKorean` so its `MAX_GLUE_RUN` cap cannot undo these joints.
+ */
+function glueTitle(text: string): string {
+	return glueKorean(text)
+		.replace(ONE_SYLLABLE_DETERMINER, `$1${NBSP}`)
+		.replace(/(\S) & (?=\S)(?![^()]*\))/g, `$1${NBSP}&${NBSP}`)
+		.replace(/슈퍼 캔슬/g, `슈퍼${NBSP}캔슬`)
+		.replace(/(?<![A-Za-z])[A-Z][A-Za-z]*(?: [A-Z][A-Za-z]*)+/g, (run) =>
+			run.split(" ").length <= MAX_LATIN_GLUE_WORDS ? run.replaceAll(" ", NBSP) : run,
+		)
+		.replace(/(?<![A-Za-z])(FC|FIFA) (\d+)/g, `$1${NBSP}$2`)
+		.replace(TRAILING_PAREN, `$1${NBSP}$2`)
+		.replace(SHORT_TRAILING_PAREN, (_paren, inner: string) => `(${inner.replaceAll(" ", NBSP)})`)
+		.replace(/(\S) ·/g, `$1${NBSP}·`)
+		.replace(/(?<=\S)·/g, `${WORD_JOINER}·`);
 }
 
 /**
@@ -346,16 +649,51 @@ export function glueKorean(text: string): string {
  * every prose field (ref summary/key points/translation cells) routes through this single
  * helper — not a per-site ad hoc `escapeHtml(text)` — so none of them can silently fall back to
  * the untreated CJK line-break hazard (round-7 review: several call sites had).
+ * `partPrefixHtml` returns markup placed before a " / "-joined part (the card title's "지적" label); it defaults to none.
+ * `glueActor` (card title only) binds each part's "행위자:" to the word after it with NBSP.
  */
-function titleHtml(text: string): string {
-	return wrapNobr(escapeHtml(glueKorean(text)));
+function titleHtml(text: string, partPrefixHtml: (part: string) => string = () => "", glueActor = false): string {
+	const bindActor = (part: string): string => (glueActor ? part.replace(TITLE_ACTOR_COLON, `$1${NBSP}`) : part);
+	const parts = text.split(" / ");
+	if (parts.length === 1) {
+		return partPrefixHtml(text) + wrapNobr(escapeHtml(glueTitle(glueShortFinalEojeol(bindActor(text)))));
+	}
+	// A " / " title is a list of clauses: each clause is an inline-block so a line break lands between
+	// clauses, never inside one, and the slash stays at the end of the clause before it (never opens a
+	// line). Only the last clause has no slash.
+	return parts
+		.map((part, index) => {
+			const clause = index < parts.length - 1 ? `${bindActor(part)} /` : glueShortFinalEojeol(bindActor(part));
+			return `<span class="title-part">${partPrefixHtml(part)}${wrapNobr(escapeHtml(glueTitle(clause)))}</span>`;
+		})
+		.join(" ");
+}
+
+const HANGUL_WORD = /^[\uAC00-\uD7A3]+$/;
+
+/**
+ * Keeps a short closing predicate on the line of the word before it (DESIGN §10, §15-1): a final eojeol of
+ * at most 2 Hangul syllables ("놓침", "넓힘", "명을") is joined to the eojeol before it with NBSP, and
+ * when that eojeol is itself a single syllable ("한" in "상대 한 명을") the join continues one eojeol
+ * further. Runs before `glueKorean`, whose `MAX_GLUE_RUN` cap still bounds the joined run.
+ */
+function glueShortFinalEojeol(text: string): string {
+	const words = text.split(" ");
+	const last = words[words.length - 1] ?? "";
+	if (words.length < 2 || !HANGUL_WORD.test(last) || last.length > 2) {
+		return text;
+	}
+	let from = words.length - 2;
+	while (from > 0 && HANGUL_WORD.test(words[from]) && words[from].length === 1) {
+		from -= 1;
+	}
+	return [...words.slice(0, from), words.slice(from).join(NBSP)].join(" ");
 }
 
 // ── position tree display order (DESIGN.md §7) ──────────────────────────────
 //
 // core.ts's `PARENT` map already lists each parent's children in the exact
-// order DESIGN.md §7 implies (CB,FB / LB,RB,LWB,RWB / CDM,CM,CAM,LM,RM /
-// ST,CF,LW,RW,LF,RF) — this only adds the root ordering, which `PARENT` does
+// order DESIGN.md §7 implies (CB,FB,WB / CDM,CM,CAM,SM / WF,ST) — this only adds the root ordering, which `PARENT` does
 // not carry (roots have no parent entry).
 
 const POSITION_ROOTS = ["GK", "DF", "MF", "FW"] as const;
@@ -385,13 +723,24 @@ function chipCount(count: number): string {
 	return `<span class="chip-count">(${count})</span>`;
 }
 
+function youtubeAt(video: string, seconds: number): string {
+	return `https://youtu.be/${video}?t=${Math.floor(seconds)}`;
+}
+
 /**
  * A keyboard-reachable seek control (DESIGN §5/§13): renders the time label as a real
  * `<button>` instead of a decorative `<span>` so seeking works without a mouse, while the
  * card/frame area itself stays clickable too — `onCardListClick` reads `data-seek-t` first.
  */
-function seekTimeButton(seconds: number): string {
+function seekTimeButton(seconds: number, linkVideo: string | null): string {
 	const label = formatTime(seconds);
+	if (linkVideo !== null) {
+		// Link-only session (no video is embeddable, DESIGN §9): the chip is a real new-tab link, not a seek.
+		return (
+			`<a class="chip chip-time seek-btn" href="${escapeHtml(youtubeAt(linkVideo, seconds))}" target="_blank" rel="noopener" ` +
+			`aria-label="${escapeHtml(label)}부터 유튜브에서 보기">${escapeHtml(label)} ↗</a>`
+		);
+	}
 	return (
 		`<button type="button" class="chip chip-time seek-btn" data-seek-t="${seconds}" ` +
 		`aria-label="${escapeHtml(label)}부터 재생">${escapeHtml(label)}</button>`
@@ -453,52 +802,98 @@ function countTopicTags(data: SessionData): Map<string, number> {
 	return counts;
 }
 
+/** The ids in a unit's "이름이 나온 선수" facet: asked to change behaviour (`member_ids`) ∪ named in the source (`named_member_ids`), no duplicates. */
+function mentionIds(unit: SessionUnit): string[] {
+	return [...new Set([...unit.member_ids, ...unit.named_member_ids])];
+}
+
 function countMentionMembers(data: SessionData): Map<string, number> {
 	const counts = new Map<string, number>();
 	for (const unit of data.units) {
-		for (const id of unit.member_ids) {
+		for (const id of mentionIds(unit)) {
 			counts.set(id, (counts.get(id) ?? 0) + 1);
 		}
 	}
 	return counts;
 }
 
-/** `relatedMembers(unit)` occurrence count per member — the basis for both the "내 피드백" pill count (§6) and pill eligibility (only members with ≥1 count get a pill). A `addressed_to_all` unit matches every member when "내 피드백"로 선택되므로(§7 elementMatchesExcept), 모든 팀원에게 1건씩 가산한다 — `related_member_ids`는 따로 더하지 않는다(전원이 이미 그 집합을 포함하는 상위집합). */
-function countRelatedMembers(data: SessionData): Map<string, number> {
-	const counts = new Map<string, number>();
-	for (const unit of data.units) {
-		if (unit.addressed_to_all) {
-			for (const member of data.members) {
-				counts.set(member.id, (counts.get(member.id) ?? 0) + 1);
-			}
-			continue;
+/** `addressedMemberIds` of every unit, keyed by unit id. */
+function addressedMemberIdsByUnit(data: SessionData): Map<string, string[]> {
+	const lineupByMatch = new Map(data.matches.map((match) => [match.id, lineupFromLegacyData(match)]));
+	const namedByMatch = new Map(data.matches.map((match) => [match.id, new Set(data.units.filter((unit) => unit.match_id === match.id).flatMap((unit) => unit.named_member_ids))]));
+	return new Map(
+		data.units.map((unit) => [unit.id, addressedMemberIds(unit, lineupByMatch.get(unit.match_id) ?? null, namedByMatch.get(unit.match_id) ?? new Set(), data.members)]),
+	);
+}
+
+interface MineCount {
+	/** Units where the member is asked to change behaviour (`member_ids`). */
+	fix: number;
+	/** Units addressed to the member's position group ("내 포지션 대상", `position_target_ids`). */
+	positionTarget: number;
+	/** Units addressed to everyone (`addressed_to_all`) that are neither of the above; they apply to the members in the unit's match lineup. */
+	addressedToAll: number;
+	/** Units that reach the member only by name (`named_member_ids`) or through another person's position-related correction. */
+	reference: number;
+}
+
+/**
+ * Per-member "내 피드백" pill counts (DESIGN §6): `fix` = units with the member in `member_ids`,
+ * `positionTarget` = units addressed to the member's position unit, `addressedToAll` = the remaining
+ * `addressed_to_all` units of a match the member played — in its lineup or named in its source (any member when that
+ * lineup is unknown, see `addressedMemberIds`) (the pill's main number is `fix + positionTarget + addressedToAll`: everything the
+ * member must act on), `reference` = the remaining units the member's selection would show (named in the
+ * source, or another person's position-related correction). A member gets a pill when the four sum to >= 1 -
+ * the same set the selection keeps, so main + reference add up to the selection's visible count when no
+ * other filter is active.
+ */
+function countMineBreakdown(data: SessionData): Map<string, MineCount> {
+	const counts = new Map<string, MineCount>();
+	const addressedByUnit = addressedMemberIdsByUnit(data);
+	for (const member of data.members) {
+		const count: MineCount = { fix: 0, positionTarget: 0, addressedToAll: 0, reference: 0 };
+		for (const unit of data.units) {
+			if (unit.member_ids.includes(member.id)) count.fix += 1;
+			else if (unit.position_target_ids.includes(member.id)) count.positionTarget += 1;
+			else if (addressedByUnit.get(unit.id)?.includes(member.id)) count.addressedToAll += 1;
+			else if (mentionIds(unit).includes(member.id) || unit.related_member_ids.includes(member.id)) count.reference += 1;
 		}
-		for (const id of unit.related_member_ids) {
-			counts.set(id, (counts.get(id) ?? 0) + 1);
-		}
+		counts.set(member.id, count);
 	}
 	return counts;
 }
 
 // ── 내 피드백 (DESIGN.md §6) ─────────────────────────────────────────────
 
+/** Tooltip on each "내 피드백" pill: which unit groups the main number and the "참고" number count (same groups as `countMineBreakdown`). */
+const MINE_PILL_TITLE = "숫자: 내가 고칠 점 / 팀: 내 포지션 대상 + 전원 대상 / 참고: 이름이 나온 장면 + 같은 포지션 참고";
+
+/** Visible legend under the pill row (a phone has no hover for `MINE_PILL_TITLE`): the same two groups, short. */
+const MINE_PILL_LEGEND = "숫자: 내가 고칠 점 / 팀: 내 포지션 대상 · 전원 대상 / 참고: 이름이 나온 장면 · 같은 포지션 지적";
+
 function renderMyFeedbackNav(data: SessionData): string {
 	if (data.members.length === 0) {
 		return "";
 	}
-	const counts = countRelatedMembers(data);
-	const eligible = data.members.filter((member) => (counts.get(member.id) ?? 0) > 0);
+	const counts = countMineBreakdown(data);
+	const eligible = data.members.filter((member) => {
+		const count = counts.get(member.id);
+		return count !== undefined && count.fix + count.positionTarget + count.addressedToAll + count.reference > 0;
+	});
 	if (eligible.length === 0) {
 		return "";
 	}
 	const pills = eligible
 		.map((member) => {
-			const count = counts.get(member.id) ?? 0;
+			const count = counts.get(member.id) ?? { fix: 0, positionTarget: 0, addressedToAll: 0, reference: 0 };
+			const teamCount = count.positionTarget + count.addressedToAll;
+			const teamHtml = teamCount > 0 ? `<span class="count-team">· 팀 ${teamCount}</span>` : "";
+			const referenceHtml = count.reference > 0 ? `<span class="count-ref">· 참고 ${count.reference}</span>` : "";
 			// `role="listitem"` sits on this wrapper, not the button itself (DESIGN §6/§13):
 			// an interactive control cannot also carry a structural list-item role.
 			return (
-				`<div role="listitem"><button type="button" class="pill pill-mine" data-group="mine" data-value="${escapeHtml(member.id)}" data-label="${escapeHtml(member.name)}" aria-pressed="false">` +
-				`${titleHtml(member.name)} <span class="count">${count}</span></button></div>`
+				`<div role="listitem"><button type="button" class="pill pill-mine" title="${MINE_PILL_TITLE}" data-group="mine" data-value="${escapeHtml(member.id)}" data-label="${escapeHtml(member.name)}" aria-pressed="false">` +
+				`${titleHtml(member.name)} <span class="count">${count.fix}</span>${teamHtml}${referenceHtml}</button></div>`
 			);
 		})
 		.join("");
@@ -506,6 +901,7 @@ function renderMyFeedbackNav(data: SessionData): string {
 		`<nav class="my-feedback" aria-label="내 피드백">` +
 		`<span class="my-feedback-label">내 피드백</span>` +
 		`<div class="my-feedback-row" role="list">${pills}</div>` +
+		`<p class="my-feedback-legend">${titleHtml(MINE_PILL_LEGEND)}</p>` +
 		`</nav>`
 	);
 }
@@ -517,17 +913,19 @@ function renderMyFeedbackNav(data: SessionData): string {
  * levels read differently at a glance — children (recursive calls below) never get it. A node
  * with children renders as `.pos-node--branch`: its own chip in a fixed left column, its
  * children wrapping in the row to the right (DESIGN §7) — the same two-column rule at every
- * depth is what keeps a nested branch (FB > LB/RB/LWB/RWB) visually consistent with a root
+ * depth is what keeps a nested branch (should the tree ever grow one) visually consistent with a root
  * branch instead of every chip at every depth flowing into one mixed row. A childless node
  * stays a plain `.pos-node` span (no row split needed).
  */
-function renderPositionNode(tag: string, counts: Map<string, number>, isRoot: boolean): string {
-	const count = counts.get(tag) ?? 0;
-	if (count === 0) {
+function renderPositionNode(tag: string, counts: Map<string, number>, tagged: ReadonlySet<string>, isRoot: boolean): string {
+	// `counts` is the closure count (an FW-tagged card also counts for ST), so it cannot decide whether a node
+	// exists: only a tag some unit carries, or an ancestor of one, renders (DESIGN §7).
+	if (!tagged.has(tag)) {
 		return "";
 	}
+	const count = counts.get(tag) ?? 0;
 	const childHtml = childrenOf(tag)
-		.map((child) => renderPositionNode(child, counts, false))
+		.map((child) => renderPositionNode(child, counts, tagged, false))
 		.join("");
 	const rootClass = isRoot ? " chip-pos-root" : "";
 	// Display label stays on escapeHtml, not titleHtml: `tag` is a position code (GK/DF/.../FB/CB/
@@ -543,7 +941,8 @@ function renderPositionNode(tag: string, counts: Map<string, number>, isRoot: bo
 
 function renderPositionFacetGroup(data: SessionData): string {
 	const counts = countPositionNodes(data);
-	const roots = POSITION_ROOTS.map((root) => renderPositionNode(root, counts, true)).join("");
+	const tagged = new Set(data.units.flatMap((unit) => unit.position_tags.flatMap((tag) => anc(tag))));
+	const roots = POSITION_ROOTS.map((root) => renderPositionNode(root, counts, tagged, true)).join("");
 	if (roots === "") {
 		return "";
 	}
@@ -596,7 +995,7 @@ function renderMentionFacetGroup(data: SessionData): string {
 			);
 		})
 		.join("");
-	return `<div class="filter-group" data-role="filter-mention"><span class="filter-group-label">언급 선수</span>${chips}</div>`;
+	return `<div class="filter-group" data-role="filter-mention"><span class="filter-group-label">이름이 나온 선수</span>${chips}</div>`;
 }
 
 function renderFilterBar(data: SessionData): string {
@@ -614,34 +1013,63 @@ function renderFilterBar(data: SessionData): string {
 
 // ── TOC tabs (DESIGN.md §8) ──────────────────────────────────────────────
 
-function tocItemAttrs(unit: SessionUnit): string {
-	return (
-		`data-target="${escapeHtml(unit.id)}" ` +
-		`data-pos="${escapeHtml(posClosure(unit.position_tags).join("|"))}" ` +
-		`data-topics="${escapeHtml(unit.topic_tags.join("|"))}" ` +
-		`data-member-ids="${escapeHtml(unit.member_ids.join("|"))}" ` +
-		`data-related-ids="${escapeHtml(unit.related_member_ids.join("|"))}" ` +
-		`data-addressed-to-all="${unit.addressed_to_all ? "true" : "false"}"`
-	);
-}
-
 /** TOC item label: time chip (non-interactive, TOC click never seeks — DESIGN §8) + title. */
 function tocItemLabel(unit: SessionUnit): string {
-	return `${chip("chip-time", formatTime(unit.start))} ${titleHtml(unit.title)}`;
+	return `${chip("chip-time", formatTime(unit.start))}<span class="toc-title">${titleHtml(unit.title)}</span>`;
 }
 
+/** The match ordinal ("2경기 · LVT 대 AL" → 2) a title opens with, or `null` when it does not (match titles are free text; the skill numbers them in video order, missing matches included). */
+function matchOrdinal(title: string): number | null {
+	const hit = /^\s*(\d+)\s*경기/.exec(title);
+	return hit === null ? null : Number(hit[1]);
+}
+
+/**
+ * Where each `matches_without_feedback` title stands among the matches that have feedback, in video order: `before` maps a feedback match id to the
+ * titles whose ordinal is below that match's (and not below an earlier feedback match's), sorted by ordinal; `tail` holds the rest in input order —
+ * ordinals above every feedback match's, and titles with no ordinal, which have no known place.
+ */
+function placeMatchesWithoutFeedback(data: SessionData): { before: Map<string, string[]>; tail: string[] } {
+	const before = new Map<string, string[]>();
+	const tail: string[] = [];
+	for (const title of data.matches_without_feedback) {
+		const ordinal = matchOrdinal(title);
+		const next = ordinal === null ? undefined : data.matches.find((match) => (matchOrdinal(match.title) ?? -Infinity) > ordinal);
+		if (next === undefined) {
+			tail.push(title);
+		} else {
+			before.set(next.id, [...(before.get(next.id) ?? []), title]);
+		}
+	}
+	for (const [matchId, titles] of before) {
+		before.set(matchId, [...titles].sort((a, b) => (matchOrdinal(a) ?? 0) - (matchOrdinal(b) ?? 0)));
+	}
+	return { before, tail };
+}
+
+const noFeedbackText = (title: string): string => `${titleHtml(title)} — 피드백 없음`;
+const noFeedbackLine = (title: string): string => `<p class="match-no-feedback">${noFeedbackText(title)}</p>`;
+
 function renderTabMatch(data: SessionData): string {
+	const placement = placeMatchesWithoutFeedback(data);
+	const noFeedbackRows = (titles: readonly string[]): string => titles.map((title) => `<p class="toc-no-feedback">${noFeedbackText(title)}</p>`).join("");
 	const unitById = new Map(data.units.map((unit) => [unit.id, unit]));
 	const groups = data.matches
 		.map((match) => {
-			const topics = match.topics
+			// A topic may group units that are not adjacent in time, so topics list by their earliest unit
+			// (`data.units` is in time order) and a topic's own units by the same order.
+			const timeIndex = (unitId: string): number => data.units.findIndex((unit) => unit.id === unitId);
+			const earliest = (topic: SessionTopic): number => Math.min(...topic.unit_ids.map(timeIndex).filter((index) => index >= 0));
+			const topics = [...match.topics]
+				.sort((a, b) => earliest(a) - earliest(b))
 				.map((topic) => {
-					const items = topic.unit_ids
+					const items = [...topic.unit_ids]
+						.sort((a, b) => timeIndex(a) - timeIndex(b))
 						.map((unitId) => unitById.get(unitId))
 						.filter((unit): unit is SessionUnit => unit !== undefined)
 						.map(
 							(unit) =>
-								`<li><a class="toc-item" href="#${escapeHtml(unit.id)}" ${tocItemAttrs(unit)}>${tocItemLabel(unit)}</a></li>`,
+								`<li><a class="toc-item" href="#${escapeHtml(unit.id)}" data-target="${escapeHtml(unit.id)}">${tocItemLabel(unit)}</a></li>`,
 						)
 						.join("");
 					return (
@@ -651,25 +1079,27 @@ function renderTabMatch(data: SessionData): string {
 					);
 				})
 				.join("");
-			return `<div class="toc-match-group"><h2>${titleHtml(match.title)}</h2>${topics}</div>`;
+			return noFeedbackRows(placement.before.get(match.id) ?? []) + `<div class="toc-match-group"><h2>${titleHtml(match.title)}</h2>${topics}</div>`;
 		})
 		.join("");
-	return `<div role="tabpanel" id="panel-match" aria-labelledby="tab-match">${groups}</div>`;
+	return `<div role="tabpanel" id="panel-match" aria-labelledby="tab-match">${groups}${noFeedbackRows(placement.tail)}</div>`;
 }
 
 function renderTabTopic(data: SessionData): string {
-	const tags = firstAppearanceTags(data.units);
-	const groups = tags
-		.map((tag) => {
-			const units = data.units.filter((unit) => unit.topic_tags.includes(tag));
+	// Largest group first (DESIGN §8); Array#sort is stable, so ties keep first-appearance order.
+	const groupedTags = firstAppearanceTags(data.units)
+		.map((tag) => ({ tag, units: data.units.filter((unit) => unit.topic_tags.includes(tag)) }))
+		.sort((a, b) => b.units.length - a.units.length);
+	const groups = groupedTags
+		.map(({ tag, units }) => {
 			const items = units
 				.map(
 					(unit) =>
-						`<li><a class="toc-item" href="#${escapeHtml(unit.id)}" ${tocItemAttrs(unit)}>${tocItemLabel(unit)}</a></li>`,
+						`<li><a class="toc-item" href="#${escapeHtml(unit.id)}" data-target="${escapeHtml(unit.id)}">${tocItemLabel(unit)}</a></li>`,
 				)
 				.join("");
 			return (
-				`<div class="toc-tag-group"><h2>${titleHtml(tag)} (${units.length})</h2>` + `<ul>${items}</ul></div>`
+				`<div class="toc-tag-group"><h2>${titleHtml(tag)} (<span class="toc-group-count">${units.length}</span>)</h2>` + `<ul>${items}</ul></div>`
 			);
 		})
 		.join("");
@@ -727,8 +1157,25 @@ function renderPlayerWrapper(data: SessionData): string {
 	);
 }
 
+/** True when no video of the session can be embedded: the page has no player, only links out (DESIGN §4/§9). */
+function isLinkOnly(data: SessionData): boolean {
+	return data.videos.length > 0 && data.videos.every((video) => !video.embeddable);
+}
+
+/** Small non-sticky bar replacing the player in a link-only session — one "유튜브에서 시청 ↗" link per part. */
+function renderWatchBar(data: SessionData): string {
+	const multiPart = data.videos.length > 1;
+	const links = data.videos
+		.map(
+			(video) =>
+				`<a class="watch-bar-link" href="${escapeHtml(youtubeAt(video.id, 0))}" target="_blank" rel="noopener">${multiPart ? `Part ${video.part} ` : ""}유튜브에서 시청 ↗</a>`,
+		)
+		.join("");
+	return `<div class="watch-bar">${links}<span class="watch-bar-note">시간을 누르면 유튜브에서 그 장면부터 열립니다</span></div>`;
+}
+
 function renderPartSwitch(data: SessionData): string {
-	if (data.videos.length <= 1) {
+	if (data.videos.length <= 1 || isLinkOnly(data)) {
 		return "";
 	}
 	const buttons = data.videos
@@ -747,7 +1194,21 @@ interface CardContext {
 	topicById: Map<string, SessionTopic>;
 	videoById: Map<string, SessionVideoInfo>;
 	multiPart: boolean;
+	/** Link-only session: time chips are YouTube links and cards never seek (DESIGN §9). */
+	linkOnly: boolean;
 	members: SessionMemberInfo[];
+	/** `sharedCommentAuthor` of the session: when non-null the header also names the writer (cards keep their own line). */
+	sharedAuthor: string | null;
+	/** `addressedMemberIds` of every unit, keyed by unit id. */
+	addressedByUnit: Map<string, string[]>;
+}
+
+/**
+ * The card's title line. A " / "-joined segment in the fault (-ㅁ) form (`isFaultTitleSegment`, the classifier `check plan` uses) gets a small
+ * "지적" label before it, so the reader sees the line states a fault, not an action to take.
+ */
+function renderCardTitle(title: string): string {
+	return titleHtml(title, (part) => (isFaultTitleSegment(part.trim()) ? `<span class="title-fault-label">지적</span> ` : ""), true);
 }
 
 function renderCardHead(unit: SessionUnit, ctx: CardContext): string {
@@ -755,11 +1216,9 @@ function renderCardHead(unit: SessionUnit, ctx: CardContext): string {
 	const partChip = ctx.multiPart && video !== undefined ? chip("chip-part", `P${video.part}`) : "";
 	const match = ctx.matchById.get(unit.match_id);
 	const topic = ctx.topicById.get(unit.topic_id);
-	const breadcrumb =
-		match !== undefined && topic !== undefined
-			? `<span class="breadcrumb">${titleHtml(match.title)}<span aria-hidden="true"> › </span>${titleHtml(topic.title)}</span>`
-			: "";
-	return `<div class="card-head">` + seekTimeButton(unit.start) + partChip + breadcrumb + `</div>`;
+	const path = match !== undefined && topic !== undefined ? `${titleHtml(match.title)} <span class="breadcrumb-topic"><span aria-hidden="true">›${NBSP}</span>${titleHtml(topic.title)}</span>` : "";
+	const breadcrumb = path === "" && unit.comment_author_names.length === 0 ? "" : `<span class="breadcrumb">${path}${path !== "" && unit.comment_author_names.length > 0 ? " " : ""}${renderCardSource(unit, path !== "")}</span>`;
+	return `<div class="card-head">` + seekTimeButton(unit.start, ctx.linkOnly ? unit.video : null) + partChip + breadcrumb + `</div>`;
 }
 
 const MAX_CHIP_ROW_TAGS = 6;
@@ -787,20 +1246,183 @@ function renderMemberNameMark(id: string, name: string): string {
 	return `<mark class="member-name" data-member-id="${escapeHtml(id)}">${titleHtml(name)}</mark>`;
 }
 
-function renderMentionedLine(unit: SessionUnit, members: readonly SessionMemberInfo[]): string {
+/** "(추정 — 문장에 주어 없음)" right after the name of a fixer whose role as actor was inferred (`inferred_member_ids`); "" otherwise. */
+function inferredMark(unit: SessionUnit, id: string): string {
+	return unit.inferred_member_ids.includes(id) ? `<span class="inferred-mark">(추정 — 문장에 주어 없음)</span>` : "";
+}
+
+/**
+ * "고칠 사람": the players the feedback asks to change behaviour (`member_ids`) — DESIGN §5 item 6. A player who
+ * also wrote the unit's comment (`self_critique_member_ids`) carries a muted "(작성자 본인)" right after the name, so
+ * the card does not read as someone else blaming them. The mark opens with NBSP and is `nowrap`: it never breaks from the name or inside itself.
+ */
+function renderMentionedLine(unit: SessionUnit, members: readonly SessionMemberInfo[], positionTargetPart = ""): string {
 	if (unit.member_ids.length === 0) {
 		return "";
 	}
-	const names = unit.member_ids.map((id) => renderMemberNameMark(id, memberName(members, id))).join(", ");
-	return `<p class="mentioned-members">언급: ${names}</p>`;
+	const names = unit.member_ids
+		.map((id) => renderMemberNameMark(id, memberName(members, id)) + inferredMark(unit, id) + (unit.self_critique_member_ids.includes(id) ? `<span class="self-critique-mark">${NBSP}(작성자 본인)</span>` : ""))
+		.join(", ");
+	return `<p class="mentioned-members">고칠 사람: ${names}${positionTargetPart}</p>`;
 }
 
-/** "전원 대상" 표시(DESIGN §5 item 6): 이름을 부르지 않고 모두에게 하는 원칙 유닛에 렌더한다 — 이름 불린 팀원이 함께 올 수도 있어 "언급:" 줄과 독립적으로, roster 유무와 무관하게(disabled 모드에서도) 렌더한다. */
-function renderAddressedAllLine(unit: SessionUnit): string {
-	if (!unit.addressed_to_all) {
+/**
+ * "고칠 사람" and "대상(포지션)" lines (DESIGN §5 item 6). When the card has both and the 대상 names fit inline (at most `MAX_RELATED_INLINE`), they are one
+ * line, "고칠 사람: … · 대상(DF): …", so the card's top meta takes one row on a phone; otherwise (no fixer, or a 대상 list that collapses into a
+ * `<details>`) the lines stay separate. The "·" opens the 대상 part, never ends the fixer part's line.
+ */
+function renderFixerAndPositionTargetLines(unit: SessionUnit, members: readonly SessionMemberInfo[]): string {
+	const targets = unit.position_target_ids;
+	if (unit.member_ids.length === 0 || targets.length === 0 || targets.length > MAX_RELATED_INLINE) {
+		return renderMentionedLine(unit, members) + renderPositionTargetLine(unit, members);
+	}
+	const positions = unit.position_tags.length > 0 ? `(${unit.position_tags.join(", ")})` : "";
+	const names = targets.map((id) => renderMemberNameMark(id, memberName(members, id))).join(", ");
+	return renderMentionedLine(unit, members, ` <span class="position-target-part">·${NBSP}대상${positions}: ${names}</span>`);
+}
+
+/** The ids named in the source that no earlier line of the card shows: `named_member_ids \ member_ids \ position_target_ids` (the "고칠 사람" and "대상(포지션)" lines already carry those names). */
+function namedOnlyIds(unit: SessionUnit): string[] {
+	return unit.named_member_ids.filter((id) => !unit.member_ids.includes(id) && !unit.position_target_ids.includes(id));
+}
+
+/** "언급": players whose name appears in the source without being asked to change behaviour and without being shown as a position target — DESIGN §5 item 6. */
+function renderNamedLine(unit: SessionUnit, members: readonly SessionMemberInfo[]): string {
+	const ids = namedOnlyIds(unit);
+	if (ids.length === 0) {
 		return "";
 	}
-	return `<p class="mentioned-members addressed-all-line">${chip("chip-addressed-all", "대상: 전원")}</p>`;
+	const names = ids.map((id) => renderMemberNameMark(id, memberName(members, id))).join(", ");
+	return `<p class="mentioned-members named-members">언급: ${names}</p>`;
+}
+
+/** The "대상" label of an `addressed_to_all` unit: the title's actor (text before the first ":"), or "전원" when the title has no ":" or an empty actor. */
+function addressedActor(title: string): string {
+	const colon = title.indexOf(":");
+	const actor = colon === -1 ? "" : title.slice(0, colon).trim();
+	return actor === "" ? "전원" : actor;
+}
+
+/**
+ * "대상" 표시(DESIGN §5 item 6): 이름을 부르지 않고 모두에게 하는 원칙 유닛에는 "대상: 전원"(제목 앞 행위자가
+ * "전원"이 아니면 그 문구, 예 "대상: 키 작은 선수")을, 그 외 유닛에는 포지션이 있을 때 "대상: <포지션>"을 렌더한다.
+ * 포지션만 말하는 이 줄은 바로 위 태그 행의 포지션 칩과 같은 말이라, 이미 대상을 말하는 줄이 있으면 생략한다:
+ * "고칠 사람" 줄이 보이거나 "대상(포지션): 이름" 줄이 보이고(`hasNamedTargets`), 포지션이 모두 태그 행에 보일 때
+ * (`MAX_CHIP_ROW_TAGS` 이하). roster 유무와 무관하게(disabled 모드에서도) 렌더하며 "언급:" 줄과 독립이다.
+ */
+function renderTargetLine(unit: SessionUnit, hasNamedTargets: boolean): string {
+	if (unit.addressed_to_all) {
+		return `<p class="mentioned-members addressed-all-line">${chip("chip-addressed-all", `대상: ${addressedActor(unit.title)}`)}</p>`;
+	}
+	const tagRowShowsAllPositions = unit.position_tags.length <= MAX_CHIP_ROW_TAGS;
+	const targetsAlreadyShown = hasNamedTargets && tagRowShowsAllPositions;
+	if (unit.position_tags.length > 0 && !targetsAlreadyShown) {
+		return `<p class="target-position-line">${chip("chip-target-position", `대상: ${unit.position_tags.join(", ")}`)}</p>`;
+	}
+	return "";
+}
+
+function feedbackSourceLine(names: readonly string[]): string {
+	return `<p class="feedback-source">댓글 작성 · ${names.map((name) => titleHtml(name)).join(", ")}</p>`;
+}
+
+/**
+ * Comment-sourced feedback names its writer(s) on the card's header row, after the breadcrumb ("1경기 › 수비 조직 · 댓글 작성 뎁스차저"),
+ * on every such card (even when the session header names the same single writer) so a reader who opens one card can tell whose written
+ * review it is; narrated feedback renders nothing. The separator sits inside the inline-block span so a line break never leaves "·" at a line end.
+ */
+function renderCardSource(unit: SessionUnit, afterPath: boolean): string {
+	if (unit.comment_author_names.length === 0) {
+		return "";
+	}
+	const separator = afterPath ? `<span aria-hidden="true">· </span>` : "";
+	return `<span class="card-source">${separator}댓글 작성 ${unit.comment_author_names.map((name) => titleHtml(name)).join(", ")}</span>`;
+}
+
+/** The single writer when every unit is comment feedback by that same one person (DESIGN §5 item 2: also named once in the session header); otherwise null. */
+function sharedCommentAuthor(units: readonly SessionUnit[]): string | null {
+	const first = units[0]?.comment_author_names;
+	if (first === undefined || first.length !== 1) {
+		return null;
+	}
+	return units.every((unit) => unit.comment_author_names.length === 1 && unit.comment_author_names[0] === first[0]) ? first[0] : null;
+}
+
+/** The label of a card's 장면/자료 줄: the same "<label> ·" shape and `.line-label` styling for both lines. */
+function lineLabel(label: string): string {
+	return `<span class="line-label">${label} ·</span>`;
+}
+
+/** "장면 · …" under the lesson line of a fault (-ㅁ) card: how the fault looked in the frames; "" when the unit has none. */
+function renderFaultSceneLine(unit: SessionUnit): string {
+	return unit.fault_scene === null ? "" : `<p class="fault-scene">${lineLabel("장면")} ${titleHtml(unit.fault_scene)}</p>`;
+}
+
+/**
+ * A fault card whose every title segment is a fault (-ㅁ) and to which no ref gives a lesson states no action to take: say so under the
+ * title instead of leaving the reader to look for one. It points to the 장면 line only when the card has one (a card with a
+ * `direction_check_ko` has none); "" when any segment is a to-do (-기) or a ref gives a lesson.
+ */
+function renderNoActionLine(unit: SessionUnit): string {
+	if (!unit.title.split(" / ").every((segment) => isFaultTitleSegment(segment.trim())) || unit.refs.some((ref) => ref.lesson_ko !== null)) {
+		return "";
+	}
+	return `<p class="no-action">${titleHtml(unit.fault_scene === null ? "피드백에 고칠 행동은 적혀 있지 않다" : "피드백에 고칠 행동은 적혀 있지 않다 — 장면 줄 참고")}</p>`;
+}
+
+/** "방향 확인 필요 · …" right after the 장면 line (or where it would be): the source's left/right disagrees with the card's frames; "" when the unit has none. */
+function renderDirectionCheckLine(unit: SessionUnit): string {
+	return unit.direction_check_ko === null ? "" : `<p class="direction-check">${lineLabel("방향 확인 필요")} ${titleHtml(unit.direction_check_ko)}</p>`;
+}
+
+/** Element id of a ref's entry in a card's reference list (the target of the lesson line's source link). */
+function refEntryId(unitId: string, refId: string): string {
+	return `${unitId}-ref-${refId}`;
+}
+
+/** "자료가 권하는 것 · 교훈 (출처)" directly under the card title (the action comes first, before the 장면 line): the first ref of the unit that gives a lesson, attributed to that reference (never to the commenter) and linked to its entry in the card's reference list; "" when none does. */
+function renderRefLessonLine(unit: SessionUnit): string {
+	const ref = unit.refs.find((candidate) => candidate.lesson_ko !== null);
+	if (ref === undefined || ref.lesson_ko === null) {
+		return "";
+	}
+	return `<p class="ref-lesson">${lineLabel("자료가 권하는 것")} ${titleHtml(ref.lesson_ko)} <span class="ref-lesson-cite">(<a class="ref-lesson-source" href="#${escapeHtml(refEntryId(unit.id, ref.id))}">${escapeHtml(ref.source_name)}</a>)</span></p>`;
+}
+
+/**
+ * "머리 위 표시: 홍길동 분홍 삼각형 · SAMBA 이름표(명단에 없음) 자홍 삼각형 · …" — the colour legend of a match's `marker_legend`, then its
+ * `unmatched_name_tags` (the colour part is left out when the tag was seen without one); "" when the match has neither.
+ */
+function renderMarkerLegend(match: SessionMatch, members: readonly SessionMemberInfo[]): string {
+	const entries = markerLegendFromLegacyData(match);
+	const unmatched = unmatchedNameTagsFromLegacyData(match);
+	if (entries.length === 0 && unmatched.length === 0) {
+		return "";
+	}
+	const items = [
+		...entries.map((entry) => `${memberName(members, entry.member_id)}${NBSP}${entry.color}${NBSP}삼각형`),
+		...unmatched.map((entry) => `${entry.tag}${NBSP}이름표(명단에${NBSP}없음)${entry.color === undefined ? "" : `${NBSP}${entry.color}${NBSP}삼각형`}`),
+	]
+		.map((item) => titleHtml(item))
+		.join(" · ");
+	return `<span class="marker-legend">머리 위 표시: ${items}</span>`;
+}
+
+/** The `look_at` line's label, glued with NBSP so it never breaks across lines. */
+const LOOK_AT_LABEL = `사진에서${NBSP}볼${NBSP}곳`;
+
+/**
+ * "사진에서 위치를 확인하지 못한 사람": roster ids to fix whom no photo of the card lets the writer identify, then the `look_at` line
+ * (where in the photos to look instead). `look_at` also stands alone when a caption says the title's receiver is not visible and
+ * nobody is unidentified; "" when there is neither.
+ */
+function renderUnidentifiedLine(unit: SessionUnit, members: readonly SessionMemberInfo[]): string {
+	const lookAt = unit.look_at === null ? "" : `<p class="look-at">${LOOK_AT_LABEL}: ${titleHtml(unit.look_at)}</p>`;
+	if (unit.unidentified_member_ids.length === 0) {
+		return lookAt;
+	}
+	const names = unit.unidentified_member_ids.map((id) => titleHtml(memberName(members, id))).join(", ");
+	return `<p class="unidentified-members">사진에서 위치를 확인하지 못한 사람: ${names}</p>${lookAt}`;
 }
 
 /** Above this many related members, `renderRelatedLine` collapses into a `<details>` (mobile readability — 13–14-name rows were unreadable). */
@@ -809,26 +1431,71 @@ const MAX_RELATED_INLINE = 5;
 /** How many names stay visible in the collapsed `<summary>` before "외 N명". */
 const RELATED_SUMMARY_SHOWN = 4;
 
-/** `relatedMembers(unit) \ member_ids` — the set difference DESIGN §5 item 8 requires (already-shown mentions aren't repeated). At most `MAX_RELATED_INLINE` names renders as the plain `<p>` line; more collapses into a native `<details>` (no JS needed) showing the first `RELATED_SUMMARY_SHOWN` names + "외 N명", with the rest revealed on expand. */
+/** `position_target_ids` as the "대상(포지션): 이름" line (DESIGN §5 item 6): members the unit's unnamed position group makes responsible, next to "고칠 사람"; "" when there are none. */
+function renderPositionTargetLine(unit: SessionUnit, members: readonly SessionMemberInfo[]): string {
+	const positions = unit.position_tags.length > 0 ? `(${unit.position_tags.join(", ")})` : "";
+	return renderNameList(unit.position_target_ids, members, `대상${positions}:`, "related-members position-target-members");
+}
+
+/** `relatedMembers(unit) \ member_ids \ named_member_ids \ position_target_ids` — the set difference DESIGN §5 item 8 requires (names already shown on the "고칠 사람"/"대상"/"언급" lines aren't repeated). */
 function renderRelatedLine(unit: SessionUnit, members: readonly SessionMemberInfo[]): string {
-	const ids = unit.related_member_ids.filter((id) => !unit.member_ids.includes(id));
+	const ids = unit.related_member_ids.filter(
+		(id) => !unit.member_ids.includes(id) && !unit.named_member_ids.includes(id) && !unit.position_target_ids.includes(id),
+	);
+	return renderNameList(ids, members, "같은 포지션:", "related-members");
+}
+
+/** A labelled name list: at most `MAX_RELATED_INLINE` names renders as the plain `<p>` line; more collapses into a native `<details>` (no JS needed) showing the first `RELATED_SUMMARY_SHOWN` names + "외 N명", with the rest revealed on expand. "" for no ids. */
+function renderNameList(ids: readonly string[], members: readonly SessionMemberInfo[], label: string, className: string): string {
 	if (ids.length === 0) {
 		return "";
 	}
 	if (ids.length <= MAX_RELATED_INLINE) {
 		const names = ids.map((id) => renderMemberNameMark(id, memberName(members, id))).join(", ");
-		return `<p class="related-members">관련: ${names}</p>`;
+		return `<p class="${className}">${label} ${names}</p>`;
 	}
 	const shownIds = ids.slice(0, RELATED_SUMMARY_SHOWN);
 	const restIds = ids.slice(RELATED_SUMMARY_SHOWN);
 	const shownNames = shownIds.map((id) => renderMemberNameMark(id, memberName(members, id))).join(", ");
 	const restNames = restIds.map((id) => renderMemberNameMark(id, memberName(members, id))).join(", ");
 	return (
-		`<details class="related-members">` +
-		`<summary>관련: ${shownNames}<span class="related-more"> 외 ${restIds.length}명</span></summary>` +
+		`<details class="${className}">` +
+		`<summary>${label} ${shownNames}<span class="related-more"> 외 ${restIds.length}명</span></summary>` +
 		`<span class="related-rest">${restNames}</span>` +
 		`</details>`
 	);
+}
+
+/** Frames wider than this width/height ratio get the phone pan box (DESIGN §5 item 4a). */
+const ULTRAWIDE_RATIO = 2;
+
+/**
+ * The one conversion from a notes frame's optional `focus_x` to the point of the image (0..1 of its
+ * width) that the pan box shows at its horizontal center on first paint. Absent focus means "no known
+ * subject", so the box starts centered (0.5); the default lives here and nowhere is it stored as data.
+ */
+export function panCenterFromFocus(focusX: number | undefined): number {
+	return focusX ?? 0.5;
+}
+
+/**
+ * A frame `<img>`; an ultrawide one (width/height > 2) is wrapped in a pan box at every width: a fixed
+ * readable height with a horizontal scroll inside the box only, plus a hint. VIEWER_JS scrolls the box
+ * so `data-pan-center` (see `panCenterFromFocus`) sits at its horizontal center.
+ */
+function frameImage(
+	image: { src: string; width: number; height: number },
+	extraAttrs: string,
+	linkHref: string | null = null,
+	focusX: number | undefined = undefined,
+): string {
+	const bare = `<img src="${escapeHtml(image.src)}" width="${image.width}" height="${image.height}" ${extraAttrs}>`;
+	const img =
+		linkHref === null ? bare : `<a class="frame-link" href="${escapeHtml(linkHref)}" target="_blank" rel="noopener">${bare}</a>`;
+	if (!isUltrawide(image)) {
+		return img;
+	}
+	return `<div class="frame-pan"><div class="frame-pan-scroll" data-pan-center="${panCenterFromFocus(focusX)}">${img}</div><p class="frame-pan-hint" hidden>좌우로 밀어 보기</p></div>`;
 }
 
 /**
@@ -855,25 +1522,31 @@ function renderBodyText(text: string): string {
  * would be the layout's only wrappable unit and could push the time chip or "확대" onto their
  * own lines instead of staying pinned to the row's edges.
  */
-function renderBodyFrame(block: UnitBodyFrameBlock): string {
+function zoomLink(src: string, seconds: number): string {
+	return `<a href="${escapeHtml(src)}" target="_blank" rel="noopener" class="zoom-link" aria-label="확대: ${escapeHtml(formatTime(seconds))} 프레임 원본">확대</a>`;
+}
+
+/** `unitStart`: a frame at the card's own start second (same m:ss) shows no time chip — the card header's chip and the watch link already give that time. */
+function renderBodyFrame(block: UnitBodyFrameBlock, video: string, linkOnly: boolean, unitStart: number): string {
 	// `alt` is an attribute -- a titleHtml() <span> inside it would just show as literal text, so
 	// it stays on glueKorean+escapeHtml (glue only, no nobr). The visible figcaption span has no
 	// such constraint, so it goes through the full titleHtml pipeline on the RAW caption (not the
 	// already-glued `caption` above -- glueKorean is idempotent in practice, but there is no
 	// reason to run it twice, round-8 CJK pipeline review).
 	const caption = glueKorean(block.caption);
+	const atUnitStart = formatTime(block.t) === formatTime(unitStart);
 	return (
-		`<figure class="body-frame" data-frame-t="${block.t}">` +
-		`<img src="${escapeHtml(block.src)}" width="${block.width}" height="${block.height}" loading="lazy" alt="${escapeHtml(caption)}">` +
-		`<figcaption>${seekTimeButton(block.t)}<span class="body-frame-caption">${titleHtml(block.caption)}</span>` +
-		`<a href="${escapeHtml(block.src)}" target="_blank" rel="noopener" class="zoom-link" aria-label="이미지 원본 크게 보기">확대</a></figcaption>` +
+		`<figure class="body-frame${atUnitStart ? " no-time-chip" : ""}" data-frame-t="${block.t}">` +
+		frameImage(block, `loading="lazy" alt="${escapeHtml(caption)}"`, linkOnly ? youtubeAt(video, block.t) : null, block.focus_x) +
+		`<figcaption>${atUnitStart ? "" : seekTimeButton(block.t, linkOnly ? video : null)}<span class="body-frame-caption">${titleHtml(block.caption)}</span>` +
+		zoomLink(block.src, block.t) + `</figcaption>` +
 		`</figure>`
 	);
 }
 
-function renderBody(body: UnitBodyBlock[]): string {
+function renderBody(body: UnitBodyBlock[], video: string, linkOnly: boolean, unitStart: number): string {
 	const blocks = body
-		.map((block) => (block.type === "text" ? renderBodyText(block.text) : renderBodyFrame(block)))
+		.map((block) => (block.type === "text" ? renderBodyText(block.text) : renderBodyFrame(block, video, linkOnly, unitStart)))
 		.join("");
 	return `<div class="card-body">${blocks}</div>`;
 }
@@ -894,28 +1567,67 @@ function renderSimilarList(similar: UnitSimilar[]): string {
 	return `<ul class="similar-list">${items}</ul>`;
 }
 
-function renderRefsList(refs: UnitRef[]): string {
+/** A YouTube link opens at `start_seconds` via `t=`; other hosts have no portable start parameter, so the label alone carries the time. */
+function refOpenLink(ref: Pick<UnitRef, "orig_url" | "start_seconds">): string {
+	if (ref.start_seconds === null || ref.start_seconds === 0) {
+		return `<a class="ref-link" href="${escapeHtml(ref.orig_url)}" target="_blank" rel="noopener">원문 ↗</a>`;
+	}
+	let href = ref.orig_url;
+	try {
+		const url = new URL(ref.orig_url);
+		if (/(^|\.)youtube\.com$/.test(url.hostname)) {
+			url.searchParams.set("t", `${ref.start_seconds}s`);
+			href = url.toString();
+		}
+	} catch {
+		// unparsable orig_url: open it as-is
+	}
+	return `<a class="ref-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">자료 영상 ${escapeHtml(formatTime(ref.start_seconds))}부터 ↗</a>`;
+}
+
+/** Korean display name of a reference `kind` enum value. */
+function refKindLabel(kind: UnitRef["kind"]): string {
+	switch (kind) {
+		case "eafc":
+			return "EA FC";
+		case "tactics":
+			return "축구 전술";
+	}
+}
+
+/** Badge row contents shared by the card's ref list and the ref page: format, kind, [프로클럽], [version], [upload month], [language unless "ko" — the page's own language]. */
+function renderRefBadges(ref: Pick<UnitRef, "format" | "kind" | "lang" | "pro_clubs" | "version_badge" | "published_badge">): string {
+	return (
+		`<span class="badge ref-format">${ref.format === "video" ? "영상" : "글"}</span>` +
+		`<span class="badge">${escapeHtml(refKindLabel(ref.kind))}</span>` +
+		(ref.pro_clubs ? `<span class="badge badge-pro-clubs">프로클럽</span>` : "") +
+		(ref.version_badge !== null ? `<span class="badge badge-version">${escapeHtml(ref.version_badge)}</span>` : "") +
+		(ref.published_badge !== null ? `<span class="badge badge-published">${escapeHtml(ref.published_badge)}</span>` : "") +
+		(ref.lang !== "ko" ? `<span class="badge">${escapeHtml(ref.lang.toUpperCase())}</span>` : "")
+	);
+}
+
+function renderRefsList(unitId: string, refs: UnitRef[]): string {
 	if (refs.length === 0) {
 		return "";
 	}
 	const items = refs
 		.map((ref) => {
 			const summaryLink =
-				ref.lang !== "ko" && ref.href !== null ? `<a href="${escapeHtml(ref.href)}">요약</a> ` : "";
-			// ref.kind ("eafc"/"tactics") and ref.lang.toUpperCase() ("KO"/"EN") are fixed ASCII
-			// enums (escapeHtml); ref.title is the reference's Korean display title, so it goes
+				ref.lang !== "ko" && ref.href !== null ? `<a class="ref-link" href="${escapeHtml(ref.href)}" target="_blank" rel="noopener">요약</a><span class="ref-sep" aria-hidden="true">·</span>` : "";
+			// refKindLabel(ref.kind) is a fixed Korean label and ref.lang.toUpperCase() ("KO"/"EN") a fixed ASCII
+			// enum (escapeHtml); ref.title and ref.relevance_ko are Korean display text, so they go
 			// through titleHtml (round-8 CJK pipeline review).
 			return (
-				`<li>${titleHtml(ref.title)} ` +
-				`<span class="ref-badges"><span class="badge">${escapeHtml(ref.kind)}</span>` +
-				`<span class="badge">${escapeHtml(ref.lang.toUpperCase())}</span></span> ` +
-				summaryLink +
-				`<a href="${escapeHtml(ref.orig_url)}" target="_blank" rel="noopener">원문 ↗</a>` +
+				`<li id="${escapeHtml(refEntryId(unitId, ref.id))}"><span class="ref-title">${titleHtml(ref.title)}</span>` +
+				`<span class="ref-badges">${renderRefBadges(ref)}</span>` +
+				`<span class="ref-relevance">${titleHtml(ref.relevance_ko)}</span>` +
+				`<span class="ref-links">${summaryLink}${refOpenLink(ref)}</span>` +
 				`</li>`
 			);
 		})
 		.join("");
-	return `<ul class="refs-list">${items}</ul>`;
+	return `<p class="refs-label">참고자료</p><ul class="refs-list">${items}</ul>`;
 }
 
 /**
@@ -927,12 +1639,12 @@ function renderRefsList(refs: UnitRef[]): string {
  * sitting on its own line below: the two were previously two stacked rows with the link alone
  * above the tags.
  */
-function renderStartImage(image: UnitStartImage, tagsHtml: string): string {
+function renderStartImage(image: UnitStartImage, startSeconds: number, tagsHtml: string): string {
 	return (
 		`<figure class="card-image">` +
-		`<img src="${escapeHtml(image.src)}" width="${image.width}" height="${image.height}" alt="">` +
+		frameImage(image, `alt=""`) +
 		`<figcaption>${tagsHtml}` +
-		`<a href="${escapeHtml(image.src)}" target="_blank" rel="noopener" class="zoom-link" aria-label="이미지 원본 크게 보기">확대</a></figcaption>` +
+		zoomLink(image.src, startSeconds) + `</figcaption>` +
 		`</figure>`
 	);
 }
@@ -940,15 +1652,25 @@ function renderStartImage(image: UnitStartImage, tagsHtml: string): string {
 /** Groups similar/refs (items 9/10) as one visually-separated metadata block below the body (item 6) — "" when both are empty, so no bare separator renders. */
 function renderMetaBlock(unit: SessionUnit): string {
 	const similar = renderSimilarList(unit.similar);
-	const refs = renderRefsList(unit.refs);
+	const refs = renderRefsList(unit.id, unit.refs);
 	if (similar === "" && refs === "") {
 		return "";
 	}
 	return `<div class="card-meta">${similar}${refs}</div>`;
 }
 
-/** Card field order per DESIGN §5: header → title → mention badge → image → tag row → mentioned members → body → related members → similar → refs → watch link. */
-function renderCard(unit: SessionUnit, ctx: CardContext): string {
+/** Whether a frame image is ultrawide (`frameImage` wraps it in a pan box). */
+function isUltrawide(image: { width: number; height: number }): boolean {
+	return image.width / image.height > ULTRAWIDE_RATIO;
+}
+
+/** A card with any captioned body frame shows no separate (caption-less) start image (DESIGN §5 item 4). */
+function hasBodyFrame(unit: SessionUnit): boolean {
+	return unit.body.some((block) => block.type === "frame");
+}
+
+/** Card field order per DESIGN §5: header → title → 자료 교훈 → 장면 → mention badge → image → tag row → 고칠 사람/언급 → body → 위치 미확인 인물 → 같은 포지션 → similar → refs → watch link. */
+function renderCard(unit: SessionUnit, ctx: CardContext, legendHtml = ""): string {
 	const video = ctx.videoById.get(unit.video);
 	const hasRoster = ctx.members.length > 0;
 	return (
@@ -957,19 +1679,34 @@ function renderCard(unit: SessionUnit, ctx: CardContext): string {
 		`data-pos="${escapeHtml(posClosure(unit.position_tags).join("|"))}" ` +
 		`data-topics="${escapeHtml(unit.topic_tags.join("|"))}" ` +
 		`data-member-ids="${escapeHtml(unit.member_ids.join("|"))}" ` +
+		`data-named-ids="${escapeHtml(unit.named_member_ids.join("|"))}" ` +
+		`data-mention-ids="${escapeHtml(mentionIds(unit).join("|"))}" ` +
 		`data-related-ids="${escapeHtml(unit.related_member_ids.join("|"))}" ` +
+		`data-position-target-ids="${escapeHtml(unit.position_target_ids.join("|"))}" ` +
+		`data-group-member-ids="${escapeHtml(unit.group_member_ids.join("|"))}" ` +
 		`data-addressed-to-all="${unit.addressed_to_all ? "true" : "false"}" ` +
+		`data-addressed-member-ids="${escapeHtml((ctx.addressedByUnit.get(unit.id) ?? []).join("|"))}" ` +
 		`data-embeddable="${(video?.embeddable ?? true) ? "true" : "false"}">` +
 		renderCardHead(unit, ctx) +
-		`<h3>${titleHtml(unit.title)}</h3>` +
+		`<h3>${renderCardTitle(unit.title)}</h3>` +
+		(legendHtml === "" ? "" : `<p class="match-legend">${legendHtml}</p>`) +
+		renderRefLessonLine(unit) +
+		renderNoActionLine(unit) +
+		renderFaultSceneLine(unit) +
+		renderDirectionCheckLine(unit) +
 		(hasRoster ? `<p class="mention-badge" hidden></p>` : "") +
-		renderStartImage(unit.images.start, renderChipRow(unit)) +
-		(hasRoster ? renderMentionedLine(unit, ctx.members) : "") +
-		renderAddressedAllLine(unit) +
-		renderBody(unit.body) +
+		(hasBodyFrame(unit)
+			? renderChipRow(unit)
+			: renderStartImage(unit.images.start, unit.start, renderChipRow(unit))) +
+		(hasRoster
+			? renderFixerAndPositionTargetLines(unit, ctx.members) + renderNamedLine(unit, ctx.members)
+			: "") +
+		renderTargetLine(unit, hasRoster && (unit.member_ids.length > 0 || unit.position_target_ids.length > 0)) +
+		renderBody(unit.body, unit.video, ctx.linkOnly, unit.start) +
+		renderUnidentifiedLine(unit, ctx.members) +
 		(hasRoster ? renderRelatedLine(unit, ctx.members) : "") +
 		renderMetaBlock(unit) +
-		`<a class="watch-link" href="${escapeHtml(unit.watch_url)}" target="_blank" rel="noopener">유튜브에서 보기 ↗</a>` +
+		`<a class="watch-link" href="${escapeHtml(unit.watch_url)}" target="_blank" rel="noopener">경기 영상 ${formatTime(unit.start)}부터 보기 ↗</a>` +
 		`</article>`
 	);
 }
@@ -1000,26 +1737,168 @@ ${scripts}</body>
 
 const FOOTER_NOTICE = "팀 내부 피드백용 비공식 정리 문서입니다. 영상 저작권은 원게시자에게 있습니다.";
 
+// ── 반복 지적 (DESIGN.md §6a) ─────────────────────────────────────────────
+
+/**
+ * Who a recurring time chip blames for its unit. `fixer_ids` = the unit's fixers (`member_ids`) who are also owners of the
+ * label; `name` = their names when there are any, otherwise the actors of the unit title's " / " segments ("수비진",
+ * "수비 라인", "전원") that are not roster members — a title naming only a team unit must not read as a person's fault.
+ * When the label names nobody (`labelOwnerIds` empty) and the title has no such non-roster actor either, `name` is the unit's
+ * fixers' names (with `fixer_ids` still []). `name` is "" when none of these exists. Only `fixer_ids` can make the chip "내가 고칠 것" for a member (DESIGN §6a).
+ * `team_owned` = the name is a team unit's ("수비 라인"): such a chip is "내 포지션 대상" for every member of the unit's group (`group_member_ids`), fixers included.
+ */
+function recurringChipOwner(unit: SessionUnit, labelOwnerIds: readonly string[], members: readonly SessionMemberInfo[]): { fixer_ids: string[]; name: string; team_owned: boolean } {
+	const fixerIds = unit.member_ids.filter((id) => labelOwnerIds.includes(id));
+	if (fixerIds.length > 0) {
+		return { fixer_ids: fixerIds, name: fixerIds.map((id) => memberName(members, id)).join("·"), team_owned: false };
+	}
+	const rosterLabels = new Set(members.flatMap((member) => [member.name, member.gamertag]).map((label) => label.trim().toLowerCase()));
+	const actors = unit.title.split(" / ").flatMap((segment) => {
+		const colon = segment.indexOf(": ");
+		return colon <= 0 ? [] : segment.slice(0, colon).split("·").map((actor) => actor.trim());
+	});
+	const teamActors = [...new Set(actors.filter((actor) => actor !== "" && !rosterLabels.has(actor.toLowerCase())))];
+	if (teamActors.length === 0 && labelOwnerIds.length === 0) {
+		// The title names only roster members and the label names nobody: the chip still says whom the unit asks to change, but it is not "내가 고칠 것" (fixer_ids stays []).
+		return { fixer_ids: [], name: unit.member_ids.map((id) => memberName(members, id)).join("·"), team_owned: false };
+	}
+	return { fixer_ids: [], name: teamActors.join("·"), team_owned: teamActors.length > 0 };
+}
+
+/**
+ * "반복 지적" block above the card list: one row per repeated problem, most-repeated first (stable, so
+ * ties keep plan order), each with its unit time chips as in-page anchors (same scroll+highlight as a
+ * TOC click, never a seek). "" when nothing repeats.
+ */
+function renderRecurring(data: SessionData): string {
+	const unitById = new Map(data.units.map((unit) => [unit.id, unit]));
+	const items = data.recurring
+		.map((entry) => ({
+			label: entry.label,
+			member_ids: entry.member_ids,
+			refs_unfound: entry.refs_unfound,
+			units: entry.unit_ids.map((id) => unitById.get(id)).filter((unit): unit is SessionUnit => unit !== undefined),
+		}))
+		.filter((entry) => entry.units.length > 0)
+		.sort((a, b) => b.units.length - a.units.length)
+		.map((entry) => {
+			const chipOwners = entry.units.map((unit) => ({ unit, ...recurringChipOwner(unit, entry.member_ids, data.members) }));
+			// "Mine" for a row is decided per chip: a chip's fixers, plus — for a chip owned by a team unit or an entry that names nobody — the members
+			// who played the unit's group positions (`group_member_ids`). `entry.member_ids` alone would hide a team-unit chip from its own group.
+			const isGroupChip = (chip: { team_owned: boolean }) => chip.team_owned || entry.member_ids.length === 0;
+			const ownerIds = [...new Set(chipOwners.flatMap((chip) => [...chip.fixer_ids, ...(isGroupChip(chip) ? chip.unit.group_member_ids : [])]))];
+			const chips = chipOwners
+				.map(({ unit, fixer_ids: fixerIds, name: owner, team_owned: teamOwned }) => {
+					const time = escapeHtml(formatTime(unit.start));
+					const label = owner === "" ? `${time} ${escapeHtml(unit.title)}` : `${time} ${escapeHtml(owner)} — ${escapeHtml(unit.title)}`;
+					return `<a class="chip chip-time recurring-unit" href="#${escapeHtml(unit.id)}" data-target="${escapeHtml(unit.id)}" data-fixer-ids="${escapeHtml(fixerIds.join("|"))}"${teamOwned ? ` data-team-owner="true"` : ""} aria-label="${label}">${time}${owner === "" ? "" : ` <span class="recurring-unit-owner">${escapeHtml(owner)}</span>`}</a>`;
+				})
+				.join("");
+			return (
+				`<li class="recurring-item" data-owner-ids="${escapeHtml(ownerIds.join("|"))}" data-label-owner-ids="${escapeHtml(entry.member_ids.join("|"))}"><span class="recurring-label">${titleHtml(entry.label)}</span>` +
+				`<span class="recurring-meta"><span class="recurring-count" data-total="${entry.units.length}">×${entry.units.length}</span>` +
+				(entry.refs_unfound ? `<span class="recurring-unfound">추천 자료 없음</span>` : "") +
+				`</span><span class="recurring-units">${chips}</span></li>`
+			);
+		})
+		.join("");
+	if (items === "") {
+		return "";
+	}
+	return `<section class="recurring" aria-labelledby="recurring-title"><h2 class="recurring-title" id="recurring-title">반복 지적</h2><p class="recurring-summary" hidden></p><ul class="recurring-list">${items}</ul><button type="button" class="recurring-more" aria-expanded="false" hidden></button></section>`;
+}
+
+/**
+ * One muted line per match that has no feedback ("2경기 · LVT 대 AL — 피드백 없음", DESIGN §4), so the page does not
+ * seem to skip a match. plan.json carries only the title, not the match's place among the others, so the lines follow the
+ * card list instead of standing between cards. "" when every match has feedback.
+ */
+function renderMatchesWithoutFeedback(tail: readonly string[]): string {
+	if (tail.length === 0) {
+		return "";
+	}
+	const lines = tail.map((title) => noFeedbackLine(title)).join("");
+	return `<div class="matches-without-feedback">${lines}</div>`;
+}
+
 // ── renderSession (DESIGN.md §4–§11) ──────────────────────────────────────
 
-export function renderSession(data: SessionData): string {
+/** `SessionData` as read from a data.json that may predate `named_member_ids` (see `namedMemberIdsFromLegacyData`). */
+export type SessionDataInput = Omit<SessionData, "units" | "recurring" | "matches_without_feedback"> & {
+	recurring?: SessionRecurringInput[];
+	matches_without_feedback?: string[];
+	units: Array<
+		Omit<SessionUnit, "named_member_ids" | "unidentified_member_ids" | "look_at" | "fault_scene" | "direction_check_ko" | "self_critique_member_ids" | "inferred_member_ids" | "position_target_ids" | "group_member_ids" | "refs"> & {
+			named_member_ids?: string[];
+			position_target_ids?: string[];
+			group_member_ids?: string[];
+			unidentified_member_ids?: string[];
+			look_at?: string | null;
+			fault_scene?: string | null;
+			direction_check_ko?: string | null;
+			self_critique_member_ids?: string[];
+			inferred_member_ids?: string[];
+			refs: UnitRefInput[];
+		}
+	>;
+};
+
+export function renderSession(input: SessionDataInput): string {
+	const data: SessionData = {
+		...input,
+		recurring: recurringFromLegacyData(input),
+		matches_without_feedback: matchesWithoutFeedbackFromLegacyData(input),
+		members: input.members.map((member) => ({ ...member, positions: positionTagsFromLegacy(member.positions) })),
+		matches: input.matches.map((match) => ({ ...match, lineup: lineupFromLegacyData(match) })),
+		units: input.units.map((unit) => ({
+			...unit,
+			position_tags: positionTagsFromLegacyData(unit),
+			named_member_ids: namedMemberIdsFromLegacyData(unit),
+			unidentified_member_ids: unidentifiedMemberIdsFromLegacyData(unit),
+			look_at: lookAtFromLegacyData(unit),
+			fault_scene: faultSceneFromLegacyData(unit),
+			direction_check_ko: directionCheckFromLegacyData(unit),
+			self_critique_member_ids: selfCritiqueMemberIdsFromLegacyData(unit),
+			inferred_member_ids: inferredMemberIdsFromLegacyData(unit),
+			position_target_ids: positionTargetIdsFromLegacyData(unit),
+			group_member_ids: groupMemberIdsFromLegacyData(unit),
+			refs: unit.refs.map((ref) => ({ ...ref, version_badge: versionBadgeFromLegacyData(ref), published_badge: publishedBadgeFromLegacyData(ref), pro_clubs: proClubsFromLegacyData(ref), source_name: sourceNameFromLegacyData(ref), lesson_ko: lessonFromLegacyData(ref) })),
+		})),
+	};
 	const matchById = new Map(data.matches.map((match) => [match.id, match]));
 	const topicById = new Map(data.matches.flatMap((match) => match.topics.map((topic) => [topic.id, topic])));
 	const videoById = new Map(data.videos.map((video) => [video.id, video]));
+	const linkOnly = isLinkOnly(data);
 	const ctx: CardContext = {
 		matchById,
 		topicById,
 		videoById,
 		multiPart: data.videos.length > 1,
+		linkOnly,
 		members: data.members,
+		sharedAuthor: sharedCommentAuthor(data.units),
+		addressedByUnit: addressedMemberIdsByUnit(data),
 	};
 
 	const total = data.units.length;
-	const cards = data.units.map((unit) => renderCard(unit, ctx)).join("");
+	const placement = placeMatchesWithoutFeedback(data);
+	const cards = data.units
+		.map((unit, index) => {
+			const previous = data.units[index - 1];
+			const startsMatch = previous === undefined || previous.match_id !== unit.match_id;
+			const match = previous !== undefined && startsMatch ? matchById.get(unit.match_id) : undefined;
+			const noFeedback = startsMatch ? (placement.before.get(unit.match_id) ?? []).map(noFeedbackLine).join("") : "";
+			const dividerLegend = match === undefined ? "" : renderMarkerLegend(match, data.members);
+			// The first match has no divider: its legend stands on the first card.
+			const firstCardMatch = previous === undefined ? matchById.get(unit.match_id) : undefined;
+			const cardLegend = firstCardMatch === undefined ? "" : renderMarkerLegend(firstCardMatch, data.members);
+			return noFeedback + (match === undefined ? "" : `<h2 class="match-divider">${titleHtml(match.title)}${dividerLegend}</h2>`) + renderCard(unit, ctx, cardLegend);
+		})
+		.join("");
 
 	const sideCol =
 		`<div class="side-col">` +
-		renderPlayerWrapper(data) +
+		(linkOnly ? renderWatchBar(data) : renderPlayerWrapper(data)) +
 		`<aside class="side">${renderPartSwitch(data)}<div class="toc-scroll">${renderToc(data)}</div></aside>` +
 		`</div>`;
 
@@ -1029,19 +1908,22 @@ export function renderSession(data: SessionData): string {
 		renderFilterBar(data) +
 		`<div class="active-filters" hidden></div>` +
 		`<p class="result-count">피드백 <span id="visible-count">${total}</span>/<span id="total-count">${total}</span></p>` +
+		renderRecurring(data) +
 		`<div class="card-list">${cards}</div>` +
+		renderMatchesWithoutFeedback(placement.tail) +
 		`<p class="empty-state" hidden>조건에 맞는 피드백이 없어요 <button type="button" class="filter-reset">전체 해제</button></p>` +
 		`</div>`;
 
 	const body =
-		`<header class="header"><h1>${titleHtml(data.title)}</h1><p class="date">${escapeHtml(data.date)}</p></header>` +
+		`<header class="header"><h1>${titleHtml(data.title)}</h1><p class="date">영상 업로드 ${escapeHtml(data.date)}</p>${ctx.sharedAuthor !== null ? feedbackSourceLine([ctx.sharedAuthor]) : ""}</header>` +
 		`<div class="layout">${sideCol}${main}</div>` +
 		`<footer class="footer"><p>${titleHtml(FOOTER_NOTICE)}</p></footer>`;
 
 	const scripts =
 		`<script>${VIEWER_JS}</script>\n` + `<script src="https://www.youtube.com/iframe_api" async></script>\n`;
 
-	return pageShell(data.title, ` data-video="${escapeHtml(data.videos[0]?.id ?? "")}"`, body, scripts);
+	const bodyAttrs = ` data-video="${escapeHtml(data.videos[0]?.id ?? "")}"${linkOnly ? ' data-link-only="true"' : ""}`;
+	return pageShell(data.title, bodyAttrs, body, scripts);
 }
 
 // ── renderIndex (DESIGN.md §12) ──────────────────────────────────────────
@@ -1050,7 +1932,7 @@ function renderSessionCard(entry: IndexSessionEntry): string {
 	const tags = entry.topic_tags.map((tag) => chip("chip-topic", tag)).join("");
 	return (
 		`<a class="session-card" href="${escapeHtml(entry.href)}">` +
-		`<p class="date">${escapeHtml(entry.date)}</p>` +
+		`<p class="date">영상 업로드 ${escapeHtml(entry.date)}</p>` +
 		`<h2>${titleHtml(entry.title)}</h2>` +
 		`<p class="meta">${entry.videos}파트 · 피드백 ${entry.unit_count}개</p>` +
 		`<div class="topic-tags">${tags}</div>` +
@@ -1075,7 +1957,7 @@ function renderIndexByTopic(index: ArchiveIndex): string {
 		.map((tag) => {
 			const units = index.units.filter((unit) => unit.topic_tags.includes(tag));
 			const items = units
-				.map((unit) => `<li><a class="toc-item" href="${escapeHtml(unit.href)}">${titleHtml(unit.title)}</a></li>`)
+				.map((unit) => `<li><a class="toc-item" href="${escapeHtml(unit.href)}"><span class="toc-title">${titleHtml(unit.title)}</span></a></li>`)
 				.join("");
 			return `<div class="toc-tag-group"><h3>${titleHtml(tag)} (${units.length})</h3><ul>${items}</ul></div>`;
 		})
@@ -1109,7 +1991,11 @@ export function renderIndex(index: ArchiveIndex): string {
 
 const MAX_TRANSLATION_ROWS = 5;
 
-export function renderRef(ref: RefPageData): string {
+/** `RefPageData` as read from a refs.verified.json that may predate `version_badge`/`published_badge`/`pro_clubs`. */
+export type RefPageInput = Omit<RefPageData, "version_badge" | "published_badge" | "pro_clubs"> & { version_badge?: string | null; published_badge?: string | null; pro_clubs?: boolean };
+
+export function renderRef(input: RefPageInput): string {
+	const ref: RefPageData = { ...input, version_badge: versionBadgeFromLegacyData(input), published_badge: publishedBadgeFromLegacyData(input), pro_clubs: proClubsFromLegacyData(input) };
 	const keyPoints = ref.key_points_ko.map((point) => `<li>${titleHtml(point)}</li>`).join("");
 	// row.orig is the foreign-language original sentence (DESIGN §10/§12: excluded from the CJK
 	// glue treatment, since it isn't Korean); row.ko is the Korean translation and goes through
@@ -1125,9 +2011,8 @@ export function renderRef(ref: RefPageData): string {
 	const html =
 		`<main class="ref-main">` +
 		`<h1>${titleHtml(ref.title)}</h1>` +
-		`<p class="ref-badges"><span class="badge">${escapeHtml(ref.kind)}</span>` +
-		`<span class="badge">${escapeHtml(ref.lang.toUpperCase())}</span></p>` +
-		`<p class="plain-link"><a href="${escapeHtml(ref.url)}" target="_blank" rel="noopener">원문 ↗</a></p>` +
+		`<p class="ref-badges">${renderRefBadges(ref)}</p>` +
+		`<p class="plain-link">${refOpenLink({ orig_url: ref.url, start_seconds: ref.start_seconds })}</p>` +
 		`<p class="summary-ko">${titleHtml(ref.summary_ko)}</p>` +
 		(keyPoints ? `<ul class="key-points">${keyPoints}</ul>` : "") +
 		(rows
@@ -1172,7 +2057,7 @@ body {
 }
 h1, h2, h3 { text-wrap: balance; word-break: keep-all; overflow-wrap: anywhere; line-break: strict; margin: 0 0 var(--space-2); font-weight: 700; }
 .nobr { white-space: nowrap; }
-p, dd, li, figcaption { text-wrap: pretty; word-break: keep-all; overflow-wrap: anywhere; line-break: strict; }
+p, dd, li, figcaption, .translations-table td { text-wrap: pretty; word-break: keep-all; overflow-wrap: anywhere; line-break: strict; }
 h1 { font-size: 1.75rem; line-height: 1.3; }
 h2 { font-size: 1.375rem; line-height: 1.35; }
 h3 { font-size: 1.25rem; line-height: 1.4; }
@@ -1213,6 +2098,11 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .player-mini-bar-text { display: none; }
 .player-collapse { display: none; }
 
+/* Link-only session (DESIGN §4/§9): no player, a small non-sticky bar of "유튜브에서 시청 ↗" links. */
+.watch-bar { flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-4); padding: 0 var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-md); background: var(--surface); font-size: 0.8125rem; font-weight: 600; }
+.watch-bar-link { display: inline-flex; align-items: center; min-height: 44px; }
+.watch-bar-note { flex-basis: 100%; padding-bottom: var(--space-2); color: var(--muted); font-size: 0.8125rem; font-weight: 400; }
+
 .side { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--space-4); }
 .part-switch { flex-shrink: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .part-btn { min-height: 44px; padding: var(--space-2) var(--space-3); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--surface); font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
@@ -1234,28 +2124,48 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .toc [role="tabpanel"][hidden] { display: none; }
 .toc-topic-group, .toc-tag-group, .toc-match-group { margin: var(--space-6) 0 0; }
 .toc-topic-group[hidden], .toc-tag-group[hidden], .toc-match-group[hidden] { display: none; }
+.toc-no-feedback { font-size: 0.8125rem; color: var(--muted); margin: var(--space-6) 0 0; }
 .toc-summary { font-size: 0.875rem; color: var(--muted); margin: var(--space-1) 0 var(--space-2); }
 /* Shared with the archive's #by-topic list (DESIGN §12), which has no .toc ancestor of its own
    but reuses the same group/list classes and needs the same reset — without it the bare <ul>
    fell through to the browser default (bullets, ~40px indent). */
 .toc ul, #by-topic ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
-.toc-item { display: block; min-height: 44px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: 0.875rem; color: var(--muted); text-decoration: none; }
-.toc-item .chip-time { margin-right: var(--space-2); }
+.toc-item { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-2); align-items: start; min-height: 44px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: 0.875rem; color: var(--muted); text-decoration: none; }
+.toc-item .chip-time { min-width: 8ch; justify-content: center; font-variant-numeric: tabular-nums; }
+.toc-item > .toc-title:first-child { grid-column: 1 / -1; }
+.toc-item .toc-title { text-decoration: inherit; }
+.title-part { display: inline-block; text-decoration: inherit; }
+/* A card title's slash-separated clauses are block lines (each clause starts a line), and the title wraps with pretty, not balance: balancing cut each clause into near-equal halves mid-phrase. */
+.card h3 { text-wrap: pretty; }
+.card h3 .title-part { display: block; }
 .toc-item:hover, .toc-item:focus-visible, .toc-item.is-current { color: var(--accent); text-decoration: underline; }
 .toc-item[hidden] { display: none; }
+/* Archive topic list (DESIGN §12): items read as links (accent + underline), hairline-divided, with a fixed vertical padding so wrapped titles keep the rhythm. */
+#by-topic ul { gap: 0; }
+#by-topic li { border-bottom: 1px solid var(--line); }
+#by-topic li:last-child { border-bottom: 0; }
+#by-topic .toc-item { color: var(--accent); text-decoration: underline; padding: var(--space-3) var(--space-2); }
+#by-topic .toc-item:hover, #by-topic .toc-item:focus-visible { color: var(--accent-hover); }
 
 .main { flex: 1 1 auto; min-width: 0; max-width: var(--measure); display: flex; flex-direction: column; gap: var(--space-8); }
 
 .my-feedback { display: flex; flex-direction: column; gap: var(--space-2); }
 .my-feedback-label { font-size: 0.8125rem; font-weight: 700; }
-.my-feedback-row { display: flex; gap: var(--space-2); overflow-x: auto; white-space: nowrap; padding-bottom: var(--space-1); }
+.my-feedback-legend { margin: 0; font-size: 0.8125rem; line-height: 1.5; color: var(--muted); }
+.my-feedback-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+/* Below 1024px the pill strip scrolls sideways: a right-edge alpha-mask fade (theme-independent) hints at it, and the end padding keeps the last pill clear of the fade. */
+@media (max-width: 1023.98px) {
+  .my-feedback-row { flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; padding-bottom: var(--space-1); padding-right: var(--space-6); mask-image: linear-gradient(to right, #000 calc(100% - var(--space-6)), transparent); -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--space-6)), transparent); }
+}
 /* role="listitem" wrapper (DESIGN §6/§13) — display:contents would drop the box
    these tests inspect, so it stays an ordinary inline-flex item instead. */
 .my-feedback-row [role="listitem"] { display: inline-flex; flex-shrink: 0; }
 .pill { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 44px; padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--bg); font-size: 0.8125rem; font-weight: 600; cursor: pointer; flex-shrink: 0; }
 .pill .count { color: var(--muted); }
+.pill .count-team { color: var(--ink); font-weight: 600; }
+.pill .count-ref { color: var(--muted); font-weight: 400; }
 .pill[aria-pressed="true"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
-.pill[aria-pressed="true"] .count { color: var(--bg); }
+.pill[aria-pressed="true"] .count, .pill[aria-pressed="true"] .count-team, .pill[aria-pressed="true"] .count-ref { color: var(--bg); }
 
 /* Padding lives on the summary (both states) and only on .filter-groups/.filter-reset
    when open (DESIGN §7) — a closed filter bar is a single compact row on every width. */
@@ -1287,17 +2197,23 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
    line off-screen (DESIGN §7/§15-5); chip margin is reset per node since the tree's own
    gap already spaces siblings — keeping both would double the gap (DESIGN §2). */
 /* Each root is its own row — .pos-tree stacks branches in a column instead of letting every
-   root/child chip wrap into one mixed flow ("MF-CDM-CM-FW-ST-CF-LW" reading as a single line
+   root/child chip wrap into one mixed flow ("MF-CDM-CM-FW-WF-ST" reading as a single line
    at 1440px). */
 .pos-tree { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; max-width: 100%; }
 .pos-node { display: inline-flex; align-items: center; min-width: 0; max-width: 100%; }
 .pos-node .chip { margin: 0; }
 /* Two-column row: the branch's own chip in a fixed-width left column, its children wrapping in
-   the right column — applied identically at every nesting depth, so a nested branch (e.g. FB's
-   own LB/RB/LWB/RWB row inside DF's children) reads with the same rule and indent as a root
-   branch, not a special case. */
+   the right column — applied identically at every nesting depth, so a nested branch (should
+   the tree grow one) reads with the same rule and indent as a root branch, not a special case. */
 .pos-node--branch { display: grid; grid-template-columns: minmax(64px, max-content) minmax(0, 1fr); align-items: start; gap: var(--space-2); width: 100%; }
 .pos-children { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2); min-width: 0; max-width: 100%; }
+@media (max-width: 640px) {
+  /* Narrow screens have no room for the indent column: children sit in their own row under the parent chip, indented by one step. */
+  .pos-node--branch { grid-template-columns: minmax(0, 1fr); }
+  /* One-column grid would stretch the branch chip to full width; keep it at its content width and indent the children one step. */
+  .pos-node--branch > .chip { justify-self: start; }
+  .pos-children { padding-left: var(--space-4); }
+}
 .chip-overflow { color: var(--muted); }
 .filter-reset { min-height: 44px; padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--bg); font-size: 0.8125rem; font-weight: 600; cursor: pointer; margin-top: var(--space-3); }
 
@@ -1309,16 +2225,46 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 
 .result-count { font-size: 0.8125rem; color: var(--muted); margin: 0; }
 
+/* 반복 지적 (DESIGN §6a): label + ×N + time-chip anchors, one row per repeated problem. */
+.recurring { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); }
+.recurring[hidden], .recurring-item[hidden], .recurring-unit[hidden] { display: none; }
+.recurring-title { margin: 0 0 var(--space-2); font-size: 0.8125rem; line-height: 1.4; font-weight: 700; }
+.recurring-summary { margin: 0 0 var(--space-2); font-size: 0.875rem; line-height: 1.5; font-weight: 600; color: var(--muted); }
+.recurring-summary[hidden] { display: none; }
+.recurring-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.recurring-item { font-size: 0.875rem; }
+.recurring-label { display: block; font-weight: 600; }
+.recurring-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-2); }
+.recurring-units { display: flex; flex-wrap: wrap; }
+.recurring-count { color: var(--muted); font-weight: 600; }
+/* Count text is split into parts, each starting with its own "·" so a line break never leaves a "·" at a line end. */
+.recurring-count { display: flex; flex-wrap: wrap; column-gap: var(--space-2); }
+.recurring-count-part { white-space: nowrap; }
+.recurring-unfound { display: inline-block; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-full); color: var(--muted); font-size: 0.8125rem; }
+/* gap: .chip is inline-flex, so the whitespace text node between the time and the owner is dropped; the gap keeps "1:02:23 4백" from reading "1:02:234백". */
+.recurring-unit { margin: var(--space-1) var(--space-1) var(--space-1) 0; min-height: 44px; max-width: 100%; white-space: normal; gap: var(--space-1); }
+.recurring-unit-owner { min-width: 0; overflow-wrap: anywhere; }
+.recurring-unit.is-mine { background: var(--mine-tint); }
+@media (max-width: 640px) {
+  /* Chips are 44px tall hit areas; the 4px right/bottom-only margin halves the gap so a row of time chips wraps in fewer lines. */
+  .recurring-unit { margin: 0 var(--space-1) var(--space-1) 0; }
+}
+.recurring-more { display: none; min-height: 44px; margin-top: var(--space-2); padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--bg); font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
+.recurring-more:not([hidden]) { display: inline-flex; align-items: center; }
+.recurring:not(.is-expanded) .recurring-extra { display: none; }
+
 .card-list { display: flex; flex-direction: column; gap: var(--space-6); }
+.matches-without-feedback { display: flex; flex-direction: column; gap: var(--space-1); }
+.match-no-feedback { margin: 0; font-size: 0.8125rem; color: var(--muted); }
 /* Without this, [hidden]'s UA display:none loses to this file's own explicit display:flex
    above (author styles always beat the UA sheet) — the empty card list kept its flex slot at
    0 results, doubling the gap above .empty-state (round-6 CJK review). */
 .card-list[hidden] { display: none; }
-/* 30-second criterion (DESIGN §6): direct-mention cards float above position-related ones
-   via flex order, not DOM reordering; flex's sort is stable so each group stays in its
-   original chronological order. */
-.card-list.mine-active .card:not(.is-direct) { order: 1; }
+/* 30-second criterion (DESIGN §6): VIEWER_JS regroups the real DOM under these headings
+   (direct → all → position), so keyboard and screen-reader order match the visual order. */
+.mine-group-heading { margin: 0; font-size: 0.875rem; line-height: 1.4; font-weight: 700; color: var(--muted); }
 .card { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-4); cursor: pointer; scroll-margin-top: var(--space-4); }
+body[data-link-only] .card, body[data-link-only] .card-body .body-frame { cursor: auto; }
 .card[hidden] { display: none; }
 .card--highlighted { border-color: var(--accent); border-width: 2px; }
 .card-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-2); }
@@ -1327,8 +2273,15 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
    footprint while expanding its hit area to the 44px minimum via an invisible
    centered pseudo-element, instead of inflating the compact header row's own size. */
 .seek-btn { cursor: pointer; position: relative; }
+a.chip-time { color: var(--ink); text-decoration: none; }
 .seek-btn::after { content: ""; position: absolute; top: 50%; left: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
-.breadcrumb { color: var(--muted); font-size: 0.8125rem; }
+.breadcrumb { color: var(--muted); font-size: 0.8125rem; text-wrap: balance; }
+/* The topic phrase moves to the next line whole instead of breaking mid-phrase ("› 무리한 / 가로채기와 패스"); its leading "›" travels with it, so no line ends with "›". */
+.breadcrumb-topic { display: inline-block; }
+@media (max-width: 640px) {
+  /* A long breadcrumb gets its own full row so the time chip is not left alone and the phrase does not wrap mid-way. */
+  .breadcrumb { flex-basis: 100%; }
+}
 .card-image { margin: var(--space-3) 0 0; }
 .card-image img { width: 100%; height: auto; border: 1px solid var(--line); }
 /* Tags (left) + 확대 (right) share one row instead of stacking on two — the tag box wraps
@@ -1338,14 +2291,42 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .mention-badge { display: inline-block; margin: var(--space-2) 0 0; padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); font-size: 0.8125rem; font-weight: 600; }
 .mention-badge[hidden] { display: none; }
 .mention-badge.mention-direct { background: var(--accent); color: var(--bg); }
+.mention-badge.mention-named, .mention-badge.mention-position-target { background: var(--mine-tint); color: var(--ink); }
 .mention-badge.mention-related, .mention-badge.mention-all { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
-.chip-addressed-all { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+.chip-addressed-all, .chip-target-position { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
 .chip-row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }
 .chip-pos-gk { background: var(--pos-gk-bg); color: var(--pos-gk-fg); }
 .chip-pos-df { background: var(--pos-df-bg); color: var(--pos-df-fg); }
 .chip-pos-mf { background: var(--pos-mf-bg); color: var(--pos-mf-fg); }
 .chip-pos-fw { background: var(--pos-fw-bg); color: var(--pos-fw-fg); }
-.mentioned-members, .related-members { font-size: 0.8125rem; color: var(--muted); margin: var(--space-2) 0 0; }
+.mentioned-members, .related-members, .target-position-line, .unidentified-members, .look-at { font-size: 0.8125rem; color: var(--muted); margin: var(--space-2) 0 0; }
+.self-critique-mark { color: var(--muted); font-weight: 400; white-space: nowrap; }
+.marker-legend { display: block; margin-top: var(--space-1); font-size: 0.8125rem; line-height: 1.5; font-weight: 400; color: var(--muted); overflow-wrap: anywhere; }
+.match-legend { margin: var(--space-1) 0 0; }
+.inferred-mark { color: var(--muted); font-weight: 400; white-space: nowrap; }
+/* The 대상 part of the merged "고칠 사람 · 대상" line moves whole to the next line (its leading "·" never ends a line); a long name list still wraps inside it. */
+.position-target-part { display: inline-block; max-width: 100%; }
+/* "지적" label after a fault (-ㅁ) title segment: a small outlined tag so the line reads as a stated fault, not an action to take. */
+.title-fault-label { display: inline-block; padding: 0 var(--space-1); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); font-size: 0.8125rem; font-weight: 600; line-height: 1.4; vertical-align: middle; white-space: nowrap; }
+/* Match header between consecutive cards of different matches; hidden when none of its match's cards is visible or a member is selected. */
+.match-divider { margin: var(--space-4) 0 0; padding-bottom: var(--space-1); border-bottom: 1px solid var(--line-strong); font-size: 1rem; line-height: 1.4; font-weight: 700; overflow-wrap: anywhere; }
+.match-divider[hidden] { display: none; }
+.fault-scene { font-size: 0.875rem; line-height: 1.7; color: var(--muted); margin: var(--space-2) 0 0; }
+.no-action { font-size: 0.875rem; line-height: 1.7; color: var(--muted); margin: var(--space-2) 0 0; }
+.direction-check { font-size: 0.875rem; line-height: 1.7; color: var(--ink); margin: var(--space-1) 0 0; }
+/* Warning tone from the existing amber token pair; the label carries it so the sentence itself stays in --ink. */
+.direction-check .line-label { color: var(--pos-gk-fg); }
+.ref-lesson { font-size: 0.875rem; line-height: 1.7; color: var(--ink); margin: var(--space-1) 0 0; }
+/* Same label for 장면 and 자료가 권하는 것 (DESIGN §5 item 2). */
+.line-label { font-weight: 600; color: var(--ink); white-space: nowrap; }
+/* "(출처)" moves as one unit so "(" never ends a line; max-width keeps a long source name wrapping inside it. */
+.ref-lesson-cite { display: inline-block; max-width: 100%; }
+/* 44px hit area via ::after (DESIGN §13), like .ref-link — no min-height, so the paragraph keeps its own line height. */
+.ref-lesson-source { position: relative; }
+.ref-lesson-source::after { content: ""; position: absolute; top: 50%; left: 50%; width: max(100%, 44px); height: 44px; transform: translate(-50%, -50%); }
+p.feedback-source { font-size: 0.8125rem; color: var(--muted); margin: var(--space-1) 0 0; }
+/* Comment writer on the card's header row, after the breadcrumb: one unbreakable-from-its-separator piece. */
+.card-source { display: inline-block; }
 /* 접힘 요약(summary)의 탭 영역 최소 44px(DESIGN §13/§5 item 8) — .seek-btn(위)과 같은 기법으로
    보이지 않는 ::before 확장 영역을 쓴다. summary 자체는 한 줄 텍스트로 남아 흐름 안 공간을
    차지하지 않으므로, 펼친 뒤 나머지 줄(.related-rest)과 빈틈 없이 붙어 한 목록으로 읽힌다.
@@ -1379,6 +2360,7 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .card-body > .body-frame + * { margin-top: var(--space-6); }
 .card-body .body-frame { cursor: pointer; border-radius: var(--radius-sm); }
 .card-body .body-frame img { width: 100%; height: auto; border-radius: var(--radius-sm); }
+.card-body .body-frame .frame-link { display: block; }
 /* Grid, not flex-wrap: a flex row let the caption text node be the
    only wrap point, so depending on caption length the time chip / text / 확대 scattered across
    1-4 lines. The fixed edge columns (time chip left, 확대 right) never wrap — only the middle
@@ -1386,20 +2368,69 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
    row's edges at any caption length, top-aligned (align-items:start) even across wrapped lines. */
 .card-body .body-frame figcaption { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-2); font-size: 0.875rem; font-weight: 500; color: var(--muted); margin-top: var(--space-2); }
 .body-frame-caption { min-width: 0; }
-.zoom-link { font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+/* A frame at the card's own start second has no time chip: caption | 확대 only. */
+.card-body .body-frame.no-time-chip figcaption { grid-template-columns: minmax(0, 1fr) auto; }
+.zoom-link { font-weight: 600; white-space: nowrap; flex-shrink: 0; position: relative; }
+/* 44px hit area via ::after (DESIGN §13), like .seek-btn/.ref-link. */
+.zoom-link::after { content: ""; position: absolute; top: 50%; left: 50%; width: max(100%, 44px); height: 44px; transform: translate(-50%, -50%); }
+@media (max-width: 640px) {
+  /* Narrow screens: time chip + 확대 share the first row, the caption gets its own full-width row below. */
+  .card-body .body-frame figcaption { grid-template-columns: auto 1fr; align-items: center; }
+  .body-frame-caption { grid-column: 1 / -1; grid-row: 2; }
+  .card-body .body-frame .zoom-link { grid-column: 2; grid-row: 1; justify-self: end; }
+  .card-body .body-frame.no-time-chip figcaption { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+  .card-body .body-frame.no-time-chip .body-frame-caption { grid-column: 1; grid-row: 1; }
+}
+
+/* Ultrawide frames (width/height > 2, DESIGN §5 item 4a): at every width the image gets a fixed readable
+   height and pans horizontally inside its own box only (the page never scrolls sideways). VIEWER_JS
+   scrolls the box to its data-pan-center. */
+.frame-pan-scroll { overflow-x: auto; overflow-y: hidden; border-radius: var(--radius-sm); }
+.card-image .frame-pan-scroll img, .card-body .body-frame .frame-pan-scroll img { width: auto; max-width: none; height: 100%; }
+.card-body .body-frame .frame-pan-scroll .frame-link { height: 100%; }
+.frame-pan .frame-pan-hint { display: block; margin: var(--space-1) 0 0; font-size: 0.8125rem; color: var(--muted); text-align: center; }
+.frame-pan .frame-pan-hint[hidden] { display: none; }
+/* A mouse drags a cropped box (VIEWER_JS marks it data-pannable and adds .is-dragging while dragging); touch keeps its native swipe. */
+@media (pointer: fine) {
+  .frame-pan-scroll[data-pannable] { cursor: grab; }
+  .frame-pan-scroll[data-pannable] .frame-link { cursor: inherit; }
+  .frame-pan-scroll.is-dragging { cursor: grabbing; user-select: none; }
+}
+@media (max-width: 640px) {
+  .frame-pan-scroll { height: 280px; }
+}
+@media (min-width: 641px) {
+  .frame-pan-scroll { height: 300px; }
+}
+/* A frame that would render at least 280px tall at its box width (VIEWER_JS adds .frame-pan--full) is shown whole: no box height, no sideways scroll.
+   Every other ultrawide frame keeps the pan box at every width — the card is never widened to fit it. */
+.frame-pan--full .frame-pan-scroll { overflow: visible; height: auto; }
+.card-image .frame-pan--full .frame-pan-scroll img, .card-body .body-frame .frame-pan--full .frame-pan-scroll img { width: 100%; max-width: 100%; height: auto; }
+.card-body .body-frame .frame-pan--full .frame-pan-scroll .frame-link { height: auto; }
 
 /* Groups similar/refs as one metadata block, separated from the body above by a hairline
    (DESIGN §5 items 9/10, §15-10 "160px 넘는 빈 공백" is the opposite failure this guards
    against — this is a small, deliberate gap, not a blank run). */
 .card-meta { margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--space-2); }
 .similar-list, .refs-list { font-size: 0.875rem; margin: 0; }
-.ref-badges { display: inline-flex; gap: var(--space-1); }
+.refs-label { font-size: 0.875rem; font-weight: 700; color: var(--muted); margin: 0; }
+.refs-list li + li { margin-top: var(--space-3); }
+.ref-title { font-weight: 600; }
+.ref-relevance { display: block; margin: var(--space-1) 0; color: var(--muted); }
+/* Ref links (요약 · 원문 ↗ · 자료 영상 m:ss부터 ↗) keep their text size and get a >=44px hit area via ::after (DESIGN §13), like .seek-btn. */
+.ref-links { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-3); }
+.ref-sep { color: var(--muted); }
+.ref-link { position: relative; display: inline-block; }
+.ref-link::after { content: ""; position: absolute; top: 50%; left: 50%; width: max(100%, 44px); height: 44px; transform: translate(-50%, -50%); }
+.ref-badges { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: var(--space-1) 0; }
+.badge.ref-format { background: var(--surface-sunken); color: var(--ink); font-weight: 700; }
 .badge { display: inline-block; background: var(--surface-sunken); color: var(--muted); font-size: 0.875rem; font-weight: 500; padding: var(--space-1) var(--space-2); border-radius: var(--radius-full); }
 .similar-date { color: var(--muted); font-size: 0.875rem; }
 /* margin-top (not conditional on .card-meta) reads as the card's own end block whether the
    previous sibling is .card-meta or .card-body directly — without it the link ran on right
    after the last paragraph as if it were part of it. */
-.watch-link { display: inline-block; font-weight: 600; font-size: 0.8125rem; margin-top: var(--space-4); }
+.watch-link { display: inline-block; position: relative; font-weight: 600; font-size: 0.8125rem; margin-top: var(--space-4); }
+.watch-link::after { content: ""; position: absolute; top: 50%; left: 50%; width: max(100%, 44px); height: 44px; transform: translate(-50%, -50%); }
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); text-align: center; font-size: 1.0625rem; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-8) var(--space-6); }
 .empty-state[hidden] { display: none; }
 .empty-state .filter-reset { margin-top: 0; }
@@ -1410,6 +2441,10 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 @media (min-width: 1024px) {
   .toc-toggle { display: none; }
   .toc-panel[hidden] { display: block; }
+  /* Scrolling .toc-scroll must not scroll the 경기별/주제별 tablist away (DESIGN §8). */
+  .toc [role="tablist"] { position: sticky; top: 0; z-index: 1; background: var(--bg); }
+  /* A cut-off last line reads as "more below": the bottom 28px fades out; the same padding keeps the final line clear of the fade at the end of the scroll. */
+  .toc-scroll { padding-bottom: 28px; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); }
 }
 
 @media (max-width: 1023.98px) {
@@ -1424,7 +2459,10 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
   .player-wrapper { order: 1; position: sticky; top: 0; z-index: 10; aspect-ratio: auto; height: auto;
     display: flex; flex-direction: column; }
   .player-media { position: relative; inset: auto; flex-shrink: 0; height: min(56.25vw, 200px); }
-  .player-wrapper.is-collapsed .player-media { height: 0; }
+  .player-wrapper.is-collapsed .player-media { height: 0; overflow: hidden; }
+  /* A non-embeddable part's placeholder is taller than the 44px collapsed bar; it must not cover the 펼치기 button. */
+  .player-wrapper.is-collapsed .player-placeholder { display: none; }
+  .watch-bar { order: 1; }
   .player-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2);
     flex-shrink: 0; min-height: 44px; padding: 0 var(--space-3); background: var(--ink); }
   .player-mini-bar-text { margin-right: auto; color: var(--bg); font-size: 0.8125rem; font-weight: 600; }
@@ -1435,11 +2473,13 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
   .part-switch { order: 2; }
   .my-feedback { order: 3; }
   .filter-bar { order: 4; }
-  .active-filters { order: 5; }
-  .result-count { order: 6; }
-  .card-list { order: 7; }
-  .empty-state { order: 8; }
-  .toc-scroll { order: 9; flex: 0 1 auto; overflow-y: visible; }
+  .toc-scroll { order: 5; flex: 0 1 auto; overflow-y: visible; }
+  .active-filters { order: 6; }
+  .result-count { order: 7; }
+  .recurring { order: 8; }
+  .card-list { order: 9; }
+  .empty-state { order: 10; }
+  .matches-without-feedback { order: 11; }
   .card { scroll-margin-top: calc(var(--sticky-player-h) + var(--space-4)); }
 }
 
@@ -1454,7 +2494,7 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .session-card h2 { text-decoration: none; }
 .session-card:hover h2, .session-card:focus-visible h2 { color: var(--accent); text-decoration: underline; }
 .topic-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2); }
-.summary-ko { font-size: 1.0625rem; line-height: 1.7; }
+.summary-ko { font-size: 1.0625rem; line-height: 1.7; max-width: var(--measure); }
 .key-points { font-size: 1.0625rem; line-height: 1.7; margin: var(--space-4) 0; }
 .translations-table { width: 100%; border-collapse: collapse; margin: var(--space-4) 0; }
 .translations-table th { font-size: 0.875rem; font-weight: 700; text-align: left; vertical-align: top; padding: var(--space-3); border: 0; border-bottom: 1px solid var(--line); }
@@ -1510,13 +2550,14 @@ export const VIEWER_JS = `(function () {
   function elementMatchesExcept(el, exceptGroup) {
     var pos = el.getAttribute("data-pos") || "";
     var topics = el.getAttribute("data-topics") || "";
-    var memberIds = el.getAttribute("data-member-ids") || "";
+    var mentionIds = el.getAttribute("data-mention-ids") || "";
+    var namedIds = el.getAttribute("data-named-ids") || "";
     var relatedIds = el.getAttribute("data-related-ids") || "";
-    var addressedToAll = el.getAttribute("data-addressed-to-all") === "true";
+    var addressedIds = el.getAttribute("data-addressed-member-ids") || "";
     if (exceptGroup !== "position" && selected.position && !hasToken(pos, selected.position)) return false;
     if (exceptGroup !== "topic" && selected.topic.length > 0 && !anyToken(topics, selected.topic)) return false;
-    if (exceptGroup !== "mention" && selected.mention && !hasToken(memberIds, selected.mention)) return false;
-    if (exceptGroup !== "mine" && selected.mine && !addressedToAll && !hasToken(relatedIds, selected.mine)) return false;
+    if (exceptGroup !== "mention" && selected.mention && !hasToken(mentionIds, selected.mention)) return false;
+    if (exceptGroup !== "mine" && selected.mine && !hasToken(addressedIds, selected.mine) && !hasToken(relatedIds, selected.mine) && !hasToken(namedIds, selected.mine)) return false;
     return true;
   }
 
@@ -1578,7 +2619,7 @@ export const VIEWER_JS = `(function () {
   function updateFacetCounts() {
     applyFacetCounts("position", "data-pos");
     applyFacetCounts("topic", "data-topics");
-    applyFacetCounts("mention", "data-member-ids");
+    applyFacetCounts("mention", "data-mention-ids");
   }
 
   // Finds a chip by (group, value) via iteration + getAttribute comparison, never a
@@ -1679,7 +2720,7 @@ export const VIEWER_JS = `(function () {
       hasAny = true;
     }
     if (selected.mention) {
-      appendActiveChip(container, "mention", selected.mention, "언급 선수: " + mentionLabel(selected.mention));
+      appendActiveChip(container, "mention", selected.mention, "이름이 나온 선수: " + mentionLabel(selected.mention));
       hasAny = true;
     }
     if (hasAny) {
@@ -1710,23 +2751,239 @@ export const VIEWER_JS = `(function () {
     }
     if (selected.mention) {
       n = n + 1;
-      parts.push("언급 선수 " + mentionLabel(selected.mention));
+      parts.push("이름이 나온 선수 " + mentionLabel(selected.mention));
     }
     if (countLabel) countLabel.textContent = String(n);
     if (detail) detail.textContent = parts.length > 0 ? " · " + parts.join(", ") : "";
   }
 
-  // Also toggles .is-direct on each card and .mine-active on .card-list (DESIGN §6's
-  // 30-second criterion): CSS order then floats direct-mention cards above position-related
-  // ones while flex's stable sort keeps each group in its original chronological (DOM) order
-  // — no DOM reordering. Clears both on deselect (mine falsy skips every classList.add call).
+  // ── "내 피드백" grouping (DESIGN §6): the real DOM is regrouped under headings, so keyboard and
+  // screen-reader order equal the visual order. Cards keep their original time order inside a
+  // group; deselecting puts every card back in the original order and drops the headings.
+  var allCards = Array.prototype.slice.call(document.querySelectorAll(".card"));
+  // Cards and the match dividers (h2.match-divider) between them, in the original order — deselecting restores this whole sequence.
+  var allListItems = Array.prototype.slice.call((document.querySelector(".card-list") || { children: [] }).children);
+  var cardsArranged = false;
+  var MINE_GROUPS = [
+    { key: "fix", label: "고칠 점" },
+    { key: "named", label: "이름이 나온 장면" },
+    { key: "positionTarget", label: "내 포지션 대상" },
+    { key: "all", label: "전원 대상" },
+    { key: "position", label: "같은 포지션 참고" }
+  ];
+
+  function mineGroupOf(card) {
+    if (hasToken(card.getAttribute("data-member-ids") || "", selected.mine)) return "fix";
+    if (hasToken(card.getAttribute("data-position-target-ids") || "", selected.mine)) return "positionTarget";
+    if (hasToken(card.getAttribute("data-addressed-member-ids") || "", selected.mine)) return "all";
+    if (hasToken(card.getAttribute("data-named-ids") || "", selected.mine)) return "named";
+    return "position";
+  }
+
+  function arrangeCards() {
+    var cardList = document.querySelector(".card-list");
+    if (!cardList) return;
+    if (!selected.mine && !cardsArranged) return;
+    var oldHeadings = cardList.querySelectorAll(".mine-group-heading");
+    for (var h = 0; h < oldHeadings.length; h++) oldHeadings[h].parentNode.removeChild(oldHeadings[h]);
+    var i;
+    if (!selected.mine) {
+      for (i = 0; i < allListItems.length; i++) cardList.appendChild(allListItems[i]);
+      cardsArranged = false;
+      return;
+    }
+    var buckets = { fix: [], positionTarget: [], all: [], named: [], position: [] };
+    var hiddenCards = [];
+    for (i = 0; i < allCards.length; i++) {
+      if (allCards[i].hasAttribute("hidden")) hiddenCards.push(allCards[i]);
+      else buckets[mineGroupOf(allCards[i])].push(allCards[i]);
+    }
+    for (var g = 0; g < MINE_GROUPS.length; g++) {
+      var group = buckets[MINE_GROUPS[g].key];
+      if (group.length === 0) continue;
+      var heading = document.createElement("h2");
+      heading.className = "mine-group-heading";
+      heading.textContent = MINE_GROUPS[g].label + " " + group.length;
+      cardList.appendChild(heading);
+      for (i = 0; i < group.length; i++) cardList.appendChild(group[i]);
+    }
+    for (i = 0; i < hiddenCards.length; i++) cardList.appendChild(hiddenCards[i]);
+    cardsArranged = true;
+  }
+
+  var RECURRING_VISIBLE_ROWS = 3;
+  // The rows in their original (most-repeated first) order: choosing a member moves that member's own rows to the front; deselecting restores this order.
+  var allRecurringRows = Array.prototype.slice.call(document.querySelectorAll(".recurring-item"));
+
+  // 반복 지적 (DESIGN §6a): a time chip whose card the filters hid is hidden with it (an anchor to a
+  // hidden card does nothing); a row with no visible chip, and the block with no visible row, hide too.
+  function updateRecurring() {
+    var block = document.querySelector(".recurring");
+    if (!block) return;
+    var rows = allRecurringRows;
+    var anyRow = false;
+    var rowOwned = [];
+    var rowFix = [];
+    var rowVisibleFix = [];
+    var rowVisiblePosition = [];
+    for (var i = 0; i < rows.length; i++) {
+      var chips = rows[i].querySelectorAll(".recurring-unit");
+      var anyChip = false;
+      var visibleChips = 0;
+      // "내가 고칠 것" = the entry's chips whose owner is the selected member (data-fixer-ids: the unit's fixers who own the label);
+      // a chip owned by a team unit ("수비 라인") never counts, nor does someone else's repeated behaviour.
+      // A chip also counts as a separate "내 포지션 대상" when its owner is a team unit ("수비 라인", data-team-owner) or its entry has no owners:
+      // the member played a position of the unit's group in that match (data-group-member-ids, fixers included), and is not the chip's fixer.
+      // data-owner-ids = the row's owners decided per chip (fixers + group members of group-owned chips); data-label-owner-ids = the label's own owners.
+      var noOwners = (rows[i].getAttribute("data-label-owner-ids") || "") === "";
+      var mineUnits = 0; // filters do not change it
+      var positionUnits = 0;
+      var visibleMineUnits = 0; // the "그중" counts: mine among the visible chips
+      var visiblePositionUnits = 0;
+      for (var j = 0; j < chips.length; j++) {
+        var target = document.getElementById(chips[j].getAttribute("data-target") || "");
+        var isFixChip = selected.mine && hasToken(chips[j].getAttribute("data-fixer-ids") || "", selected.mine);
+        var isTeamChip = chips[j].getAttribute("data-team-owner") === "true";
+        var isPositionChip = !isFixChip && (noOwners || isTeamChip) && target !== null && selected.mine && hasToken(target.getAttribute("data-group-member-ids") || "", selected.mine);
+        var isMineChip = isFixChip || isPositionChip;
+        if (isFixChip) mineUnits = mineUnits + 1;
+        if (isPositionChip) positionUnits = positionUnits + 1;
+        chips[j].classList.toggle("is-mine", !!isMineChip);
+        var shown = target !== null && !target.hasAttribute("hidden");
+        if (shown) {
+          chips[j].removeAttribute("hidden");
+          anyChip = true;
+          visibleChips = visibleChips + 1;
+          if (isFixChip) visibleMineUnits = visibleMineUnits + 1;
+          if (isPositionChip) visiblePositionUnits = visiblePositionUnits + 1;
+        } else {
+          chips[j].setAttribute("hidden", "");
+        }
+      }
+      rowOwned.push(!!selected.mine && hasToken(rows[i].getAttribute("data-owner-ids") || "", selected.mine));
+      rowFix.push(mineUnits > 0);
+      rowVisibleFix.push(visibleMineUnits > 0);
+      rowVisiblePosition.push(visiblePositionUnits > 0);
+      var countEl = rows[i].querySelector(".recurring-count");
+      if (countEl) {
+        var total = countEl.getAttribute("data-total");
+        var someHidden = visibleChips < Number(total);
+        var mineText = function (fix, position) {
+          var parts = [];
+          if (fix > 0) parts.push("내가 고칠 것 " + fix);
+          if (position > 0) parts.push("내 포지션 대상 " + position);
+          return parts.join(" · ");
+        };
+        // Parts carry no outer spaces: the flex gap spaces them, and a plain space text node between them (ignored by flex layout) keeps textContent readable.
+        // A part starts with "·" or "(" so a "·" always begins the next line, never ends one.
+        var countParts = ["×" + total];
+        if (someHidden) {
+          var shownText = "· 보이는 카드 " + visibleChips;
+          var visibleMine = mineText(visibleMineUnits, visiblePositionUnits);
+          countParts.push(shownText);
+          if (visibleMine !== "") {
+            var mineSplit = visibleMine.split(" · ");
+            for (var m = 0; m < mineSplit.length; m++) countParts.push((m === 0 ? "(그중 " : "· ") + mineSplit[m] + (m === mineSplit.length - 1 ? ")" : ""));
+          }
+        } else if (mineText(mineUnits, positionUnits) !== "") {
+          var mineAll = mineText(mineUnits, positionUnits).split(" · ");
+          for (var n = 0; n < mineAll.length; n++) countParts.push("· " + mineAll[n]);
+        }
+        countEl.textContent = "";
+        for (var q = 0; q < countParts.length; q++) {
+          var partEl = document.createElement("span");
+          partEl.className = "recurring-count-part";
+          partEl.textContent = countParts[q];
+          if (q > 0) countEl.appendChild(document.createTextNode(" "));
+          countEl.appendChild(partEl);
+        }
+      }
+      if (anyChip) {
+        rows[i].removeAttribute("hidden");
+        anyRow = true;
+      } else {
+        rows[i].setAttribute("hidden", "");
+      }
+    }
+    if (anyRow) block.removeAttribute("hidden");
+    else block.setAttribute("hidden", "");
+    // With a member selected the rows the member owns come first — rows with the member's own "내가 고칠 것" chips, then rows that reach the
+    // member only through a position chip ("내 포지션 대상") — each group keeping the original count order. A one-line summary counts
+    // both kinds among the rows with a visible chip of the member's; without a selection the original order returns and the summary hides.
+    var list = block.querySelector(".recurring-list");
+    var summary = block.querySelector(".recurring-summary");
+    var ordered = [];
+    var orderedOwned = []; // parallel to ordered: the row holds a chip of the selected member (a fix chip or a position/team chip)
+    var fixRows = 0;
+    var positionRows = 0;
+    for (var o = 0; o < rows.length; o++) {
+      if (rowOwned[o] && rowFix[o]) {
+        ordered.push(rows[o]);
+        orderedOwned.push(true);
+        if (rowVisibleFix[o]) fixRows = fixRows + 1;
+      }
+    }
+    for (var q2 = 0; q2 < rows.length; q2++) {
+      if (rowOwned[q2] && !rowFix[q2]) {
+        ordered.push(rows[q2]);
+        orderedOwned.push(true);
+        if (rowVisiblePosition[q2]) positionRows = positionRows + 1;
+      }
+    }
+    for (var p = 0; p < rows.length; p++) {
+      if (!rowOwned[p]) {
+        ordered.push(rows[p]);
+        orderedOwned.push(false);
+      }
+    }
+    if (list) for (var a = 0; a < ordered.length; a++) list.appendChild(ordered[a]);
+    if (summary) {
+      if (selected.mine) {
+        summary.textContent = "내가 고칠 반복 " + fixRows + (positionRows > 0 ? " · 내 포지션 대상 " + positionRows : "");
+        summary.removeAttribute("hidden");
+      } else {
+        summary.textContent = "";
+        summary.setAttribute("hidden", "");
+      }
+    }
+    rows = ordered;
+    // CSS shows only the first RECURRING_VISIBLE_ROWS visible rows until expanded (every width). A row that holds a chip of the selected member is never
+    // folded, however far down it sits; only the rows unrelated to the member fold.
+    var shownRows = 0;
+    var extraRows = 0;
+    for (var r = 0; r < rows.length; r++) {
+      if (rows[r].hasAttribute("hidden")) continue;
+      shownRows = shownRows + 1;
+      var folded = shownRows > RECURRING_VISIBLE_ROWS && !orderedOwned[r];
+      rows[r].classList.toggle("recurring-extra", folded);
+      if (folded) extraRows = extraRows + 1;
+    }
+    var more = block.querySelector(".recurring-more");
+    if (more) {
+      if (extraRows > 0) {
+        more.removeAttribute("hidden");
+        more.textContent = block.classList.contains("is-expanded") ? "접기" : "더 보기 (" + extraRows + ")";
+      } else {
+        more.setAttribute("hidden", "");
+      }
+    }
+  }
+
+  function initRecurringMore() {
+    var block = document.querySelector(".recurring");
+    var more = block ? block.querySelector(".recurring-more") : null;
+    if (!block || !more) return;
+    more.addEventListener("click", function () {
+      var expanded = block.classList.toggle("is-expanded");
+      more.setAttribute("aria-expanded", expanded ? "true" : "false");
+      updateRecurring();
+    });
+  }
+
+  // Toggles .is-direct on each card (the direct-mention marker, DESIGN §6) and applies the badges
+  // and name highlights for the selected member; mine falsy clears them all.
   function updateMentionBadgesAndMarks() {
     var mine = selected.mine;
-    var cardList = document.querySelector(".card-list");
-    if (cardList) {
-      if (mine) cardList.classList.add("mine-active");
-      else cardList.classList.remove("mine-active");
-    }
     var cards = document.querySelectorAll(".card");
     for (var i = 0; i < cards.length; i++) {
       var card = cards[i];
@@ -1734,17 +2991,27 @@ export const VIEWER_JS = `(function () {
       card.classList.toggle("is-direct", isDirect);
       var badge = card.querySelector(".mention-badge");
       if (badge) {
-        var isAddressedToAll = card.getAttribute("data-addressed-to-all") === "true";
+        var isAddressedToAll = mine !== null && hasToken(card.getAttribute("data-addressed-member-ids") || "", mine);
+        // Named in the source on top of the primary relation: shown as a suffix so the badge does not hide it.
+        var isNamed = mine !== null && hasToken(card.getAttribute("data-named-ids") || "", mine);
         if (isDirect) {
-          badge.textContent = "직접 언급";
+          badge.textContent = "고칠 점";
           badge.className = "mention-badge mention-direct";
           badge.removeAttribute("hidden");
+        } else if (mine && hasToken(card.getAttribute("data-position-target-ids") || "", mine)) {
+          badge.textContent = isNamed ? "내 포지션 대상 · 이름 나옴" : "내 포지션 대상";
+          badge.className = "mention-badge mention-position-target";
+          badge.removeAttribute("hidden");
         } else if (mine && isAddressedToAll) {
-          badge.textContent = "전원";
+          badge.textContent = isNamed ? "전원 대상 · 이름 나옴" : "전원 대상";
           badge.className = "mention-badge mention-all";
           badge.removeAttribute("hidden");
+        } else if (mine && isNamed) {
+          badge.textContent = "이름이 나온 장면";
+          badge.className = "mention-badge mention-named";
+          badge.removeAttribute("hidden");
         } else if (mine && hasToken(card.getAttribute("data-related-ids") || "", mine)) {
-          badge.textContent = "포지션 관련(참고)";
+          badge.textContent = "같은 포지션 참고";
           badge.className = "mention-badge mention-related";
           badge.removeAttribute("hidden");
         } else {
@@ -1778,12 +3045,37 @@ export const VIEWER_JS = `(function () {
   function hideEmptyTocGroups() {
     var groups = document.querySelectorAll(".toc-match-group, .toc-topic-group, .toc-tag-group");
     for (var i = 0; i < groups.length; i++) {
-      var hasVisible = groups[i].querySelector(".toc-item:not([hidden])") !== null;
+      var visibleItems = groups[i].querySelectorAll(".toc-item:not([hidden])").length;
+      var hasVisible = visibleItems > 0;
+      var countEl = groups[i].querySelector(".toc-group-count");
+      if (countEl) countEl.textContent = String(visibleItems);
       if (hasVisible) {
         groups[i].removeAttribute("hidden");
       } else {
         groups[i].setAttribute("hidden", "");
       }
+    }
+  }
+
+  // A match divider shows only while some card of its match (the cards after it up to the next divider) is visible; with a member selected the
+  // cards are regrouped by relation, not by match, so every divider hides.
+  function updateMatchDividers() {
+    var dividers = document.querySelectorAll(".match-divider");
+    for (var d = 0; d < dividers.length; d++) {
+      var anyVisible = false;
+      var el = dividers[d].nextElementSibling;
+      while (el && !el.classList.contains("match-divider")) {
+        if (el.classList.contains("card") && !el.hasAttribute("hidden")) anyVisible = true;
+        el = el.nextElementSibling;
+      }
+      if (anyVisible && !selected.mine) dividers[d].removeAttribute("hidden");
+      else dividers[d].setAttribute("hidden", "");
+    }
+    // The "피드백 없음" rows standing among the dividers lose their place with the dividers when a member is selected.
+    var noFeedbackRows = document.querySelectorAll(".card-list .match-no-feedback");
+    for (var n = 0; n < noFeedbackRows.length; n++) {
+      if (selected.mine) noFeedbackRows[n].setAttribute("hidden", "");
+      else noFeedbackRows[n].removeAttribute("hidden");
     }
   }
 
@@ -1800,7 +3092,9 @@ export const VIEWER_JS = `(function () {
     }
     var tocItems = document.querySelectorAll(".toc-item");
     for (var j = 0; j < tocItems.length; j++) {
-      if (elementMatches(tocItems[j])) {
+      // A TOC item (side TOC and mobile TOC are the same list) is hidden exactly when its card is.
+      var tocCard = document.getElementById(tocItems[j].getAttribute("data-target") || "");
+      if (tocCard !== null && !tocCard.hasAttribute("hidden")) {
         tocItems[j].removeAttribute("hidden");
       } else {
         tocItems[j].setAttribute("hidden", "");
@@ -1824,10 +3118,15 @@ export const VIEWER_JS = `(function () {
       if (resultCount) resultCount.removeAttribute("hidden");
       if (emptyState) emptyState.setAttribute("hidden", "");
     }
+    arrangeCards();
+    updateMatchDividers();
+    updateCurrentToc();
+    updateRecurring();
     updateMentionBadgesAndMarks();
     updateFacetCounts();
     renderActiveFilters();
     updateFilterSummary();
+    refreshPanBoxes();
   }
 
   function setSinglePressed(group, value) {
@@ -1873,6 +3172,8 @@ export const VIEWER_JS = `(function () {
     selected.mine = next;
     setMinePressed(next);
     applyFilters();
+    // The pill row scrolls sideways below 1024px: bring a selected pill that was scrolled out back into view.
+    if (next && typeof pillEl.scrollIntoView === "function") pillEl.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
   function initMyFeedback() {
@@ -1926,13 +3227,51 @@ export const VIEWER_JS = `(function () {
     tocItem.classList.add("is-current");
     setTimeout(function () {
       targetCard.classList.remove("card--highlighted");
-      tocItem.classList.remove("is-current");
+      updateCurrentToc();
     }, 600);
   }
 
+  // The TOC entry (every panel's copy) of the card that holds the top of the viewport is marked is-current + aria-current="true": the last visible
+  // card whose top edge is within CURRENT_CARD_VIEWPORT_SHARE of the viewport height from the top, or the first visible card when all start lower.
+  var CURRENT_CARD_VIEWPORT_SHARE = 0.3;
+  function updateCurrentToc() {
+    var cards = document.querySelectorAll(".card:not([hidden])");
+    var limit = (window.innerHeight || 800) * CURRENT_CARD_VIEWPORT_SHARE;
+    var current = cards.length > 0 ? cards[0] : null;
+    for (var i = 0; i < cards.length; i++) {
+      if (cards[i].getBoundingClientRect().top <= limit) current = cards[i];
+    }
+    var items = document.querySelectorAll(".toc-item[data-target]");
+    for (var j = 0; j < items.length; j++) {
+      var isCurrent = current !== null && items[j].getAttribute("data-target") === current.id;
+      if (isCurrent) {
+        items[j].classList.add("is-current");
+        items[j].setAttribute("aria-current", "true");
+      } else {
+        items[j].classList.remove("is-current");
+        items[j].removeAttribute("aria-current");
+      }
+    }
+  }
+
+  var currentTocQueued = false;
+  function queueCurrentToc() {
+    if (typeof window.requestAnimationFrame !== "function") {
+      updateCurrentToc();
+      return;
+    }
+    if (currentTocQueued) return;
+    currentTocQueued = true;
+    window.requestAnimationFrame(function () {
+      currentTocQueued = false;
+      updateCurrentToc();
+    });
+  }
+
   function initToc() {
-    var items = document.querySelectorAll(".toc-item");
+    var items = document.querySelectorAll(".toc-item, .recurring-unit");
     for (var i = 0; i < items.length; i++) items[i].addEventListener("click", onTocItemClick);
+    document.addEventListener("scroll", queueCurrentToc);
   }
 
   // ── video player (DESIGN.md §9) ──────────────────────────────────────
@@ -2084,6 +3423,8 @@ export const VIEWER_JS = `(function () {
   }
 
   function onCardListClick(event) {
+    // Link-only session (no embeddable video, DESIGN §9): time chips are real links, the card area never seeks.
+    if (document.body.hasAttribute("data-link-only")) return;
     var selectionText = typeof window.getSelection === "function" ? window.getSelection().toString() : "";
     if (selectionText !== "") return;
     var seekBtn = event.target.closest ? event.target.closest(".seek-btn") : null;
@@ -2167,6 +3508,117 @@ export const VIEWER_JS = `(function () {
     });
   }
 
+  // Ultrawide frames in their pan box start with the caption's subject (data-pan-center, 0..1 of the
+  // image width) at the box center, clamped to the scroll range (DESIGN §5 item 4a). A box that does
+  // not overflow has scrollWidth === clientWidth, so this is a no-op there. Re-run when an
+  // image loads (scrollWidth was 0 before) and when filtering shows a card again (a hidden card's box
+  // has no width); a box the user has scrolled (its scroll event left the position we set) is never moved.
+  // A frame in a pan box shows whole (class frame-pan--full) only where it would render at least FULL_FRAME_MIN_HEIGHT px tall at the box's own width;
+  // otherwise it keeps the pan box at every width, so an ultrawide frame never shrinks to a strip too small to read. The box width does not depend on the
+  // class, so the decision is stable; it re-runs on resize.
+  var FULL_FRAME_MIN_HEIGHT = 280;
+  function fitPanBoxes() {
+    var pans = document.querySelectorAll(".frame-pan");
+    for (var i = 0; i < pans.length; i++) {
+      var img = pans[i].querySelector("img");
+      var width = Number(img ? img.getAttribute("width") : 0);
+      var height = Number(img ? img.getAttribute("height") : 0);
+      var full = width > 0 && height > 0 && pans[i].clientWidth * height / width >= FULL_FRAME_MIN_HEIGHT;
+      pans[i].classList.toggle("frame-pan--full", full);
+    }
+  }
+
+  // The hint and the grab cursor show only for a box whose frame is actually cropped: more than 1px of overflow (sub-pixel rounding is not a crop)
+  // and not a whole-frame box (frame-pan--full). A fine pointer (mouse) cannot swipe, so its hint says to drag; the drag itself is initPanBoxes.
+  function finePointer() {
+    return typeof window.matchMedia === "function" && window.matchMedia("(pointer: fine)").matches;
+  }
+
+  function centerPanBoxes() {
+    var boxes = document.querySelectorAll(".frame-pan-scroll");
+    var hintedCards = [];
+    for (var i = 0; i < boxes.length; i++) {
+      var box = boxes[i];
+      var pan = box.parentNode;
+      var cropped = box.scrollWidth - box.clientWidth > 1 && !(pan && pan.classList.contains("frame-pan--full"));
+      if (cropped) box.setAttribute("data-pannable", "");
+      else box.removeAttribute("data-pannable");
+      // The pan hint shows once per card, under the first frame whose image is cropped.
+      var hint = pan ? pan.querySelector(".frame-pan-hint") : null;
+      if (hint) {
+        var card = box.closest ? box.closest(".card") : null;
+        var showHint = cropped && hintedCards.indexOf(card) === -1;
+        if (showHint) hintedCards.push(card);
+        if (showHint) hint.removeAttribute("hidden");
+        else hint.setAttribute("hidden", "");
+        hint.textContent = finePointer() ? "끌어서 좌우로 보기" : "좌우로 밀어 보기";
+      }
+      if (box.fcUserScrolled) continue;
+      var center = parseFloat(box.getAttribute("data-pan-center"));
+      box.scrollLeft = Math.min(Math.max(0, center * box.scrollWidth - box.clientWidth / 2), Math.max(0, box.scrollWidth - box.clientWidth));
+      box.fcAutoScrollLeft = box.scrollLeft;
+    }
+  }
+
+  function refreshPanBoxes() {
+    fitPanBoxes();
+    centerPanBoxes();
+  }
+
+  // A mouse drags a cropped box sideways (a fine pointer has no swipe and the box shows no scrollbar). Listeners are on the document, not
+  // pointer capture: a captured pointer would retarget the click away from the frame's link, so a plain click would stop opening it. A drag
+  // past PAN_DRAG_THRESHOLD swallows the click that ends it; a plain click is left alone.
+  var PAN_DRAG_THRESHOLD = 4;
+  var panDrag = null;
+
+  function initPanDrag() {
+    document.addEventListener("pointermove", function (event) {
+      if (!panDrag) return;
+      var dx = event.clientX - panDrag.x;
+      if (!panDrag.box.fcDragged && Math.abs(dx) < PAN_DRAG_THRESHOLD) return;
+      panDrag.box.fcDragged = true;
+      panDrag.box.classList.add("is-dragging");
+      panDrag.box.scrollLeft = panDrag.left - dx;
+    });
+    function endPanDrag() {
+      if (!panDrag) return;
+      var box = panDrag.box;
+      panDrag = null;
+      box.classList.remove("is-dragging");
+      setTimeout(function () { box.fcDragged = false; }, 0);
+    }
+    document.addEventListener("pointerup", endPanDrag);
+    document.addEventListener("pointercancel", endPanDrag);
+  }
+
+  function initPanBoxes() {
+    var boxes = document.querySelectorAll(".frame-pan-scroll");
+    for (var i = 0; i < boxes.length; i++) {
+      var box = boxes[i];
+      box.addEventListener("scroll", function (event) {
+        var el = event.currentTarget;
+        if (el.scrollLeft !== el.fcAutoScrollLeft) el.fcUserScrolled = true;
+      });
+      box.addEventListener("pointerdown", function (event) {
+        var el = event.currentTarget;
+        el.fcDragged = false;
+        if (event.pointerType !== "mouse" || event.button !== 0 || !finePointer() || !el.hasAttribute("data-pannable")) return;
+        panDrag = { box: el, x: event.clientX, left: el.scrollLeft };
+      });
+      box.addEventListener("dragstart", function (event) { event.preventDefault(); });
+      box.addEventListener("click", function (event) {
+        var el = event.currentTarget;
+        if (!el.fcDragged) return;
+        el.fcDragged = false;
+        event.preventDefault();
+        event.stopPropagation();
+      }, true);
+      var img = box.querySelector("img");
+      if (img) img.addEventListener("load", refreshPanBoxes);
+    }
+    initPanDrag();
+  }
+
   initChips();
   initReset();
   initMyFeedback();
@@ -2176,7 +3628,14 @@ export const VIEWER_JS = `(function () {
   initPartButtons();
   initPlayerCollapse();
   initTocToggle();
+  initPanBoxes();
+  initRecurringMore();
   applyFilters();
+  refreshPanBoxes();
+  if (typeof window.addEventListener === "function") window.addEventListener("resize", function () {
+    refreshPanBoxes();
+    queueCurrentToc();
+  });
   syncPlayerHeight();
   if (typeof ResizeObserver !== "undefined") {
     var playerWrapperEl = document.querySelector(".player-wrapper");

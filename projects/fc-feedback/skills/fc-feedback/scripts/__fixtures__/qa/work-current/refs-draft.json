@@ -21,7 +21,13 @@
           "orig": "Play out from the back with clear passing angles.",
           "ko": "명확한 패스 각도를 만들며 후방에서 빌드업하라."
         }
-      ]
+      ],
+      "format": "article",
+      "relevance_ko": {
+        "u001": "‘센터백 패스 지연’ 장면에서 짚은 움직임을 원리부터 설명한다",
+        "u002": "‘풀백 빌드업 참여 위치’ 장면에서 짚은 움직임을 원리부터 설명한다"
+      },
+      "recurring_labels": []
     },
     {
       "url": "https://example.com/eafc/ja/overlap-timing",
@@ -43,7 +49,17 @@
           "orig": "オーバーラップは相手の視野外から始める。",
           "ko": "오버래핑은 상대 시야 밖에서 시작한다."
         }
-      ]
+      ],
+      "format": "video",
+      "relevance_ko": {
+        "u004": "‘우측 풀백 오버래핑’ 장면에서 짚은 움직임을 원리부터 설명한다",
+        "u005": "‘측면 오버래핑 후 크로스’ 장면에서 짚은 움직임을 원리부터 설명한다"
+      },
+      "recurring_labels": [],
+      "video_starts": {
+        "u004": "2:10",
+        "u005": "2:10"
+      }
     },
     {
       "url": "https://example.com/eafc/ko/counter-attack-finishing",
@@ -54,6 +70,107 @@
       "unit_ids": [
         "u011",
         "u013"
+      ],
+      "format": "article",
+      "relevance_ko": {
+        "u011": "‘역습 시 스트라이커 움직임’ 장면에서 짚은 움직임을 원리부터 설명한다",
+        "u013": "‘마무리 슈팅 타이밍’ 장면에서 짚은 움직임을 원리부터 설명한다"
+      },
+      "recurring_labels": [],
+      "game_version": "FC 25",
+      "pro_clubs": true
+    }
+  ],
+  "recurring_unfound": [],
+  "units_unfound": [
+    {
+      "unit_id": "u003",
+      "queries": [
+        "pro clubs u003 검색 예시 A",
+        "pro clubs u003 검색 예시 B"
+      ],
+      "subtitle_terms": [
+        "예시3"
+      ]
+    },
+    {
+      "unit_id": "u006",
+      "queries": [
+        "pro clubs u006 검색 예시 A",
+        "pro clubs u006 검색 예시 B"
+      ],
+      "subtitle_terms": [
+        "예시6"
+      ]
+    },
+    {
+      "unit_id": "u007",
+      "queries": [
+        "pro clubs u007 검색 예시 A",
+        "pro clubs u007 검색 예시 B"
+      ],
+      "subtitle_terms": [
+        "예시7"
+      ]
+    },
+    {
+      "unit_id": "u008",
+      "queries": [
+        "pro clubs u008 검색 예시 A",
+        "pro clubs u008 검색 예시 B"
+      ],
+      "subtitle_terms": [
+        "예시8"
+      ]
+    },
+    {
+      "unit_id": "u009",
+      "queries": [
+        "pro clubs u009 검색 예시 A",
+        "pro clubs u009 검색 예시 B"
+      ],
+      "subtitle_terms": [
+        "예시9"
+      ]
+    },
+    {
+      "unit_id": "u010",
+      "queries": [
+        "pro clubs u010 검색 예시 A",
+        "pro clubs u010 검색 예시 B"
+      ],
+      "subtitle_terms": [
+        "예시0"
+      ]
+    },
+    {
+      "unit_id": "u012",
+      "queries": [
+        "pro clubs u012 검색 예시 A",
+        "pro clubs u012 검색 예시 B"
+      ],
+      "subtitle_terms": [
+        "예시2"
+      ]
+    },
+    {
+      "unit_id": "u014",
+      "queries": [
+        "pro clubs u014 검색 예시 A",
+        "pro clubs u014 검색 예시 B"
+      ],
+      "subtitle_terms": [
+        "예시4"
+      ]
+    },
+    {
+      "unit_id": "u015",
+      "queries": [
+        "pro clubs u015 검색 예시 A",
+        "pro clubs u015 검색 예시 B"
+      ],
+      "subtitle_terms": [
+        "예시5"
       ]
     }
   ]

@@ -6,6 +6,11 @@
         {
           "type": "text",
           "text": "이 파트의 영상은 embeddable:false로 표시돼 iframe 대신 임베드 불가 플레이스홀더(썸네일 또는 텍스트 카드 + \"유튜브에서 시청 ↗\")가 보여야 한다."
+        },
+        {
+          "type": "frame",
+          "candidate_id": "c001",
+          "caption": "임베드 불가 확인용 유닛 장면"
         }
       ]
     }
