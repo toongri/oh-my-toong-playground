@@ -437,6 +437,14 @@ describe("qa state: render actor device profiles", () => {
 		expect(() => addStory(S, { id: "story-1", actor: "actor-1", contract: { ...CONTRACT, goal: "운영자가 getJobs 응답을 확인한다" } })).toThrow(/goal.*"getJobs"/);
 	});
 
+	test("스토리·시나리오 id에 ':'가 있으면 거부한다", () => {
+		seedStoryApi();
+		expect(() => addStory(S, { id: "a:b", actor: "actor-1", contract: CONTRACT })).toThrow(/id must not contain ":"/);
+		expect(() => authorScenario(S, { ...scenarioOpts("s1", "H", [1]), story: "a:b" })).toThrow(/story must not contain ":"/);
+		expect(() => authorScenario(S, scenarioOpts("b:c", "H", [1]))).toThrow(/id must not contain ":"/);
+		authorScenario(S, scenarioOpts("a-b", "H", [1]));
+	});
+
 	test("render 아닌 액터의 story에 --profile을 주면 거부한다", () => {
 		seedStoryApi();
 		expect(() => authorScenario(S, scenarioOpts("s1", "H", [1], "phone-small"))).toThrow(/applies only to a client-impact render actor/);
