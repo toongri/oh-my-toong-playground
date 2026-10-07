@@ -179,6 +179,8 @@ example `agent-device replay <shared>.ad --keep-session && agent-device replay
    `"execution_cwd": "{project}"`, replayed with `--device <serial> --allow-project-cwd`.
    Record into the run's own evidence directory. When you save the case, copy
    only the final script into the store and point `native_files` there.
+   `save` refuses a case that reads from a temp directory or from a past run's
+   `runs/` artifacts: the replay takes its own screenshots under `{artifacts}`.
 5. **Replay it as the flaky-rerun check.** Reset the application and
    independently rerun the saved recipe through `qa-replay.ts`, with the
    same assertions from the real boundary. This replay is the check that the

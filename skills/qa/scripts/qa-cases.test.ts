@@ -20,7 +20,7 @@ describe("qa-cases CLI", () => {
 		expect(runQaCasesCli(["configure", "--location", location, "--project", cwd], { cwd, home }).exitCode).toBe(0);
 		const runner = join(cwd, "runner.sh"); const native = join(cwd, "native.json"); const input = join(cwd, "case.json");
 		writeFileSync(runner, "sentinel-runner"); writeFileSync(native, "sentinel-native"); seedFeatures(cwd, home, ["checkout"]);
-		writeFileSync(input, JSON.stringify({ id: "cli-case", title: "CLI case", goal: "metadata only", given: ["ready"], when: ["save"], then: ["stored"], feature_refs: ["checkout"], surface: "bash", runner: [runner], execution_cwd: "project-root", native_files: [native], reset_description: "remove case" }));
+		writeFileSync(input, JSON.stringify({ id: "cli-case", title: "CLI case", goal: "metadata only", given: ["ready"], when: ["save"], then: ["stored"], feature_refs: ["checkout"], surface: "bash", runner: ["./runner.sh"], execution_cwd: "project-root", native_files: ["native.json"], reset_description: "remove case" }));
 		const saved = runQaCasesCli(["save", "--file", input, "--expect", "new", "--project", cwd], { cwd, home });
 		expect(saved.exitCode).toBe(0); expect(readFileSync(runner, "utf8")).toBe("sentinel-runner"); expect(readFileSync(native, "utf8")).toBe("sentinel-native");
 	});

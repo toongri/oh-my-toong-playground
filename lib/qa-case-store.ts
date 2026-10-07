@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { accessSync, constants, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { parseDocument, stringify } from "yaml";
 
 import { withStateLock } from "@lib/persistent-mode-core/state-lock.ts";
@@ -193,6 +193,16 @@ export function validateQaCase(record: unknown): asserts record is QaCaseRecord 
 	if (typeof record.surface !== "string" || !["agent-browser", "agent-device", "curl", "bash"].includes(record.surface)) throw new Error("qa-cases: invalid surface");
 	stringArray(record.runner, "runner");
 }
+// A case outlives the run that recorded it: anything it reads from a temp directory or a past run's artifacts is gone or stale next cycle.
+function assertDurableReferences(root: string, record: QaCaseRecord): void {
+	const temps = [...new Set(["/tmp", "/private/tmp", tmpdir(), realpathSync(tmpdir())])];
+	for (const value of [...record.runner, ...record.native_files, record.execution_cwd]) {
+		for (const path of value.match(/(?<![\w.~$}/-])\/[^\s"'`;|&)]+/g) ?? []) {
+			const resolved = resolve(path);
+			if (inside(join(root, "runs"), resolved) || (!inside(root, resolved) && temps.some((temp) => inside(temp, resolved)))) throw new Error(`qa-cases: case references a temporary or run-artifact path (${path}); copy what the case needs into the store (assets/<id>) or produce it during replay under {artifacts}`);
+		}
+	}
+}
 function rootFor(options: QaCaseStoreOptions): string | QaCaseStatus { const value = configured(options); return value.location ?? statusFrom(value.result); }
 function casePath(root: string, id: string): string { safeId(id); return join(root, "cases", `${id}.json`); }
 function revision(bytes: Buffer): string { return createHash("sha256").update(bytes).digest("hex"); }
@@ -202,6 +212,7 @@ export function saveQaCase(input: { record: QaCaseRecord; expectedRevision: stri
 	validateQaCase(input.record);
 	if (input.expectedRevision !== null && !/^[a-f0-9]{64}$/.test(input.expectedRevision)) throw new Error("qa-cases: expectedRevision must be null or a SHA-256 hex string");
 	const root = rootFor(options); if (typeof root !== "string") return unavailable(root);
+	assertDurableReferences(root, input.record);
 	const path = casePath(root, input.record.id); assertNoSymlinkComponents(root, path); mkdirSync(dirname(path), { recursive: true });
 	return withStateLock(join(root, ".qa-cases-state"), () => {
 		if (lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink()) throw new Error(`qa-cases: symlink case file is not allowed: ${path}`);

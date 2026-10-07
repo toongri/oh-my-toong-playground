@@ -275,6 +275,18 @@ describe("qa case store", () => {
 		expect(listQaCases({ cwd, home }, { feature: "missing" })).toMatchObject({ status: "ok", cases: [] });
 	});
 
+	test("임시 디렉터리나 지난 실행 결과물을 참조하는 케이스는 저장을 거부한다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const store = join(tempDir(), "cases");
+		configureQaCaseStore(store, { cwd, home });
+		const save = (record: QaCaseRecord) => () => saveQaCase({ record, expectedRevision: null }, { cwd, home });
+		expect(save({ ...sample(), runner: ["sh", "-c", "cp \"$1/before.png\" \"$QA_ARTIFACTS_DIR\"", "x", "/private/tmp/qa-author"] })).toThrow(/temporary or run-artifact/);
+		expect(save({ ...sample(), runner: ["sh", "-c", "cp /tmp/qa-author/before.png \"$QA_ARTIFACTS_DIR\""] })).toThrow(/temporary or run-artifact/);
+		expect(save({ ...sample(), native_files: [join(store, "runs", "attempt-1", "action.ad")] })).toThrow(/temporary or run-artifact/);
+		expect(save({ ...sample(), native_files: [join(store, "assets", "checkout-happy-path", "case.ad")], runner: ["sh", "-c", "cp \"$1/x.png\" {artifacts}/x.png"] })().status).toBe("ok");
+	});
+
 	test("native_files는 direct runner case에서 빈 배열을 허용한다", () => {
 		const cwd = repo();
 		const home = tempDir();
