@@ -1204,6 +1204,20 @@ export interface ValidatedUnit {
 	group_positions: string[];
 	/** YouTube handles of the comment lines in this unit's line range, first-seen order, no duplicates. */
 	comment_authors: string[];
+	/** The plan unit's `start_line..end_line` (inclusive `lines.json` indices); `null` when its lines did not validate or plan.validated.json predates the field. */
+	line_range: { start_line: number; end_line: number } | null;
+}
+
+/**
+ * The unit's own source lines: those in its `line_range`. Time containment is not used when the range is known, because
+ * lines overlap in time (a 15-second comment line holds shorter speech lines of other units). A plan.validated.json written
+ * before `line_range` existed falls back to the lines its time span contains.
+ */
+export function unitLines(unit: ValidatedUnit, lines: readonly Line[]): Line[] {
+	const range = unit.line_range;
+	return range === null
+		? lines.filter((line) => line.video === unit.video && unit.start <= line.start && line.end <= unit.end)
+		: lines.filter((line) => range.start_line <= line.i && line.i <= range.end_line);
 }
 
 export interface ValidatedTopic {
@@ -1990,6 +2004,7 @@ export function checkPlan(plan: unknown, context: CheckPlanContext): CheckPlanRe
 								addressed_to_all,
 								group_positions,
 								comment_authors: linesValid ? commentAuthorsInRange(lines, startLine, endLine) : [],
+								line_range: linesValid ? { start_line: startLine, end_line: endLine } : null,
 							});
 
 							const memberNames = member_ids.map((id) => memberDisplayName(id, roster));
@@ -2142,12 +2157,13 @@ export function recurringInferredActorWarnings(validated: ValidatedPlan, roster:
 export const TRAILING_LINE_WINDOW_SECONDS = 5;
 
 /**
- * Non-blocking `check plan` warnings: a line of no unit (no unit of its video contains it by time) that starts at most
+ * Non-blocking `check plan` warnings: a line of no unit (in no unit's `unitLines`) that starts at most
  * `TRAILING_LINE_WINDOW_SECONDS` after a unit's end — often the result of the play or the instruction the unit led up to
  * ("새로 패널티"). Speech has filler between units, so only lines this close are shown. One line per unit with hits.
  */
 export function trailingUnassignedLineWarnings(validated: ValidatedPlan, lines: readonly Line[]): string[] {
-	const unassigned = lines.filter((line) => !validated.units.some((unit) => unit.video === line.video && unit.start <= line.start && line.end <= unit.end));
+	const assigned = new Set(validated.units.flatMap((unit) => unitLines(unit, lines).map((line) => line.i)));
+	const unassigned = lines.filter((line) => !assigned.has(line.i));
 	return validated.units.flatMap((unit) => {
 		const hits = unassigned.filter((line) => line.video === unit.video && line.start - unit.end >= 0 && line.start - unit.end <= TRAILING_LINE_WINDOW_SECONDS);
 		if (hits.length === 0) return [];

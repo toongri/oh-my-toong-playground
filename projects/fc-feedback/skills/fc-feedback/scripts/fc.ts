@@ -36,6 +36,7 @@ import { resolveSessionIdOrThrow } from "@lib/state-core.ts";
 import {
 	checkNotes,
 	isRangeScanOfUnit,
+	unitLines,
 	mentionsMember,
 	rawFrameCaptions,
 	KEY_FRAME_TOLERANCE_SECONDS,
@@ -1247,6 +1248,13 @@ function inferredMemberIdsFromLegacyValidated(raw: Record<string, unknown>): str
 	return raw.inferred_member_ids === undefined ? [] : toStringArray(raw.inferred_member_ids, "unit.inferred_member_ids");
 }
 
+/** Legacy conversion: a plan.validated.json written before `line_range` existed has no such field; `unitLines` then falls back to time containment. */
+function lineRangeFromLegacyValidated(raw: Record<string, unknown>): ValidatedUnit["line_range"] {
+	if (raw.line_range === undefined || raw.line_range === null) return null;
+	if (!isRecord(raw.line_range)) throw new Error("fc-feedback: plan.validated.json의 unit.line_range가 올바르지 않습니다");
+	return { start_line: num(raw.line_range.start_line, "unit.line_range.start_line"), end_line: num(raw.line_range.end_line, "unit.line_range.end_line") };
+}
+
 function toValidatedUnit(raw: unknown): ValidatedUnit {
 	if (!isRecord(raw)) {
 		throw new Error("fc-feedback: plan.validated.json의 unit이 올바르지 않습니다");
@@ -1269,6 +1277,7 @@ function toValidatedUnit(raw: unknown): ValidatedUnit {
 		group_positions: groupPositionsFromLegacyValidated(raw),
 		// plan.validated.json written before comment support has no `comment_authors`: its units held speech lines only.
 		comment_authors: raw.comment_authors === undefined ? [] : toStringArray(raw.comment_authors, "unit.comment_authors"),
+		line_range: lineRangeFromLegacyValidated(raw),
 	};
 }
 
@@ -1495,7 +1504,7 @@ function notesBrief(unit: ValidatedUnit, loop: NotesLoop, notes: NotesDoc, error
 	}
 
 	out.push("", "### 원문 줄");
-	for (const line of loop.lines.filter((candidate) => candidate.video === unit.video && candidate.start >= unit.start && candidate.end <= unit.end)) {
+	for (const line of unitLines(unit, loop.lines)) {
 		out.push(`- ${formatTime(line.start)} ${line.source === "comment" ? `[댓글 ${commentAuthorName(line.author, roster)}] ` : ""}${line.text}`);
 	}
 
@@ -2121,10 +2130,8 @@ function refsReviewBundle(input: {
 			const unit = unitsById.get(unitId);
 			if (unit === undefined) throw new Error(`fc-feedback: refs-draft.json의 unit id가 plan에 없습니다: ${unitId}`);
 			out.push(`### ${unitId} · ${unit.title}`, "", ...negatedTodoCueLines(unit).flatMap((cueLine) => [cueLine, ""]), "원문:");
-			for (const line of lines) {
-				if (line.video === unit.video && line.start >= unit.start && line.end <= unit.end) {
-					out.push(`> [${formatTime(line.start)}]${line.source === "comment" ? ` (댓글 · ${line.author})` : ""} ${line.text}`);
-				}
+			for (const line of unitLines(unit, lines)) {
+				out.push(`> [${formatTime(line.start)}]${line.source === "comment" ? ` (댓글 · ${line.author})` : ""} ${line.text}`);
 			}
 			out.push("", `relevance_ko: ${ref.relevance_ko[unitId] ?? ""}`);
 			const lesson = ref.lesson_ko?.[unitId];

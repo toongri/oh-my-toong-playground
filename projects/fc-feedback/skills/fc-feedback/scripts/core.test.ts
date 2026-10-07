@@ -22,6 +22,7 @@ import {
 	recurringCandidateWarnings,
 	recurringInferredActorWarnings,
 	trailingUnassignedLineWarnings,
+	unitLines,
 	TRAILING_LINE_WINDOW_SECONDS,
 	dubeolsikReading,
 	unmatchedTagReadingWarnings,
@@ -1495,6 +1496,25 @@ describe("checkPlan", () => {
 	test("음성 줄만 있는 unit의 comment_authors는 빈 배열이다", () => {
 		const result = checkPlan(makeValidPlan(), fixtureContext);
 		expect(result.validated.units.map((unit) => unit.comment_authors)).toEqual([[], []]);
+	});
+
+	test("validated unit은 plan의 start_line..end_line을 line_range로 남긴다", () => {
+		const result = checkPlan(makeValidPlan(), fixtureContext);
+		expect(result.validated.units.map((unit) => unit.line_range)).toEqual([
+			{ start_line: 0, end_line: 1 },
+			{ start_line: 2, end_line: 2 },
+		]);
+	});
+
+	test("unitLines는 시간이 겹쳐도 line_range 밖 줄을 넣지 않고, line_range가 없는 옛 unit은 시간 범위로 고른다", () => {
+		// 15초짜리 댓글 줄(0)이 다른 유닛의 짧은 음성 줄(1)을 시간상 감싼다.
+		const lines: Line[] = [
+			{ i: 0, video: "AAAAAAAAAAA", start: 10, end: 25, text: "댓글", source: "comment", author: "@a" },
+			{ i: 1, video: "AAAAAAAAAAA", start: 12, end: 14, text: "해설", source: "speech" },
+		];
+		const unit = { ...checkPlan(makeValidPlan(), fixtureContext).validated.units[0], video: "AAAAAAAAAAA", start: 10, end: 25 };
+		expect(unitLines({ ...unit, line_range: { start_line: 0, end_line: 0 } }, lines).map((line) => line.i)).toEqual([0]);
+		expect(unitLines({ ...unit, line_range: null }, lines).map((line) => line.i)).toEqual([0, 1]);
 	});
 
 	test("명단이 있으면 matches[].lineup이 필요하고, 키는 명단 id·값은 포지션 트리의 포지션이어야 한다", () => {
@@ -3793,6 +3813,7 @@ function warnUnit(id: string, matchId: string, namedMemberIds: string[], range: 
 		addressed_to_all: false,
 		group_positions: [],
 		comment_authors: [],
+		line_range: null,
 	};
 }
 

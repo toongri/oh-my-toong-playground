@@ -106,7 +106,7 @@
   필드가 생기기 전의 `plan.validated.json`은 `[]`로 읽는다.
 
 **exit 0**: 유효 + `proposed_tags` 미사용 → `plan.validated.json` 생성(`m1`, `m1-t1`,
-`u001`… id를 시간 순서(시작 줄이 빠른 unit이 `u001`, 어느 topic에 있든)로 부여하고, `units`·topic의 `unit_ids`·`recurring[].unit_ids`도 그 순서로 두며 `start`/`end`(초)·`video`를 채움) + 게이트 표
+`u001`… id를 시간 순서(시작 줄이 빠른 unit이 `u001`, 어느 topic에 있든)로 부여하고, `units`·topic의 `unit_ids`·`recurring[].unit_ids`도 그 순서로 두며 `start`/`end`(초)·`video`와 `line_range: {start_line, end_line}`(plan의 줄 범위를 그대로; 이 필드가 생기기 전의 `plan.validated.json`은 이름 있는 변환 함수 `lineRangeFromLegacyValidated`가 `null`로 읽고, 그때만 시간 범위로 줄을 고른다)를 채움) + 게이트 표
 (`tableMd`, 경기/시간/제목/포지션/주제/팀원) + `proposed` 배열을 stdout에 JSON으로 출력.
 스키마가 유효하면 stderr에 비차단 경고 한 줄(종료 코드는 그대로)을 낼 수 있다: 같은 행위자("A·B"는 이름별)의 두 unit 제목 행동이 내용어(조사 한 개를 뗀 한글 단어; 1음절·일반어("패스하기" 포함)·조건절 낱말(-면·-때 꼴: "잡으면", "받으면", "할때", "했을")·명단 팀원의 이름·별칭·게이머태그가 든 낱말은 제외)를 공유하는데 한 `recurring` 항목에 함께 있지 않으면 `fc-feedback: 경고 반복 지적 후보 u025·u027 "뎁스차저" 공통어 "반대편", "보기" — 같은 잘못이면 recurring에 묶는다`. 공통어는 한 줄에 정렬해 모두 나열한다. "측면"·"화면"처럼 -면으로 끝나는 명사는 조건절이 아니다(-면은 세 음절부터, 또는 하/되/보/오/가/서/나 뒤에서만 조건절로 본다).
 같은 방식의 비차단 경고가 둘 더 있다(종료 코드·쓰는 파일은 그대로, 판단은 작성자 몫이고 경고는 놓친 사실만 보인다).
@@ -209,6 +209,8 @@ notes.json을 유닛 하나씩 쓰는 길이다. 작업 폴더가 상태이고 �
   `marker_colors`·`unmatched_name_tags`, 없으면 "없음"; 한글 자판으로 읽히는 이름표는 `CEF_dnjswo313 이름표(명단에 없음; 한글 자판 "원재")`처럼 읽기를 함께 보이고, 읽기가 명단 이름과 비슷하면 `CEF_dnjswo313 이름표(명단에 없음; 한글 자판 "원재", 명단 원전과 비슷)`처럼 그 팀원도 보인다), 같은 경기에서 이미 캡션이 이름을 짚은 사람(`checkNotes`와
   같은 이름 매칭), `[start-5, end+5]` 프레임 후보(id·시각·kind·`cand/<id>.jpg`, 유닛 가운데 시각에 가까운 20개까지, 생략 개수 표시),
   그 창에 `range` 후보가 없으면 정확한 `scan-range` 명령, 그리고 다음에 실행할 `notes submit` 명령.
+  원문 줄은 검증된 unit의 `line_range`(plan의 `start_line..end_line`) 안 줄만 보인다 — 시간이 겹치는 다른 유닛의 줄(15초짜리
+  댓글 줄 안의 짧은 음성 줄 등)은 넣지 않는다. 참고자료 리뷰 번들의 유닛 원문과 `check plan`의 "유닛 끝 직후 어느 유닛에도 없는 줄" 경고도 같은 범위로 줄을 고른다.
 - `fc notes submit <unit-id> --file <path> [--work <dir>]`: 파일은 아래 모양의 JSON이다(보통 `<work>/notes-units/<unit-id>.json`).
 
 ```json
