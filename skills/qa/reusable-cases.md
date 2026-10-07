@@ -103,7 +103,7 @@ artifacts are never overwritten.
 Review the runner's flags/output/config first: native runners are not sandboxed.
 
 The wrapper checks the saved case revision, actor surface, that the case's
-`feature_refs` share a feature with the story's recorded provenance, reset
+`feature_refs` share a feature with the story's recorded provenance (recorded in the current cycle), reset
 confirmation, and current-cycle authored scenario. It requires the
 active `chainComplete` gate. A successful runner produces a receipt with
 `qa_result: "not-recorded"`; it never records a QA scenario PASS. A failed runner
@@ -159,7 +159,8 @@ example `agent-device replay <shared>.ad --keep-session && agent-device replay
    baseline or recorded scenarios. Find each story's feature in the feature map
    (`feature-map.ts query`). If it is not there, add it (`feature-map.ts
    save`). Then record it with `record-story-provenance`. When you create the
-   case, take its `feature_refs` ids from that story's provenance.
+   case, take its `feature_refs` ids from that story's provenance. After `inc-cycle`,
+   re-record provenance before BASELINE, or replay is refused for that cycle.
 2. **Record while you drive.** The recording is made during the scenario's own
    run, not in a separate pass. The form follows the driver:
    - `agent-device`: record with `--save-script` (example below). A debug build

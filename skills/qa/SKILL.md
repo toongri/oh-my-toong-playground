@@ -169,7 +169,7 @@ bun "${CLAUDE_SKILL_DIR}/scripts/qa-state.ts" record-story-provenance \
   --story ID --json '{"features":[{"id":"stock.view","revision":"<getrevision>","entrypoints":["push"],"states":["new-user"]}],"code_ref":"<commit/build id plus dirty diff evidence>"}'
 ```
 
-The `revision` must match the live feature-map file. Feature labels are not metadata membership. Legacy, missing, or unverified maps do not permit fabricated IDs: retain code/spec discovery and evidence and report the story as not recorded. A feature missing from the map is added with `feature-map.ts save` before recording provenance, because a reusable case links to a story only through a feature in its provenance. After each FIX cycle, recheck the live map and rerecord planning provenance.
+The `revision` must match the live feature-map file. Feature labels are not metadata membership. Legacy, missing, or unverified maps do not permit fabricated IDs: retain code/spec discovery and evidence and report the story as not recorded. A feature missing from the map is added with `feature-map.ts save` before recording provenance, because a reusable case links to a story only through a feature in its provenance. After each FIX cycle, recheck the live map and rerecord planning provenance; replay refuses stale provenance.
 
 #### Story Planning Context (PLAN output)
 
