@@ -397,7 +397,7 @@ works, and therefore whether the requirements were met?**
 - A user flow slot holds raw test or build logs → replace with what was proven, in words
 - A scenario shows a raw curl/HTTP/JSON dump (`HTTP=404`, `{"error":...}`, `table row count before=6`) as its proof → convert it to a natural-language "we ran this scenario and observed X"; the raw bytes belong in the audit section, not the reader
 - A requirement was never proven but it reads `yes`/`partial` → mark `satisfied: "unverified"` (renders loud "미검증")
-- A visual scenario lacks either an observation or before/after images → capture the missing asserted state, record its path, and render again. Text-boundary scenarios need a grounded `observed` explanation of the received output.
+- A visual scenario lacks either an observation or before/after images → capture the missing asserted state, record its path, and render again. Text-boundary scenarios need a grounded `observed` explanation of the received output. `qa-report.ts` refuses a nonvisual or test-surface pass/fail scenario without `observed`.
 - An observation says "the user saw" but no screen was captured → name the real medium (API response, test)
 - Internal jargon (risk numbers, source tags) is visible to the reader → remove it
 - The narrative names more users/scenarios/requirements than the records hold → invention; fix the records

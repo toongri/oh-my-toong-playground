@@ -311,6 +311,15 @@ describe("qa-report renderer", () => {
 		expect(() => renderQaReport(view, {}, validImageReader, undefined, undefined, true)).toThrow("visual observation");
 	});
 
+	test("텍스트·테스트로 증명한 시나리오도 관찰 기록이 없으면 보고서 생성을 거부한다", () => {
+		for (const surface of ["curl", "bash", "test"]) {
+			const view = baseView({ scenarios: [scenario({ id: "sc-1", evidence: { path: "/evidence/api.log", surface } })] });
+			expect(() => renderQaReport(view, {}, fakeReader, undefined, undefined, true)).toThrow(/observation required/);
+			const narrative = { scenarios: { "story-1:sc-1": { observed: "요청을 보냈더니 정상 응답이 돌아왔다." } } };
+			expect(renderQaReport(view, narrative, fakeReader, undefined, undefined, true)).toContain("요청을 보냈더니 정상 응답이 돌아왔다.");
+		}
+	});
+
 	test("renders null (no-op) when the roster is empty — PRE-FLIGHT fail-fast has no report", () => {
 		expect(renderQaReport(baseView({ actors: [] }), {}, fakeReader)).toBeNull();
 	});
@@ -1553,7 +1562,9 @@ describe("qa-report CLI", () => {
 				"--evidence-path skills/qa/scripts/qa-report.test.ts --evidence-surface bash",
 		);
 		const out = join(tmpDir, "report.html");
-		const stdout = execSync(`bun ${reportScript} --session ${S} --out ${out}`, { encoding: "utf8", env: process.env });
+		const narrative = join(tmpDir, "narrative.json");
+		writeFileSync(narrative, JSON.stringify({ scenarios: { "story-1:sc-1": { observed: "홈을 열었더니 요청한 결과가 보였다." } } }));
+		const stdout = execSync(`bun ${reportScript} --session ${S} --out ${out} --narrative ${narrative}`, { encoding: "utf8", env: process.env });
 		expect(stdout.trim()).toBe(out);
 		expect(existsSync(out)).toBe(true);
 		const html = readFileSync(out, "utf8");
