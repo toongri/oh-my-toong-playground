@@ -96,6 +96,7 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 	if (record.surface !== actor.driver) fail(`case surface "${record.surface}" does not match actor driver "${actor.driver}"`);
 	const storyFeatures = (story.provenance?.features ?? []).map((feature) => feature.id);
 	if (!storyFeatures.length) fail(`story "${storyId}" has no recorded provenance; record its feature with record-story-provenance (a case binds to a story through its features)`);
+	if (story.provenance?.cycle !== state.cycle) fail(`story "${storyId}" provenance was recorded in cycle ${story.provenance?.cycle}, not the current cycle ${state.cycle}; recheck the live feature map and rerecord with record-story-provenance (refused once this cycle has a story baseline or recorded scenario; then replay waits for the next FIX cycle)`);
 	if (!record.feature_refs.some((id) => storyFeatures.includes(id))) fail(`case feature_refs [${record.feature_refs.join(", ")}] share no feature with story "${storyId}" provenance [${storyFeatures.join(", ")}]`);
 	const device = typeof parsed.device === "string" ? parsed.device : undefined;
 	if (device !== undefined && !heldDevice(unreleasedResources(sessionId), device)) fail(`--device "${device}" is not a device this session holds; use the serial acquire-device returned this session`);

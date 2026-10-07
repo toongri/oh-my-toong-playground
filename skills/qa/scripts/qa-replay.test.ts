@@ -31,10 +31,10 @@ function readyChain(session: string): void {
 }
 
 /** Writes story provenance directly; recordStoryProvenance needs a live feature map. */
-function setStoryProvenance(session: string, featureIds: string[]): void {
+function setStoryProvenance(session: string, featureIds: string[], cycle?: number): void {
 	const path = resolveStatePath(session);
 	const state = JSON.parse(readFileSync(path, "utf8"));
-	for (const story of state.stories) story.provenance = featureIds.length ? { features: featureIds.map((id) => ({ id, revision: "rev", entrypoints: [], states: [] })), code_ref: "code", cycle: 1 } : undefined;
+	for (const story of state.stories) story.provenance = featureIds.length ? { features: featureIds.map((id) => ({ id, revision: "rev", entrypoints: [], states: [] })), code_ref: "code", cycle: cycle ?? state.cycle ?? 0 } : undefined;
 	writeFileSync(path, JSON.stringify(state));
 }
 
@@ -262,6 +262,8 @@ describe("qa replay CLI", () => {
 		await expect(replayFromCli(["--case", "other-feature-case", "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home })).rejects.toThrow(/share no feature/);
 		setStoryProvenance("gate-session", []);
 		await expect(replayFromCli(["--case", "other-feature-case", "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home })).rejects.toThrow(/no recorded provenance/);
+		setStoryProvenance("gate-session", ["checkout"], (readQaState("gate-session")?.cycle ?? 0) - 1);
+		await expect(replayFromCli(["--case", "other-feature-case", "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home })).rejects.toThrow(/provenance was recorded in cycle/);
 		setStoryProvenance("gate-session", ["checkout"]);
 		disableQaCaseStore({ cwd: root, home });
 		const disabled = await replayFromCli(["--case", "gate-case", "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home });

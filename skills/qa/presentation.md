@@ -204,7 +204,7 @@ there is no separate actor-roster table).
   place the evidence lives; each scenario's own observation lives on its card
   (next bullet).
 - **Per-scenario observation (`scenarios`, keyed by `<story>:<scenario>`, the
-  scenario key — write it under the top-level `scenarios` object, field `observed`)** —
+  scenario key; story and scenario ids must not contain ":", and the CLI rejects them — write it under the top-level `scenarios` object, field `observed`)** —
   this is the reader's proof, **one per scenario**. For each verified scenario,
   state in plain language what you did in that scenario and what
   the real software rendered — "이 시나리오에서 이렇게 했더니 화면/응답이 이렇게
