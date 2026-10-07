@@ -269,6 +269,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts record-scenario --story … --scenar
 | "No seed data or account, so NOT-RUN" | Create it. |
 | "The tests prove the ACs; the rest can stay unverified" | An unexecuted scenario has no status. Execute it, or record it `blocked` with the attempts that hit a limit. |
 | "The app's screen does not change, so its boundary is the service test" | The app still reads the changed data: `client_impact contract`, proven at the request the app sends. The boundary never moves inward. |
+| "Snapshots time out and taps change nothing, so every scenario is `blocked`" | An unresponsive device is setup trouble, not a limit. Check the host load and the app's logs, relaunch, or release and re-acquire the device, then re-drive. A screen an earlier cycle or a saved case reached is reachable: read the feature's cases first. |
 | "Pairing needs a code from the device, so skip that actor" | Ask the user for the code (`await-user`). A human step is work you request, not an obstacle. When the code is on an emulator you drive and the account is your local seed, enter it yourself. |
 | "The runbook wants the user's confirmation before that call and I have none, so `blocked`" | A confirmation is a human step too. Take a path that needs none (an in-app developer menu, a local seed), or ask for it with `await-user`. Never record `blocked` for a question you did not ask. |
 | "A Fold is about 345 dp wide, I'll use that" | Read the project's device profiles. If none exist, ask the user and save them. Never guess a size. |
