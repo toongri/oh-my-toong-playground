@@ -177,8 +177,8 @@ example `agent-device replay <shared>.ad --keep-session && agent-device replay
    to that workspace:
    `"runner": ["agent-device", "replay", "<store>/cases/<id>.ad", "--platform", "android", "--serial", "{device}", "--session", "qa-{device}"]`,
    `"execution_cwd": "{project}"`, replayed with `--device <serial> --allow-project-cwd`.
-   Keep drafts in the run's own evidence directory. Only the saved case's
-   files go in the store.
+   Record into the run's own evidence directory. When you save the case, copy
+   only the final script into the store and point `native_files` there.
 5. **Replay it as the flaky-rerun check.** Reset the application and
    independently rerun the saved recipe through `qa-replay.ts`, with the
    same assertions from the real boundary. This replay is the check that the

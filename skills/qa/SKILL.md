@@ -140,7 +140,7 @@ A profile is a logical screen size, not a device model; its label only names it.
   - iOS simulator → an installed device type whose logical size equals the profile (`xcrun simctl list devicetypes`). A size no installed type has goes on the Android emulator.
 - Record the device and the size in `driven-at`. A model name that is not installed is not an obstacle; the size is what you prove.
 
-On each profile, the scenario's before/after screenshots must show that a person can read and use the changed screen: nothing clipped or overlapping, no horizontal scroll, no truncated Korean text, touch targets reachable. Its `review-evidence` carries one `kind: "layout"` claim that names each of those checks and what the capture shows for it ([presentation.md](presentation.md#claim-review-record)); the CLI refuses a profile review without it. A broken layout on one profile is a `fail` for that profile's scenario.
+On each profile, the scenario's before/after screenshots must show that a person can read and use the changed screen: nothing clipped or overlapping, no horizontal scroll, no truncated Korean text, touch targets reachable. Its `review-evidence` carries one `kind: "layout"` claim that names each of those checks and what the capture shows for it ([presentation.md](presentation.md#claim-review-record)); the CLI refuses a profile review without it. A broken layout on one profile is a `fail` for that profile's scenario. A list that scrolls under a fixed bar is not overlap by itself: scroll to the end, and it overlaps only when the last item stays covered.
 
 #### The cheapest proof
 
