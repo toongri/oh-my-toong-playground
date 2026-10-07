@@ -1859,8 +1859,13 @@ function makeValidNotes(): any {
 	};
 }
 
-// scan-range가 u001 창(video A, [-5,25]) 안에서 훑은 프레임 하나(kind range)를 더한 후보 목록.
-const rangedCandidates = [...fixtureCandidates, { id: "c005", video: "AAAAAAAAAAA", t: 12, kind: "range" as const }];
+// `scan-range --video A --from <from> --to <to> --step <step>`이 만드는 range 후보(c101부터).
+function rangeScan(from: number, to: number, step = 2, video = "AAAAAAAAAAA") {
+	return Array.from({ length: Math.floor((to - from) / step) + 1 }, (_, k) => ({ id: `c${101 + k}`, video, t: from + k * step, kind: "range" as const }));
+}
+
+// u001(video A, 0~20초)을 브리프가 알려 주는 scan-range(2초 간격)로 훑은 후보 목록.
+const rangedCandidates = [...fixtureCandidates, ...rangeScan(0, 20)];
 
 describe("checkNotes", () => {
 	describe("fault_scene", () => {
@@ -1991,21 +1996,21 @@ describe("checkNotes", () => {
 			test("범위 스캔 기록이 없으면 받는 사람 이름을 든 에러를 낸다", () => {
 				const errors = run(TITLE, [NOT_VISIBLE], fixtureCandidates);
 				expect(errors.map((e) => e.path)).toEqual(["units.u001.blocks"]);
-				expect(errors[0].message).toBe("u001: 받는 사람 김철수를 사진에서 못 찾았다고 했지만 이 유닛 범위를 scan-range로 훑은 기록이 없다");
+				expect(errors[0].message).toBe("u001: 받는 사람 김철수를 사진에서 못 찾았다고 했지만 이 유닛 범위 전체를 scan-range로 훑은 기록이 없다");
 			});
 
-			test("유닛 창 안에 kind range 후보가 있으면 통과한다", () => {
+			test("유닛 범위 전체를 덮는 kind range 후보가 있으면 통과한다", () => {
 				expect(run(TITLE, [NOT_VISIBLE], rangedCandidates)).toEqual([]);
 			});
 
 			test("'알아볼 수 없다'로 쓴 캡션도 못 찾았다는 말로 보고 범위 스캔 기록을 요구한다", () => {
 				const errors = run(TITLE, ["홍길동 앞 공 옆, 김철수는 이 프레임에서 알아볼 수 없다"], fixtureCandidates);
-				expect(errors.map((e) => e.message)).toEqual(["u001: 받는 사람 김철수를 사진에서 못 찾았다고 했지만 이 유닛 범위를 scan-range로 훑은 기록이 없다"]);
+				expect(errors.map((e) => e.message)).toEqual(["u001: 받는 사람 김철수를 사진에서 못 찾았다고 했지만 이 유닛 범위 전체를 scan-range로 훑은 기록이 없다"]);
 			});
 
 			test("'확인되지 않는다'로 쓴 캡션도 못 찾았다는 말로 보고 범위 스캔 기록을 요구한다", () => {
 				const errors = run(TITLE, ["홍길동 앞 공 옆, 김철수는 이 프레임에서 이름표로 확인되지 않는다"], fixtureCandidates);
-				expect(errors.map((e) => e.message)).toEqual(["u001: 받는 사람 김철수를 사진에서 못 찾았다고 했지만 이 유닛 범위를 scan-range로 훑은 기록이 없다"]);
+				expect(errors.map((e) => e.message)).toEqual(["u001: 받는 사람 김철수를 사진에서 못 찾았다고 했지만 이 유닛 범위 전체를 scan-range로 훑은 기록이 없다"]);
 			});
 
 			test("받는 사람 위치를 쓴 캡션이 하나라도 있으면 범위 스캔 기록을 요구하지 않는다", () => {
@@ -2014,7 +2019,7 @@ describe("checkNotes", () => {
 
 			test("'이름 쪽' 제목에도 같은 요구가 적용된다", () => {
 				const errors = run("게임메이커: 김철수 쪽 바라보기", [NOT_VISIBLE], fixtureCandidates);
-				expect(errors.map((e) => e.message)).toEqual(["u001: 받는 사람 김철수를 사진에서 못 찾았다고 했지만 이 유닛 범위를 scan-range로 훑은 기록이 없다"]);
+				expect(errors.map((e) => e.message)).toEqual(["u001: 받는 사람 김철수를 사진에서 못 찾았다고 했지만 이 유닛 범위 전체를 scan-range로 훑은 기록이 없다"]);
 			});
 		});
 	});
@@ -2150,7 +2155,7 @@ describe("checkNotes", () => {
 	});
 
 	describe("unidentified_member_ids는 유닛 범위를 scan-range로 훑은 기록이 필요하다", () => {
-		const MESSAGE = "u001: 고칠 사람을 사진에서 못 찾았다고 했지만 이 유닛 범위를 scan-range로 훑은 기록이 없다";
+		const MESSAGE = "u001: 고칠 사람을 사진에서 못 찾았다고 했지만 이 유닛 범위 전체를 scan-range로 훑은 기록이 없다";
 		const unidentifiedNotes = () => {
 			const notes = makeValidNotes();
 			notes.units.u001.blocks[1].caption = "패스 미스 순간";
@@ -2170,14 +2175,19 @@ describe("checkNotes", () => {
 			expect(run([...fixtureCandidates, { id: "c005", video: "AAAAAAAAAAA", t: 12, kind: "manual" }]).map((e) => e.message)).toEqual([MESSAGE]);
 		});
 
-		test("다른 video이거나 유닛 창(시작-5 ~ 끝+5초) 밖의 range 후보는 기록으로 세지 않는다", () => {
-			expect(run([...fixtureCandidates, { id: "c005", video: "BBBBBBBBBBB", t: 12, kind: "range" }]).map((e) => e.message)).toEqual([MESSAGE]);
-			expect(run([...fixtureCandidates, { id: "c005", video: "AAAAAAAAAAA", t: 26, kind: "range" }]).map((e) => e.message)).toEqual([MESSAGE]);
-			expect(run([...fixtureCandidates, { id: "c005", video: "AAAAAAAAAAA", t: 25, kind: "range" }])).toEqual([]);
+		test("유닛 안 range 후보 한 장, 범위 일부만 훑은 기록, 다른 video의 기록은 세지 않는다", () => {
+			expect(run([...fixtureCandidates, { id: "c005", video: "AAAAAAAAAAA", t: 12, kind: "range" }]).map((e) => e.message)).toEqual([MESSAGE]);
+			expect(run([...fixtureCandidates, ...rangeScan(0, 10)]).map((e) => e.message)).toEqual([MESSAGE]);
+			expect(run([...fixtureCandidates, ...rangeScan(0, 20, 2, "BBBBBBBBBBB")]).map((e) => e.message)).toEqual([MESSAGE]);
 		});
 
-		test("창 안에 range 후보가 하나라도 있으면 통과한다", () => {
+		test("브리프의 step(이 유닛은 2초)보다 넓은 간격으로 훑은 기록은 세지 않는다", () => {
+			expect(run([...fixtureCandidates, ...rangeScan(0, 20, 3)]).map((e) => e.message)).toEqual([MESSAGE]);
+		});
+
+		test("유닛 범위 전체를 step 간격 이내로 덮으면 범위 밖에서 시작한 훑기도 통과한다", () => {
 			expect(run(rangedCandidates)).toEqual([]);
+			expect(run([...fixtureCandidates, ...rangeScan(-1, 21)])).toEqual([]);
 		});
 
 		test("unidentified_member_ids가 없거나 비어 있으면 요구하지 않는다", () => {

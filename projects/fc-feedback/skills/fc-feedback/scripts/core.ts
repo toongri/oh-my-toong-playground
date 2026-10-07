@@ -2475,7 +2475,7 @@ function checkNoteUnit(
 		});
 	}
 	checkBoldInFirstParagraph(texts, unit.id, path, errors);
-	const rangeScanned = candidates.some((candidate) => isRangeScanOfUnit(candidate, unit));
+	const rangeScanned = rangeScanCoversUnit(candidates, unit);
 	checkTitleReceiversCaptioned(captions, unit, roster, rangeScanned, path, errors);
 	checkPassCardNamesBall(captions, unit, roster, path, errors);
 	checkMembersCaptioned(entryRaw.unidentified_member_ids, captions, unit, roster, path, errors);
@@ -2495,14 +2495,30 @@ function checkBoldInFirstParagraph(texts: readonly string[], unitId: string, pat
 	}
 }
 
-/** A `scan-range` frame of the same video inside the window frame blocks may use (`unit.start - 5` .. `unit.end + 5`). */
-export function isRangeScanOfUnit(candidate: Candidate, unit: ValidatedUnit): boolean {
-	return (
-		candidate.kind === "range" &&
-		candidate.video === unit.video &&
-		candidate.t >= unit.start - KEY_FRAME_TOLERANCE_SECONDS &&
-		candidate.t <= unit.end + KEY_FRAME_TOLERANCE_SECONDS
-	);
+/** Most frames one `scan-range` takes — they tile into one contact sheet. */
+export const MAX_RANGE_FRAMES = 36;
+export const DEFAULT_RANGE_STEP_SECONDS = 2;
+/** `scan-range` rounds frame times to milliseconds, so a gap may exceed the step by this much. */
+const RANGE_TIME_ROUNDING_SECONDS = 0.001;
+
+/** The `--step` the brief's `scan-range` command uses for the unit: 2 seconds, widened until the span fits `MAX_RANGE_FRAMES` frames. */
+export function rangeScanStep(unit: ValidatedUnit): number {
+	return Math.max(DEFAULT_RANGE_STEP_SECONDS, Math.ceil((unit.end - unit.start) / (MAX_RANGE_FRAMES - 1)));
+}
+
+/**
+ * Whether `scan-range` frames of the unit's video cover its whole span: at least one frame, and no gap longer than
+ * `rangeScanStep(unit)` from `unit.start` to the first frame, between frames, or from the last frame to `unit.end`.
+ * A partial scan, or a frame left by scanning a neighbouring unit, does not count as having looked through this unit.
+ */
+export function rangeScanCoversUnit(candidates: readonly Candidate[], unit: ValidatedUnit): boolean {
+	const maxGap = rangeScanStep(unit) + RANGE_TIME_ROUNDING_SECONDS;
+	const times = candidates
+		.filter((candidate) => candidate.kind === "range" && candidate.video === unit.video && candidate.t >= unit.start - maxGap && candidate.t <= unit.end + maxGap)
+		.map((candidate) => candidate.t);
+	if (times.length === 0) return false;
+	const points = [unit.start, ...times, unit.end].sort((a, b) => a - b);
+	return points.every((point, k) => k === 0 || point - points[k - 1] <= maxGap);
 }
 
 /** A caption that says the person is not in the frame ("우사는 이 프레임에 보이지 않는다", "우사는 이 프레임에서 이름표로 확인되지 않는다"). */
@@ -2544,7 +2560,7 @@ function checkTitleReceiversCaptioned(captions: readonly string[], unit: Validat
 		} else if (naming.every(saysNotVisible) && !rangeScanned) {
 			errors.push({
 				path: `${path}.blocks`,
-				message: `${unit.id}: 받는 사람 ${member.name}를 사진에서 못 찾았다고 했지만 이 유닛 범위를 scan-range로 훑은 기록이 없다`,
+				message: `${unit.id}: 받는 사람 ${member.name}를 사진에서 못 찾았다고 했지만 이 유닛 범위 전체를 scan-range로 훑은 기록이 없다`,
 			});
 		}
 	}
@@ -2574,7 +2590,7 @@ function checkUnidentifiedRangeScanned(raw: unknown, unit: ValidatedUnit, rangeS
 	if (Array.isArray(raw) && raw.length > 0 && !rangeScanned) {
 		errors.push({
 			path: `${path}.unidentified_member_ids`,
-			message: `${unit.id}: 고칠 사람을 사진에서 못 찾았다고 했지만 이 유닛 범위를 scan-range로 훑은 기록이 없다`,
+			message: `${unit.id}: 고칠 사람을 사진에서 못 찾았다고 했지만 이 유닛 범위 전체를 scan-range로 훑은 기록이 없다`,
 		});
 	}
 }

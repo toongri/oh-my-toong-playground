@@ -816,13 +816,25 @@ describe("fc-feedback CLI", () => {
 		writeFileSync(join(work, "candidates.json"), JSON.stringify([{ id: "c001", video: "NUzEChn9EyI", t: 2, kind: "manual" }]));
 		const without = run(["check", "notes", "--work", work], { cwd, home });
 		expect(without.exitCode).toBe(1);
-		expect(without.stderr).toContain("u001: 고칠 사람을 사진에서 못 찾았다고 했지만 이 유닛 범위를 scan-range로 훑은 기록이 없다");
+		expect(without.stderr).toContain("u001: 고칠 사람을 사진에서 못 찾았다고 했지만 이 유닛 범위 전체를 scan-range로 훑은 기록이 없다");
 
 		writeFileSync(
 			join(work, "candidates.json"),
 			JSON.stringify([
 				{ id: "c001", video: "NUzEChn9EyI", t: 2, kind: "manual" },
 				{ id: "c002", video: "NUzEChn9EyI", t: 4, kind: "range" },
+			]),
+		);
+		// range 후보 한 장은 유닛 범위(0~5초) 전체를 훑은 기록이 아니다.
+		expect(run(["check", "notes", "--work", work], { cwd, home }).stderr).toContain("이 유닛 범위 전체를 scan-range로 훑은 기록이 없다");
+
+		writeFileSync(
+			join(work, "candidates.json"),
+			JSON.stringify([
+				{ id: "c001", video: "NUzEChn9EyI", t: 2, kind: "manual" },
+				{ id: "c002", video: "NUzEChn9EyI", t: 4, kind: "range" },
+				{ id: "c003", video: "NUzEChn9EyI", t: 0, kind: "range" },
+				{ id: "c004", video: "NUzEChn9EyI", t: 2, kind: "range" },
 			]),
 		);
 		expect(run(["check", "notes", "--work", work], { cwd, home }).exitCode).toBe(0);
@@ -1531,12 +1543,14 @@ describe("fc-feedback CLI", () => {
 			if (unidentified !== undefined) {
 				notes.units.u001.unidentified_member_ids = unidentified;
 				notes.units.u001.look_at = "화면 위쪽 마크 없는 홍길동";
-				// 위치 미확인은 유닛 범위를 scan-range로 훑은 기록(kind range 후보)이 있어야 통과한다.
+				// 위치 미확인은 유닛 범위 전체를 scan-range로 훑은 기록(kind range 후보)이 있어야 통과한다.
 				writeFileSync(
 					join(work, "candidates.json"),
 					JSON.stringify([
 						{ id: "c001", video: "NUzEChn9EyI", t: 2, kind: "manual" },
 						{ id: "c002", video: "NUzEChn9EyI", t: 4, kind: "range" },
+						{ id: "c003", video: "NUzEChn9EyI", t: 0, kind: "range" },
+						{ id: "c004", video: "NUzEChn9EyI", t: 2, kind: "range" },
 					]),
 				);
 				const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
@@ -2692,20 +2706,21 @@ describe("fc-feedback notes next/submit", () => {
 		expect(JSON.stringify(notes)).not.toContain("wonjeon");
 	});
 
-	test("브리프는 창 안에 range 후보가 없으면 scan-range 명령을, 있으면 생략한다", () => {
+	test("브리프는 range 후보가 유닛 범위 전체를 덮지 않으면 scan-range 명령을, 덮으면 생략한다", () => {
 		const ctx = loopWork();
-		const without = run(["notes", "next", "--work", ctx.work], ctx);
-		expect(without.stdout).toContain(`bun \${CLAUDE_SKILL_DIR}/scripts/fc.ts scan-range --video ${VIDEO} --from 0 --to 5 --work ${ctx.work}`);
-		writeFileSync(
-			join(ctx.work, "candidates.json"),
-			JSON.stringify([
-				{ id: "c001", video: VIDEO, t: 2, kind: "manual" },
-				{ id: "c004", video: VIDEO, t: 4, kind: "range" },
-			]),
-		);
-		const withRange = run(["notes", "next", "--work", ctx.work], ctx);
-		expect(withRange.stdout).not.toContain("scan-range --video");
-		expect(withRange.stdout).toContain("range");
+		const command = `bun \${CLAUDE_SKILL_DIR}/scripts/fc.ts scan-range --video ${VIDEO} --from 0 --to 5 --work ${ctx.work}`;
+		expect(run(["notes", "next", "--work", ctx.work], ctx).stdout).toContain(command);
+		const withCandidates = (rangeTimes: number[]) => {
+			writeFileSync(
+				join(ctx.work, "candidates.json"),
+				JSON.stringify([{ id: "c001", video: VIDEO, t: 2, kind: "manual" }, ...rangeTimes.map((t, k) => ({ id: `c${101 + k}`, video: VIDEO, t, kind: "range" }))]),
+			);
+			return run(["notes", "next", "--work", ctx.work], ctx).stdout;
+		};
+		expect(withCandidates([4])).toContain(command);
+		const covered = withCandidates([0, 2, 4]);
+		expect(covered).not.toContain("scan-range --video");
+		expect(covered).toContain("구간 훑기: range 후보가 유닛 범위 전체를 덮음");
 	});
 
 	test("브리프는 프레임 후보를 20개로 줄이고 생략한 개수를 알린다", () => {

@@ -35,7 +35,10 @@ import { resolveSessionIdOrThrow } from "@lib/state-core.ts";
 
 import {
 	checkNotes,
-	isRangeScanOfUnit,
+	DEFAULT_RANGE_STEP_SECONDS,
+	MAX_RANGE_FRAMES,
+	rangeScanCoversUnit,
+	rangeScanStep,
 	unitLines,
 	mentionsMember,
 	rawFrameCaptions,
@@ -1129,9 +1132,7 @@ async function handleAddFrame(rest: readonly string[], workDir: string, status: 
 // pulls a frame every `step` seconds over [from, to] as `kind: "range"` candidates (the same extraction
 // as add-frame) and tiles the whole range into one contact sheet so an agent sees every frame at once.
 
-const MAX_RANGE_FRAMES = 36;
 const MAX_RANGE_SHEET_COLS = 6;
-const DEFAULT_RANGE_STEP_SECONDS = 2;
 
 function round3(value: number): number {
 	return Math.round(value * 1000) / 1000;
@@ -1541,12 +1542,12 @@ function notesBrief(unit: ValidatedUnit, loop: NotesLoop, notes: NotesDoc, error
 	if (inWindow.length > shown.length) {
 		out.push(`- ${inWindow.length - shown.length}개 생략 (유닛 가운데 시각에서 먼 후보)`);
 	}
-	if (inWindow.some((candidate) => isRangeScanOfUnit(candidate, unit))) {
-		out.push("", "구간 훑기: range 후보가 이미 있음");
+	if (rangeScanCoversUnit(loop.candidates, unit)) {
+		out.push("", "구간 훑기: range 후보가 유닛 범위 전체를 덮음");
 	} else {
-		const step = Math.max(DEFAULT_RANGE_STEP_SECONDS, Math.ceil((unit.end - unit.start) / (MAX_RANGE_FRAMES - 1)));
+		const step = rangeScanStep(unit);
 		const stepFlag = step === DEFAULT_RANGE_STEP_SECONDS ? "" : ` --step ${step}`;
-		out.push("", "구간 훑기: range 후보 없음 — 사람을 못 찾았다고 쓰려면 먼저 실행", `${FC_COMMAND} scan-range --video ${unit.video} --from ${unit.start} --to ${unit.end}${stepFlag} --work ${workDir}`);
+		out.push("", "구간 훑기: 유닛 범위 전체를 덮는 range 후보 없음 — 사람을 못 찾았다고 쓰려면 먼저 실행", `${FC_COMMAND} scan-range --video ${unit.video} --from ${unit.start} --to ${unit.end}${stepFlag} --work ${workDir}`);
 	}
 
 	out.push("", "### 다음", `${FC_COMMAND} notes submit ${unit.id} --file ${workDir}/notes-units/${unit.id}.json --work ${workDir}`, "파일을 직접 만든다. 형식은 references/contracts.md의 notes submit 절.");
