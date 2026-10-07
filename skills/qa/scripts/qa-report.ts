@@ -801,7 +801,7 @@ function renderBlockedBanner(view: QaView): string {
 		? `<p class="gap waive-banner">검증 불가 시나리오 ${blocked.length}건 — 변경 밖의 한계로 실행하지 못했습니다. 판정은 이 시나리오들을 검증하지 않은 채 내려졌습니다: ${blocked.map((scenario) => escapeHtml(scenario.title ?? scenario.id)).join(" · ")}</p>`
 		: "";
 	const rerunBanner = rerunBlocked
-		? `<p class="gap waive-banner">반복 검사 검증 불가 — ${escapeHtml(rerunBlocked.obstacle)}. 같은 시나리오를 다시 돌려 결과가 같은지는 확인하지 못했습니다.</p>`
+		? `<p class="gap waive-banner">반복 검사 검증 불가 — ${escapeHtml(rerunBlocked.obstacle.trim().replace(/\.+$/, ""))}. 같은 시나리오를 다시 돌려 결과가 같은지는 확인하지 못했습니다.</p>`
 		: "";
 	return scenarioBanner + rerunBanner;
 }

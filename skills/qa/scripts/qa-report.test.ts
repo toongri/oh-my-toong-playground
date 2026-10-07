@@ -553,6 +553,8 @@ describe("qa-report renderer", () => {
 		const html = renderQaReport(view, {}, fakeReader)!;
 		expect(html).toContain("반복 검사 검증 불가 — 에뮬레이터가 부팅하지 못함");
 		expect(html.indexOf("반복 검사 검증 불가")).toBeLessThan(html.indexOf("<h2>판정"));
+		view.run_checks = { ...view.run_checks, flaky_rerun: { result: "blocked", cycle: view.cycle, blocked: { obstacle: "에뮬레이터가 부팅하지 못했다.", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } } };
+		expect(renderQaReport(view, {}, fakeReader)!).toContain("부팅하지 못했다. 같은 시나리오를");
 	});
 
 	test("검증 불가 배너는 현재 사이클의 blocked 시나리오가 있을 때만, 개수와 제목과 함께 나온다", () => {
