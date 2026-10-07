@@ -122,7 +122,7 @@ A `render` actor is verified on each screen size its client must stay usable on,
 bun "${CLAUDE_SKILL_DIR}/scripts/qa-device-profiles.ts" get --project .
 ```
 
-- `status: "ok"` → use those profiles. Pick every profile whose platform the actor's client ships on: a React Native or Flutter app ships on `ios` and `android`, so it takes the profiles of both; a phone app does not run on a 1440 px desktop. The project's QA runbook names the platforms it ships.
+- `status: "ok"` → use those profiles. Pick every profile whose platform the actor's client ships on: a React Native or Flutter app ships on `ios` and `android`, so it takes the profiles of both; a phone app does not run on a 1440 px desktop, nor on another product's device that shares its platform (a kiosk or dispenser tablet profile belongs to that device's app). The project's QA runbook names the platforms it ships.
 - `status: "unconfigured"` (first run for this project, or a new machine) → the result carries the built-in `defaults` (phones, Galaxy Z Fold8 and iPhone Duo folded/unfolded, iPad portrait/landscape, laptop, FHD and 21:9 desktops). Ask the user once: show that list and ask which platforms the project ships and which screens it must support. Then:
   - The user accepts the list or does not know → `set --defaults`.
   - The user gives a list → `set --file <json>`.
