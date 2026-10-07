@@ -13,6 +13,7 @@ import {
 	caseRunBindingComplete,
 	scenariosMissingCase,
 	recordComplete,
+	recordGaps,
 	requestChangesOk,
 	riskCoverageComplete,
 	rosterComplete,
@@ -195,6 +196,12 @@ describe("qa chain core", () => {
 		for (const record of state.scenarios) record.evidence = { path: "/action.log", surface: "agent-device" };
 		expect(recordComplete(state, probe)).toBe(false);
 		expect(approveOk(state, probe)).toBe(false);
+	});
+	test("미완성 기록은 시나리오와 빠진 항목을 이름으로 돌려줌", () => {
+		const state = authoredState();
+		expect(recordGaps(state, probe)).toEqual([]);
+		state.scenarios[0] = { ...state.scenarios[0], evidence_review: undefined };
+		expect(recordGaps(state, probe)).toEqual([`${state.scenarios[0].story}/${state.scenarios[0].id}: evidence review incomplete (review-evidence)`]);
 	});
 	test("프로필 시나리오는 테스트 근거로 기록해도 화면 증거를 요구함", () => {
 		const state = authoredState();

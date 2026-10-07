@@ -932,6 +932,7 @@ describe("qa-state CLI wiring", () => {
 		run("record-run-check --check flaky-rerun --result pass");
 		for (const verdict of ["APPROVE", "COMMENT", "REQUEST_CHANGES"]) expect(() => run(`set-verdict ${verdict}`)).toThrow();
 		expect(rawState().verdict ?? null).toBeNull();
+		expect(() => run("set-verdict COMMENT")).toThrow(/story-1\/s1: not recorded/);
 	});
 
 	test("blocked requires obstacle, attempts, deepest-reachable, and a readable attempt log, then caps the verdict at COMMENT", () => {

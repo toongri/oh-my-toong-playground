@@ -51,6 +51,7 @@ import {
 	cycleUntouched,
 	driverGateArmed,
 	recordComplete,
+	recordGaps,
 	scenarioNeedsVisualProof,
 	scenariosMissingCase,
 	visualEvidenceComplete,
@@ -1269,6 +1270,11 @@ export function recordRunCheck(sessionId: string, opts: RecordRunCheckOpts): voi
 	mergeWrite(sessionId, { run_checks: existingChecks, ...(Object.keys(history).length ? { run_checks_history: history } : {}) });
 }
 
+function gapList(state: QaChainState): string {
+	const gaps = recordGaps(state, stateProbe);
+	return gaps.length ? `\nIncomplete record:\n${gaps.map((gap) => `  ${gap}`).join("\n")}` : "";
+}
+
 export function setVerdict(sessionId: string, verdict: string): void {
 	if (!isOneOf(verdict, VERDICTS)) {
 		throw new Error("set-verdict: verdict must be APPROVE, COMMENT, or REQUEST_CHANGES");
@@ -1277,10 +1283,10 @@ export function setVerdict(sessionId: string, verdict: string): void {
 		ensureSeed("qa", sessionId);
 		const prior = readPrior(sessionId);
 		if (verdict === "APPROVE" && !approveOk(prior, stateProbe)) {
-			throw new Error("set-verdict: APPROVE refused — approveOk is false; APPROVE needs every scenario pass and a passing flaky-rerun. Execute and record every remaining scenario; a blocked scenario or blocked rerun leaves it unproven, so the verdict is COMMENT at most");
+			throw new Error("set-verdict: APPROVE refused — approveOk is false; APPROVE needs every scenario pass and a passing flaky-rerun. Execute and record every remaining scenario; a blocked scenario or blocked rerun leaves it unproven, so the verdict is COMMENT at most" + gapList(prior));
 		}
 		if (verdict === "COMMENT" && !commentOk(prior, stateProbe)) {
-			throw new Error("set-verdict: COMMENT refused — commentOk is false; every scenario must be recorded, and an H fail with a supported cause claim asks for REQUEST_CHANGES");
+			throw new Error("set-verdict: COMMENT refused — commentOk is false; every scenario must be recorded, and an H fail with a supported cause claim asks for REQUEST_CHANGES" + gapList(prior));
 		}
 		if (verdict === "REQUEST_CHANGES" && !cycleUntouched(prior) && !requestChangesOk(prior, stateProbe)) {
 			throw new Error("set-verdict: REQUEST_CHANGES refused — it requires a recorded failure (a failed scenario, baseline, or run check); a failed scenario counts once its review-evidence carries a supported {\"kind\":\"cause\",\"checked\":[\"product-path\",\"base-commit\"]} claim citing the product's own log line or code location and the base commit run or diff hunk (and, on a screen, its screenshots). If you cannot show the cause, fix the setup and re-drive, or keep it as an open finding under COMMENT. Unexecuted scenarios are your remaining work, not a product defect: execute them, or record-scenario --status blocked with the attempts that failed");
