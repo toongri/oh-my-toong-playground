@@ -28,7 +28,7 @@ function planUnits(work: string): Record<string, unknown>[] {
 	return records(asRecord(readJsonFile(join(work, "plan.json")))?.matches).flatMap((match) => records(match.topics).flatMap((topic) => records(topic.units)));
 }
 
-/** Comment lines that sit in other than exactly one plan unit, plus units that hold other than exactly one comment line (0 for a speech-only session). */
+/** Comment lines that sit in other than exactly one plan unit, plus units that hold more than one comment line (0 for a speech-only session; a speech-only unit of a mixed session holds none and passes). */
 function commentCoverageProblems(work: string): number {
 	const comments = records(readJsonFile(join(work, "lines.json"))).filter((line) => line.source === "comment");
 	if (comments.length === 0) return 0;
@@ -36,7 +36,7 @@ function commentCoverageProblems(work: string): number {
 	const inside = (unit: Record<string, unknown>, line: Record<string, unknown>): boolean =>
 		typeof unit.start_line === "number" && typeof unit.end_line === "number" && typeof line.i === "number" && unit.start_line <= line.i && line.i <= unit.end_line;
 	const strayLines = comments.filter((line) => units.filter((unit) => inside(unit, line)).length !== 1).length;
-	const strayUnits = units.filter((unit) => comments.filter((line) => inside(unit, line)).length !== 1).length;
+	const strayUnits = units.filter((unit) => comments.filter((line) => inside(unit, line)).length > 1).length;
 	return strayLines + strayUnits;
 }
 

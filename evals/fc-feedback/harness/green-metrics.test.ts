@@ -58,6 +58,18 @@ describe("greenMetrics", () => {
 		]);
 	});
 
+	test("음성과 댓글이 섞인 세션에서 음성만 든 유닛은 커버리지 문제가 아니고, 댓글 둘을 묶은 유닛은 문제다", () => {
+		const mixedLines = [
+			{ i: 0, video: "V", start: 0, end: 4, text: "s", source: "speech" },
+			{ i: 1, video: "V", start: 10, end: 25, text: "a", source: "comment", author: "@x" },
+			{ i: 2, video: "V", start: 40, end: 55, text: "b", source: "comment", author: "@x" },
+		];
+		const units = (ranges: number[][]) => ({ matches: [{ topics: [{ units: ranges.map(([start_line, end_line]) => ({ title: "T", start_line, end_line })) }] }] });
+		const base = { "lines.json": mixedLines, "plan.validated.json": validated, "notes.json": { units: {} }, "refs.verified.json": refs };
+		expect(greenMetrics(work({ ...base, "plan.json": units([[0, 0], [1, 1], [2, 2]]) }), null).failures).toEqual([]);
+		expect(greenMetrics(work({ ...base, "plan.json": units([[0, 0], [1, 2]]) }), null).failures).toEqual(["댓글 줄 커버리지: 1건 문제"]);
+	});
+
 	test("정답 단위의 줄 중 plan 유닛 범위에 든 비율을 줄 재현율로 보고하고 막지는 않는다", () => {
 		const dir = work({
 			"lines.json": [],
