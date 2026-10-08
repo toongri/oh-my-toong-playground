@@ -499,14 +499,25 @@ describe("qa-report renderer", () => {
 		const html = renderQaReport(view, {}, fakeReader)!;
 		const audit = auditSection(html);
 
-		expect(audit).toContain('<td class="audit-story"><code>story-1</code><br><code>sc-1</code></td>');
-		expect(audit).toContain('<td class="audit-coverage">H · 1 실패 경로</td>');
-		expect(audit).toContain('<td class="audit-boundary">브라우저 경계 미구동<br>');
+		expect(audit).toContain('<td class="audit-story" data-label="story / scenario"><code>story-1</code><br><code>sc-1</code></td>');
+		expect(audit).toContain('<td class="audit-coverage" data-label="priority · risks">H · 1 실패 경로</td>');
+		expect(audit).toContain('<td class="audit-boundary" data-label="driven at">브라우저 경계 미구동<br>');
 		expect(html).toContain("table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.94rem; display: block; overflow-x: auto; }");
 		expect(html).toContain(".audit-story { min-width: 6rem; }");
 		expect(html).toContain(".audit-story code { white-space: normal; overflow-wrap: anywhere; }");
 		expect(html).toContain(".audit-coverage { min-width: 8rem; word-break: keep-all; overflow-wrap: normal; }");
 		expect(html).toContain(".audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: anywhere; }");
+	});
+
+	test("좁은 화면에서는 감사 표의 행을 열 이름이 붙은 카드로 쌓는다", () => {
+		const view = baseView();
+		attachReviews(view);
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const audit = auditSection(html);
+
+		expect(audit).toContain('<table class="audit-table" tabindex="0">');
+		for (const label of ["story / scenario", "priority · risks", "scenario · why needed", "driven at", "result · evidence"]) expect(audit).toContain(`data-label="${label}"`);
+		expect(html).toMatch(/@media \(max-width: 40rem\) \{[^}]*\.audit-table tr \{ display: block;/);
 	});
 
 	test("동작이 바뀌지 않는 변경으로 선언된 inert는 시나리오 섹션 머리에 안내로 표시함", () => {
@@ -543,6 +554,16 @@ describe("qa-report renderer", () => {
 		expect(html.indexOf("검증 불가 시나리오 1건")).toBeGreaterThan(-1);
 		expect(html.indexOf("검증 불가 시나리오 1건")).toBeLessThan(html.indexOf("<h2>판정"));
 		expect(html.indexOf("검증 불가 시나리오 1건")).toBeLessThan(html.indexOf("<h2>기능 개요"));
+	});
+
+	test("막힌 반복 검사는 상단 배너에 막힌 이유와 함께 나온다", () => {
+		const view = baseView();
+		view.run_checks = { ...view.run_checks, flaky_rerun: { result: "blocked", cycle: view.cycle, blocked: { obstacle: "에뮬레이터가 부팅하지 못함", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } } };
+		const html = renderQaReport(view, {}, fakeReader)!;
+		expect(html).toContain("반복 검사 검증 불가 — 에뮬레이터가 부팅하지 못함");
+		expect(html.indexOf("반복 검사 검증 불가")).toBeLessThan(html.indexOf("<h2>판정"));
+		view.run_checks = { ...view.run_checks, flaky_rerun: { result: "blocked", cycle: view.cycle, blocked: { obstacle: "에뮬레이터가 부팅하지 못했다.", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } } };
+		expect(renderQaReport(view, {}, fakeReader)!).toContain("부팅하지 못했다. 같은 시나리오를");
 	});
 
 	test("검증 불가 배너는 현재 사이클의 blocked 시나리오가 있을 때만, 개수와 제목과 함께 나온다", () => {

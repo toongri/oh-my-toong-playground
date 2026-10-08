@@ -13,6 +13,7 @@ import {
 	caseRunBindingComplete,
 	scenariosMissingCase,
 	recordComplete,
+	recordGaps,
 	requestChangesOk,
 	riskCoverageComplete,
 	rosterComplete,
@@ -196,6 +197,12 @@ describe("qa chain core", () => {
 		expect(recordComplete(state, probe)).toBe(false);
 		expect(approveOk(state, probe)).toBe(false);
 	});
+	test("미완성 기록은 시나리오와 빠진 항목을 이름으로 돌려줌", () => {
+		const state = authoredState();
+		expect(recordGaps(state, probe)).toEqual([]);
+		state.scenarios[0] = { ...state.scenarios[0], evidence_review: undefined };
+		expect(recordGaps(state, probe)).toEqual([`${state.scenarios[0].story}/${state.scenarios[0].id}: evidence review incomplete (review-evidence)`]);
+	});
 	test("프로필 시나리오는 테스트 근거로 기록해도 화면 증거를 요구함", () => {
 		const state = authoredState();
 		state.scenarios[1] = { ...state.scenarios[1], evidence: { path: "/vitest.txt", surface: "test" } };
@@ -372,6 +379,16 @@ describe("qa chain core", () => {
 		expect(commentOk(state, probe)).toBe(true);
 		state.scenarios[0].blocked!.attempts = [];
 		expect(recordComplete(state, probe)).toBe(false);
+	});
+	test("반복 검사를 환경 때문에 못 돌리면 blocked로 기록하고 COMMENT만 허용함", () => {
+		const state = authoredState();
+		state.run_checks.flaky_rerun = { result: "blocked", cycle: 2, blocked: { obstacle: "에뮬레이터가 오류 보고 창에서 부팅을 멈춤", attempts: ["런처 재실행 → ADB 기기 없음"], deepest_reachable: "QEMU 프로세스 기동", attempt_log: "/missing" } };
+		expect(commentOk(state, probe)).toBe(false);
+		state.run_checks.flaky_rerun.blocked!.attempt_log = "/attempts.log";
+		expect(recordComplete(state, probe)).toBe(true);
+		expect(commentOk(state, probe)).toBe(true);
+		expect(approveOk(state, probe)).toBe(false);
+		expect(requestChangesOk(state, probe)).toBe(false);
 	});
 	test("M/L 시나리오가 blocked여도 APPROVE는 거부하고 COMMENT는 허용함", () => {
 		const state = authoredState();

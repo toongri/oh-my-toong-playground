@@ -149,7 +149,7 @@ describe("qa replay CLI", () => {
 		manifestDirs.push(join(configured.manifestPath, ".."));
 		readyChain("device-session");
 		setQaState("device-session", { phase: "BASELINE" });
-		const marker = join(root, "ran.txt");
+		const marker = join(store, "ran.txt");
 		const record: QaCaseRecord = { id: "device-case", title: "CLI", goal: "run", given: ["case exists"], when: ["run"], then: ["observed"], feature_refs: ["checkout"], surface: "bash", runner: [process.execPath, "-e", `require('fs').writeFileSync(${JSON.stringify(marker)}, process.argv[1])`, "{device}"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset" };
 		saveCase(root, record, home);
 		const args = ["--case", "device-case", "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset", "--device", "emulator-5554"];

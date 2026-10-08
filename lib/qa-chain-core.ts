@@ -285,10 +285,12 @@ export function caseRunBindingComplete(cell: QaScenario, probe: EvidenceProbe): 
 }
 
 export interface QaRunCheck {
-	result?: QaResult;
+	/** "blocked" is accepted only for flaky-rerun: the environment kept the rerun from running. */
+	result?: QaResult | "blocked";
 	status?: QaResult;
 	note?: string;
 	cycle?: number;
+	blocked?: QaBlocked;
 }
 
 export interface QaRunChecks {
@@ -425,7 +427,7 @@ export function scenariosMissingCase(state: QaChainState): QaScenario[] {
 	});
 }
 
-function result(value: QaRunCheck | QaResult | null | undefined): QaResult | null {
+function result(value: QaRunCheck | QaResult | null | undefined): QaResult | "blocked" | null {
 	if (typeof value === "string") return value;
 	if (!value) return null;
 	return value.result ?? value.status ?? null;
@@ -529,30 +531,36 @@ function storyFor(state: QaChainState, scenario: QaScenario): QaStory | undefine
 }
 
 export function recordComplete(state: QaChainState, probe: EvidenceProbe): boolean {
-	const stories = state.stories ?? [];
-	for (const story of stories) {
+	return recordGaps(state, probe).length === 0;
+}
+
+/** What keeps the current cycle's record incomplete, one line per gap, so a refused verdict names what to record. */
+export function recordGaps(state: QaChainState, probe: EvidenceProbe): string[] {
+	const gaps: string[] = [];
+	for (const story of state.stories ?? []) {
 		const actor = actorFor(state, story);
 		const baseline = story.baseline;
-		if (!baseline || baseline.cycle !== currentCycle(state) || result(baseline) === null) return false;
-		if (result(baseline) === "pass" && !validEvidence(state, baseline.evidence, actor?.driver, baseline.cycle, probe)) return false;
+		if (!baseline || baseline.cycle !== currentCycle(state) || result(baseline) === null) gaps.push(`${story.id}: baseline not recorded this cycle (record-baseline)`);
+		else if (result(baseline) === "pass" && !validEvidence(state, baseline.evidence, actor?.driver, baseline.cycle, probe)) gaps.push(`${story.id}: baseline evidence missing or invalid`);
 	}
 	for (const scenario of currentScenarios(state)) {
-		if (scenario.status !== "pass" && scenario.status !== "fail" && scenario.status !== "blocked") return false;
-		if (scenario.status === "blocked" && !blockedRecordValid(scenario.blocked, probe)) return false;
-		if (scenario.case_run && !caseRunBindingComplete(scenario, probe)) return false;
+		const name = `${scenario.story}/${scenario.id}`;
+		if (scenario.status !== "pass" && scenario.status !== "fail" && scenario.status !== "blocked") { gaps.push(`${name}: not recorded`); continue; }
+		if (scenario.status === "blocked" && !blockedRecordValid(scenario.blocked, probe)) gaps.push(`${name}: blocked record needs obstacle, attempts, deepest reachable and an existing attempt log`);
+		if (scenario.case_run && !caseRunBindingComplete(scenario, probe)) gaps.push(`${name}: case-run binding stale or incomplete`);
 		const story = storyFor(state, scenario);
 		const driver = story ? actorFor(state, story)?.driver : undefined;
 		if (scenario.status !== "blocked" && scenarioNeedsVisualProof(scenario, driver)) {
-			if (!visualEvidenceComplete(scenario.evidence, probe) || !evidenceReviewComplete(scenario, probe)) return false;
+			if (!visualEvidenceComplete(scenario.evidence, probe)) gaps.push(`${name}: before/action/after screenshots missing`);
+			else if (!evidenceReviewComplete(scenario, probe)) gaps.push(`${name}: evidence review incomplete (review-evidence)`);
 		}
-		if (scenario.status === "pass" && !validEvidence(state, scenario.evidence, driver, scenario.cycle, probe)) return false;
+		if (scenario.status === "pass" && !validEvidence(state, scenario.evidence, driver, scenario.cycle, probe)) gaps.push(`${name}: pass evidence missing or invalid`);
 	}
 	const checks = state.run_checks ?? {};
-	return (
-		recordCycle(checks.stale_state, state) &&
-		recordCycle(checks.dirty_worktree, state) &&
-		recordCycle(checks.flaky_rerun, state)
-	);
+	for (const [name, check] of [["stale-state", checks.stale_state], ["dirty-worktree", checks.dirty_worktree], ["flaky-rerun", checks.flaky_rerun]] as const) {
+		if (!recordCycle(check, state)) gaps.push(`run check ${name}: not recorded this cycle (record-run-check)`);
+	}
+	return gaps;
 }
 
 function failureEstablished(state: QaChainState, scenario: QaScenario, probe: EvidenceProbe): boolean {
@@ -590,16 +598,23 @@ function verdictGround(state: QaChainState, probe: EvidenceProbe): boolean {
 		chainComplete(state) &&
 		recordComplete(state, probe) &&
 		result(checks.stale_state) === "pass" &&
-		result(checks.flaky_rerun) === "pass" &&
+		(result(checks.flaky_rerun) === "pass" || flakyRerunBlocked(checks, probe)) &&
 		(state.stories ?? []).every((story) => result(story.baseline) === "pass")
 	);
+}
+
+// A rerun the environment kept from running leaves stability unproven, like a blocked scenario.
+function flakyRerunBlocked(checks: QaRunChecks, probe: EvidenceProbe): boolean {
+	const check = checks.flaky_rerun;
+	return typeof check === "object" && check !== null && check.result === "blocked" && blockedRecordValid(check.blocked, probe);
 }
 
 // Priority orders execution; it never decides whether an unexecuted scenario may
 // pass the verdict gate. A `blocked` scenario resolves, and the report names it.
 export function approveOk(state: QaChainState, probe: EvidenceProbe): boolean {
 	// A blocked scenario leaves its requirement unproven: COMMENT at most, never APPROVE.
-	return verdictGround(state, probe) && currentScenarios(state).every((scenario) => scenario.status === "pass");
+	return verdictGround(state, probe) && result(state.run_checks?.flaky_rerun) === "pass" &&
+		currentScenarios(state).every((scenario) => scenario.status === "pass");
 }
 
 /** Soft pass: a failed non-H scenario (the 50-74 nitpick band) permits COMMENT. */

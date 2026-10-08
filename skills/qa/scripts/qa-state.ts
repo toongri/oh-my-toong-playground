@@ -51,6 +51,7 @@ import {
 	cycleUntouched,
 	driverGateArmed,
 	recordComplete,
+	recordGaps,
 	scenarioNeedsVisualProof,
 	scenariosMissingCase,
 	visualEvidenceComplete,
@@ -76,6 +77,7 @@ import {
 	type QaDriver,
 	type QaPhase,
 	type QaRunCheckHistory,
+	type QaRunCheck,
 	type QaRunChecks,
 	type QaStory,
 	type QaStoryContract,
@@ -1007,7 +1009,7 @@ export interface RecordScenarioOpts extends ScenarioFieldOpts, EvidenceSlotOpts 
 	caseRun?: string;
 }
 
-function blockedRecord(opts: RecordScenarioOpts): QaBlocked {
+function blockedRecord(opts: Pick<RecordScenarioOpts, "obstacle" | "attempts" | "deepestReachable" | "attemptLog">): QaBlocked {
 	let attempts: unknown;
 	try {
 		attempts = JSON.parse(nonEmpty(opts.attempts, "attempts"));
@@ -1260,12 +1262,19 @@ export interface RecordRunCheckOpts {
 	check: string;
 	result: string;
 	note?: string;
+	obstacle?: string;
+	attempts?: string;
+	deepestReachable?: string;
+	attemptLog?: string;
 }
 
 export function recordRunCheck(sessionId: string, opts: RecordRunCheckOpts): void {
 	if (!isOneOf(opts.check, CHECKS)) throw new Error(`check must be one of ${CHECKS.join("|")}`);
-	if (!isOneOf(opts.result, BINARY_RESULTS)) throw new Error("result must be pass or fail");
+	const blocked = opts.result === "blocked";
+	if (blocked && opts.check !== "flaky-rerun") throw new Error("only flaky-rerun can be blocked: the environment kept the rerun from running");
+	if (!blocked && !isOneOf(opts.result, BINARY_RESULTS)) throw new Error("result must be pass, fail, or blocked (flaky-rerun only)");
 	if (opts.result === "fail" && !opts.note?.trim()) throw new Error("fail result requires note");
+	const blockedFields = blocked ? { blocked: blockedRecord(opts) } : {};
 	const prior = readPrior(sessionId);
 	const cycle = currentCycle(prior);
 	const key = opts.check;
@@ -1281,8 +1290,14 @@ export function recordRunCheck(sessionId: string, opts: RecordRunCheckOpts): voi
 	if (old && typeof old !== "string" && old.cycle !== cycle) {
 		history[key] = [...(history[key] ?? []), old];
 	}
-	existingChecks[field] = { result: opts.result, ...(opts.note !== undefined ? { note: opts.note } : {}), cycle };
+	const checkResult: QaRunCheck["result"] = blocked ? "blocked" : opts.result === "pass" ? "pass" : "fail";
+	existingChecks[field] = { result: checkResult, ...(opts.note !== undefined ? { note: opts.note } : {}), cycle, ...blockedFields };
 	mergeWrite(sessionId, { run_checks: existingChecks, ...(Object.keys(history).length ? { run_checks_history: history } : {}) });
+}
+
+function gapList(state: QaChainState): string {
+	const gaps = recordGaps(state, stateProbe);
+	return gaps.length ? `\nIncomplete record:\n${gaps.map((gap) => `  ${gap}`).join("\n")}` : "";
 }
 
 export function setVerdict(sessionId: string, verdict: string): void {
@@ -1293,10 +1308,10 @@ export function setVerdict(sessionId: string, verdict: string): void {
 		ensureSeed("qa", sessionId);
 		const prior = readPrior(sessionId);
 		if (verdict === "APPROVE" && !approveOk(prior, stateProbe)) {
-			throw new Error("set-verdict: APPROVE refused — approveOk is false; APPROVE needs every scenario pass. Execute and record every remaining scenario; a blocked scenario leaves its requirement unproven, so the verdict is COMMENT at most");
+			throw new Error("set-verdict: APPROVE refused — approveOk is false; APPROVE needs every scenario pass and a passing flaky-rerun. Execute and record every remaining scenario; a blocked scenario or blocked rerun leaves it unproven, so the verdict is COMMENT at most" + gapList(prior));
 		}
 		if (verdict === "COMMENT" && !commentOk(prior, stateProbe)) {
-			throw new Error("set-verdict: COMMENT refused — commentOk is false; every scenario must be recorded, and an H fail with a supported cause claim asks for REQUEST_CHANGES");
+			throw new Error("set-verdict: COMMENT refused — commentOk is false; every scenario must be recorded, and an H fail with a supported cause claim asks for REQUEST_CHANGES" + gapList(prior));
 		}
 		if (verdict === "REQUEST_CHANGES" && !cycleUntouched(prior) && !requestChangesOk(prior, stateProbe)) {
 			throw new Error("set-verdict: REQUEST_CHANGES refused — it requires a recorded failure (a failed scenario, baseline, or run check); a failed scenario counts once its review-evidence carries a supported {\"kind\":\"cause\",\"checked\":[\"product-path\",\"base-commit\"]} claim citing the product's own log line or code location and the base commit run or diff hunk (and, on a screen, its screenshots). If you cannot show the cause, fix the setup and re-drive, or keep it as an open finding under COMMENT. Unexecuted scenarios are your remaining work, not a product defect: execute them, or record-scenario --status blocked with the attempts that failed");
@@ -1581,7 +1596,7 @@ const ROSTER: CliCommand[] = [
 	{ name: "set-verdict", authority: "ai", effect: "persists the cycle verdict" },
 	{ name: "await-user", authority: "ai", effect: "pauses at a human-decision gate; Stop-allowed, auto-cleared next write" },
 	{ name: "start", authority: "ai", effect: "creates or re-enters the guarded state for a target" },
-	{ name: "set-acceptance", authority: "ai", effect: "records the acceptance criteria array" },
+	{ name: "set-acceptance", authority: "ai", effect: "records the acceptance criteria array (--json-file PATH or --json '[...]') and prints what it recorded" },
 	{ name: "declare-inert", authority: "ai", effect: "declares a no-risk-surface cycle" },
 	{
 		name: "acquire-device",
@@ -1739,6 +1754,10 @@ function main(): void {
 					check: requiredArg(args, "check"),
 					result: requiredArg(args, "result"),
 					note: str(args["note"]),
+					obstacle: str(args["obstacle"]),
+					attempts: str(args["attempts"]),
+					deepestReachable: str(args["deepest-reachable"]),
+					attemptLog: str(args["attempt-log"]),
 				});
 			} else if (subcommand === "set-verdict") {
 				const verdict = process.argv.slice(3).find((arg) => !arg.startsWith("--"));
@@ -1752,8 +1771,10 @@ function main(): void {
 			} else if (subcommand === "start") {
 				startQa(sessionId, requiredArg(args, "target"));
 			} else if (subcommand === "set-acceptance") {
-				const parsed = JSON.parse(requiredArg(args, "json"));
-				setAcceptance(sessionId, parsed);
+				// --json-file keeps quotes in the criteria away from shell quoting.
+				const source = typeof args["json-file"] === "string" ? readFileSync(args["json-file"], "utf8") : requiredArg(args, "json");
+				setAcceptance(sessionId, JSON.parse(source));
+				process.stdout.write(`${JSON.stringify(readPrior(sessionId).acceptance_criteria ?? [], null, 2)}\n`);
 			} else if (subcommand === "waive") {
 				// Retired: a reason-only exemption let an unexecuted cell pass the gate.
 				// Waives already persisted in state stay readable and keep resolving.

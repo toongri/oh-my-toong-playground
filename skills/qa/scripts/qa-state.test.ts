@@ -692,6 +692,16 @@ describe("qa-state CLI wiring", () => {
 	const PASS_EVIDENCE = "--evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash";
 	const recordPass = (id: string) => run(`record-scenario --story story-1 --scenario ${id} --status pass ${PASS_EVIDENCE}`);
 
+	test("set-acceptance는 따옴표가 든 문장을 파일로 받아 그대로 기록하고 기록한 목록을 출력한다", () => {
+		run("set --phase PLAN");
+		const criteria = ["홈 메뉴에서 '주문 목록'을 직접 열면 줄 올리기가 적용되지 않는다.", "담은 영양제는 \"주문 필요\" 순서대로 보인다."];
+		const file = join(tmpDir, "acceptance.json");
+		writeFileSync(file, JSON.stringify(criteria));
+		const out = run(`set-acceptance --json-file ${file}`);
+		expect(rawState().acceptance_criteria).toEqual(criteria);
+		expect(out).toContain("적용되지 않는다.");
+	});
+
 	test("새 CLI story는 구조화 계약과 AC 링크가 없으면 거부한다", () => {
 		run("set --phase PLAN");
 		run("set-acceptance --json '[\"home shows today supplements\"]'");
@@ -843,6 +853,25 @@ describe("qa-state CLI wiring", () => {
 		expect(rawState().verdict).toBe("APPROVE");
 	});
 
+	test("flaky-rerun은 막힌 근거와 함께 blocked로 기록하면 COMMENT만 허용하고, 다른 run check는 blocked를 거부한다", () => {
+		authorCompleteChain();
+		run(`record-baseline --story story-1 --result pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface test`);
+		for (const [id] of SCENARIOS) {
+			run(`record-scenario --story story-1 --scenario ${id} --status pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface test`);
+		}
+		run("record-run-check --check stale-state --result pass");
+		run("record-run-check --check dirty-worktree --result pass");
+		const logPath = join(tmpDir, "rerun-attempts.txt");
+		writeFileSync(logPath, "emulator-5592 not found\n");
+		expect(() => run("record-run-check --check flaky-rerun --result blocked")).toThrow(/attempts|obstacle/);
+		expect(() => run(`record-run-check --check stale-state --result blocked --obstacle o --attempts '["a"]' --deepest-reachable d --attempt-log ${logPath}`)).toThrow(/flaky-rerun/);
+		run(`record-run-check --check flaky-rerun --result blocked --obstacle "에뮬레이터 부팅 멈춤" --attempts '["런처 재실행 → ADB 기기 없음"]' --deepest-reachable "QEMU 기동" --attempt-log ${logPath}`);
+		expect(rawState().run_checks.flaky_rerun.blocked.obstacle).toBe("에뮬레이터 부팅 멈춤");
+		expect(() => run("set-verdict APPROVE")).toThrow(/APPROVE refused/);
+		run("set-verdict COMMENT");
+		expect(rawState().verdict).toBe("COMMENT");
+	});
+
 	test("agent-device actor still requires before/after screenshots when evidence-surface is its own driver", () => {
 		authorCompleteChain();
 		run('add-actor --id actor-1 --driver agent-device --reachable yes');
@@ -973,6 +1002,7 @@ describe("qa-state CLI wiring", () => {
 		run("record-run-check --check flaky-rerun --result pass");
 		for (const verdict of ["APPROVE", "COMMENT", "REQUEST_CHANGES"]) expect(() => run(`set-verdict ${verdict}`)).toThrow();
 		expect(rawState().verdict ?? null).toBeNull();
+		expect(() => run("set-verdict COMMENT")).toThrow(/story-1\/s1: not recorded/);
 	});
 
 	test("blocked requires obstacle, attempts, deepest-reachable, and a readable attempt log, then caps the verdict at COMMENT", () => {
