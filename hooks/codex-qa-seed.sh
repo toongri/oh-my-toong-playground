@@ -1,7 +1,7 @@
 #!/bin/bash
 # Codex QA seed hook. Codex has no structured Skill invocation event, so seed
-# when the platform's $qa mention scanner submits a prompt or when the
-# deployed QA skill is opened through a shell tool.
+# only when the user's submitted prompt mentions $qa. Model-decided QA creates
+# its state through the skill's own `qa-state.ts start`.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,16 +21,6 @@ if [ "$event" = "UserPromptSubmit" ]; then
     if printf '%s' "$prompt" | grep -Eq '(^|[^[:alnum:]_])\$qa([^[:alnum:]_]|$)'; then
         trigger=true
     fi
-elif [ "$event" = "PreToolUse" ]; then
-    tool_name=$(printf '%s' "$input" | jq -r '.tool_name // .toolName // empty' 2>/dev/null) || tool_name=""
-    case "$(printf '%s' "$tool_name" | tr '[:upper:]' '[:lower:]')" in
-        bash|exec_command|shell_command)
-            command=$(printf '%s' "$input" | jq -r '.tool_input.cmd // .tool_input.command // empty' 2>/dev/null) || command=""
-            case "$command" in
-                *.agents/skills/qa/SKILL.md*) trigger=true ;;
-            esac
-            ;;
-    esac
 fi
 [ "$trigger" = true ] || exit 0
 

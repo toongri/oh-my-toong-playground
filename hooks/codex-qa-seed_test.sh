@@ -47,13 +47,13 @@ test_sigil_seed_is_idempotent() {
     [ "$after" = '{"active":true,"sentinel":"preserve"}' ]
 }
 
-test_skill_open_seeds() {
+test_skill_read_does_not_seed() {
     setup
     local payload
     payload=$(jq -nc --arg cwd "$REPO" '{session_id:"never",cwd:$cwd,hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:"sed -n 1,80p .agents/skills/qa/SKILL.md"}}')
     printf '%s' "$payload" | env -u OMT_DIR -u OMT_SESSION_ID HOME="$SBX" CODEX_THREAD_ID=never bash "$HOOK"
     local ok=0
-    [ -f "$OMT/qa-state-never.json" ] || ok=1
+    [ ! -f "$OMT/qa-state-never.json" ] || ok=1
     teardown
     return "$ok"
 }
@@ -67,18 +67,19 @@ test_unrelated_prompt_does_not_seed() {
     return "$ok"
 }
 
-test_yaml_registers_both_events() {
-    local count
-    count=$(awk '/component: codex-qa-seed.sh/{n++} END{print n+0}' "$SCRIPT_DIR/../codex.yaml")
-    [ "$count" -eq 2 ]
+test_yaml_registers_prompt_event_only() {
+    local yaml="$SCRIPT_DIR/../codex.yaml" total in_prompt
+    total=$(awk '/component: codex-qa-seed.sh/{n++} END{print n+0}' "$yaml")
+    in_prompt=$(awk '/^  [A-Za-z]+:/{ev=$1} /component: codex-qa-seed.sh/ && ev=="UserPromptSubmit:"{n++} END{print n+0}' "$yaml")
+    [ "$total" -eq 1 ] && [ "$in_prompt" -eq 1 ]
 }
 
 main() {
     run_test test_sigil_seeds_qa_only
     run_test test_sigil_seed_is_idempotent
-    run_test test_skill_open_seeds
+    run_test test_skill_read_does_not_seed
     run_test test_unrelated_prompt_does_not_seed
-    run_test test_yaml_registers_both_events
+    run_test test_yaml_registers_prompt_event_only
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
     [ "$TESTS_FAILED" -eq 0 ]
 }

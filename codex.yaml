@@ -119,10 +119,6 @@ hooks:
       type: command
       timeout: 10
   PreToolUse:
-    - component: codex-qa-seed.sh
-      type: command
-      matcher: "Bash|bash|exec_command|shell_command"
-      timeout: 10
     # Always deny direct shell reads of model-disabled SKILL.md files. Explicit
     # prompt sigils receive trusted additionalContext from the UserPromptSubmit
     # hook above; marker files are not consulted as read authorization.
