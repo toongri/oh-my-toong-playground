@@ -238,6 +238,13 @@ test_codex_skill_invocation_hooks_registered_with_runtime_matcher() {
     done
 }
 
+test_codex_qa_seed_not_registered_under_pretooluse() {
+    local pre_block count
+    pre_block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "PreToolUse")
+    count=$(echo "$pre_block" | grep -cF 'component: codex-qa-seed.sh' || true)
+    [ "$count" -eq 0 ] || { echo "ASSERTION FAILED: qa seed must not be registered under PreToolUse"; return 1; }
+}
+
 test_codex_explain_diff_seed_not_registered_under_pretooluse() {
     local pre_block count
     pre_block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "PreToolUse")
@@ -574,8 +581,7 @@ qa-driver-guard.sh
 label-commit-gate.sh
 explain-diff-artifact-guard.sh"
 
-_codex_pretooluse_expected_ids="codex-qa-seed.sh
-codex-skill-invocation-gate.sh
+_codex_pretooluse_expected_ids="codex-skill-invocation-gate.sh
 codex-explain-diff-artifact-guard.sh
 codex-write-guard.sh
 codex-qa-driver-guard.sh
@@ -683,6 +689,7 @@ main() {
     run_test test_codex_yaml_has_pretooluse_guard
     run_test test_codex_skill_invocation_hooks_registered_with_runtime_matcher
     run_test test_codex_explain_diff_seed_not_registered_under_pretooluse
+    run_test test_codex_qa_seed_not_registered_under_pretooluse
     run_test test_core_claude_hooks_registered_in_tracked_root_yaml
     run_test test_orphan_reaper_registered_in_tracked_root_yaml
     run_test test_core_claude_hooks_not_duplicated_per_project
