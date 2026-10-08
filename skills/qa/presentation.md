@@ -204,7 +204,7 @@ there is no separate actor-roster table).
   place the evidence lives; each scenario's own observation lives on its card
   (next bullet).
 - **Per-scenario observation (`scenarios`, keyed by `<story>:<scenario>`, the
-  scenario key — write it under the top-level `scenarios` object, field `observed`)** —
+  scenario key; story and scenario ids must not contain ":", and the CLI rejects them — write it under the top-level `scenarios` object, field `observed`)** —
   this is the reader's proof, **one per scenario**. For each verified scenario,
   state in plain language what you did in that scenario and what
   the real software rendered — "이 시나리오에서 이렇게 했더니 화면/응답이 이렇게
@@ -233,8 +233,8 @@ there is no separate actor-roster table).
   현황** board near the top of the report (the AC text alone is no longer a
   separate section). Each entry must include a non-empty `scenarioRefs` array of
   `{story, scenario}` selectors. The renderer validates every ref against
-  exactly one recorded current-cycle scenario and its recorded status (`pass`,
-  `fail`, or `blocked`). The grounded status invariants are: `yes` requires
+  exactly one recorded current-cycle scenario, requires the ref's story to link that
+  AC, and checks its recorded status (`pass`, `fail`, or `blocked`). The grounded status invariants are: `yes` requires
   every referenced scenario to be `pass`; `no` requires every referenced scenario to be
   `fail`; `partial` requires at least one `pass` and one `fail` and no
   `blocked`; `unverified` requires at least one valid `blocked`. Missing/legacy/malformed/duplicate/stale/unknown/ineligible
@@ -397,7 +397,7 @@ works, and therefore whether the requirements were met?**
 - A user flow slot holds raw test or build logs → replace with what was proven, in words
 - A scenario shows a raw curl/HTTP/JSON dump (`HTTP=404`, `{"error":...}`, `table row count before=6`) as its proof → convert it to a natural-language "we ran this scenario and observed X"; the raw bytes belong in the audit section, not the reader
 - A requirement was never proven but it reads `yes`/`partial` → mark `satisfied: "unverified"` (renders loud "미검증")
-- A visual scenario lacks either an observation or before/after images → capture the missing asserted state, record its path, and render again. Text-boundary scenarios need a grounded `observed` explanation of the received output.
+- A visual scenario lacks either an observation or before/after images → capture the missing asserted state, record its path, and render again. Text-boundary scenarios need a grounded `observed` explanation of the received output. `qa-report.ts` refuses a nonvisual or test-surface pass/fail scenario without `observed`.
 - An observation says "the user saw" but no screen was captured → name the real medium (API response, test)
 - Internal jargon (risk numbers, source tags) is visible to the reader → remove it
 - The narrative names more users/scenarios/requirements than the records hold → invention; fix the records

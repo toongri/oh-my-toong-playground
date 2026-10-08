@@ -1,5 +1,7 @@
 {
   "session_title": "1.4 팀 연습 피드백",
+  "recurring": [],
+  "matches_without_feedback": [],
   "matches": [
     {
       "title": "1차전 하프타임 피드백",
@@ -9,7 +11,7 @@
           "summary": "센터백/풀백의 빌드업 참여와 판단 속도",
           "units": [
             {
-              "title": "센터백 패스 지연",
+              "title": "센터백: 패스 빨리 내주기",
               "start_line": 0,
               "end_line": 0,
               "position_tags": [
@@ -23,23 +25,25 @@
               ],
               "key_frame_candidate_ids": [
                 "c001"
-              ]
+              ],
+              "group_positions": []
             },
             {
-              "title": "풀백 빌드업 참여 위치",
+              "title": "풀백: 빌드업 때 안쪽으로 들어오기",
               "start_line": 1,
               "end_line": 1,
               "position_tags": [
-                "LB"
+                "FB"
               ],
               "topic_tags": [
                 "빌드업"
               ],
               "member_ids": [],
-              "key_frame_candidate_ids": []
+              "key_frame_candidate_ids": [],
+              "group_positions": []
             },
             {
-              "title": "빌드업 후 측면 전환",
+              "title": "전원: 빌드업 뒤 측면으로 전환하기",
               "start_line": 2,
               "end_line": 2,
               "position_tags": [],
@@ -49,7 +53,8 @@
               ],
               "member_ids": [],
               "key_frame_candidate_ids": [],
-              "addressed_to_all": true
+              "addressed_to_all": true,
+              "group_positions": []
             }
           ]
         },
@@ -58,7 +63,7 @@
           "summary": "풀백의 오버래핑 타이밍과 크로스 연계",
           "units": [
             {
-              "title": "우측 풀백 오버래핑",
+              "title": "우측 풀백: 오버래핑 타이밍 맞추기",
               "start_line": 3,
               "end_line": 3,
               "position_tags": [
@@ -73,24 +78,30 @@
               "key_frame_candidate_ids": [
                 "c002",
                 "c003"
-              ]
+              ],
+              "group_positions": []
             },
             {
-              "title": "측면 오버래핑 후 크로스",
+              "title": "풀백: 오버래핑 뒤 크로스 올리기",
               "start_line": 4,
               "end_line": 4,
               "position_tags": [
-                "LB"
+                "FB"
               ],
               "topic_tags": [
                 "오버래핑"
               ],
               "member_ids": [],
-              "key_frame_candidate_ids": []
+              "key_frame_candidate_ids": [],
+              "group_positions": []
             }
           ]
         }
-      ]
+      ],
+      "lineup": {
+        "song-cb": "CB",
+        "yoon-fb": "FB"
+      }
     },
     {
       "title": "2차전 세트피스 점검",
@@ -100,7 +111,7 @@
           "summary": "세트피스 수비 위치 선정과 역습 대비",
           "units": [
             {
-              "title": "코너킥 수비 위치 선정",
+              "title": "센터백: 코너킥 때 자리 먼저 잡기",
               "start_line": 5,
               "end_line": 5,
               "position_tags": [
@@ -112,19 +123,23 @@
               "member_ids": [
                 "song-cb"
               ],
-              "key_frame_candidate_ids": []
+              "key_frame_candidate_ids": [],
+              "group_positions": []
             },
             {
-              "title": "세트피스 후 역습 대비",
+              "title": "수비진: 세트피스 뒤 역습 대비하기",
               "start_line": 6,
               "end_line": 6,
-              "position_tags": [],
+              "position_tags": [
+                "CB"
+              ],
               "topic_tags": [
                 "세트피스",
                 "수비전환"
               ],
               "member_ids": [],
-              "key_frame_candidate_ids": []
+              "key_frame_candidate_ids": [],
+              "group_positions": []
             }
           ]
         },
@@ -133,7 +148,7 @@
           "summary": "볼 소유권 전환 직후 압박 속도",
           "units": [
             {
-              "title": "중원 수비 전환 속도",
+              "title": "미드필더: 수비 전환 빨리 하기",
               "start_line": 7,
               "end_line": 7,
               "position_tags": [
@@ -149,10 +164,11 @@
                 "c004",
                 "c005",
                 "c006"
-              ]
+              ],
+              "group_positions": []
             },
             {
-              "title": "수비형 미드필더 커버 범위",
+              "title": "수비형 미드필더: 커버 범위 넓히기",
               "start_line": 8,
               "end_line": 8,
               "position_tags": [
@@ -162,23 +178,31 @@
                 "수비전환"
               ],
               "member_ids": [],
-              "key_frame_candidate_ids": []
+              "key_frame_candidate_ids": [],
+              "group_positions": []
             },
             {
-              "title": "볼 탈취 후 역습 전개",
+              "title": "미드필더: 볼 탈취 뒤 바로 역습 전개하기",
               "start_line": 9,
               "end_line": 9,
-              "position_tags": [],
+              "position_tags": [
+                "CM"
+              ],
               "topic_tags": [
                 "수비전환",
                 "역습"
               ],
               "member_ids": [],
-              "key_frame_candidate_ids": []
+              "key_frame_candidate_ids": [],
+              "group_positions": []
             }
           ]
         }
-      ]
+      ],
+      "lineup": {
+        "song-cb": "CB",
+        "cho-mf": "CM"
+      }
     },
     {
       "title": "3차전 역습 & 마무리",
@@ -188,7 +212,7 @@
           "summary": "탈취 후 역습 연결과 침투 타이밍",
           "units": [
             {
-              "title": "역습 시 스트라이커 움직임",
+              "title": "스트라이커: 역습 때 뒷공간 파고들기",
               "start_line": 10,
               "end_line": 10,
               "position_tags": [
@@ -202,20 +226,22 @@
               ],
               "key_frame_candidate_ids": [
                 "c007"
-              ]
+              ],
+              "group_positions": []
             },
             {
-              "title": "역습 시 측면 폭",
+              "title": "윙어: 역습 때 측면 폭 유지하기",
               "start_line": 11,
               "end_line": 11,
               "position_tags": [
-                "LW"
+                "WF"
               ],
               "topic_tags": [
                 "역습"
               ],
               "member_ids": [],
-              "key_frame_candidate_ids": []
+              "key_frame_candidate_ids": [],
+              "group_positions": []
             }
           ]
         },
@@ -224,7 +250,7 @@
           "summary": "박스 안 슈팅 타이밍과 세컨볼 지원",
           "units": [
             {
-              "title": "마무리 슈팅 타이밍",
+              "title": "스트라이커: 슈팅 타이밍 앞당기기",
               "start_line": 12,
               "end_line": 12,
               "position_tags": [
@@ -239,23 +265,25 @@
               "key_frame_candidate_ids": [
                 "c008",
                 "c009"
-              ]
+              ],
+              "group_positions": []
             },
             {
-              "title": "세컨드 스트라이커 마무리 위치",
+              "title": "세컨드 스트라이커: 마무리 위치 먼저 잡기",
               "start_line": 13,
               "end_line": 13,
               "position_tags": [
-                "CF"
+                "ST"
               ],
               "topic_tags": [
                 "마무리"
               ],
               "member_ids": [],
-              "key_frame_candidate_ids": []
+              "key_frame_candidate_ids": [],
+              "group_positions": []
             },
             {
-              "title": "마무리 후 오버래핑 지원",
+              "title": "미드필더: 마무리 뒤 오버래핑 지원하기",
               "start_line": 14,
               "end_line": 14,
               "position_tags": [],
@@ -266,11 +294,16 @@
               "member_ids": [
                 "cho-mf"
               ],
-              "key_frame_candidate_ids": []
+              "key_frame_candidate_ids": [],
+              "group_positions": []
             }
           ]
         }
-      ]
+      ],
+      "lineup": {
+        "han-fw": "ST",
+        "cho-mf": "CM"
+      }
     }
   ]
 }

@@ -141,6 +141,13 @@ function nonEmpty(value: unknown, field: string): string {
 	return value;
 }
 
+/** A story or scenario id: story and scenario ids join as "story:scenario" in report keys, so a ":" would make two pairs collide. */
+function localId(value: unknown, field: string): string {
+	const id = nonEmpty(value, field);
+	if (id.includes(":")) throw new Error(`${field} must not contain ":" because story and scenario ids join as "story:scenario" in report keys`);
+	return id;
+}
+
 /**
  * camelCase (`displayName`), snake_case (`deep_link_value`) or a three-part PascalCase
  * component name (`JoinStepLayout`) — a code name, not something a reader sees.
@@ -639,10 +646,15 @@ export function addActor(sessionId: string, opts: AddActorOpts): void {
 	if (!isOneOf(clientImpact, CLIENT_IMPACTS)) throw new Error(`client-impact must be one of ${CLIENT_IMPACTS.join("|")}: none (no client renders this actor's result), contract (a client renders it but its rendering code did not change), render (the client's rendering changed)`);
 	const reason = readerProse(clientImpactReason, "client-impact-reason");
 	let deviceProfiles = prior.device_profiles ?? [];
+	const redefinedProfileIds = new Set<string>();
 	if (clientImpact === "render") {
 		if (driver !== "agent-browser" && driver !== "agent-device") throw new Error("client-impact render needs a screen driver (agent-browser|agent-device): the proof is the rendered screen");
 		if (!profileIds.length) throw new Error("client-impact render requires --profiles: the device profiles this screen must stay usable on");
 		const resolved = resolveProfiles(profileIds, opts);
+		for (const next of resolved) {
+			const previous = deviceProfiles.find((profile) => profile.id === next.id);
+			if (previous && JSON.stringify(previous) !== JSON.stringify(next)) redefinedProfileIds.add(next.id);
+		}
 		deviceProfiles = [...deviceProfiles.filter((profile) => !resolved.some((next) => next.id === profile.id)), ...resolved];
 	} else if (profileIds.length) {
 		throw new Error(`--profiles applies only to client-impact render; a ${clientImpact} actor has no rendered screen under test`);
@@ -653,10 +665,15 @@ export function addActor(sessionId: string, opts: AddActorOpts): void {
 	const changedSurface = existing && (existing.boundary !== boundary || existing.driver !== driver || existing.client_impact !== clientImpact || JSON.stringify(existing.profiles ?? []) !== JSON.stringify(actor.profiles ?? []));
 	const cycle = currentCycle(prior);
 	const affectedStories = new Set((prior.stories ?? []).filter((story) => (story.actor ?? story.actor_id) === id).map((story) => story.id));
-	const scenarios = changedSurface
-		? (prior.scenarios ?? []).map((scenario) => (affectedStories.has(scenario.story) && scenario.cycle === cycle ? clearScenarioRecord(scenario) : scenario))
-		: prior.scenarios;
-	mergeWrite(sessionId, { actors, device_profiles: deviceProfiles, ...(changedSurface ? { scenarios } : {}) });
+	// A profile id keeps its name when its definition changes; profiles are shared by id, so every actor's scenarios on it lose their record.
+	const clearsRecords = changedSurface || redefinedProfileIds.size > 0;
+	const scenarios = (prior.scenarios ?? []).map((scenario) => {
+		if (scenario.cycle !== cycle) return scenario;
+		const onChangedSurface = changedSurface && affectedStories.has(scenario.story);
+		const onRedefinedProfile = scenario.profile !== undefined && redefinedProfileIds.has(scenario.profile);
+		return onChangedSurface || onRedefinedProfile ? clearScenarioRecord(scenario) : scenario;
+	});
+	mergeWrite(sessionId, { actors, device_profiles: deviceProfiles, ...(clearsRecords ? { scenarios } : {}) });
 }
 
 export interface AddStoryOpts {
@@ -694,7 +711,7 @@ function validateStoryContract(value: unknown, acceptanceCriteria: string[]): Qa
 }
 
 export function addStory(sessionId: string, opts: AddStoryOpts): void {
-	const id = nonEmpty(opts.id, "id");
+	const id = localId(opts.id, "id");
 	const actor = nonEmpty(opts.actor, "actor");
 	withStateLock(resolveStatePath(sessionId), () => {
 		const prior = readPrior(sessionId);
@@ -882,8 +899,8 @@ export interface AuthorScenarioOpts extends ScenarioFieldOpts {
 
 /** Authors one user scenario: who does what, in which state, and what they must observe. */
 export function authorScenario(sessionId: string, opts: AuthorScenarioOpts): void {
-	const story = nonEmpty(opts.story, "story");
-	const id = nonEmpty(opts.id, "id");
+	const story = localId(opts.story, "story");
+	const id = localId(opts.id, "id");
 	const priority = opts.priority;
 	if (!isOneOf(priority, PRIORITIES)) throw new Error(`priority must be one of ${PRIORITIES.join("|")}`);
 	const steps = opts.steps.map((step) => nonEmpty(step, "steps item"));
@@ -1105,6 +1122,14 @@ function recordScenarioUnlocked(sessionId: string, opts: RecordScenarioOpts): vo
 	}
 	if ((opts.status === "pass" || opts.status === "fail") && scenarioNeedsVisualProof({ evidence, profile: authored.profile }, driver) && !visualEvidenceComplete(evidence, stateProbe)) {
 		throw new Error(`visual scenario requires separate before/after screenshot files and an action record${authored.profile ? ` captured on device profile "${authored.profile}"` : ""}; capture the asserted screen, then record-scenario again`);
+	}
+	if (authored.profile && evidence && (opts.status === "pass" || opts.status === "fail")) {
+		const shots = new Set([evidence.before, evidence.after].map((p) => (p ? stateProbe(p).sha256 : undefined)));
+		for (const other of scenarios) {
+			if (other === authored || other.cycle !== cycle || !other.profile || other.profile === authored.profile) continue;
+			const clash = [other.evidence?.before, other.evidence?.after].find((p) => p && shots.has(stateProbe(p).sha256));
+			if (clash) throw new Error(`same screenshot is already evidence for scenario "${other.id}" of story "${other.story}" on another device profile "${other.profile}"; capture each profile's own screen`);
+		}
 	}
 	const binding = opts.caseRun ? caseRunBinding(prior, sessionId, selector, opts.status, evidence, opts.caseRun, driver) : undefined;
 	const { status: _status, blocked: _blocked, evidence: _evidence, evidence_review: _review, case_run: _caseRun, case: _case, ...record } = authored;
@@ -1550,9 +1575,9 @@ const ROSTER: CliCommand[] = [
 	{ name: "advance-phase", authority: "ai", effect: "advances to the named phase (chain-gated)" },
 	{ name: "inc-cycle", authority: "ai", effect: "increments the fix-loop cycle counter" },
 	{ name: "add-actor", authority: "ai", effect: "adds one actor: --client-impact none|contract|render with --client-impact-reason; render needs a screen driver and --profiles '[ids]' from qa-device-profiles.ts" },
-	{ name: "add-story", authority: "ai", effect: "adds a story with goal, given/when/then JSON arrays, and acceptance-criteria index links" },
+	{ name: "add-story", authority: "ai", effect: "adds a story with goal, given/when/then JSON arrays, and acceptance-criteria index links; --id must not contain ':'" },
 	{ name: "record-story-provenance", authority: "ai", effect: "records JSON {features:[{id,revision,entrypoints,states}],code_ref}; features non-empty, entrypoints/states may be empty" },
-	{ name: "author-scenario", authority: "ai", effect: "authors one user scenario: --story --id --title --preconditions --steps '[…]' --expected --why-needed --priority H|M|L [--risks '[1..6]'] [--profile id]" },
+	{ name: "author-scenario", authority: "ai", effect: "authors one user scenario: --story --id (neither contains ':') --title --preconditions --steps '[…]' --expected --why-needed --priority H|M|L [--risks '[1..6]'] [--profile id]" },
 	{ name: "declare-risk-na", authority: "ai", effect: "declares an adversarial axis (--axis 1..6) that no scenario of this change can exercise, with --reason; once per cycle" },
 	{ name: "record-baseline", authority: "ai", effect: "records a story's BASELINE result: fail only when the change adds a build/test/lint failure; a failure the base commit has too is pass with a --note" },
 	{ name: "record-scenario", authority: "ai", effect: "records one scenario's execution result (--story --scenario --status pass|fail|blocked); --evidence-surface accepts the actor's own driver or \"test\" for an automated test run that exercises the scenario; optional --case-run RECEIPT binds replay provenance" },

@@ -163,8 +163,8 @@ describe("notes v2 작성 규칙(품질 핵심)", () => {
 		expect(skillMd).toContain("두괄식");
 	});
 
-	test("볼드는 핵심 행동 하나에만 쓴다는 규칙이 있다", () => {
-		expect(skillMd).toContain("볼드는 그 문장의 핵심 행동/대상 하나에만 쓴다");
+	test("볼드는 지시 하나에 한 번만 쓴다는 규칙이 있다", () => {
+		expect(skillMd).toContain("볼드는 지시 하나에 한 번만 쓴다");
 	});
 
 	test("프레임 캡션은 실제로 보이는 것만 쓴다는 규칙이 있다", () => {
@@ -183,7 +183,7 @@ describe("notes v2 작성 규칙(품질 핵심)", () => {
 	test("불린 이름·다루는 포지션·전원 대상을 해당하면 함께 태그한다는 규칙이 있다", () => {
 		expect(skillMd).toContain("셋을 함께 넣는다");
 		expect(skillMd).toContain("그 피드백이 다루는 포지션(코치가 지목한");
-		expect(skillMd).toContain("확인 안 되면 명단의 주포지션)은\n  `position_tags`");
+		expect(skillMd).toContain("확인 안 되면 명단의 주포지션)은 `position_tags`");
 	});
 });
 
@@ -217,6 +217,21 @@ describe("round-0 RED 기준선 실패 대응 (진입점/재개, bare fc 금지,
 	});
 });
 
+describe("이름표 읽기", () => {
+	test("클럽명·시그니처 접두·접미와 한글 자판으로 친 이름을 다룬다", () => {
+		expect(skillMd).toContain("클럽명");
+		expect(skillMd).toContain("한글 자판");
+	});
+});
+
+describe("notes 작성 루프(6단계)", () => {
+	test("유닛마다 notes next로 브리프를 받고 notes submit으로 기록하는 루프를 쓴다", () => {
+		const step6 = skillMd.slice(skillMd.indexOf("6. **notes 작성"), skillMd.indexOf("7. **frames**"));
+		expect(step6).toContain("fc.ts notes next");
+		expect(step6).toContain("fc.ts notes submit");
+	});
+});
+
 describe("SOURCE REVIEW — presentation-reviewer 원문 대조", () => {
 	test("notes 작성 단계(6단계)에 presentation-reviewer 디스패치가 명시되어 있다", () => {
 		expect(skillMd).toContain("SOURCE REVIEW");
@@ -237,7 +252,7 @@ describe("SOURCE REVIEW — presentation-reviewer 원문 대조", () => {
 
 	test("원문 대조 리뷰 체크리스트가 볼드 대상을 점검한다", () => {
 		expect(contractsMd).toContain("볼드가 평가어");
-		expect(contractsMd).toContain("실제로 한 잘못된 행동을 볼드로 짚는다");
+		expect(contractsMd).toContain("요청한 할 행동만 짚는가");
 	});
 
 	test("원문 대조 리뷰 체크리스트가 장면의 공수 방향을 점검한다", () => {

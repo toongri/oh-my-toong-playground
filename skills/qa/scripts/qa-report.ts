@@ -354,7 +354,7 @@ type ValidAcMapping = Omit<QaReportAcMapping, "satisfied" | "scenarioRefs"> & {
 	scenarioRefs: NonNullable<QaReportAcMapping["scenarioRefs"]>;
 };
 
-function validateAcMapping(view: QaView, value: unknown): ValidAcMapping | null {
+function validateAcMapping(view: QaView, value: unknown, acIndex: number): ValidAcMapping | null {
 	if (!isRecord(value)) return null;
 	const satisfied = value.satisfied;
 	if (satisfied !== "yes" && satisfied !== "no" && satisfied !== "partial" && satisfied !== "unverified") return null;
@@ -369,6 +369,8 @@ function validateAcMapping(view: QaView, value: unknown): ValidAcMapping | null 
 		seen.add(key);
 		const matches = (view.scenarios ?? []).filter((scenario) => scenario.story === ref.story && scenario.id === ref.scenario && scenario.cycle === view.cycle);
 		if (matches.length !== 1) return null;
+		const story = (view.stories ?? []).find((s) => s.id === ref.story);
+		if (!story?.contract?.acceptance_criteria?.includes(acIndex)) return null;
 		const status = matches[0].status;
 		if (status !== "pass" && status !== "fail" && status !== "blocked") return null;
 		refs.push({ story: ref.story, scenario: ref.scenario });
@@ -451,7 +453,7 @@ function renderRequirementFulfillment(view: QaView, narrative: QaReportNarrative
 	const acRows = acItems
 		.map((criterion, i) => {
 			const m = p?.requirementMapping?.[String(i)];
-			const valid = validateAcMapping(view, m);
+			const valid = validateAcMapping(view, m, i);
 			if (valid?.scenarioRefs.some((ref) => unverified.has(scenarioKey({ story: ref.story, id: ref.scenario })))) return `<div class="ac-map"><h3><span class="badge satisfied-unverified">미검증</span> ${escapeHtml(criterion)}</h3>${gap("근거 미검증 — 연결된 시나리오의 주장 검토가 없거나 부족하거나 오래되었습니다")}</div>`;
 			const badge = valid
 				? `<span class="badge satisfied-${escapeHtml(valid.satisfied)}">${escapeHtml(SATISFIED_LABEL[valid.satisfied])}</span>`
@@ -920,8 +922,11 @@ export function renderQaReport(
 			const actor = actorFor(view, story);
 			for (const scenario of scenariosForStory(view, story.id)) {
 				if (scenario.status !== "pass" && scenario.status !== "fail") continue;
-				if (!scenarioNeedsVisualProof(scenario, actor?.driver)) continue;
 				const key = scenarioKey(scenario);
+				if (!scenarioNeedsVisualProof(scenario, actor?.driver)) {
+					if (!narrative.scenarios?.[key]?.observed?.trim()) throw new Error(`observation required for ${key}`);
+					continue;
+				}
 				for (const source of scenario.evidence_review?.claims.flatMap((claim) => claim.sources) ?? []) {
 					const embed = readEvidence(source.path);
 					if (embed.kind === "missing" || embed.kind === "too-large") throw new Error(`visual claim evidence not embeddable for ${key}: ${source.path}; record a bounded source and review again`);

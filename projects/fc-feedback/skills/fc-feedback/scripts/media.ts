@@ -1,8 +1,9 @@
 /**
  * fc-feedback pure media module.
  *
- * Parses YouTube captions (json3 / vtt), mlx-whisper ASR segments, and ffmpeg
- * stderr output (silencedetect / showinfo), builds the transcript line list
+ * Parses YouTube captions (json3 / vtt), mlx-whisper ASR segments, timestamped
+ * YouTube comments, and ffmpeg stderr output (silencedetect / showinfo), builds
+ * the transcript line list
  * (plan §4-A), merges frame candidates (plan §4-B), computes sheet frame
  * times, and builds exact argv arrays for the external tools this skill
  * shells out to (yt-dlp, mlx-whisper, ffmpeg). No I/O — fc.ts is the thin
@@ -182,11 +183,21 @@ export interface WhisperSegment {
 	compression_ratio: number;
 }
 
+/** One YouTube comment as yt-dlp reports it (`parent` is "root" for a top-level comment). */
+export interface VideoComment {
+	id: string;
+	parent: string;
+	author: string;
+	text: string;
+}
+
 export interface VideoInput {
 	id: string;
 	part: number;
+	duration: number;
 	whisperSegments: WhisperSegment[] | null;
 	captions: ParsedCaptions | null;
+	comments: VideoComment[];
 }
 
 export interface AliasRule {
@@ -194,13 +205,10 @@ export interface AliasRule {
 	name: string;
 }
 
-export interface Line {
-	i: number;
-	video: string;
-	start: number;
-	end: number;
-	text: string;
-}
+/** A narrated (ASR/caption) line, or one timestamped item of a YouTube comment and its writer's handle. */
+export type Line =
+	| { i: number; video: string; start: number; end: number; text: string; source: "speech" }
+	| { i: number; video: string; start: number; end: number; text: string; source: "comment"; author: string };
 
 export interface LoopStat {
 	video: string;
@@ -216,12 +224,23 @@ export interface RemovedStats {
 	empty: number;
 }
 
+/** Comment items that became lines, and the ones that did not: a bare timestamp (`empty`), comment text outside any timestamp (`untimed`), a timestamp past the video's end (`out_of_range`). */
+export interface CommentStats {
+	lines: number;
+	empty: number;
+	untimed: number;
+	out_of_range: number;
+}
+
+export type SpeechMode = "asr" | "captions" | "none";
+
 export interface BuildLinesStats {
 	removed: RemovedStats;
 	loops: LoopStat[];
 	replaced_by_caption: number;
+	comments: CommentStats;
 	lines: number;
-	mode: "asr" | "captions";
+	mode: SpeechMode;
 }
 
 export interface BuildLinesResult {
@@ -333,31 +352,86 @@ function applyAliases(text: string, aliases: AliasRule[]): string {
 	return text.replace(new RegExp(pattern, "g"), (match) => replacement.get(match) ?? match);
 }
 
-interface CollectedLine {
-	video: string;
-	part: number;
-	start: number;
-	end: number;
-	text: string;
+type CollectedLine = { video: string; part: number; start: number; end: number; text: string } & (
+	| { source: "speech" }
+	| { source: "comment"; author: string }
+);
+
+/**
+ * `h:mm:ss` or `m:ss` — exactly two seconds digits and no adjacent digit/colon, so a ratio
+ * like "6:4"/"4:3" or "1:1:2" is never read as a timestamp.
+ */
+const COMMENT_TIMESTAMP = /(?<![\d:])(?:(\d{1,2}):)?(\d{1,2}):([0-5]\d)(?![\d:])/g;
+
+function timestampSeconds(match: RegExpMatchArray): number | null {
+	const minutes = Number(match[2]);
+	if (match[1] !== undefined && minutes > 59) return null;
+	return (match[1] === undefined ? 0 : Number(match[1]) * 3600) + minutes * 60 + Number(match[3]);
+}
+
+function cleanCommentText(text: string): string {
+	return text.replace(/\s+/g, " ").replace(/^[\s:\-–—·,.]+/, "").trim();
+}
+
+/**
+ * Splits each comment at its timestamps: the text after a timestamp (up to the next one) is the
+ * feedback for the scene starting there. A comment line spans `commentSceneSeconds`, clipped at
+ * the video's end.
+ */
+function collectCommentLines(video: VideoInput, stats: CommentStats): CollectedLine[] {
+	const collected: CollectedLine[] = [];
+	for (const comment of video.comments) {
+		const matches = [...comment.text.matchAll(COMMENT_TIMESTAMP)].filter((match) => timestampSeconds(match) !== null);
+		const prefix = matches.length === 0 ? comment.text : comment.text.slice(0, matches[0].index);
+		if (cleanCommentText(prefix) !== "") stats.untimed++;
+		matches.forEach((match, k) => {
+			const from = (match.index ?? 0) + match[0].length;
+			const to = k + 1 < matches.length ? matches[k + 1].index : comment.text.length;
+			const text = cleanCommentText(comment.text.slice(from, to));
+			const start = timestampSeconds(match) ?? 0;
+			if (text === "") {
+				stats.empty++;
+				return;
+			}
+			if (start >= video.duration) {
+				stats.out_of_range++;
+				return;
+			}
+			collected.push({
+				video: video.id,
+				part: video.part,
+				start,
+				end: Math.min(start + MEDIA_CONSTANTS.commentSceneSeconds, video.duration),
+				text,
+				source: "comment",
+				author: comment.author,
+			});
+			stats.lines++;
+		});
+	}
+	return collected;
 }
 
 /**
  * Builds the final transcript line list across all videos (plan §4-A):
  * loop-window collapse → compression_ratio>2.4 drop → greeting/empty-phrase
- * drop → (asr mode, when captions exist) caption-proximity drop → alias
+ * drop → (asr mode, when captions exist) caption-proximity drop, plus the
+ * timestamped comment lines (mode "none" skips speech entirely) → alias
  * normalization → sort by (part, start) → sequential `i`.
  */
 export function buildLines(input: {
 	videos: VideoInput[];
 	aliases: AliasRule[];
-	mode: "asr" | "captions";
+	mode: SpeechMode;
 }): BuildLinesResult {
 	const removed: RemovedStats = { cr: 0, phrase: 0, unsupported: 0, empty: 0 };
+	const comments: CommentStats = { lines: 0, empty: 0, untimed: 0, out_of_range: 0 };
 	const loops: LoopStat[] = [];
 	let replacedByCaption = 0;
 	const collected: CollectedLine[] = [];
 
 	for (const video of input.videos) {
+		collected.push(...collectCommentLines(video, comments));
 		if (input.mode === "asr") {
 			const expansion = expandLoopWindows(video, video.whisperSegments ?? []);
 			loops.push(...expansion.loops);
@@ -394,9 +468,10 @@ export function buildLines(input: {
 					start: candidate.start,
 					end: candidate.end,
 					text,
+					source: "speech",
 				});
 			}
-		} else {
+		} else if (input.mode === "captions") {
 			for (const line of video.captions?.lines ?? []) {
 				const text = line.text.trim();
 				if (text === "" || isBracketToken(text)) {
@@ -413,6 +488,7 @@ export function buildLines(input: {
 					start: line.start,
 					end: line.end,
 					text,
+					source: "speech",
 				});
 			}
 		}
@@ -423,13 +499,10 @@ export function buildLines(input: {
 		text: applyAliases(line.text, input.aliases),
 	}));
 	aliased.sort((a, b) => a.part - b.part || a.start - b.start);
-	const lines: Line[] = aliased.map((line, i) => ({
-		i,
-		video: line.video,
-		start: line.start,
-		end: line.end,
-		text: line.text,
-	}));
+	const lines: Line[] = aliased.map((line, i) => {
+		const base = { i, video: line.video, start: line.start, end: line.end, text: line.text };
+		return line.source === "comment" ? { ...base, source: "comment", author: line.author } : { ...base, source: "speech" };
+	});
 
 	if (lines.length === 0) throw new Error("전사 결과가 비어 있습니다");
 
@@ -439,6 +512,7 @@ export function buildLines(input: {
 			removed,
 			loops,
 			replaced_by_caption: replacedByCaption,
+			comments,
 			lines: lines.length,
 			mode: input.mode,
 		},
@@ -472,7 +546,7 @@ export function parseShowinfo(stderr: string): number[] {
 
 // ── Frame candidates (plan §4-B) ────────────────────────────────────────
 
-export type CandidateKind = "silence" | "scene" | "interval" | "manual";
+export type CandidateKind = "comment" | "silence" | "scene" | "interval" | "manual";
 
 export interface Candidate {
 	id: string;
@@ -482,15 +556,16 @@ export interface Candidate {
 	dur?: number;
 }
 
-const CANDIDATE_PRIORITY: Record<"silence" | "scene" | "interval", number> = {
-	silence: 0,
-	scene: 1,
-	interval: 2,
+const CANDIDATE_PRIORITY: Record<"comment" | "silence" | "scene" | "interval", number> = {
+	comment: 0,
+	silence: 1,
+	scene: 2,
+	interval: 3,
 };
 
 interface RawCandidate {
 	t: number;
-	kind: "silence" | "scene" | "interval";
+	kind: "comment" | "silence" | "scene" | "interval";
 	dur?: number;
 }
 
@@ -526,16 +601,18 @@ function assignCandidateIds(video: string, items: RawCandidate[]): Candidate[] {
 }
 
 /**
- * Merges silence/scene/interval frame candidates for one video: silence
+ * Merges comment/silence/scene/interval frame candidates for one video: a
+ * comment candidate sits exactly on a comment's timestamp; silence
  * t = max(start, end-1); candidates within 3s collapse to one, keeping the
- * highest-priority kind (silence > scene > interval); ids are c001… in
- * ascending t order.
+ * highest-priority kind (comment > silence > scene > interval); ids are
+ * c001… in ascending t order.
  */
 export function mergeCandidates(
-	input: { silences: Silence[]; scenes: number[]; duration: number; interval: number },
+	input: { silences: Silence[]; scenes: number[]; comments: number[]; duration: number; interval: number },
 	video: string,
 ): Candidate[] {
 	const raw: RawCandidate[] = [];
+	for (const t of input.comments) raw.push({ t, kind: "comment" });
 	for (const silence of input.silences)
 		raw.push({ t: Math.max(silence.start, silence.end - 1), kind: "silence", dur: silence.dur });
 	for (const t of input.scenes) raw.push({ t, kind: "scene" });
@@ -580,6 +657,8 @@ export function sheetTimes(
 
 export const MEDIA_CONSTANTS = {
 	maxCompressionRatio: 2.4,
+	/** A comment timestamp marks where a scene starts; its line covers this many seconds after it. */
+	commentSceneSeconds: 15,
 	loopMinRun: 3,
 	captionProximitySeconds: 5,
 	silenceNoiseDb: -50,
@@ -597,7 +676,10 @@ export const MEDIA_CONSTANTS = {
 			tile: "4x6",
 		},
 	},
-	yt: { videoFormat: "bv*[height<=480]" },
+	// 540 rather than 480: 16:9 uploads have no 540p rung, so they still get 480p, while 32:9
+	// ultrawide recordings get 1920x540 instead of 1280x360 — the extra width keeps name tags
+	// and the ball readable in extracted frames.
+	yt: { maxVideoHeight: 540, videoFormat: "bv*[height<=540]" },
 	whisper: {
 		default: "mlx-community/whisper-large-v3-turbo",
 		hq: "mlx-community/whisper-large-v3-mlx",
@@ -611,7 +693,7 @@ function assertNever(value: never): never {
 	throw new Error(`fc-feedback: unexpected value: ${JSON.stringify(value)}`);
 }
 
-/** yt-dlp argv. Captions try json3 first, falling back to vtt; video caps at 480p height. */
+/** yt-dlp argv. Captions try json3 first, falling back to vtt; video caps at `MEDIA_CONSTANTS.yt.maxVideoHeight`. */
 export function ytDlpArgs(
 	kind: "meta" | "captions" | "audio" | "video",
 	url: string,
@@ -626,6 +708,7 @@ export function ytDlpArgs(
 				"yt-dlp",
 				"--skip-download",
 				"--dump-single-json",
+				"--write-comments",
 				"--no-warnings",
 				...cookieArgs,
 				url,
@@ -677,6 +760,21 @@ export function ytDlpArgs(
 		default:
 			return assertNever(kind);
 	}
+}
+
+/** yt-dlp argv for a flat YouTube search: the top 10 results, one "<id> <title>" line each (no download, no per-video request). */
+export function ytSearchArgs(query: string): string[] {
+	return ["uvx", "yt-dlp", `ytsearch10:${query}`, "--flat-playlist", "--print", "%(id)s %(title)s"];
+}
+
+/** yt-dlp argv printing the channel URL of one video (`channel_url` of its metadata; no download). */
+export function ytChannelUrlArgs(videoUrl: string): string[] {
+	return ["uvx", "yt-dlp", videoUrl, "--skip-download", "--no-warnings", "--print", "channel_url"];
+}
+
+/** yt-dlp argv for a flat search inside one channel (`<channel URL>/search?query=<keyword>`): the top 10 results, one "<id> <title>" line each. */
+export function ytChannelSearchArgs(channelUrl: string, keyword: string): string[] {
+	return ["uvx", "yt-dlp", `${channelUrl}/search?query=${encodeURIComponent(keyword)}`, "--flat-playlist", "--playlist-end", "10", "--print", "%(id)s %(title)s"];
 }
 
 /** mlx-whisper argv (plan §4-A). No `--initial-prompt` — condition-on-previous-text is off instead. */
@@ -732,6 +830,16 @@ export function ffmpegFrameArgs(video: string, t: number, out: string): string[]
 	if (out.endsWith(".webp")) args.push("-c:v", "libwebp");
 	args.push(out);
 	return args;
+}
+
+/** True when `ffmpeg -hide_banner -encoders` lists the libwebp encoder (Homebrew's ffmpeg 9 bottle ships without it). */
+export function hasLibwebpEncoder(encodersStdout: string): boolean {
+	return /^\s*\S+\s+libwebp\s/m.test(encodersStdout);
+}
+
+/** libwebp's cwebp at ffmpeg libwebp's default quality, for when ffmpeg itself cannot encode webp. */
+export function cwebpArgs(png: string, out: string): string[] {
+	return ["cwebp", "-quiet", "-q", "75", png, "-o", out];
 }
 
 /** Contact-sheet argv: grid = plain tile, hud = cropped to the top-left HUD region before tiling. */

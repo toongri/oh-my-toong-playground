@@ -200,7 +200,7 @@ If an agent-browser step returns a non-zero exit code or the required assertion 
 | Screenshot captured | Before/after captures of the asserted state, referenced in evidence — a landing or splash capture does not count |
 | CJK / glyph rendering | CJK characters, emoji, and non-ASCII glyphs render without replacement boxes or mojibake |
 | Layout overflow | No element overflows its container; horizontal scroll width does not exceed viewport width |
-| Device profile | Set the viewport to the scenario's profile (logical width × height from `qa-device-profiles.ts get`) before the before-capture; every check above holds at that size, and a person can read and tap the changed screen |
+| Device profile | Set the viewport to the scenario's profile (logical width × height from `qa-device-profiles.ts get`) before the before-capture; every check above holds at that size, and a person can read and tap the changed screen; capture each profile's own screenshots, because the CLI refuses the same screenshot across profiles |
 
 ---
 

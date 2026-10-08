@@ -1,5 +1,7 @@
 {
   "session_title": "QA 임베드 불가 세션",
+  "recurring": [],
+  "matches_without_feedback": [],
   "matches": [
     {
       "title": "QA 경기",
@@ -9,17 +11,23 @@
           "summary": "embeddable:false 영상의 플레이스홀더 확인용 주제",
           "units": [
             {
-              "title": "임베드 불가 확인용 유닛",
+              "title": "센터백: 임베드 불가 화면 확인하기",
               "start_line": 0,
               "end_line": 0,
-              "position_tags": ["CB"],
-              "topic_tags": ["빌드업"],
+              "position_tags": [
+                "CB"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
               "member_ids": [],
-              "key_frame_candidate_ids": []
+              "key_frame_candidate_ids": [],
+              "group_positions": []
             }
           ]
         }
-      ]
+      ],
+      "lineup": {}
     }
   ]
 }
