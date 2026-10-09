@@ -412,10 +412,13 @@ describe("qa-report renderer", () => {
 		expect(audit).toContain("app 재고 화면"); // per-scenario driven_at boundary
 	});
 
-	test("도달이 막힌 액터는 막힌 사유를 배지로 보여줌", () => {
-		const view = baseView({ actors: [{ ...baseView().actors![0], reachable: "unknown" }] });
+	test("도달이 막힌 액터는 리더에 중립 배지만 보이고 기록된 원문 사유는 감사에 남는다", () => {
+		const view = baseView({ actors: [{ ...baseView().actors![0], reachable: "no: adb 연결 거부됨" }] });
 		const html = renderQaReport(view, {}, fakeReader)!;
-		expect(html.slice(html.indexOf("<h2>액터"), html.indexOf(READER_START))).toContain("도달 막힘: unknown");
+		const actorSection = html.slice(html.indexOf("<h2>액터"), html.indexOf(READER_START));
+		expect(actorSection).toContain("도달 막힘");
+		expect(actorSection).not.toContain("adb 연결 거부됨");
+		expect(auditSection(html)).toContain("adb 연결 거부됨");
 	});
 
 	test("renders recorded PASS/FAIL and evidence paths verbatim from state, not re-narrated", () => {
@@ -527,7 +530,7 @@ describe("qa-report renderer", () => {
 		expect(readerSection(renderQaReport(stale, {}, fakeReader)!)).not.toContain("동작이 바뀌지 않는 변경으로 선언됨");
 	});
 
-	test("검증 불가 시나리오는 한계와 도달 지점을 리더에 보이고 시도 내역은 감사에 남기며 상단 배너로 알린다", () => {
+	test("검증 불가 시나리오 카드는 고정 문구와 관찰 서술만 보이고 원문 한계는 감사에 남기며 상단 배너로 알린다", () => {
 		const view = baseView({
 			scenarios: [
 				baseView().scenarios![0],
@@ -540,30 +543,71 @@ describe("qa-report renderer", () => {
 				}),
 			],
 		});
-		const html = renderQaReport(view, {}, fakeReader)!;
+		const narrative = { scenarios: { "story-1:sc-3": { observed: "두 번째 접속을 시도하는 단계까지만 확인했다." } } };
+		const html = renderQaReport(view, narrative, fakeReader)!;
 		const scenarios = html.slice(html.indexOf("<h2>유저 시나리오 · 근거"), html.indexOf("<h2>시나리오 상세 기록"));
-		expect(scenarios).toContain('class="scenario-card sc-blocked"');
-		expect(scenarios).toContain("검증 불가 — PGlite는 연결이 하나뿐임");
-		expect(scenarios.slice(scenarios.indexOf('class="scenario-card sc-blocked"'))).not.toContain("presentation.md 참조");
-		expect(scenarios).toContain("확인한 가장 깊은 지점: PGlite 단일 연결");
+		const card = scenarios.slice(scenarios.indexOf('class="scenario-card sc-blocked"'));
+		expect(card).toContain("검증 불가 — 아래 설명의 한계로 이 시나리오를 끝까지 입증하지 못했습니다");
+		expect(card).toContain("두 번째 접속을 시도하는 단계까지만 확인했다.");
+		expect(card).not.toContain("PGlite");
+		expect(card).not.toContain("확인한 가장 깊은 지점");
 		expect(scenarios).toContain("다룬 위험: 중단·동시 실행");
 		expect(scenarios).not.toContain("docker compose up");
 		const audit = html.slice(html.indexOf("<h2>시나리오 상세 기록"));
+		expect(audit).toContain("PGlite는 연결이 하나뿐임");
+		expect(audit).toContain("PGlite 단일 연결");
 		expect(audit).toContain("docker compose up → daemon 없음");
 		expect(audit).toContain("/evidence/attempts.txt");
 		expect(html.indexOf("검증 불가 시나리오 1건")).toBeGreaterThan(-1);
 		expect(html.indexOf("검증 불가 시나리오 1건")).toBeLessThan(html.indexOf("<h2>판정"));
 		expect(html.indexOf("검증 불가 시나리오 1건")).toBeLessThan(html.indexOf("<h2>기능 개요"));
+		expect(html).not.toContain("변경 밖의 한계");
 	});
 
-	test("막힌 반복 검사는 상단 배너에 막힌 이유와 함께 나온다", () => {
+	test("검증 불가 시나리오 카드도 기록된 전후 화면을 관찰 서술과 함께 보여준다", () => {
+		const blockedWith = (evidence?: QaScenario["evidence"]) =>
+			baseView({ scenarios: [scenario({ id: "sc-3", status: "blocked", evidence, blocked: { obstacle: "o-raw", attempts: ["a"], deepest_reachable: "d-raw", attempt_log: "/l.txt" } })] });
+		const narrative = { scenarios: { "story-1:sc-3": { observed: "로그인 화면까지 열렸다." } } };
+		const html = renderQaReport(blockedWith({ path: "/evidence/action.png", surface: "agent-device", before: "/evidence/before.png", after: "/evidence/after.png" }), narrative, fakeReader)!;
+		const card = readerSection(html).slice(readerSection(html).indexOf('class="scenario-card sc-blocked"'));
+		expect(card.match(/<img /g)?.length).toBe(3);
+		expect(card.indexOf("행동 전 화면")).toBeLessThan(card.indexOf("로그인 화면까지 열렸다."));
+		expect(card.indexOf("로그인 화면까지 열렸다.")).toBeLessThan(card.indexOf("행동 후 화면"));
+		expect(card).not.toContain("o-raw");
+		expect(card).not.toContain("d-raw");
+		const bare = renderQaReport(blockedWith(undefined), narrative, fakeReader)!;
+		expect(readerSection(bare)).not.toContain("<img ");
+		expect(readerSection(bare)).toContain("로그인 화면까지 열렸다.");
+	});
+
+	test("최종 화면 보고서는 검증 불가 시나리오의 관찰 서술 누락을 거부하고 화면은 요구하지 않는다", () => {
+		const view = baseView({ scenarios: [scenario({ id: "sc-3", status: "blocked", blocked: { obstacle: "o", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } })] });
+		expect(() => renderQaReport(view, {}, fakeReader, undefined, undefined, true)).toThrow("observation required for story-1:sc-3");
+		expect(() => renderQaReport(view, { scenarios: { "story-1:sc-3": { observed: "  " } } }, fakeReader, undefined, undefined, true)).toThrow("observation required for story-1:sc-3");
+		expect(renderQaReport(view, { scenarios: { "story-1:sc-3": { observed: "첫 화면에서 멈췄다." } } }, fakeReader, undefined, undefined, true)).toContain("첫 화면에서 멈췄다.");
+	});
+
+	test("리더 이미지 슬롯에는 증거 파일 경로가 보이지 않고 감사에는 남는다", () => {
+		const html = renderQaReport(baseView(), {}, fakeReader)!;
+		expect(readerSection(html)).toContain("<img ");
+		expect(readerSection(html)).not.toContain("/evidence/before.png");
+		expect(readerSection(html)).not.toContain("evidence-slot-path");
+		expect(auditSection(html)).toContain("/evidence/before.png");
+	});
+
+	test("막힌 반복 검사는 상단 배너에 고정 문구만 보이고 막힌 이유와 시도 내역은 감사에 남는다", () => {
 		const view = baseView();
-		view.run_checks = { ...view.run_checks, flaky_rerun: { result: "blocked", cycle: view.cycle, blocked: { obstacle: "에뮬레이터가 부팅하지 못함", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } } };
+		view.run_checks = { ...view.run_checks, flaky_rerun: { result: "blocked", cycle: view.cycle, blocked: { obstacle: "에뮬레이터가 부팅하지 못함", attempts: ["emulator -avd x → timeout"], deepest_reachable: "부팅 화면", attempt_log: "/l.txt" } } };
 		const html = renderQaReport(view, {}, fakeReader)!;
-		expect(html).toContain("반복 검사 검증 불가 — 에뮬레이터가 부팅하지 못함");
+		const top = html.slice(0, html.indexOf("<h2>기능 개요"));
+		expect(top).toContain("반복 검사 검증 불가 — 환경 한계로 같은 시나리오를 다시 돌려 결과가 같은지 확인하지 못했습니다.");
+		expect(top).not.toContain("에뮬레이터가 부팅하지 못함");
 		expect(html.indexOf("반복 검사 검증 불가")).toBeLessThan(html.indexOf("<h2>판정"));
-		view.run_checks = { ...view.run_checks, flaky_rerun: { result: "blocked", cycle: view.cycle, blocked: { obstacle: "에뮬레이터가 부팅하지 못했다.", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } } };
-		expect(renderQaReport(view, {}, fakeReader)!).toContain("부팅하지 못했다. 같은 시나리오를");
+		const audit = auditSection(html);
+		expect(audit).toContain("에뮬레이터가 부팅하지 못함");
+		expect(audit).toContain("emulator -avd x → timeout");
+		expect(audit).toContain("부팅 화면");
+		expect(audit).toContain("/l.txt");
 	});
 
 	test("검증 불가 배너는 현재 사이클의 blocked 시나리오가 있을 때만, 개수와 제목과 함께 나온다", () => {
@@ -861,10 +905,12 @@ describe("qa-report renderer", () => {
 
 	test("an oversized (too-large) screenshot renders a placeholder in its card, not a false 'no evidence' gap", () => {
 		const reader: EvidenceReader = (path) => ({ kind: "too-large", path, size: 5 * 1024 * 1024 });
-		const scen = readerSection(renderQaReport(baseView(), {}, reader)!);
+		const html = renderQaReport(baseView(), {}, reader)!;
+		const scen = readerSection(html);
 		expect(scen).not.toContain("실제 소프트웨어 관찰 근거가 없습니다");
 		expect(scen).toContain("너무 커서");
-		expect(scen).toContain("/evidence/action.png");
+		expect(scen).not.toContain("/evidence/action.png");
+		expect(auditSection(html)).toContain("/evidence/action.png");
 	});
 
 	test("a screenshot shared by two scenario cards renders on BOTH cards (no false gap on the second)", () => {
