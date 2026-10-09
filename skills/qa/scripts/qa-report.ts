@@ -292,6 +292,8 @@ function imageSlot(label: string, path: string | undefined, readEvidence: Eviden
 		const mib = (embed.size / (1024 * 1024)).toFixed(1);
 		return evidenceSlotHtml(label, `<p class="evidence-note">스크린샷이 너무 커서 임베드하지 않음 (${escapeHtml(mib)} MiB) — 감사 기록의 증거 경로로 확인</p>`);
 	}
+	// A recorded screenshot that is gone would silently vanish from the card; text logs stay audit-only.
+	if (context.strictVisualEvidence && embed.kind === "missing" && IMAGE_MIME[extname(path).toLowerCase()]) throw new Error(`visual evidence missing: ${path}; record the capture again and render again`);
 	if (embed.kind !== "image") return ""; // text/missing → audit, not the reader
 	// The reader classifies images by extension; a corrupt capture would render as a broken <img>.
 	if (context.strictVisualEvidence && !hasValidImageSignature(embed.dataUri)) throw new Error(`visual evidence is not a valid image: ${path}; record the capture again and render again`);

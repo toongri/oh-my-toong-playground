@@ -603,6 +603,10 @@ describe("qa-report renderer", () => {
 		const view = baseView({ scenarios: [scenario({ id: "sc-3", status: "blocked", evidence: { path: "/evidence/log.txt", surface: "agent-device", before: "/evidence/before.png", action: "/evidence/action.png", after: "/evidence/after.png" }, blocked: { obstacle: "o", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } })] });
 		const corruptAction: EvidenceReader = (path) => (path === "/evidence/action.png" ? fakeReader(path) : validImageReader(path));
 		expect(() => renderQaReport(view, narrative, corruptAction, undefined, undefined, true)).toThrow("/evidence/action.png");
+		const missingAction: EvidenceReader = (path) => (path === "/evidence/action.png" ? { kind: "missing", path } : validImageReader(path));
+		expect(() => renderQaReport(view, narrative, missingAction, undefined, undefined, true)).toThrow("/evidence/action.png");
+		const missingLog: EvidenceReader = (path) => (path === "/evidence/log.txt" ? { kind: "missing", path } : validImageReader(path));
+		expect(renderQaReport(view, narrative, missingLog, undefined, undefined, true)).toContain("첫 화면에서 멈췄다.");
 		expect(renderQaReport(view, narrative, validImageReader, undefined, undefined, true)!.match(/<img /g)?.length).toBe(3);
 	});
 
