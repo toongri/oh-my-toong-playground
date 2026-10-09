@@ -605,6 +605,9 @@ describe("qa-report renderer", () => {
 		expect(() => renderQaReport(view, narrative, corruptAction, undefined, undefined, true)).toThrow("/evidence/action.png");
 		const missingAction: EvidenceReader = (path) => (path === "/evidence/action.png" ? { kind: "missing", path } : validImageReader(path));
 		expect(() => renderQaReport(view, narrative, missingAction, undefined, undefined, true)).toThrow("/evidence/action.png");
+		const svg = (body: string): EvidenceReader => (path) => (path === "/evidence/action.png" ? { kind: "image", dataUri: `data:image/svg+xml;base64,${Buffer.from(body).toString("base64")}` } : validImageReader(path));
+		expect(renderQaReport(view, narrative, svg('<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"></svg>'), undefined, undefined, true)!.match(/<img /g)?.length).toBe(3);
+		expect(() => renderQaReport(view, narrative, svg("not an svg"), undefined, undefined, true)).toThrow("/evidence/action.png");
 		const missingLog: EvidenceReader = (path) => (path === "/evidence/log.txt" ? { kind: "missing", path } : validImageReader(path));
 		expect(renderQaReport(view, narrative, missingLog, undefined, undefined, true)).toContain("첫 화면에서 멈췄다.");
 		expect(renderQaReport(view, narrative, validImageReader, undefined, undefined, true)!.match(/<img /g)?.length).toBe(3);
