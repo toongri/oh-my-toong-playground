@@ -598,6 +598,14 @@ describe("qa-report renderer", () => {
 		expect(renderQaReport(blockedWith("/evidence/before.png"), narrative, validImageReader, undefined, undefined, true)).toContain("첫 화면에서 멈췄다.");
 	});
 
+	test("최종 보고서는 카드에 그릴 어떤 화면 칸이든 이미지 시그니처가 깨졌으면 거부한다", () => {
+		const narrative = { scenarios: { "story-1:sc-3": { observed: "첫 화면에서 멈췄다." } } };
+		const view = baseView({ scenarios: [scenario({ id: "sc-3", status: "blocked", evidence: { path: "/evidence/log.txt", surface: "agent-device", before: "/evidence/before.png", action: "/evidence/action.png", after: "/evidence/after.png" }, blocked: { obstacle: "o", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } })] });
+		const corruptAction: EvidenceReader = (path) => (path === "/evidence/action.png" ? fakeReader(path) : validImageReader(path));
+		expect(() => renderQaReport(view, narrative, corruptAction, undefined, undefined, true)).toThrow("/evidence/action.png");
+		expect(renderQaReport(view, narrative, validImageReader, undefined, undefined, true)!.match(/<img /g)?.length).toBe(3);
+	});
+
 	test("리더 이미지 슬롯에는 증거 파일 경로가 보이지 않고 감사에는 남는다", () => {
 		const html = renderQaReport(baseView(), {}, fakeReader)!;
 		expect(readerSection(html)).toContain("<img ");
