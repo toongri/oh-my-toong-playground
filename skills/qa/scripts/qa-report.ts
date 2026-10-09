@@ -959,7 +959,7 @@ export function renderQaReport(
 				const key = scenarioKey(scenario);
 				const embeddableScreenshot = (path: string | undefined): boolean => {
 					const embed = path ? readEvidence(path) : undefined;
-					return embed?.kind === "image" && /^data:image\/(png|jpeg|webp|gif);base64,/.test(embed.dataUri);
+					return embed?.kind === "image" && hasValidImageSignature(embed.dataUri);
 				};
 				if (scenario.status === "blocked") {
 					if (!narrative.scenarios?.[key]?.observed?.trim()) throw new Error(`observation required for ${key}`);
