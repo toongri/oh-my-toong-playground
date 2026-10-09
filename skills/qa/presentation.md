@@ -8,7 +8,7 @@ never dumbed down, big-picture diagrams — different subject: **users and their
 product experience, not functions and files.**
 
 ## Core principle — the completion condition is a person, not a document
-For a screen scenario, the required scenario-card structure is **before image → actor action and observed explanation → after image**. Both images are captures from that scenario's actual software/device run. An authored observation accompanies them; it does not replace either image. API/CLI and test scenarios instead carry an observation grounded in the received response, output, or the test's assertions. A screenshot of a log is not UI proof.
+For a screen scenario, the required scenario-card structure is **before image → actor action and observed explanation → after image**. Both images are captures from that scenario's actual software/device run. An authored observation accompanies them; it does not replace either image. API/CLI and test scenarios instead carry an observation grounded in the received response, output, or the test's assertions. A screenshot of a log is not UI proof. A `blocked` screen scenario is the exception: it shows the recorded before/after images if any exist (not required, since it may never reach the screen), and its `observed` is required.
 
 The final `qa-report.ts` CLI validates visual images and observations before writing. Missing, unreadable, oversized, or cumulatively unembeddable images block the final report; a path-only placeholder does not satisfy visual proof. Optimize captures, update their recorded paths, and re-render. Inspect the actual HTML cards before completion, checking that each image shows the claimed actor, screen, and asserted state. Capture failure leaves an evidence gap, not an invented pass/fail or an `na` excuse.
 
@@ -194,7 +194,7 @@ there is no separate actor-roster table).
   that use — at their boundary, per the hard rule above. The reader block shows the
   actor's name, this impact narrative, how far the change reaches their client
   (the recorded client impact and its reason, plus the device profiles for a
-  screen change), and whether the boundary was reachable; the
+  screen change), and whether the boundary was reachable (a blocked boundary shows only a "도달 막힘" badge; the raw `reachable` text is audit-only); the
   concrete per-scenario boundary + driver live in the 시나리오 상세 기록 audit, not
   here — do not restate them in prose.
 - **Scenario overview (`scenarioFlows`, keyed by story id)** — for each recorded
@@ -221,8 +221,10 @@ there is no separate actor-roster table).
   card (a rendered screen a PO reads directly), labeled with its device profile. The card does **not** surface the
   record's technical fields (`driven_at`, `why_needed`, the boundary code path);
   those live in the record-faithful audit section below.
-  A `blocked` card shows the structural limit and the deepest point reached. For a
-  `blocked` scenario, write `observed` as why it could not run, in product terms.
+  A `blocked` card shows the fixed "검증 불가" status line, `observed` (required), and the
+  recorded before/after images if any. Write `observed` in product terms: what was
+  confirmed and what could not be proven. The raw obstacle, attempts, deepest point
+  reached and attempt log are audit-only; they never appear in a card or the banner.
   Risks declared not applicable are not cards: the renderer folds them under one
   "펼쳐 보기" toggle with their reasons, so they never crowd the scenarios.
 - **Big picture (`bigPicture`)** — a mermaid diagram of the user flows / affected
