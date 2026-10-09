@@ -957,8 +957,16 @@ export function renderQaReport(
 			for (const scenario of scenariosForStory(view, story.id)) {
 				if (scenario.status !== "pass" && scenario.status !== "fail" && scenario.status !== "blocked") continue;
 				const key = scenarioKey(scenario);
+				const embeddableScreenshot = (path: string | undefined): boolean => {
+					const embed = path ? readEvidence(path) : undefined;
+					return embed?.kind === "image" && /^data:image\/(png|jpeg|webp|gif);base64,/.test(embed.dataUri);
+				};
 				if (scenario.status === "blocked") {
 					if (!narrative.scenarios?.[key]?.observed?.trim()) throw new Error(`observation required for ${key}`);
+					// Captures are optional for blocked, but a recorded one must still render.
+					for (const path of [scenario.evidence?.before, scenario.evidence?.after]) {
+						if (path && !embeddableScreenshot(path)) throw new Error(`visual evidence missing or not embeddable for ${key}: ${path}`);
+					}
 					continue;
 				}
 				if (!scenarioNeedsVisualProof(scenario, actor?.driver)) {
@@ -971,10 +979,7 @@ export function renderQaReport(
 					if (embed.kind === "image" && !hasValidImageSignature(embed.dataUri)) throw new Error(`visual claim evidence not embeddable for ${key}: ${source.path}; record a bounded source and review again`);
 				}
 				for (const path of [scenario.evidence?.before, scenario.evidence?.after]) {
-					const embed = path ? readEvidence(path) : undefined;
-					if (embed?.kind !== "image" || !/^data:image\/(png|jpeg|webp|gif);base64,/.test(embed.dataUri)) {
-						throw new Error(`visual evidence missing or not embeddable for ${key}: ${path ?? "missing before/after screenshot"}`);
-					}
+					if (!embeddableScreenshot(path)) throw new Error(`visual evidence missing or not embeddable for ${key}: ${path ?? "missing before/after screenshot"}`);
 				}
 				if (!narrative.scenarios?.[key]?.observed?.trim()) throw new Error(`visual observation required for ${key}`);
 			}

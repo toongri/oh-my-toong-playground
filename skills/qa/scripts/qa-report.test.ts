@@ -587,6 +587,16 @@ describe("qa-report renderer", () => {
 		expect(renderQaReport(view, { scenarios: { "story-1:sc-3": { observed: "첫 화면에서 멈췄다." } } }, fakeReader, undefined, undefined, true)).toContain("첫 화면에서 멈췄다.");
 	});
 
+	test("최종 화면 보고서는 검증 불가 시나리오에 기록된 전후 화면이 사라졌거나 이미지가 아니면 거부한다", () => {
+		const narrative = { scenarios: { "story-1:sc-3": { observed: "첫 화면에서 멈췄다." } } };
+		const blockedWith = (before?: string, after?: string) =>
+			baseView({ scenarios: [scenario({ id: "sc-3", status: "blocked", evidence: { path: "/evidence/log.txt", surface: "agent-device", before, after }, blocked: { obstacle: "o", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } })] });
+		const missingAfter: EvidenceReader = (path) => (path === "/evidence/after.png" ? { kind: "missing", path } : fakeReader(path));
+		expect(() => renderQaReport(blockedWith("/evidence/before.png", "/evidence/after.png"), narrative, missingAfter, undefined, undefined, true)).toThrow("visual evidence missing or not embeddable for story-1:sc-3: /evidence/after.png");
+		expect(() => renderQaReport(blockedWith("/evidence/before.txt"), narrative, fakeReader, undefined, undefined, true)).toThrow("visual evidence missing or not embeddable for story-1:sc-3: /evidence/before.txt");
+		expect(renderQaReport(blockedWith("/evidence/before.png"), narrative, fakeReader, undefined, undefined, true)).toContain("첫 화면에서 멈췄다.");
+	});
+
 	test("리더 이미지 슬롯에는 증거 파일 경로가 보이지 않고 감사에는 남는다", () => {
 		const html = renderQaReport(baseView(), {}, fakeReader)!;
 		expect(readerSection(html)).toContain("<img ");
