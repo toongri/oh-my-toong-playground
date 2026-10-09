@@ -266,10 +266,9 @@ function hasValidImageSignature(dataUri: string): boolean {
  * bytes live in the audit section (`renderRawEvidence`). Non-image evidence
  * returns "" and is left unconsumed so the audit can still render it.
  */
-function evidenceSlotHtml(label: string, path: string, inner: string): string {
+function evidenceSlotHtml(label: string, inner: string): string {
 	return (
-		`<div class="evidence-slot"><div class="evidence-slot-label">${escapeHtml(label)}</div>${inner}` +
-		`<div class="evidence-slot-path"><code>${escapeHtml(path)}</code></div></div>`
+		`<div class="evidence-slot"><div class="evidence-slot-label">${escapeHtml(label)}</div>${inner}</div>`
 	);
 }
 
@@ -291,17 +290,24 @@ function imageSlot(label: string, path: string | undefined, readEvidence: Eviden
 		// The screenshot EXISTS but is too big to inline — show a placeholder with the
 		// path so the card does not misread as "no evidence recorded" (a false gap).
 		const mib = (embed.size / (1024 * 1024)).toFixed(1);
-		return evidenceSlotHtml(label, path, `<p class="evidence-note">스크린샷이 너무 커서 임베드하지 않음 (${escapeHtml(mib)} MiB) — 아래 경로로 확인</p>`);
+		return evidenceSlotHtml(label, `<p class="evidence-note">스크린샷이 너무 커서 임베드하지 않음 (${escapeHtml(mib)} MiB) — 감사 기록의 증거 경로로 확인</p>`);
 	}
+	// A recorded screenshot that is gone would silently vanish from the card; text logs stay audit-only.
+	if (context.strictVisualEvidence && embed.kind === "missing" && IMAGE_MIME[extname(path).toLowerCase()]) throw new Error(`visual evidence missing: ${path}; record the capture again and render again`);
 	if (embed.kind !== "image") return ""; // text/missing → audit, not the reader
+	// The reader classifies images by extension; a corrupt capture would render as a broken <img>.
+	// SVG is text, so it has no magic bytes: check that it holds an <svg> root instead.
+	const svg = /^data:image\/svg\+xml;base64,(.*)$/.exec(embed.dataUri);
+	const validImage = svg ? /<svg[\s>]/i.test(Buffer.from(svg[1], "base64").toString("utf8")) : hasValidImageSignature(embed.dataUri);
+	if (context.strictVisualEvidence && !validImage) throw new Error(`visual evidence is not a valid image: ${path}; record the capture again and render again`);
 	const embedBytes = embeddedByteLength(embed);
 	if (embedBytes > 0 && context.embeddedBytes + embedBytes > MAX_TOTAL_EMBED_BYTES) {
 		if (context.strictVisualEvidence) throw new Error("visual evidence exceeds the total embed budget; optimize captures and render again");
 		// Over budget: keep the reference visible rather than dropping it into a false gap.
-		return evidenceSlotHtml(label, path, `<p class="evidence-note">임베드 예산 초과 — 아래 경로로 확인</p>`);
+		return evidenceSlotHtml(label, `<p class="evidence-note">임베드 예산 초과 — 감사 기록의 증거 경로로 확인</p>`);
 	}
 	context.embeddedBytes += embedBytes;
-	return evidenceSlotHtml(label, path, `<details class="image-view"><summary>원본 크기로 확대</summary></details><div class="image-frame" tabindex="0" role="group" aria-label="${escapeHtml(label)}"><img src="${escapeHtml(embed.dataUri)}" alt="${escapeHtml(label)} evidence"></div>`);
+	return evidenceSlotHtml(label, `<details class="image-view"><summary>원본 크기로 확대</summary></details><div class="image-frame" tabindex="0" role="group" aria-label="${escapeHtml(label)}"><img src="${escapeHtml(embed.dataUri)}" alt="${escapeHtml(label)} evidence"></div>`);
 }
 
 /** A visible marker for a required presentation slot the author left unwritten. */
@@ -424,7 +430,7 @@ function renderActors(view: QaView, narrative: QaReportNarrative): string {
 	const blocks = (view.actors ?? [])
 		.map((actor) => {
 			const r = String(actor.reachable ?? "");
-			const reach = r === "yes" ? ` <span class="badge badge-pass">도달함</span>` : r ? ` <span class="badge badge-fail">도달 막힘: ${escapeHtml(r)}</span>` : "";
+			const reach = r === "yes" ? ` <span class="badge badge-pass">도달함</span>` : r ? ` <span class="badge badge-fail">도달 막힘</span>` : "";
 			const impact = actor.client_impact
 				? `<p class="client-impact"><strong>${escapeHtml(CLIENT_IMPACT_LABEL[actor.client_impact] ?? actor.client_impact)}</strong>${actor.client_impact_reason ? ` · ${escapeHtml(actor.client_impact_reason)}` : ""}</p>`
 				: gap("이 유저의 클라이언트 영향 판단이 기록되지 않았습니다");
@@ -488,6 +494,13 @@ function riskTags(scenario: QaScenario): string {
 		: `<p class="sc-risks">정상 흐름</p>`;
 }
 
+/** The action/after screenshots of one scenario (the before screenshot has its own slot), in reader order. */
+function shotSlots(e: QaScenario["evidence"], readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
+	return e
+		? [...new Set([e.action, e.after, e.path])].filter((path) => path !== e.before).map((path) => imageSlot(path === e.after ? "행동 후 화면" : "행동 기록", path, readEvidence, context)).filter(Boolean).join("")
+		: "";
+}
+
 /** One reader card for one user scenario: what the user did, what they should see, what QA saw. */
 function renderScenarioCard(view: QaView, scenario: QaScenario, actor: QaActor | undefined, narrative: QaReportNarrative, readEvidence: EvidenceReader, context: EvidenceRenderContext, unverified: Set<string>): string {
 	const key = scenarioKey(scenario);
@@ -504,9 +517,12 @@ function renderScenarioCard(view: QaView, scenario: QaScenario, actor: QaActor |
 		riskTags(scenario);
 	const observed = narrative.scenarios?.[key]?.observed;
 	if (scenario.status === "blocked") {
-		return `<div class="scenario-card sc-blocked">${head}<div class="sc-body">${plan}<p class="gap">${escapeHtml(`검증 불가 — ${scenario.blocked?.obstacle ?? ""}`)}</p>` +
-			`<p class="sc-observed">확인한 가장 깊은 지점: ${escapeHtml(scenario.blocked?.deepest_reachable ?? "")}</p>` +
+		// The raw obstacle / deepest-reachable text is audit-only; the reader gets a fixed status line plus the product-terms observation and any recorded screenshots.
+		const blockedShots = shotSlots(scenario.evidence, readEvidence, context);
+		return `<div class="scenario-card sc-blocked">${head}<div class="sc-body">${plan}${gap("검증 불가 — 아래 설명의 한계로 이 시나리오를 끝까지 입증하지 못했습니다")}` +
+			imageSlot("행동 전 화면", scenario.evidence?.before, readEvidence, context) +
 			(observed?.trim() ? `<p class="sc-observed">${escapeHtml(observed)}</p>` : "") +
+			(blockedShots ? `<div class="sc-shots">${blockedShots}</div>` : "") +
 			`</div></div>`;
 	}
 	if (scenario.status !== "pass" && scenario.status !== "fail") {
@@ -526,9 +542,7 @@ function renderScenarioCard(view: QaView, scenario: QaScenario, actor: QaActor |
 		return imageSlot(label, path, readEvidence, context);
 	};
 	const claimBlocks = Array.isArray(claims) ? claims.map((claim) => `<div class="evidence-slot"><p><strong>${escapeHtml(claim.claim)}</strong> · ${escapeHtml(claim.verdict === "supported" && !evidenceGap ? "입증" : "근거 미검증")}</p><p>${escapeHtml(claim.observation)}</p>${claim.gap ? gap(claim.gap) : ""}${(claim.sources ?? []).map((source) => `<p>${escapeHtml(source.location)}</p>${claimImage(source.path, `${claim.claim} — ${source.location}`)}`).join("")}</div>`).join("") : "";
-	const shots = e
-		? [...new Set([e.action, e.after, e.path])].filter((path) => path !== e.before).map((path) => imageSlot(path === e.after ? "행동 후 화면" : "행동 기록", path, readEvidence, context)).filter(Boolean).join("")
-		: "";
+	const shots = shotSlots(e, readEvidence, context);
 	const shotBlock = (shots ? `<div class="sc-shots">${shots}</div>` : "") + claimBlocks;
 	const body =
 		beforeBlock || observedBlock || shotBlock
@@ -586,6 +600,28 @@ function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidenc
 	return `<h2>유저 시나리오 · 근거</h2>` + inert + (stories || `<p class="evidence-note">기록된 story 없음</p>`) + renderRiskNotApplicable(view);
 }
 
+/** Raw `reachable` text of actors whose boundary was not reached; the reader block shows only a neutral badge. */
+function renderUnreachedActorsAudit(view: QaView): string {
+	const rows = (view.actors ?? [])
+		.filter((actor) => actor.reachable && actor.reachable !== "yes")
+		.map((actor) => `<li><code>${escapeHtml(actor.id)}</code> — <span class="audit-note">reachable: ${escapeHtml(String(actor.reachable))}</span></li>`)
+		.join("");
+	return rows ? `<h3>액터 도달 기록 (감사용)</h3><ul>${rows}</ul>` : "";
+}
+
+/** The blocked flaky-rerun detail that the reader banner replaces with a fixed sentence. */
+function renderBlockedRerunAudit(view: QaView): string {
+	const blocked = blockedRerun(view);
+	if (!blocked) return "";
+	return (
+		`<h3>반복 검사 검증 불가 기록 (감사용)</h3><p>` +
+		`<span class="audit-note">obstacle: ${escapeHtml(blocked.obstacle)}</span>` +
+		`<br><span class="audit-note">attempts: ${blocked.attempts.map((attempt) => escapeHtml(attempt)).join(" / ")}</span>` +
+		`<br><span class="audit-note">deepest reachable: ${escapeHtml(blocked.deepest_reachable)}</span>` +
+		`<br><span class="audit-note">attempt log: <code>${escapeHtml(blocked.attempt_log)}</code></span></p>`
+	);
+}
+
 /**
  * The record-faithful audit of every scenario — the technical trail a QA
  * engineer or reviewer traces: the risks it exercises, why it exists, where and
@@ -630,7 +666,7 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
 	const table = rows
 		? `<table class="audit-table" tabindex="0"><thead><tr><th class="audit-story">story / scenario</th><th class="audit-coverage">priority · risks</th><th>scenario · why needed</th><th class="audit-boundary">driven at</th><th>result · evidence</th></tr></thead><tbody>${rows}</tbody></table>`
 		: `<p class="evidence-note">기록된 시나리오 없음</p>`;
-	return `<h2>시나리오 상세 기록 (감사)</h2>${table}${renderStoryProvenance(view, storyAnchors)}${renderRawEvidence(scenarios, readEvidence, context)}${renderBaselineAudit(view, readEvidence, context)}`;
+	return `<h2>시나리오 상세 기록 (감사)</h2>${table}${renderUnreachedActorsAudit(view)}${renderBlockedRerunAudit(view)}${renderStoryProvenance(view, storyAnchors)}${renderRawEvidence(scenarios, readEvidence, context)}${renderBaselineAudit(view, readEvidence, context)}`;
 }
 
 /**
@@ -793,17 +829,22 @@ function renderFailures(view: QaView, narrative: QaReportNarrative): string {
 	return `<h2>실패 · 불일치</h2>${body}`;
 }
 
+/** The current-cycle blocked flaky-rerun record, if any. */
+function blockedRerun(view: QaView) {
+	const rerun = view.run_checks?.flaky_rerun;
+	return typeof rerun === "object" && rerun !== null && rerun.result === "blocked" && rerun.cycle === currentCycle(view) ? rerun.blocked : undefined;
+}
+
 // A verdict that passed with scenarios nobody could execute reads differently,
 // so the reader sees blocked scenarios before any finding.
 function renderBlockedBanner(view: QaView): string {
 	const blocked = (view.scenarios ?? []).filter((scenario) => scenario.cycle === currentCycle(view) && scenario.status === "blocked");
-	const rerun = view.run_checks?.flaky_rerun;
-	const rerunBlocked = typeof rerun === "object" && rerun !== null && rerun.result === "blocked" && rerun.cycle === currentCycle(view) ? rerun.blocked : undefined;
+	const rerunBlocked = blockedRerun(view);
 	const scenarioBanner = blocked.length
-		? `<p class="gap waive-banner">검증 불가 시나리오 ${blocked.length}건 — 변경 밖의 한계로 실행하지 못했습니다. 판정은 이 시나리오들을 검증하지 않은 채 내려졌습니다: ${blocked.map((scenario) => escapeHtml(scenario.title ?? scenario.id)).join(" · ")}</p>`
+		? `<p class="gap waive-banner">검증 불가 시나리오 ${blocked.length}건 — 판정은 이 시나리오들을 검증하지 않은 채 내려졌습니다: ${blocked.map((scenario) => escapeHtml(scenario.title ?? scenario.id)).join(" · ")}</p>`
 		: "";
 	const rerunBanner = rerunBlocked
-		? `<p class="gap waive-banner">반복 검사 검증 불가 — ${escapeHtml(rerunBlocked.obstacle.trim().replace(/\.+$/, ""))}. 같은 시나리오를 다시 돌려 결과가 같은지는 확인하지 못했습니다.</p>`
+		? `<p class="gap waive-banner">반복 검사 검증 불가 — 환경 한계로 같은 시나리오를 다시 돌려 결과가 같은지 확인하지 못했습니다.</p>`
 		: "";
 	return scenarioBanner + rerunBanner;
 }
@@ -921,8 +962,20 @@ export function renderQaReport(
 		for (const story of view.stories ?? []) {
 			const actor = actorFor(view, story);
 			for (const scenario of scenariosForStory(view, story.id)) {
-				if (scenario.status !== "pass" && scenario.status !== "fail") continue;
+				if (scenario.status !== "pass" && scenario.status !== "fail" && scenario.status !== "blocked") continue;
 				const key = scenarioKey(scenario);
+				const embeddableScreenshot = (path: string | undefined): boolean => {
+					const embed = path ? readEvidence(path) : undefined;
+					return embed?.kind === "image" && hasValidImageSignature(embed.dataUri);
+				};
+				if (scenario.status === "blocked") {
+					if (!narrative.scenarios?.[key]?.observed?.trim()) throw new Error(`observation required for ${key}`);
+					// Captures are optional for blocked, but a recorded one must still render.
+					for (const path of [scenario.evidence?.before, scenario.evidence?.after]) {
+						if (path && !embeddableScreenshot(path)) throw new Error(`visual evidence missing or not embeddable for ${key}: ${path}`);
+					}
+					continue;
+				}
 				if (!scenarioNeedsVisualProof(scenario, actor?.driver)) {
 					if (!narrative.scenarios?.[key]?.observed?.trim()) throw new Error(`observation required for ${key}`);
 					continue;
@@ -933,10 +986,7 @@ export function renderQaReport(
 					if (embed.kind === "image" && !hasValidImageSignature(embed.dataUri)) throw new Error(`visual claim evidence not embeddable for ${key}: ${source.path}; record a bounded source and review again`);
 				}
 				for (const path of [scenario.evidence?.before, scenario.evidence?.after]) {
-					const embed = path ? readEvidence(path) : undefined;
-					if (embed?.kind !== "image" || !/^data:image\/(png|jpeg|webp|gif);base64,/.test(embed.dataUri)) {
-						throw new Error(`visual evidence missing or not embeddable for ${key}: ${path ?? "missing before/after screenshot"}`);
-					}
+					if (!embeddableScreenshot(path)) throw new Error(`visual evidence missing or not embeddable for ${key}: ${path ?? "missing before/after screenshot"}`);
 				}
 				if (!narrative.scenarios?.[key]?.observed?.trim()) throw new Error(`visual observation required for ${key}`);
 			}
@@ -1060,7 +1110,6 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .evidence-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem; margin: 0.75rem 0; }
 .evidence-slot { border: 1px solid var(--rule); border-radius: 8px; padding: 0.5rem; }
 .evidence-slot-label { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.03em; color: var(--muted); margin-bottom: 0.35rem; }
-.evidence-slot-path { font-size: 0.72rem; color: var(--muted); margin-top: 0.35rem; word-break: break-all; }
 .raw-evidence { margin: 0.4rem 0; border: 1px solid var(--rule); border-radius: 6px; padding: 0.35rem 0.6rem; }
 .raw-evidence summary { cursor: pointer; font-size: 0.75rem; color: var(--muted); word-break: break-all; }
 .raw-evidence pre { margin-top: 0.5rem; }
