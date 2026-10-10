@@ -1310,6 +1310,16 @@ describe("new-prose: precondition bootstrap precedes unreachability", () => {
 	test("release, operations and provenance items leave the QA scope", () => {
 		expect(skillMd).toContain("unless the user's request names another one");
 		expect(skillMd).toContain("## Out of QA Scope");
+		// The output slot names every kind the sort moves there, so a caller's
+		// excluded provenance check is disclosed rather than dropped.
+		expect(skillMd).toContain(
+			"One line per release, operations or provenance item from the source or the caller",
+		);
+		// The operator-doc mandate stops at product behavior; a release runbook
+		// falls under the release-work row instead.
+		expect(skillMd).toContain(
+			"A deploy or post-deploy runbook is release work, sorted as below.",
+		);
 		expect(skillMd).toContain(
 			"Scenario evidence comes only from the target environment; BASELINE still builds, tests and lints the checkout.",
 		);
