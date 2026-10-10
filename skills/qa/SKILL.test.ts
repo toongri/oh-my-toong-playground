@@ -1295,12 +1295,26 @@ describe("new-prose: precondition bootstrap precedes unreachability", () => {
 	});
 
 	// The local-fallback path must not swallow deployment-targeted QA: when the
-	// QA REQUEST verifies the deployment itself, a stage 404 is the failure
-	// under test, and a local stack cannot stand in for the deployed artifact.
-	test("bootstrap branches on what the QA REQUEST verifies", () => {
-		expect(skillMd).toContain("verifies the deployment itself");
+	// user names a deployed environment as the target, a stage 404 is the
+	// failure under test, and a local stack cannot stand in for it. Only the
+	// user picks that environment; a rollout plan in the source never does.
+	test("bootstrap branches on the target environment the user names", () => {
 		expect(skillMd).toContain(
-			"the deployed environment is the surface and its failure is the FAIL",
+			"When the user names a deployed environment as the target, that environment is the surface and its failure is the FAIL.",
+		);
+		expect(skillMd).not.toContain("verifies the deployment itself");
+	});
+
+	// Observed failure: a rollout plan's deploy, production and GitHub steps
+	// were recorded as blocked scenarios of a local QA cycle.
+	test("release, operations and provenance items leave the QA scope", () => {
+		expect(skillMd).toContain("unless the user's request names another one");
+		expect(skillMd).toContain("## Out of QA Scope");
+		expect(skillMd).toContain(
+			"Evidence comes only from the target environment.",
+		);
+		expect(skillMd).toContain(
+			"When you cannot place an item, interview the user before `set-acceptance`.",
 		);
 	});
 
