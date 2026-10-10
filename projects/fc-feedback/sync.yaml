@@ -1,0 +1,7 @@
+name: fc-feedback
+path: ~/repos/fc-feedback/main
+platforms: [claude]
+
+skills:
+  items:
+    - fc-feedback
