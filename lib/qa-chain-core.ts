@@ -336,6 +336,8 @@ export interface QaChainState {
 	 * completion; only a satisfied verdict + reviewed report does.
 	 */
 	awaiting_user?: boolean;
+	/** The cycle in which `await-user` last ran; it outlives the pause so a `person` blocker can show the user was asked this cycle. */
+	awaited_user_cycle?: number;
 	phase?: QaPhase;
 	cycle?: number;
 	phase_max?: number;

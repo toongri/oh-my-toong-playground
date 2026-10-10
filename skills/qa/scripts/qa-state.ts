@@ -1014,12 +1014,13 @@ export interface RecordScenarioOpts extends ScenarioFieldOpts, EvidenceSlotOpts 
 
 const LOCAL_SETUP_IS_WORK = "An account, seed data, onboarding, a permission, env config, a tool, or app or device state on your local stack is setup work, never blocked: use the project's documented account or QA tool, create it (sign up, finish onboarding with test values, seed), or write it into the local database this cycle started, and ask the user (await-user) for anything only a person can give";
 
-function scenarioBlockedRecord(opts: RecordScenarioOpts): QaBlocked {
+function scenarioBlockedRecord(opts: RecordScenarioOpts, prior: Partial<ChainState>): QaBlocked {
 	const kind = opts.obstacleKind;
 	if (kind === undefined) throw new Error(`blocked status requires --obstacle-kind ${QA_OBSTACLE_KINDS.join("|")}. ${LOCAL_SETUP_IS_WORK}`);
 	if (!isOneOf(kind, QA_OBSTACLE_KINDS)) throw new Error(`--obstacle-kind must be ${QA_OBSTACLE_KINDS.join("|")}, not "${kind}". ${LOCAL_SETUP_IS_WORK}`);
 	const userAnswer = opts.userAnswer?.trim();
 	if (kind === "person" && !userAnswer) throw new Error("--obstacle-kind person requires --user-answer: ask the user for it (await-user) and record their reply");
+	if (kind === "person" && prior.awaited_user_cycle !== currentCycle(prior)) throw new Error("--obstacle-kind person requires await-user this cycle: ask the user in plain text, run await-user, end the turn, and record their reply");
 	const { obstacle, ...rest } = blockedRecord(opts);
 	return { obstacle, obstacle_kind: kind, ...(kind === "person" ? { user_answer: userAnswer } : {}), ...rest };
 }
@@ -1111,7 +1112,7 @@ function recordScenarioUnlocked(sessionId: string, opts: RecordScenarioOpts): vo
 	const authored = scenarios[index];
 	if (!authored) throw new Error("record-scenario requires a scenario authored this cycle (author-scenario)");
 	const driver = actorDriver(prior, selector.story);
-	const blocked = opts.status === "blocked" ? scenarioBlockedRecord(opts) : undefined;
+	const blocked = opts.status === "blocked" ? scenarioBlockedRecord(opts, prior) : undefined;
 	let evidence: QaScenario["evidence"];
 	if (opts.status === "pass" || (opts.status === "fail" && opts.evidencePath && opts.evidenceSurface)) {
 		if (!opts.evidencePath || !opts.evidenceSurface) throw new Error("pass scenario requires evidence-path and evidence-surface");
@@ -1346,7 +1347,7 @@ export function setVerdict(sessionId: string, verdict: string): void {
 export function setAwaitingUser(sessionId: string): void {
 	const prior = readPrior(sessionId);
 	if (prior.active !== true) throw new Error("await-user: refused — no active QA cycle");
-	mergeWrite(sessionId, { awaiting_user: true });
+	mergeWrite(sessionId, { awaiting_user: true, awaited_user_cycle: currentCycle(prior) });
 }
 
 export function declareInert(sessionId: string, reason: string): void {
@@ -1415,6 +1416,7 @@ export function startQa(sessionId: string, target: string): void {
 		delete reset.forced_complete;
 		delete reset.forced_reason;
 		delete reset.run_checks_history;
+		delete reset.awaited_user_cycle;
 		reset.derived = {
 			chain_complete: chainComplete(reset),
 			record_complete: recordComplete(reset, stateProbe),
