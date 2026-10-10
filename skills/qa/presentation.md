@@ -85,7 +85,8 @@ finding under COMMENT, and the report says the cause is unproven:
 ```
 
 When you cannot show both, the cause is not established. Fix the setup and drive the
-scenario again, or record it `blocked` with those attempts.
+scenario again. Record it `blocked` with those attempts only when absent hardware, an
+off-network third party, or a person stops the rerun (`--obstacle-kind`).
 
 The CLI persists the review and hashes the scenario's evidence plus every cited
 source. Re-recording the scenario, changing its scenario fields, actor assignment,

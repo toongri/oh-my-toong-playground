@@ -644,6 +644,8 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
 				statusBadge(scenario.status) +
 				(scenario.blocked
 					? `<br><span class="audit-note">obstacle: ${escapeHtml(scenario.blocked.obstacle)}</span>` +
+						(scenario.blocked.obstacle_kind ? `<br><span class="audit-note">obstacle kind: ${escapeHtml(scenario.blocked.obstacle_kind)}</span>` : "") +
+						(scenario.blocked.user_answer ? `<br><span class="audit-note">user answer: ${escapeHtml(scenario.blocked.user_answer)}</span>` : "") +
 						`<br><span class="audit-note">attempts: ${scenario.blocked.attempts.map((attempt) => escapeHtml(attempt)).join(" / ")}</span>` +
 						`<br><span class="audit-note">deepest reachable: ${escapeHtml(scenario.blocked.deepest_reachable)}</span>` +
 						`<br><span class="audit-note">attempt log: <code>${escapeHtml(scenario.blocked.attempt_log)}</code></span>`

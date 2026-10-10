@@ -69,6 +69,7 @@ import {
 	type QaActor,
 	type QaBaseline,
 	type QaBlocked,
+	QA_OBSTACLE_KINDS,
 	type QaScenario,
 	type QaScenarioStatus,
 	type QaCaseRunBinding,
@@ -1001,12 +1002,27 @@ export interface RecordScenarioOpts extends ScenarioFieldOpts, EvidenceSlotOpts 
 	scenario: string;
 	status: string;
 	obstacle?: string;
+	obstacleKind?: string;
+	userAnswer?: string;
 	attempts?: string;
 	deepestReachable?: string;
 	attemptLog?: string;
 	evidencePath?: string;
 	evidenceSurface?: string;
 	caseRun?: string;
+}
+
+const LOCAL_SETUP_IS_WORK = "An account, seed data, onboarding, a permission, env config, a tool, or app or device state on your local stack is setup work, never blocked: use the project's documented account or QA tool, create it (sign up, finish onboarding with test values, seed), or write it into the local database this cycle started, and ask the user (await-user) for anything only a person can give";
+
+function scenarioBlockedRecord(opts: RecordScenarioOpts, prior: Partial<ChainState>): QaBlocked {
+	const kind = opts.obstacleKind;
+	if (kind === undefined) throw new Error(`blocked status requires --obstacle-kind ${QA_OBSTACLE_KINDS.join("|")}. ${LOCAL_SETUP_IS_WORK}`);
+	if (!isOneOf(kind, QA_OBSTACLE_KINDS)) throw new Error(`--obstacle-kind must be ${QA_OBSTACLE_KINDS.join("|")}, not "${kind}". ${LOCAL_SETUP_IS_WORK}`);
+	const userAnswer = opts.userAnswer?.trim();
+	if (kind === "person" && !userAnswer) throw new Error("--obstacle-kind person requires --user-answer: ask the user for it (await-user) and record their reply");
+	if (kind === "person" && prior.awaited_user_cycle !== currentCycle(prior)) throw new Error("--obstacle-kind person requires await-user this cycle: ask the user in plain text, run await-user, end the turn, and record their reply");
+	const { obstacle, ...rest } = blockedRecord(opts);
+	return { obstacle, obstacle_kind: kind, ...(kind === "person" ? { user_answer: userAnswer } : {}), ...rest };
 }
 
 function blockedRecord(opts: Pick<RecordScenarioOpts, "obstacle" | "attempts" | "deepestReachable" | "attemptLog">): QaBlocked {
@@ -1096,7 +1112,7 @@ function recordScenarioUnlocked(sessionId: string, opts: RecordScenarioOpts): vo
 	const authored = scenarios[index];
 	if (!authored) throw new Error("record-scenario requires a scenario authored this cycle (author-scenario)");
 	const driver = actorDriver(prior, selector.story);
-	const blocked = opts.status === "blocked" ? blockedRecord(opts) : undefined;
+	const blocked = opts.status === "blocked" ? scenarioBlockedRecord(opts, prior) : undefined;
 	let evidence: QaScenario["evidence"];
 	if (opts.status === "pass" || (opts.status === "fail" && opts.evidencePath && opts.evidenceSurface)) {
 		if (!opts.evidencePath || !opts.evidenceSurface) throw new Error("pass scenario requires evidence-path and evidence-surface");
@@ -1331,7 +1347,7 @@ export function setVerdict(sessionId: string, verdict: string): void {
 export function setAwaitingUser(sessionId: string): void {
 	const prior = readPrior(sessionId);
 	if (prior.active !== true) throw new Error("await-user: refused — no active QA cycle");
-	mergeWrite(sessionId, { awaiting_user: true });
+	mergeWrite(sessionId, { awaiting_user: true, awaited_user_cycle: currentCycle(prior) });
 }
 
 export function declareInert(sessionId: string, reason: string): void {
@@ -1400,6 +1416,7 @@ export function startQa(sessionId: string, target: string): void {
 		delete reset.forced_complete;
 		delete reset.forced_reason;
 		delete reset.run_checks_history;
+		delete reset.awaited_user_cycle;
 		reset.derived = {
 			chain_complete: chainComplete(reset),
 			record_complete: recordComplete(reset, stateProbe),
@@ -1580,7 +1597,7 @@ const ROSTER: CliCommand[] = [
 	{ name: "author-scenario", authority: "ai", effect: "authors one user scenario: --story --id (neither contains ':') --title --preconditions --steps '[…]' --expected --why-needed --priority H|M|L [--risks '[1..6]'] [--profile id]" },
 	{ name: "declare-risk-na", authority: "ai", effect: "declares an adversarial axis (--axis 1..6) that no scenario of this change can exercise, with --reason; once per cycle" },
 	{ name: "record-baseline", authority: "ai", effect: "records a story's BASELINE result: fail only when the change adds a build/test/lint failure; a failure the base commit has too is pass with a --note" },
-	{ name: "record-scenario", authority: "ai", effect: "records one scenario's execution result (--story --scenario --status pass|fail|blocked); --evidence-surface accepts the actor's own driver or \"test\" for an automated test run that exercises the scenario; optional --case-run RECEIPT binds replay provenance" },
+	{ name: "record-scenario", authority: "ai", effect: "records one scenario's execution result (--story --scenario --status pass|fail|blocked); blocked takes --obstacle-kind hardware|third-party|person (person also --user-answer) with --obstacle --attempts --deepest-reachable --attempt-log; --evidence-surface accepts the actor's own driver or \"test\" for an automated test run that exercises the scenario; optional --case-run RECEIPT binds replay provenance" },
 	{ name: "record-case", authority: "ai", effect: "links a passed scenario to its saved, replayed case or records why it has none: --story --scenario (--case <id> | --none \"<reason>\") [--project DIR]; complete refuses an H scenario proven at its boundary that has neither" },
 	{
 		name: "review-evidence",
@@ -1725,6 +1742,8 @@ function main(): void {
 					scenario: requiredArg(args, "scenario"),
 					status: requiredArg(args, "status"),
 					obstacle: str(args["obstacle"]),
+					obstacleKind: str(args["obstacle-kind"]),
+					userAnswer: str(args["user-answer"]),
 					attempts: str(args["attempts"]),
 					deepestReachable: str(args["deepest-reachable"]),
 					attemptLog: str(args["attempt-log"]),
@@ -1778,7 +1797,7 @@ function main(): void {
 			} else if (subcommand === "waive") {
 				// Retired: a reason-only exemption let an unexecuted cell pass the gate.
 				// Waives already persisted in state stay readable and keep resolving.
-				throw new Error("waive is retired: execute the scenario, or record-scenario --status blocked --obstacle … --attempts '[…]' --deepest-reachable … --attempt-log <file>");
+				throw new Error("waive is retired: execute the scenario, or record-scenario --status blocked --obstacle-kind hardware|third-party|person --obstacle … --attempts '[…]' --deepest-reachable … --attempt-log <file>");
 			} else if (subcommand === "acquire-device") {
 				const platform = requiredArg(args, "platform");
 				const rawEmulatorArgs = str(args["emulator-args"]);
