@@ -1009,15 +1009,15 @@ describe("qa-state CLI wiring", () => {
 		authorCompleteChain();
 		recordAllPass();
 		const log = writeAttemptLog();
-		const base = "record-scenario --story story-1 --scenario s3 --status blocked";
+		const base = "record-scenario --story story-1 --scenario s3 --status blocked --obstacle-kind hardware";
 		expect(() => run(base)).toThrow();
-		expect(() => run(`${base} --obstacle "PGlite has one connection" --attempts '[]' --deepest-reachable PGlite --attempt-log ${log}`)).toThrow(/attempts/);
-		expect(() => run(`${base} --obstacle "PGlite has one connection" --attempts '["docker compose up → daemon down"]' --deepest-reachable PGlite --attempt-log ${join(tmpDir, "missing.txt")}`)).toThrow();
-		run(`${base} --obstacle "PGlite has one connection" --attempts '["docker compose up → daemon down"]' --deepest-reachable PGlite --attempt-log ${log}`);
+		expect(() => run(`${base} --obstacle "no physical dispenser" --attempts '[]' --deepest-reachable "pairing screen" --attempt-log ${log}`)).toThrow(/attempts/);
+		expect(() => run(`${base} --obstacle "no physical dispenser" --attempts '["asked the user for a dispenser → none available"]' --deepest-reachable "pairing screen" --attempt-log ${join(tmpDir, "missing.txt")}`)).toThrow();
+		run(`${base} --obstacle "no physical dispenser" --attempts '["asked the user for a dispenser → none available"]' --deepest-reachable "pairing screen" --attempt-log ${log}`);
 		const scenario = scenarioOf("s3");
 		expect(scenario.status).toBe("blocked");
 		expect(scenario.evidence).toBeUndefined();
-		expect(scenario.blocked).toEqual({ obstacle: "PGlite has one connection", attempts: ["docker compose up → daemon down"], deepest_reachable: "PGlite", attempt_log: log });
+		expect(scenario.blocked).toEqual({ obstacle: "no physical dispenser", obstacle_kind: "hardware", attempts: ["asked the user for a dispenser → none available"], deepest_reachable: "pairing screen", attempt_log: log });
 		expect(() => run("set-verdict REQUEST_CHANGES")).toThrow();
 		expect(() => run("set-verdict APPROVE")).toThrow(/APPROVE refused/);
 		run("set-verdict COMMENT");
@@ -1131,12 +1131,28 @@ describe("qa-state CLI wiring", () => {
 		expect(() => run(scenarioCmd("s2", "M", [3]))).toThrow(/declared not applicable/);
 	});
 
+	// Observed failure: ten screen scenarios were recorded blocked because a local
+	// seed account sat in onboarding. A local precondition is setup work, so the
+	// CLI admits blocked only for a limit no local work can remove.
+	test("blocked is refused without an obstacle kind outside local setup", () => {
+		authorCompleteChain();
+		recordAllPass();
+		const log = writeAttemptLog();
+		const rest = `--obstacle "seed account stuck in onboarding" --attempts '["system back → no change"]' --deepest-reachable "onboarding chat" --attempt-log ${log}`;
+		const base = "record-scenario --story story-1 --scenario s3 --status blocked";
+		expect(() => run(`${base} ${rest}`)).toThrow(/obstacle-kind hardware\|third-party\|person/);
+		expect(() => run(`${base} --obstacle-kind account ${rest}`)).toThrow(/setup work/);
+		expect(() => run(`${base} --obstacle-kind person ${rest}`)).toThrow(/user-answer/);
+		run(`${base} --obstacle-kind person --user-answer "이 단계용 OTP 휴대폰이 없다" ${rest}`);
+		expect(scenarioOf("s3").blocked).toMatchObject({ obstacle_kind: "person", user_answer: "이 단계용 OTP 휴대폰이 없다" });
+	});
+
 	test("lock serializes concurrent blocked and pass record-scenario writes", () => {
 		authorCompleteChain();
 		const log = writeAttemptLog();
 		const scriptPath = join(import.meta.dir, "qa-state.ts");
 		execSync(
-			`(bun ${scriptPath} record-scenario --story story-1 --scenario s1 --status blocked --obstacle "no daemon" --attempts '["docker compose up → daemon down"]' --deepest-reachable PGlite --attempt-log ${log} & bun ${scriptPath} record-scenario --story story-1 --scenario s2 --status pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash & wait)`,
+			`(bun ${scriptPath} record-scenario --story story-1 --scenario s1 --status blocked --obstacle-kind third-party --obstacle "partner API is off-network" --attempts '["curl partner sandbox → no route"]' --deepest-reachable "partner client" --attempt-log ${log} & bun ${scriptPath} record-scenario --story story-1 --scenario s2 --status pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash & wait)`,
 			{ encoding: "utf8", env: process.env, shell: "/bin/sh" },
 		);
 		expect(scenarioOf("s1").status).toBe("blocked");

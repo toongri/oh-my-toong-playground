@@ -190,8 +190,16 @@ export interface QaRiskNotApplicable {
 	cycle: number;
 }
 
+/** The only limits a scenario may be blocked by; everything on the local stack is setup work. */
+export const QA_OBSTACLE_KINDS = ["hardware", "third-party", "person"] as const;
+export type QaObstacleKind = (typeof QA_OBSTACLE_KINDS)[number];
+
 export interface QaBlocked {
 	obstacle: string;
+	/** What kind of limit stopped the scenario; absent on records written before the kinds existed and on run checks. */
+	obstacle_kind?: QaObstacleKind;
+	/** The user's own reply, required when the limit is something only a person can give. */
+	user_answer?: string;
 	/** Each attempt made to reach the surface, with its observed result. */
 	attempts: string[];
 	deepest_reachable: string;
