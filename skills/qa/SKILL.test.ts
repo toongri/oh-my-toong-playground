@@ -1311,7 +1311,12 @@ describe("new-prose: precondition bootstrap precedes unreachability", () => {
 		expect(skillMd).toContain("unless the user's request names another one");
 		expect(skillMd).toContain("## Out of QA Scope");
 		expect(skillMd).toContain(
-			"Evidence comes only from the target environment.",
+			"Scenario evidence comes only from the target environment; BASELINE still builds, tests and lints the checkout.",
+		);
+		// The start-command example is what agents copy, so it carries the
+		// environment prefix the Target environment rule requires.
+		expect(skillMd).toContain(
+			"`로컬 환경 — PR #4444 섭취 대조 작업의 매일 04:50 예약 제거`",
 		);
 		expect(skillMd).toContain(
 			"When you cannot place an item, interview the user before `set-acceptance`.",

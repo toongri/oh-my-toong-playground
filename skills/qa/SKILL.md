@@ -41,7 +41,7 @@ driver, the `qa-replay.ts` wrapper, `record-scenario --case-run RECEIPT` binding
 | Release or operations work | deploying, watching logs or dashboards after a deploy, comparing production records, running a command on production data, dropping production columns, a later deploy stage, a follow-up PR, a written approval | Not a criterion and not a scenario. List it once under `## Out of QA Scope` in your final message. |
 | Provenance of the change | the PR and its review state, a wiki page, a design rationale, a linked PR | Input you read for requirements. Read it from the material you were given. Do not query GitHub or another external service to prove it. |
 
-The same sort applies to a caller's `Required Verification` and caller-provided scenarios: run an item verbatim when it checks product behavior in the target environment, and move a release, operations or provenance item to `## Out of QA Scope`. Evidence comes only from the target environment. With the target `local`, a production database, production logs or dashboards, and GitHub are neither evidence sources nor options you offer the user.
+The same sort applies to a caller's `Required Verification` and caller-provided scenarios: run an item verbatim when it checks product behavior in the target environment, and move a release, operations or provenance item to `## Out of QA Scope`. Scenario evidence comes only from the target environment; BASELINE still builds, tests and lints the checkout. With the target `local`, a production database, production logs or dashboards, and GitHub are neither evidence sources nor options you offer the user.
 
 When you cannot place an item, interview the user before `set-acceptance`. Examples: you cannot tell whether they want the command proven locally or the production run checked; the request hints at a deployed environment without naming it; the requirement itself is unclear. Ask one plain-text question per open item, with what each answer makes you verify, then run `await-user` and end the turn. Ask before any evidence exists, because the criteria freeze once a scenario has evidence.
 
@@ -90,7 +90,7 @@ A **behavior-invisible contract check** — a narrow exception to qa's dynamic-o
 
 **On violation: immediate REQUEST_CHANGES, cycle NOT executed** — fail-fast. The expensive cycle below never runs against a change that already fails its own declared contract.
 
-At cycle entry, create or re-enter the guarded state with `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts start --target "<what is being verified>"`. The target is the report's title, so write it in the report language as the change a reader recognizes — e.g. `PR #4444 섭취 대조 작업의 매일 04:50 예약 제거` — not a checkout description. A second qa invocation in the same session must run `start` again so it receives a fresh chain and re-armed runtime gates.
+At cycle entry, create or re-enter the guarded state with `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts start --target "<what is being verified>"`. The target is the report's title, so write it in the report language as the target environment followed by the change a reader recognizes — e.g. `로컬 환경 — PR #4444 섭취 대조 작업의 매일 04:50 예약 제거` — not a checkout description. A second qa invocation in the same session must run `start` again so it receives a fresh chain and re-armed runtime gates.
 
 ### PLAN
 
