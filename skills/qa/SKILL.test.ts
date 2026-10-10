@@ -1295,12 +1295,41 @@ describe("new-prose: precondition bootstrap precedes unreachability", () => {
 	});
 
 	// The local-fallback path must not swallow deployment-targeted QA: when the
-	// QA REQUEST verifies the deployment itself, a stage 404 is the failure
-	// under test, and a local stack cannot stand in for the deployed artifact.
-	test("bootstrap branches on what the QA REQUEST verifies", () => {
-		expect(skillMd).toContain("verifies the deployment itself");
+	// user names a deployed environment as the target, a stage 404 is the
+	// failure under test, and a local stack cannot stand in for it. Only the
+	// user picks that environment; a rollout plan in the source never does.
+	test("bootstrap branches on the target environment the user names", () => {
 		expect(skillMd).toContain(
-			"the deployed environment is the surface and its failure is the FAIL",
+			"When the user names a deployed environment as the target, that environment is the surface and its failure is the FAIL.",
+		);
+		expect(skillMd).not.toContain("verifies the deployment itself");
+	});
+
+	// Observed failure: a rollout plan's deploy, production and GitHub steps
+	// were recorded as blocked scenarios of a local QA cycle.
+	test("release, operations and provenance items leave the QA scope", () => {
+		expect(skillMd).toContain("unless the user's request names another one");
+		expect(skillMd).toContain("## Out of QA Scope");
+		// The output slot names every kind the sort moves there, so a caller's
+		// excluded provenance check is disclosed rather than dropped.
+		expect(skillMd).toContain(
+			"One line per release, operations or provenance item from the source or the caller",
+		);
+		// The operator-doc mandate stops at product behavior; a release runbook
+		// falls under the release-work row instead.
+		expect(skillMd).toContain(
+			"A deploy or post-deploy runbook is release work, sorted as below.",
+		);
+		expect(skillMd).toContain(
+			"Scenario evidence comes only from the target environment; BASELINE still builds, tests and lints the checkout.",
+		);
+		// The start-command example is what agents copy, so it carries the
+		// environment prefix the Target environment rule requires.
+		expect(skillMd).toContain(
+			"`로컬 환경 — PR #4444 섭취 대조 작업의 매일 04:50 예약 제거`",
+		);
+		expect(skillMd).toContain(
+			"When you cannot place an item, interview the user before `set-acceptance`.",
 		);
 	});
 

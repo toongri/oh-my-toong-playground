@@ -29,7 +29,21 @@ defines the story GWT/AC contract, finding cases by feature, recording per
 driver, the `qa-replay.ts` wrapper, `record-scenario --case-run RECEIPT` binding,
 `record-case`, and what to do when a replay fails.
 
-**Inputs.** qa accepts a plan, issue, spec, PR, or a QA REQUEST. Whatever arrives, qa reads the source material itself — the plan/issue/spec text and the diff — and authors the acceptance criteria and stories from it. An earlier state file, a previous report, or a caller's summary is never the source of requirements; a `goal` qa did not write from the source is a defect. Write each acceptance criterion as an outcome a user or operator can observe ("가구 구성원 앱의 섭취 시간대가 새 기록 기준으로 표시된다"), in the report's language (Korean by default), never as an implementation sentence ("IntakeReadRepo returns …"). One criterion holds one outcome: write "담은 영양제가 앞에 모인다" and "담지 않은 영양제의 순서는 그대로다" as two criteria, so each gets its own verdict and its own proving scenario. Take the criteria from every item the source lists under what it changed, including what it says it keeps (a job left for on-demand runs) and the docs an operator follows; each item gets a criterion. A kept path is proven by running it, not by its unchanged code.
+**Inputs.** qa accepts a plan, issue, spec, PR, or a QA REQUEST. Whatever arrives, qa reads the source material itself — the plan/issue/spec text and the diff — and authors the acceptance criteria and stories from it. An earlier state file, a previous report, or a caller's summary is never the source of requirements; a `goal` qa did not write from the source is a defect. Write each acceptance criterion as an outcome a user or operator can observe ("가구 구성원 앱의 섭취 시간대가 새 기록 기준으로 표시된다"), in the report's language (Korean by default), never as an implementation sentence ("IntakeReadRepo returns …"). One criterion holds one outcome: write "담은 영양제가 앞에 모인다" and "담지 않은 영양제의 순서는 그대로다" as two criteria, so each gets its own verdict and its own proving scenario. Take the criteria from every item the source lists under what it changed, including what it says it keeps (a job left for on-demand runs) and the docs an operator follows; each item gets a criterion. A kept path is proven by running it, not by its unchanged code. An operator doc is proven by following its steps in the target environment, not by reading the doc. This covers a doc for product behavior (running an on-demand job, a backfill command). A deploy or post-deploy runbook is release work, sorted as below.
+
+**Target environment.** qa checks the quality of the product built from the change, in one target environment, at its users' boundaries. The target environment is `local` — an isolated instance you build from the checkout under test — unless the user's request names another one (`stg`, `prd`). The source material never picks it: a rollout plan, a deploy step, or a production name in the issue or PR stays `local`. State the target environment in the `--target` title ("로컬 환경 — …").
+
+**Sort every source item before `set-acceptance`.** Each item the source lists is one of three kinds:
+
+| Kind | Examples | What qa does |
+|---|---|---|
+| Product behavior the change ships | an API response, a screen, a job, an operator command (a backfill, a migration) and what it writes | An acceptance criterion, proven in the target environment. A command written for production is proven by running it on the target environment's own data (seeded local rows). |
+| Release or operations work | deploying, watching logs or dashboards after a deploy, comparing production records, running a command on production data, dropping production columns, a later deploy stage, a follow-up PR, a written approval | Not a criterion and not a scenario. List it once under `## Out of QA Scope` in your final message. |
+| Provenance of the change | the PR and its review state, a wiki page, a design rationale, a linked PR | Input you read for requirements. Read it from the material you were given. Do not query GitHub or another external service to prove it. |
+
+The same sort applies to a caller's `Required Verification` and caller-provided scenarios: run an item verbatim when it checks product behavior in the target environment, and move a release, operations or provenance item to `## Out of QA Scope`. Scenario evidence comes only from the target environment; BASELINE still builds, tests and lints the checkout. With the target `local`, a production database, production logs or dashboards, and GitHub are neither evidence sources nor options you offer the user.
+
+When you cannot place an item, interview the user before `set-acceptance`. Examples: you cannot tell whether they want the command proven locally or the production run checked; the request hints at a deployed environment without naming it; the requirement itself is unclear. Ask one plain-text question per open item, with what each answer makes you verify, then run `await-user` and end the turn. Ask before any evidence exists, because the criteria freeze once a scenario has evidence.
 
 A caller that has one composes a QA REQUEST using this structure:
 
@@ -50,7 +64,7 @@ A caller that has one composes a QA REQUEST using this structure:
 
 - `#` QA REQUEST → `##` Spec / Required Verification / Scope → `###` internal subsections
 - The content of Spec is PLAN's input: it determines the verification targets and the adversarial scenarios PLAN derives.
-- `Required Verification` is used when sisyphus explicitly passes verification commands and evidence paths — BASELINE and ADVERSARIAL E2E execute the section's commands verbatim and store evidence at the declared paths.
+- `Required Verification` is used when sisyphus explicitly passes verification commands and evidence paths — BASELINE and ADVERSARIAL E2E execute the section's commands verbatim and store evidence at the declared paths, for each item that checks product behavior in the target environment (see *Target environment*).
 - When a delegation prompt is included, its sections become `###` headings under `## Spec`
 
 To understand what changed, use `git diff $(git merge-base HEAD main) -- <path>` for context. If `main` does not exist, substitute `master`. To verify correctness, read the actual files directly (Read tool). Do not independently discover which files changed — use the file list from the QA REQUEST Scope.
@@ -76,7 +90,7 @@ A **behavior-invisible contract check** — a narrow exception to qa's dynamic-o
 
 **On violation: immediate REQUEST_CHANGES, cycle NOT executed** — fail-fast. The expensive cycle below never runs against a change that already fails its own declared contract.
 
-At cycle entry, create or re-enter the guarded state with `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts start --target "<what is being verified>"`. The target is the report's title, so write it in the report language as the change a reader recognizes — e.g. `PR #4444 섭취 대조 작업의 매일 04:50 예약 제거` — not a checkout description. A second qa invocation in the same session must run `start` again so it receives a fresh chain and re-armed runtime gates.
+At cycle entry, create or re-enter the guarded state with `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts start --target "<what is being verified>"`. The target is the report's title, so write it in the report language as the target environment followed by the change a reader recognizes — e.g. `로컬 환경 — PR #4444 섭취 대조 작업의 매일 04:50 예약 제거` — not a checkout description. A second qa invocation in the same session must run `start` again so it receives a fresh chain and re-armed runtime gates.
 
 ### PLAN
 
@@ -212,7 +226,7 @@ Build/test/lint green baseline.
 
 Drive the changed surface for real and attack it. Two parts, both required when the change touches a risk surface — user-facing OR an internal risk surface (feature-flag-gated logic, payment/notification resolver internals, permission/state transitions), per [stage3-handson.md] `### Decision Logic`; only a genuinely inert refactor that touches no risk surface skips:
 
-1. **Execute caller-provided scenarios verbatim**, with per-scenario evidence. ANY provided-scenario failure = immediate REQUEST_CHANGES. Caller-provided scenarios always run verbatim, unchanged — the derivation framework below governs only scenarios qa self-authors; it never rewrites what the caller handed in.
+1. **Execute caller-provided scenarios verbatim**, with per-scenario evidence. This covers each scenario that checks product behavior in the target environment; a release, operations or provenance scenario goes to `## Out of QA Scope` (see *Target environment*). ANY provided-scenario failure = immediate REQUEST_CHANGES. Caller-provided scenarios always run verbatim, unchanged — the derivation framework below governs only scenarios qa self-authors; it never rewrites what the caller handed in.
 2. **Self-author the user scenarios** for the changed surface, in this order — breadth before depth:
    1. **Derive candidate scenarios by breadth** via [scenario-authoring.md]: Layer A impact-map → coverage-gap → H/M/L priority, then Layer D product use-case breadth (arrival paths · adjacent state transitions · lifecycle stances) from a product-context map built from the repo.
    2. **Give the scenarios their hostile depth, highest priority (H) first.** Each of the 6 risks — failure paths, boundary/malformed input, injection, interruption-resume + dirty state, misleading success, idempotency — enters as a user scenario that walks into it (a careless user double-taps, an attacker pastes a payload, the network drops mid-checkout) and is tagged with that risk. See [stage3-handson.md] `## Adversarial Scenario Matrix` for each risk's hostile condition and the lifecycle detail (start → verify → stop). Rows 7–9 (stale-state, dirty-worktree, flaky-rerun) are per-run checks recorded separately with `record-run-check`.
@@ -236,7 +250,7 @@ For mobile/native UI work, load the `agent-device` skill first and derive the cu
 
 A **caller-provided** scenario runs verbatim at whatever layer it enters; record that layer as its `driven-at`, and it proves nothing above it.
 
-**Bootstrap only what the surface needs.** A missing precondition is work, not an obstacle. Verify an undeployed change on an isolated local instance you own, supplying any missing env config yourself. Take accounts and data from the project's documented QA provisioning first (see [stage1-commands.md] Discovery Order); only when none exists, seed rows, sign up, or mint a token. Install a missing tool outside the worktree. When the QA REQUEST verifies the deployment itself, the deployed environment is the surface and its failure is the FAIL.
+**Bootstrap only what the surface needs.** A missing precondition is work, not an obstacle. Verify an undeployed change on an isolated local instance you own, supplying any missing env config yourself. Take accounts and data from the project's documented QA provisioning first (see [stage1-commands.md] Discovery Order); only when none exists, seed rows, sign up, or mint a token. Install a missing tool outside the worktree. When the user names a deployed environment as the target, that environment is the surface and its failure is the FAIL.
 
 **Boundary substitution.** Fake only a hop you cannot reach — absent hardware, an off-network third party — and record it in `driven-at`. Prefer a substitute the repo ships. A step a person can do for you (a pairing code, an OTP) is not such a hop: ask for it with `await-user`. If even substitution is impossible, record the scenario `blocked` — never PASS — with the structural limit and the attempts that hit it:
 
@@ -526,6 +540,9 @@ Close the table with exactly one coverage-delta line naming the impact-map domai
 ## Not Verified
 [One line per `blocked` scenario: story/scenario — obstacle — attempts made — deepest point reached. Write "none" when there are none.]
 
+## Out of QA Scope
+[One line per release, operations or provenance item from the source or the caller that is not a criterion or scenario (see *Target environment*). Write "none" when there are none.]
+
 ## Issues (if any)
 [For each issue:]
 - **[CRITICAL/LOW]**: [Brief description]
@@ -583,11 +600,12 @@ PRE-FLIGHT: MUST-NOT-DO scope + B⊆A only; violation = immediate REQUEST_CHANGE
 CHECK:      a FAILED row blocks, except a self-authored M/L row scoring 50-74 = soft pass → EXIT Goal Met, soft pass → COMMENT, never APPROVE. 75+ blocks, H blocks, caller-provided blocks, unscorable-below-50 = re-run not soft-pass
 ECONOMY:    verify the change's stories and scenarios by the cheapest means that proves them. Server-only → curl the API; UI → one browser/device; a test asserting the scenario is proof (--evidence-surface test); device only for screen claims, released at once. Unchanged platforms are not under test
 INPUT:      read the plan/issue/spec/PR yourself; write ACs as user-observable outcomes in the report language. A state file or summary is never the source of requirements
+ENV:        one target environment, `local` unless the user names another; the source never picks it. Sort each source item: product behavior → AC proven there; release/operations work → `## Out of QA Scope`, never an AC or blocked; provenance (PR, wiki) → input, never queried. Cannot place an item → interview the user (await-user) before set-acceptance
 ACTOR:      Actor Roster before scenarios — actor · boundary (verification surface) · driver · client impact (none|contract|render + reason) · profiles · reachable. One actor per client that reads what changed; "screen unchanged" means contract, never an inward boundary. Human-only step (pairing code, OTP) → await-user. Substitute only an unreachable hop and record driven-at; otherwise record blocked (obstacle + attempts + deepest reachable + attempt log), never PASS
 PROFILES:   render actors are proven on every device profile they run on; profiles come from qa-device-profiles.ts get; unconfigured → show the defaults and ask once; "don't know" → set --defaults; prune/fix/add with remove / upsert; never guess sizes. Each profile: before/after screenshots, readable and unbroken
 SCENARIOS:  user scenarios under stories (author-scenario): what the actor does and sees; ≥1 H per story; risks 1..6 are tags; each risk covered by a scenario or declare-risk-na once per cycle. States: pass/fail · blocked · unrecorded (open work). author-cell, record-cell, waive, na, not_applicable are retired
 VERDICT:    REQUEST_CHANGES needs a recorded product failure (a failed scenario counts once a supported cause claim shows product path + base commit; an H fail with its cause unproven caps at COMMENT); APPROVE needs every scenario pass (a blocked one caps at COMMENT); any unrecorded scenario with no failure = no verdict yet
-BOOTSTRAP:  set up only what the chosen surface needs — isolated local instance, documented QA accounts/seeders first, cross-platform preconditions via API/seed/DB. When the QA REQUEST verifies the deployment itself, its failure is the FAIL
+BOOTSTRAP:  set up only what the chosen surface needs — isolated local instance, documented QA accounts/seeders first, cross-platform preconditions via API/seed/DB. When the user names a deployed environment as the target, its failure is the FAIL
 EVIDENCE:   the observation at the surface (before/action/after for screens) or a cited test run; claim only what it proves; launch screens prove nothing; depths never merge
 BASELINE:   build/test/lint green. See stage1-commands.md
 RISKS:      6 risks — failure paths, boundary/malformed input, injection, interruption, misleading success, idempotency — enter as user scenarios tagged with them. Breadth via scenario-authoring.md, hostile conditions via stage3-handson.md
