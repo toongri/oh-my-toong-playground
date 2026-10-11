@@ -469,6 +469,7 @@ describe("fc-feedback CLI", () => {
 			session_title: "테스트 세션",
 			recurring: [],
 			matches_without_feedback: [],
+			excluded_scenes: [],
 			matches: [
 				{
 					title: "1경기",
@@ -484,6 +485,7 @@ describe("fc-feedback CLI", () => {
 									end_line: 0,
 									position_tags: ["CB"],
 									topic_tags: [topicTag],
+									possession: { team: "ours", player: "센터백", where: "우리 진영 가운데", evidence_candidate_id: "c001" },
 									member_ids: memberIds,
 									key_frame_candidate_ids: [],
 									group_positions: [],
@@ -494,6 +496,18 @@ describe("fc-feedback CLI", () => {
 				},
 			],
 		});
+	}
+
+	// planFixture 유닛의 possession 근거 프레임(0~5초 줄의 c001, 10~15초 줄을 쓰는 둘째 유닛용 c002)을 plan.json과 함께 쓴다.
+	function writePlanFixture(work: string, planJson: string): void {
+		writeFileSync(join(work, "plan.json"), planJson);
+		writeFileSync(
+			join(work, "candidates.json"),
+			JSON.stringify([
+				{ id: "c001", video: "NUzEChn9EyI", t: 2, kind: "manual" },
+				{ id: "c002", video: "NUzEChn9EyI", t: 12, kind: "manual" },
+			]),
+		);
 	}
 
 	function linesFixture(): string {
@@ -510,7 +524,7 @@ describe("fc-feedback CLI", () => {
 
 		const work = tempDir();
 		writeFileSync(join(work, "lines.json"), linesFixture());
-		writeFileSync(join(work, "plan.json"), planFixture("빌드업"));
+		writePlanFixture(work, planFixture("빌드업"));
 
 		const result = run(["check", "plan", "--work", work], { cwd, home });
 		expect(result.exitCode).toBe(0);
@@ -518,6 +532,7 @@ describe("fc-feedback CLI", () => {
 		expect(parsed.ok).toBe(true);
 		expect(parsed.pending).toBe(false);
 		expect(parsed.tableMd).toContain("센터백: 볼 빨리 내주기");
+		expect(parsed.excludedMd).toBe("뺀 장면: 없음");
 
 		const validated = JSON.parse(readFileSync(join(work, "plan.validated.json"), "utf8"));
 		expect(validated.units).toHaveLength(1);
@@ -533,7 +548,7 @@ describe("fc-feedback CLI", () => {
 
 		const work = tempDir();
 		writeFileSync(join(work, "lines.json"), JSON.stringify([{ i: 0, video: "NUzEChn9EyI", start: 0, end: 5, text: "홍길동과 거리가 벌어짐" }]));
-		writeFileSync(join(work, "plan.json"), planFixture("빌드업"));
+		writePlanFixture(work, planFixture("빌드업"));
 
 		expect(run(["check", "plan", "--work", work], { cwd, home }).exitCode).toBe(0);
 		const validated = JSON.parse(readFileSync(join(work, "plan.validated.json"), "utf8"));
@@ -593,10 +608,10 @@ describe("fc-feedback CLI", () => {
 		const unit = plan.matches[0].topics[0].units[0];
 		plan.matches[0].topics[0].units = [
 			{ ...unit, start_line: 0, end_line: 0 },
-			{ ...unit, title: "센터백: 공 오래 끌지 않기", start_line: 1, end_line: 1 },
+			{ ...unit, title: "센터백: 공 오래 끌지 않기", start_line: 1, end_line: 1, possession: { ...unit.possession, evidence_candidate_id: "c002" } },
 		];
 		plan.recurring = [{ label: "수비 라인이 맞지 않음", lines: [1, 0], member_ids: [] }];
-		writeFileSync(join(work, "plan.json"), JSON.stringify(plan));
+		writePlanFixture(work, JSON.stringify(plan));
 
 		const result = run(["check", "plan", "--work", work], { cwd, home });
 		expect(result.exitCode).toBe(0);
@@ -623,9 +638,9 @@ describe("fc-feedback CLI", () => {
 		const unit = plan.matches[0].topics[0].units[0];
 		plan.matches[0].topics[0].units = [
 			{ ...unit, title: "뎁스차저: 뒤로 끌거나 반대편 보기", start_line: 0, end_line: 0 },
-			{ ...unit, title: "뎁스차저: 반대편이나 두두 보기", start_line: 1, end_line: 1 },
+			{ ...unit, title: "뎁스차저: 반대편이나 두두 보기", start_line: 1, end_line: 1, possession: { ...unit.possession, evidence_candidate_id: "c002" } },
 		];
-		writeFileSync(join(work, "plan.json"), JSON.stringify(plan));
+		writePlanFixture(work, JSON.stringify(plan));
 
 		const result = run(["check", "plan", "--work", work], { cwd, home });
 		expect(result.exitCode).toBe(0);
@@ -647,7 +662,7 @@ describe("fc-feedback CLI", () => {
 				{ i: 1, video: "NUzEChn9EyI", start: 6.5, end: 8, text: "새로 패널티" },
 			]),
 		);
-		writeFileSync(join(work, "plan.json"), planFixture("빌드업"));
+		writePlanFixture(work, planFixture("빌드업"));
 
 		const result = run(["check", "plan", "--work", work], { cwd, home });
 		expect(result.exitCode).toBe(0);
@@ -667,7 +682,7 @@ describe("fc-feedback CLI", () => {
 		writeFileSync(join(work, "lines.json"), linesFixture());
 		const plan = JSON.parse(planFixture("신규태그"));
 		plan.proposed_tags = [{ tag: "신규태그", reason: "새로운 유형" }];
-		writeFileSync(join(work, "plan.json"), JSON.stringify(plan));
+		writePlanFixture(work, JSON.stringify(plan));
 
 		const result = run(["check", "plan", "--work", work], { cwd, home });
 		expect(result.exitCode).toBe(2);
@@ -689,7 +704,7 @@ describe("fc-feedback CLI", () => {
 		writeFileSync(join(work, "lines.json"), linesFixture());
 		const plan = JSON.parse(planFixture("빌드업"));
 		delete plan.session_title;
-		writeFileSync(join(work, "plan.json"), JSON.stringify(plan));
+		writePlanFixture(work, JSON.stringify(plan));
 
 		const result = run(["check", "plan", "--work", work], { cwd, home });
 		expect(result.exitCode).toBe(1);
@@ -707,7 +722,7 @@ describe("fc-feedback CLI", () => {
 		run(["config", "set", "--archive", archive, "--roster", roster, "--pages-url", "https://example.com/"], { cwd, home });
 		const work = tempDir();
 		writeFileSync(join(work, "lines.json"), linesFixture());
-		writeFileSync(join(work, "plan.json"), planFixture("빌드업"));
+		writePlanFixture(work, planFixture("빌드업"));
 		expect(run(["check", "plan", "--work", work], { cwd, home }).exitCode).toBe(0);
 		return work;
 	}
@@ -725,8 +740,8 @@ describe("fc-feedback CLI", () => {
 				units: {
 					u001: {
 						blocks: [
-							{ type: "text", text: "볼드가 없는 문장입니다" },
-							{ type: "frame", candidate_id: "c001", caption: "장면" },
+							{ type: "text", text: "센터백이 공을 잡은 볼드가 없는 문장입니다" },
+							{ type: "frame", candidate_id: "c001", caption: "공을 잡은 장면" },
 						],
 					},
 				},
@@ -751,7 +766,7 @@ describe("fc-feedback CLI", () => {
 			join(work, "notes.json"),
 			JSON.stringify({
 				version: 2,
-				units: { u001: { blocks: [{ type: "text", text: "**패스**를 홍길동에게 줬어야 한다" }, { type: "frame", candidate_id: "c001", caption: "장면" }] } },
+				units: { u001: { blocks: [{ type: "text", text: "센터백이 공을 잡았을 때 **패스**를 홍길동에게 줬어야 한다" }, { type: "frame", candidate_id: "c001", caption: "공을 잡은 장면" }] } },
 			}),
 		);
 		const result = run(["check", "notes", "--work", work], { cwd, home });
@@ -772,8 +787,8 @@ describe("fc-feedback CLI", () => {
 				units: {
 					u001: {
 						blocks: [
-							{ type: "text", text: "**볼드** 문장입니다" },
-							{ type: "frame", candidate_id: "c001", caption: "장면" },
+							{ type: "text", text: "센터백이 공을 잡은 **볼드** 문장입니다" },
+							{ type: "frame", candidate_id: "c001", caption: "공을 잡은 장면" },
 						],
 					},
 				},
@@ -794,7 +809,7 @@ describe("fc-feedback CLI", () => {
 		run(["config", "set", "--archive", archive, "--roster", rosterFile(), "--pages-url", "https://example.com/"], { cwd, home });
 		const work = tempDir();
 		writeFileSync(join(work, "lines.json"), linesFixture());
-		writeFileSync(join(work, "plan.json"), planFixture("빌드업", ["hong"]));
+		writePlanFixture(work, planFixture("빌드업", ["hong"]));
 		expect(run(["check", "plan", "--work", work], { cwd, home }).exitCode).toBe(0);
 		writeFileSync(
 			join(work, "notes.json"),
@@ -803,8 +818,8 @@ describe("fc-feedback CLI", () => {
 				units: {
 					u001: {
 						blocks: [
-							{ type: "text", text: "**패스하기**가 맞습니다" },
-							{ type: "frame", candidate_id: "c001", caption: "장면" },
+							{ type: "text", text: "센터백이 공을 잡으면 **패스하기**가 맞습니다" },
+							{ type: "frame", candidate_id: "c001", caption: "공을 잡은 장면" },
 						],
 						unidentified_member_ids: ["hong"],
 						look_at: "화면 위쪽 마크 없는 선수",
@@ -858,10 +873,10 @@ describe("fc-feedback CLI", () => {
 		const unit = plan.matches[0].topics[0].units[0];
 		plan.matches[0].topics[0].units = [
 			{ ...unit, start_line: 0, end_line: 0 },
-			{ ...unit, title: "센터백: 라인 올리기", start_line: 1, end_line: 1 },
+			{ ...unit, title: "센터백: 라인 올리기", start_line: 1, end_line: 1, possession: { ...unit.possession, evidence_candidate_id: "c002" } },
 		];
 		plan.recurring = [{ label: "수비 라인이 맞지 않음", lines: [0, 1], member_ids: [] }];
-		writeFileSync(join(work, "plan.json"), JSON.stringify(plan));
+		writePlanFixture(work, JSON.stringify(plan));
 		expect(run(["check", "plan", "--work", work], { cwd, home }).exitCode).toBe(0);
 		writeFileSync(
 			join(work, "session.json"),
@@ -942,7 +957,7 @@ describe("fc-feedback CLI", () => {
 		expect(add.exitCode).toBe(0);
 
 		writeFileSync(join(work, "lines.json"), linesFixture());
-		writeFileSync(join(work, "plan.json"), planFixture("신규태그"));
+		writePlanFixture(work, planFixture("신규태그"));
 
 		const check = run(["check", "plan", "--work", work], { cwd, home });
 		expect(check.exitCode).toBe(0);
@@ -967,7 +982,7 @@ describe("fc-feedback CLI", () => {
 		const work = tempDir();
 
 		writeFileSync(join(work, "lines.json"), linesFixture());
-		writeFileSync(join(work, "plan.json"), planFixture("빌드업", ["ghost"]));
+		writePlanFixture(work, planFixture("빌드업", ["ghost"]));
 
 		const result = run(["check", "plan", "--work", work], { cwd, home });
 		expect(result.exitCode).toBe(1);
@@ -1364,7 +1379,7 @@ describe("fc-feedback CLI", () => {
 		writeFileSync(join(work, "candidates.json"), JSON.stringify([{ id: "c001", video: "NUzEChn9EyI", t: 2, kind: "manual" }]));
 		const plan = JSON.parse(planFixture("빌드업"));
 		plan.matches[0].topics[0].units[0].key_frame_candidate_ids = ["c001"];
-		writeFileSync(join(work, "plan.json"), JSON.stringify(plan));
+		writePlanFixture(work, JSON.stringify(plan));
 		writeFileSync(
 			join(work, "notes.json"),
 			JSON.stringify({
@@ -1372,8 +1387,8 @@ describe("fc-feedback CLI", () => {
 				units: {
 					u001: {
 						blocks: [
-							{ type: "text", text: "문제는 누구 때문이며 대신 이렇게 해야 함" },
-							{ type: "frame", candidate_id: "c001", caption: "캡션" },
+							{ type: "text", text: "센터백이 공을 잡았을 때 문제는 누구 때문이며 대신 이렇게 해야 함" },
+							{ type: "frame", candidate_id: "c001", caption: "공이 보이는 캡션" },
 						],
 					},
 				},
@@ -1414,8 +1429,8 @@ describe("fc-feedback CLI", () => {
 		expect(dataJson.units).toHaveLength(1);
 		expect(dataJson.units[0].images.start).toEqual({ src: "img/u001-start.webp", width: 1, height: 1 });
 		expect(dataJson.units[0].body).toEqual([
-			{ type: "text", text: "문제는 누구 때문이며 대신 이렇게 해야 함" },
-			{ type: "frame", src: "img/u001-c001.webp", width: 1, height: 1, t: 2, caption: "캡션" },
+			{ type: "text", text: "센터백이 공을 잡았을 때 문제는 누구 때문이며 대신 이렇게 해야 함" },
+			{ type: "frame", src: "img/u001-c001.webp", width: 1, height: 1, t: 2, caption: "공이 보이는 캡션" },
 		]);
 		expect(dataJson.units[0].named_member_ids).toEqual([]);
 		expect(dataJson.units[0].uid).toBe(`${sessionId}#u001`);
@@ -1680,7 +1695,7 @@ describe("fc-feedback CLI", () => {
 			Object.assign(plan.matches[0].topics[0].units[0], { member_ids: memberIds, position_tags: ["DF", "CB"], group_positions: ["DF"] });
 			writeFileSync(join(work, "plan.json"), JSON.stringify(plan));
 			const notes = JSON.parse(readFileSync(join(work, "notes.json"), "utf8"));
-			if (memberIds.length > 0) notes.units.u001.blocks[1].caption = "홍길동이 라인 뒤에 선 순간";
+			if (memberIds.length > 0) notes.units.u001.blocks[1].caption = "공을 잡은 홍길동이 라인 뒤에 선 순간";
 			writeFileSync(join(work, "notes.json"), JSON.stringify(notes));
 			const result = run(["render", "--work", work], { cwd, home });
 			expect(result.stderr).toBe("");
@@ -2476,6 +2491,7 @@ describe("fc-feedback notes next/submit", () => {
 			end_line: line,
 			position_tags: ["CB"],
 			topic_tags: ["빌드업"],
+			possession: { team: "ours", player: "센터백", where: "우리 진영 가운데", evidence_candidate_id: `c00${line + 1}` },
 			member_ids: [],
 			key_frame_candidate_ids: [],
 			group_positions: [],
@@ -2486,6 +2502,7 @@ describe("fc-feedback notes next/submit", () => {
 				session_title: "테스트 세션",
 				recurring: [],
 				matches_without_feedback: [],
+				excluded_scenes: [],
 				matches: [
 					{
 						title: "1경기",
@@ -2507,10 +2524,10 @@ describe("fc-feedback notes next/submit", () => {
 		return { cwd, home, work };
 	}
 
-	function unitNote(candidateId: string, caption = "장면") {
+	function unitNote(candidateId: string, caption = "공을 잡은 장면") {
 		return {
 			blocks: [
-				{ type: "text", text: "**볼드** 문장입니다" },
+				{ type: "text", text: "센터백이 공을 잡은 **볼드** 문장입니다" },
 				{ type: "frame", candidate_id: candidateId, caption },
 			],
 		};
@@ -2536,6 +2553,19 @@ describe("fc-feedback notes next/submit", () => {
 		expect(result.stdout).toContain(`notes submit u001 --file ${ctx.work}/notes-units/u001.json`);
 		expect(result.stdout).not.toContain("둘째 대사");
 		expect(existsSync(join(ctx.work, "notes.json"))).toBe(false);
+	});
+
+	test("브리프는 plan의 공 소유(팀·선수·위치·근거 프레임)를 싣고, possession이 없는 옛 plan.validated.json이면 기록 없음과 프레임 확인을 알린다", () => {
+		const ctx = loopWork();
+		expect(run(["notes", "next", "--work", ctx.work], ctx).stdout).toContain("공: 우리 · 센터백 · 우리 진영 가운데 (근거 c001)");
+		const validatedPath = join(ctx.work, "plan.validated.json");
+		const validated = JSON.parse(readFileSync(validatedPath, "utf8"));
+		for (const unit of validated.units) delete unit.possession;
+		writeFileSync(validatedPath, JSON.stringify(validated));
+		const legacy = run(["notes", "next", "--work", ctx.work], ctx);
+		expect(legacy.exitCode).toBe(0);
+		expect(legacy.stdout).toContain("공: 기록 없음");
+		expect(legacy.stdout).toContain("프레임에서 공 가진 팀·선수·위치를 먼저 확인한다");
 	});
 
 	test("notes next는 plan.validated.json이 없으면 exit 1", () => {
@@ -2600,7 +2630,7 @@ describe("fc-feedback notes next/submit", () => {
 
 	test("다른 유닛의 오류는 이 유닛의 submit을 막지 않는다", () => {
 		const ctx = loopWork();
-		const broken = { blocks: [{ type: "text", text: "**볼드** 프레임이 없는 유닛" }] };
+		const broken = { blocks: [{ type: "text", text: "센터백이 공을 잡은 **볼드** 프레임이 없는 유닛" }] };
 		writeFileSync(join(ctx.work, "notes.json"), JSON.stringify({ version: 2, units: { u002: broken } }));
 		const result = submit(ctx, "u001", { unit: unitNote("c001") });
 		expect(result.exitCode).toBe(0);
@@ -2611,7 +2641,7 @@ describe("fc-feedback notes next/submit", () => {
 
 	test("모든 유닛이 있지만 전체 검증이 실패하면 notes next는 오류가 있는 첫 유닛을 오류와 함께 낸다", () => {
 		const ctx = loopWork();
-		const broken = { blocks: [{ type: "text", text: "**볼드** 프레임이 없는 유닛" }] };
+		const broken = { blocks: [{ type: "text", text: "센터백이 공을 잡은 **볼드** 프레임이 없는 유닛" }] };
 		writeFileSync(
 			join(ctx.work, "notes.json"),
 			JSON.stringify({ version: 2, units: { u001: unitNote("c001"), u002: broken, u003: unitNote("c003") } }),

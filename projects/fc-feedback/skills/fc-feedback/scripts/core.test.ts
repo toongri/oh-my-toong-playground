@@ -57,6 +57,7 @@ import {
 	webpDimensions,
 	type CurrentUnit,
 	type PastUnit,
+	type Possession,
 	type Roster,
 	type SimilarCandidatesResult,
 	type Taxonomy,
@@ -1030,6 +1031,7 @@ function makeValidPlan(): any {
 		session_title: "1월 4일 세션",
 		recurring: [],
 		matches_without_feedback: [],
+		excluded_scenes: [],
 		matches: [
 			{
 				title: "1경기",
@@ -1048,6 +1050,7 @@ function makeValidPlan(): any {
 								member_ids: ["hong-gildong"],
 								key_frame_candidate_ids: ["c001"],
 								group_positions: [],
+								possession: { team: "ours", player: "홍길동", where: "우리 진영 가운데", evidence_candidate_id: "c001" },
 							},
 							{
 								start_line: 2,
@@ -1058,6 +1061,7 @@ function makeValidPlan(): any {
 								member_ids: [],
 								key_frame_candidate_ids: ["c002"],
 								group_positions: [],
+								possession: { team: "ours", player: "김철수", where: "우리 박스 안", evidence_candidate_id: "c002" },
 							},
 						],
 					},
@@ -1133,6 +1137,205 @@ describe("checkPlan — matches_without_feedback(피드백 없는 경기)", () =
 		expect(findError(checkPlan(withField([3]), fixtureContext).errors, "matches_without_feedback[0]")).toBe(true);
 		expect(findError(checkPlan(withField(["가".repeat(81)]), fixtureContext).errors, "matches_without_feedback[0]")).toBe(true);
 		expect(checkPlan(withField(["가".repeat(80)]), fixtureContext).errors).toEqual([]);
+	});
+});
+
+describe("checkPlan — excluded_scenes(유닛으로 만들지 않은 피드백 줄)", () => {
+	/** u001 = 줄 0, u002 = 줄 2 — 줄 1(0:10 "다음 상황 보시죠")이 두 유닛 사이에 남는다. */
+	function planWithGap(excluded: unknown): any {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units[0].end_line = 0;
+		plan.excluded_scenes = excluded;
+		return plan;
+	}
+	const scene = (overrides: Record<string, unknown> = {}) => ({
+		start_line: 1,
+		end_line: 1,
+		reason_ko: "누구에게 한 말인지 장면에서 정해지지 않는다",
+		scene_ko: "공은 우리 진영 왼쪽, 홍길동이 하프라인 근처에 서 있다",
+		guess_title: "홍길동: 측면으로 빠지기",
+		recommendation: "pass",
+		possession: { team: "theirs", player: "상대 공격수", where: "우리 진영 왼쪽", evidence_candidate_id: "c001" },
+		...overrides,
+	});
+	const onVideoB = { possession: { team: "loose", player: null, where: "하프라인 가운데", evidence_candidate_id: "c003" } };
+
+	test("필드가 없으면 excluded_scenes: []를 추가하라는 안내와 함께 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		delete plan.excluded_scenes;
+		const error = checkPlan(plan, fixtureContext).errors.find((e) => e.path === "excluded_scenes");
+		expect(error?.message).toContain('"excluded_scenes": []');
+	});
+
+	test("빈 배열이면 excludedMd는 '뺀 장면: 없음' 한 줄이다", () => {
+		const result = checkPlan(planWithGap([]), fixtureContext);
+		expect(result.errors).toEqual([]);
+		expect(result.excludedMd).toBe("뺀 장면: 없음");
+	});
+
+	test("결정을 기다리는 장면은 원문·앞뒤 줄(속한 유닛 표시)·앞뒤 유닛과 간격·장면·추정 피드백·뺀 이유·추천을 보인다", () => {
+		const result = checkPlan(planWithGap([scene({ recommendation: "include" })]), fixtureContext);
+		expect(result.errors).toEqual([]);
+		expect(result.excludedMd).toBe(
+			[
+				"뺀 장면 (결정 대기 1 · pass 0)",
+				"",
+				'1. 0:10 "다음 상황 보시죠" — 추천: 넣기',
+				'   - 앞 줄: 0:00 "안녕하세요" [u001]',
+				'   - 뒤 줄: 0:20 "골키퍼 배급 상황입니다" [u002]',
+				"   - 앞 유닛: u001 0:00 센터백: 라인 올리기 (1경기, 끝난 지 0초) · 뒤 유닛: u002 0:20 골키퍼: 짧게 배급하기 (1경기, 시작까지 0초)",
+				"   - 공: 상대 · 상대 공격수 · 우리 진영 왼쪽",
+				"   - 장면: 공은 우리 진영 왼쪽, 홍길동이 하프라인 근처에 서 있다",
+				"   - 추정 피드백: 홍길동: 측면으로 빠지기",
+				"   - 뺀 이유: 누구에게 한 말인지 장면에서 정해지지 않는다",
+			].join("\n"),
+		);
+	});
+
+	test("유닛과의 간격이 1분 이상이면 분·초로 쓴다", () => {
+		const lines = fixtureLines.map((line) => (line.i === 2 ? { ...line, start: 100, end: 110 } : line));
+		expect(checkPlan(planWithGap([scene()]), { ...fixtureContext, lines }).excludedMd).toContain("(1경기, 시작까지 1분 20초)");
+	});
+
+	test("앞뒤에 같은 영상 유닛이 없으면 '없음'으로 쓰고, 댓글 줄은 작성자를 붙인다", () => {
+		const lines = fixtureLines.map((line) => (line.i === 4 ? { ...line, source: "comment" as const, author: "@HongGD" } : line));
+		const result = checkPlan(planWithGap([scene({ start_line: 3, end_line: 3, ...onVideoB })]), { ...fixtureContext, lines });
+		expect(result.errors).toEqual([]);
+		expect(result.excludedMd).toContain('   - 뒤 줄: 0:10 (댓글 홍길동) "크로스가 올라갑니다"');
+		expect(result.excludedMd).toContain("   - 앞 유닛: 없음 · 뒤 유닛: 없음");
+		expect(result.excludedMd).not.toContain("앞 줄:");
+	});
+
+	test("user_decision: pass인 장면은 'pass로 정한 장면'에 한 줄로 접힌다", () => {
+		const result = checkPlan(planWithGap([scene({ user_decision: "pass" }), scene({ start_line: 3, end_line: 3, ...onVideoB })]), fixtureContext);
+		expect(result.errors).toEqual([]);
+		expect(result.excludedMd.split("\n")[0]).toBe("뺀 장면 (결정 대기 1 · pass 1)");
+		expect(result.excludedMd).toContain('2. 0:00 "2부 시작합니다" — 추천: pass');
+		expect(result.excludedMd).toContain('pass로 정한 장면:\n- 1. 0:10 "다음 상황 보시죠" — 누구에게 한 말인지 장면에서 정해지지 않는다');
+		expect(result.excludedMd).not.toContain('1. 0:10 "다음 상황 보시죠" — 추천');
+	});
+
+	test("유닛 범위에 든 줄은 뺀 장면이 될 수 없다", () => {
+		const result = checkPlan(planWithGap([scene({ start_line: 2, end_line: 2 })]), fixtureContext);
+		const error = result.errors.find((e) => e.path === "excluded_scenes[0].start_line");
+		expect(error?.message).toContain("u002");
+	});
+
+	test("줄 범위가 무효·다른 영상에 걸침·서로 겹침·순서가 거꾸로면 에러다", () => {
+		expect(findError(checkPlan(planWithGap([scene({ start_line: -1 })]), fixtureContext).errors, "excluded_scenes[0].start_line")).toBe(true);
+		expect(findError(checkPlan(planWithGap([scene({ end_line: 99 })]), fixtureContext).errors, "excluded_scenes[0].end_line")).toBe(true);
+		expect(findError(checkPlan(planWithGap([scene({ start_line: 3, end_line: 1 })]), fixtureContext).errors, "excluded_scenes[0].end_line")).toBe(true);
+		const lines = [...fixtureLines, { i: 5, video: "BBBBBBBBBBB", start: 20, end: 30, text: "끝", source: "speech" as const }];
+		const plan = makeValidPlan();
+		plan.excluded_scenes = [scene({ start_line: 3, end_line: 4, ...onVideoB }), scene({ start_line: 4, end_line: 5, ...onVideoB })];
+		expect(findError(checkPlan(plan, { ...fixtureContext, lines }).errors, "excluded_scenes[1].start_line")).toBe(true);
+		plan.excluded_scenes = [scene({ start_line: 5, end_line: 5, ...onVideoB }), scene({ start_line: 3, end_line: 3, ...onVideoB })];
+		expect(findError(checkPlan(plan, { ...fixtureContext, lines }).errors, "excluded_scenes[1].start_line")).toBe(true);
+	});
+
+	test("문장 필드는 비어 있지 않은 한 줄·길이 상한, guess_title은 유닛 제목 꼴이어야 한다", () => {
+		const errorsOf = (overrides: Record<string, unknown>) => checkPlan(planWithGap([scene(overrides)]), fixtureContext).errors;
+		expect(findError(errorsOf({ reason_ko: " " }), "excluded_scenes[0].reason_ko")).toBe(true);
+		expect(findError(errorsOf({ reason_ko: "가\n나" }), "excluded_scenes[0].reason_ko")).toBe(true);
+		expect(findError(errorsOf({ reason_ko: "가".repeat(101) }), "excluded_scenes[0].reason_ko")).toBe(true);
+		expect(findError(errorsOf({ scene_ko: "가".repeat(161) }), "excluded_scenes[0].scene_ko")).toBe(true);
+		expect(findError(errorsOf({ guess_title: "홍길동 측면" }), "excluded_scenes[0].guess_title")).toBe(true);
+		expect(errorsOf({ reason_ko: "가".repeat(100), scene_ko: "가".repeat(160) })).toEqual([]);
+	});
+
+	test("recommendation은 include|pass, user_decision은 생략하거나 pass만 쓴다", () => {
+		const errorsOf = (overrides: Record<string, unknown>) => checkPlan(planWithGap([scene(overrides)]), fixtureContext).errors;
+		expect(findError(errorsOf({ recommendation: "merge" }), "excluded_scenes[0].recommendation")).toBe(true);
+		expect(findError(errorsOf({ user_decision: "include" }), "excluded_scenes[0].user_decision")).toBe(true);
+		expect(errorsOf({ user_decision: "pass" })).toEqual([]);
+	});
+
+	test("프레임으로 소유를 가를 수 없으면 team unknown(player·where null)으로 적고, excludedMd는 미확인과 본 프레임을 보인다", () => {
+		const unknown = { team: "unknown", player: null, where: null, evidence_candidate_id: "c001" };
+		const result = checkPlan(planWithGap([scene({ possession: unknown })]), fixtureContext);
+		expect(result.errors).toEqual([]);
+		expect(result.excludedMd).toContain("   - 공: 미확인 — c001 등 프레임으로 공 가진 팀을 가르지 못했다(이 장면을 넣으려면 소유를 먼저 정한다)");
+		const errorsOf = (possession: unknown) => checkPlan(planWithGap([scene({ possession })]), fixtureContext).errors.map((e) => e.path);
+		expect(errorsOf({ ...unknown, player: "상대 공격수" })).toEqual(["excluded_scenes[0].possession.player"]);
+		expect(errorsOf({ ...unknown, where: "우리 진영 왼쪽" })).toEqual(["excluded_scenes[0].possession.where"]);
+	});
+});
+
+describe("checkPlan — possession(공 소유)", () => {
+	const unitPath = "matches[0].topics[0].units[0]";
+	function planWithPossession(possession: unknown, topicTags?: string[]): any {
+		const plan = makeValidPlan();
+		const unit = plan.matches[0].topics[0].units[0];
+		if (possession === undefined) delete unit.possession;
+		else unit.possession = possession;
+		if (topicTags !== undefined) unit.topic_tags = topicTags;
+		return plan;
+	}
+	const ours: Possession = { team: "ours", player: "홍길동", where: "우리 진영 가운데", evidence_candidate_id: "c001" };
+	const errorsOf = (possession: unknown, topicTags?: string[]) => checkPlan(planWithPossession(possession, topicTags), fixtureContext).errors;
+
+	test("유닛은 소유가 정해져야 만든다 — team unknown이면 excluded_scenes로 옮기라는 에러다", () => {
+		const errors = errorsOf({ team: "unknown", player: null, where: null, evidence_candidate_id: "c001" });
+		expect(errors.map((e) => e.path)).toEqual([`${unitPath}.possession.team`]);
+		expect(errors[0].message).toContain("excluded_scenes");
+	});
+
+	test("없으면 해석 전에 공 소유를 정하라는 에러를 낸다", () => {
+		const error = errorsOf(undefined).find((e) => e.path === `${unitPath}.possession`);
+		expect(error?.message).toContain("공 소유");
+	});
+
+	test("검증된 유닛에 possession을 그대로 싣고, 게이트 표의 '공' 열에 팀과 선수를 보인다", () => {
+		const result = checkPlan(makeValidPlan(), fixtureContext);
+		expect(result.errors).toEqual([]);
+		expect(result.validated.units[0].possession).toEqual(ours);
+		expect(result.tableMd.split("\n")[0]).toBe("| 경기 | 시간 | 제목 | 공 | 포지션 | 주제 | 팀원 |");
+		expect(result.tableMd).toContain("| 센터백: 라인 올리기 | 우리 홍길동 |");
+		const loose = checkPlan(planWithPossession({ team: "loose", player: null, where: "하프라인", evidence_candidate_id: "c001" }, ["포지셔닝"]), {
+			...fixtureContext,
+			taxonomy: { version: 1, topics: ["빌드업", "탈압박", "포지셔닝"] },
+		});
+		expect(loose.errors).toEqual([]);
+		expect(loose.tableMd).toContain("| 센터백: 라인 올리기 | 경합 |");
+	});
+
+	test("team은 ours|theirs|loose, player는 loose일 때만 null, where는 1–40자 한 줄이어야 한다", () => {
+		expect(findError(errorsOf({ ...ours, team: "us" }), `${unitPath}.possession.team`)).toBe(true);
+		expect(findError(errorsOf({ ...ours, player: null }), `${unitPath}.possession.player`)).toBe(true);
+		expect(findError(errorsOf({ ...ours, team: "loose" }), `${unitPath}.possession.player`)).toBe(true);
+		expect(findError(errorsOf({ ...ours, where: " " }), `${unitPath}.possession.where`)).toBe(true);
+		expect(findError(errorsOf({ ...ours, where: "가".repeat(41) }), `${unitPath}.possession.where`)).toBe(true);
+		expect(findError(errorsOf({ ...ours, player: "가".repeat(31) }), `${unitPath}.possession.player`)).toBe(true);
+	});
+
+	test("evidence_candidate_id는 후보에 있고 유닛과 같은 영상·유닛 ±5초 안이어야 한다(그 프레임을 보고 정한다)", () => {
+		expect(findError(errorsOf({ ...ours, evidence_candidate_id: "c999" }), `${unitPath}.possession.evidence_candidate_id`)).toBe(true);
+		expect(findError(errorsOf({ ...ours, evidence_candidate_id: "c003" }), `${unitPath}.possession.evidence_candidate_id`)).toBe(true);
+		expect(findError(errorsOf({ ...ours, evidence_candidate_id: "c004" }), `${unitPath}.possession.evidence_candidate_id`)).toBe(true);
+	});
+
+	test("상대 공인데 빌드업·탈압박·파이널서드, 우리 공인데 압박·수비라인 태그면 소유와 해석이 어긋났다는 에러다", () => {
+		const context = { ...fixtureContext, taxonomy: { version: 1 as const, topics: ["빌드업", "탈압박", "압박", "수비라인", "파이널서드", "포지셔닝"] } };
+		const errorsWith = (possession: unknown, tags: string[]) => checkPlan(planWithPossession(possession, tags), context).errors;
+		const theirs = { ...ours, team: "theirs", player: "상대 공격수" };
+		const error = errorsWith(theirs, ["빌드업"]).find((e) => e.path === `${unitPath}.topic_tags`);
+		expect(error?.message).toContain("상대 공");
+		expect(findError(errorsWith(theirs, ["파이널서드"]), `${unitPath}.topic_tags`)).toBe(true);
+		expect(findError(errorsWith(ours, ["압박"]), `${unitPath}.topic_tags`)).toBe(true);
+		expect(findError(errorsWith(ours, ["수비라인"]), `${unitPath}.topic_tags`)).toBe(true);
+		expect(errorsWith(theirs, ["압박", "포지셔닝"])).toEqual([]);
+		expect(errorsWith({ ...ours, team: "loose", player: null }, ["빌드업", "압박"])).toEqual([]);
+	});
+
+	test("excluded_scenes 항목도 possession이 필수이고 같은 규칙으로 검사한다", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units[0].end_line = 0;
+		plan.excluded_scenes = [
+			{ start_line: 1, end_line: 1, reason_ko: "이유", scene_ko: "장면", guess_title: "홍길동: 빠지기", recommendation: "pass" },
+		];
+		expect(findError(checkPlan(plan, fixtureContext).errors, "excluded_scenes[0].possession")).toBe(true);
+		plan.excluded_scenes[0].possession = { ...ours, evidence_candidate_id: "c003" };
+		expect(findError(checkPlan(plan, fixtureContext).errors, "excluded_scenes[0].possession.evidence_candidate_id")).toBe(true);
 	});
 });
 
@@ -1272,6 +1475,7 @@ describe("checkPlan — 시간 순서와 topic (떨어진 유닛 묶기)", () =>
 			member_ids: [],
 			key_frame_candidate_ids: [],
 			group_positions: [],
+			possession: { team: "ours", player: "우리 센터백", where: "우리 진영", evidence_candidate_id: ["c001", "c001", "c002", "c003", "c003"][line] },
 			...extra,
 		};
 	}
@@ -1565,13 +1769,13 @@ describe("checkPlan", () => {
 		expect(result.validated.units[1]).toMatchObject({ video: "AAAAAAAAAAA", start: 20, end: 30 });
 	});
 
-	test("tableMd는 경기·시간·제목·포지션·주제·팀원 열로 게이트 표를 만든다(스냅샷)", () => {
+	test("tableMd는 경기·시간·제목·공·포지션·주제·팀원 열로 게이트 표를 만든다(스냅샷)", () => {
 		const result = checkPlan(makeValidPlan(), fixtureContext);
 		const expected = [
-			"| 경기 | 시간 | 제목 | 포지션 | 주제 | 팀원 |",
-			"|---|---|---|---|---|---|",
-			"| 1경기 | 0:00 | 센터백: 라인 올리기 | CB | 빌드업 | 홍길동 |",
-			"| 1경기 | 0:20 | 골키퍼: 짧게 배급하기 | GK | 탈압박 | - |",
+			"| 경기 | 시간 | 제목 | 공 | 포지션 | 주제 | 팀원 |",
+			"|---|---|---|---|---|---|---|",
+			"| 1경기 | 0:00 | 센터백: 라인 올리기 | 우리 홍길동 | CB | 빌드업 | 홍길동 |",
+			"| 1경기 | 0:20 | 골키퍼: 짧게 배급하기 | 우리 김철수 | GK | 탈압박 | - |",
 		].join("\n");
 		expect(result.tableMd).toBe(expected);
 	});
@@ -1845,13 +2049,13 @@ function makeValidNotes(): any {
 		units: {
 			u001: {
 				blocks: [
-					{ type: "text", text: "센터백이 패스를 미스한 장면입니다" },
+					{ type: "text", text: "홍길동이 우리 진영 가운데에서 공을 잡고 패스를 미스한 장면입니다" },
 					{ type: "frame", candidate_id: "c001", caption: "화면 왼쪽 홍길동이 공을 패스 미스한 순간" },
 				],
 			},
 			u002: {
 				blocks: [
-					{ type: "text", text: "골키퍼 배급이 느렸습니다" },
+					{ type: "text", text: "골키퍼가 우리 박스 안에서 공을 잡은 뒤 배급이 느렸습니다" },
 					{ type: "frame", candidate_id: "c002", caption: "골키퍼가 공을 잡은 장면" },
 				],
 			},
@@ -1917,22 +2121,22 @@ describe("checkNotes", () => {
 			const notes = makeValidNotes();
 			notes.units.u001.blocks = [
 				...texts.map((text) => ({ type: "text", text })),
-				{ type: "frame", candidate_id: "c001", caption: "화면 왼쪽 홍길동이 패스를 미스한 순간" },
+				{ type: "frame", candidate_id: "c001", caption: "화면 왼쪽 홍길동이 공을 패스 미스한 순간" },
 			];
 			return notes;
 		};
 		const errorsOf = (texts: string[]) => checkNotes(notesWithTexts(texts), fixtureValidated, fixtureCandidates, fixtureRoster).errors;
 
 		test("첫 text 블록에 볼드가 없고 뒤 text 블록에만 있으면 유닛을 짚어 에러를 낸다", () => {
-			const errors = errorsOf(["센터백이 패스를 미스한 장면입니다", "다음엔 **짧게 패스하기**가 맞습니다"]);
+			const errors = errorsOf(["홍길동이 공을 잡고 패스를 미스한 장면입니다", "다음엔 **짧게 패스하기**가 맞습니다"]);
 			expect(errors.map((e) => e.path)).toEqual(["units.u001.blocks"]);
 			expect(errors[0].message).toBe("u001: 볼드(할 행동)가 첫 문단에 없고 뒤 문단에만 있다 — 행위자와 교정 행동을 첫 문단에 쓴다");
 		});
 
 		test("첫 문단에 볼드가 있거나, 어느 문단에도 볼드가 없으면 통과한다", () => {
-			expect(errorsOf(["**짧게 패스하기**가 맞습니다", "근거 문단"])).toEqual([]);
-			expect(errorsOf(["**짧게 패스하기**가 맞습니다", "또 **한 번 더** 씁니다"])).toEqual([]);
-			expect(errorsOf(["볼드 없는 첫 문단", "볼드 없는 둘째 문단"])).toEqual([]);
+			expect(errorsOf(["공을 잡으면 **짧게 패스하기**가 맞습니다", "근거 문단"])).toEqual([]);
+			expect(errorsOf(["공을 잡으면 **짧게 패스하기**가 맞습니다", "또 **한 번 더** 씁니다"])).toEqual([]);
+			expect(errorsOf(["공을 잡은 볼드 없는 첫 문단", "볼드 없는 둘째 문단"])).toEqual([]);
 		});
 	});
 
@@ -1969,7 +2173,7 @@ describe("checkNotes", () => {
 			expect(errors[0].message).toContain("제목의 받는 사람 김철수");
 			expect(errorsOf("게임메이커: 김철수 쪽으로 짧게 패스하기", "홍길동이 공을 잡은 순간").map((e) => e.path)).toEqual(["units.u001.blocks"]);
 			expect(errorsOf("게임메이커: KimCS 쪽 바라보기", "홍길동이 공을 잡은 순간").map((e) => e.path)).toEqual(["units.u001.blocks"]);
-			expect(errorsOf("게임메이커: 김철수 쪽 바라보기", "홍길동 앞쪽 김철수가 열린 순간")).toEqual([]);
+			expect(errorsOf("게임메이커: 김철수 쪽 바라보기", "홍길동 앞쪽 공 옆 김철수가 열린 순간")).toEqual([]);
 		});
 
 		test("'에게'·' 쪽'이 이름 바로 뒤에 붙지 않았거나 명단이 없으면 검사하지 않는다", () => {
@@ -2014,7 +2218,7 @@ describe("checkNotes", () => {
 			});
 
 			test("받는 사람 위치를 쓴 캡션이 하나라도 있으면 범위 스캔 기록을 요구하지 않는다", () => {
-				expect(run(TITLE, [NOT_VISIBLE, "홍길동 앞쪽 김철수가 열린 순간"], fixtureCandidates)).toEqual([]);
+				expect(run(TITLE, [NOT_VISIBLE, "홍길동 앞쪽 공 옆 김철수가 열린 순간"], fixtureCandidates)).toEqual([]);
 			});
 
 			test("'이름 쪽' 제목에도 같은 요구가 적용된다", () => {
@@ -2045,7 +2249,7 @@ describe("checkNotes", () => {
 
 	test("unidentified_member_ids가 비어 있지 않으면 look_at이 필수고, 비어 있는데 look_at이 있으면 에러다", () => {
 		const notes = makeValidNotes();
-		notes.units.u001.blocks[1].caption = "패스 미스 순간";
+		notes.units.u001.blocks[1].caption = "공을 패스 미스한 순간";
 		notes.units.u001.unidentified_member_ids = ["hong-gildong"];
 		const missing = checkNotes(notes, fixtureValidated, rangedCandidates, fixtureRoster).errors;
 		expect(missing.map((e) => e.path)).toEqual(["units.u001.look_at"]);
@@ -2066,7 +2270,7 @@ describe("checkNotes", () => {
 	test("look_at에 ':'나 ' / '가 있으면 에러다(볼 곳은 한 문장)", () => {
 		for (const lookAt of ["동그리: 화면 위쪽", "화면 위쪽 / 우사는 아래쪽"]) {
 			const notes = makeValidNotes();
-			notes.units.u001.blocks[1].caption = "패스 미스 순간";
+			notes.units.u001.blocks[1].caption = "공을 패스 미스한 순간";
 			notes.units.u001.unidentified_member_ids = ["hong-gildong"];
 			notes.units.u001.look_at = lookAt;
 			const errors = checkNotes(notes, fixtureValidated, rangedCandidates, fixtureRoster).errors;
@@ -2077,13 +2281,13 @@ describe("checkNotes", () => {
 
 	test("text 블록이나 frame 캡션에 '원문'이 있으면 유닛 id를 짚은 에러를 낸다", () => {
 		const inText = makeValidNotes();
-		inText.units.u001.blocks[0].text = "원문에서 지적한 패스 미스입니다";
+		inText.units.u001.blocks[0].text = "원문에서 지적한 공 패스 미스입니다";
 		const textErrors = checkNotes(inText, fixtureValidated, fixtureCandidates, fixtureRoster).errors;
 		expect(textErrors.map((e) => e.path)).toEqual(["units.u001.blocks[0].text"]);
 		expect(textErrors[0].message).toContain("u001");
 		expect(textErrors[0].message).toContain("원문");
 		const inCaption = makeValidNotes();
-		inCaption.units.u001.blocks[1].caption = "화면 왼쪽 홍길동이 원문 속 패스를 미스한 순간";
+		inCaption.units.u001.blocks[1].caption = "화면 왼쪽 홍길동이 원문 속 공을 패스 미스한 순간";
 		const captionErrors = checkNotes(inCaption, fixtureValidated, fixtureCandidates, fixtureRoster).errors;
 		expect(captionErrors.map((e) => e.path)).toEqual(["units.u001.blocks[1].caption"]);
 		expect(captionErrors[0].message).toContain("u001");
@@ -2092,7 +2296,7 @@ describe("checkNotes", () => {
 	test("frame 캡션에 '가려내기 어렵'·'알아보기 어렵' 같은 작업 과정의 말이 있으면 유닛 id를 짚은 에러를 낸다", () => {
 		for (const phrase of ["가려내기 어렵", "알아보기 어렵"]) {
 			const notes = makeValidNotes();
-			notes.units.u001.blocks[1].caption = `홍길동 뒤 선수는 ${phrase}다`;
+			notes.units.u001.blocks[1].caption = `공을 잡은 홍길동 뒤 선수는 ${phrase}다`;
 			const errors = checkNotes(notes, fixtureValidated, fixtureCandidates, fixtureRoster).errors;
 			expect(errors.map((e) => e.path)).toEqual(["units.u001.blocks[1].caption"]);
 			expect(errors[0].message).toContain("u001");
@@ -2109,13 +2313,13 @@ describe("checkNotes", () => {
 		})();
 		for (const phrase of ["댓글은", "댓글이", "댓글에"]) {
 			const inText = makeValidNotes();
-			inText.units.u001.blocks[0].text = `${phrase} 좌측이라고 했다`;
+			inText.units.u001.blocks[0].text = `${phrase} 좌측이라고 했다, 공은 홍길동에게 있다`;
 			const textErrors = checkNotes(inText, fixtureValidated, fixtureCandidates, fixtureRoster).errors;
 			expect(textErrors.map((e) => e.path)).toEqual(["units.u001.blocks[0].text"]);
 			expect(textErrors[0].message).toBe(message("u001"));
 
 			const inCaption = makeValidNotes();
-			inCaption.units.u001.blocks[1].caption = `홍길동 ${phrase} 좌측이라 했지만 몰린 쪽은 화면 위쪽이다`;
+			inCaption.units.u001.blocks[1].caption = `공을 잡은 홍길동 ${phrase} 좌측이라 했지만 몰린 쪽은 화면 위쪽이다`;
 			const captionErrors = checkNotes(inCaption, fixtureValidated, fixtureCandidates, fixtureRoster).errors;
 			expect(captionErrors.map((e) => e.path)).toEqual(["units.u001.blocks[1].caption"]);
 			expect(captionErrors[0].message).toBe(message("u001"));
@@ -2127,7 +2331,7 @@ describe("checkNotes", () => {
 			expect(sceneErrors[0].message).toBe(message("u001"));
 
 			const inLookAt = makeValidNotes();
-			inLookAt.units.u001.blocks[1].caption = "패스 미스 순간";
+			inLookAt.units.u001.blocks[1].caption = "공을 패스 미스한 순간";
 			inLookAt.units.u001.unidentified_member_ids = ["hong-gildong"];
 			inLookAt.units.u001.look_at = `${phrase} 가리킨 화면 위쪽`;
 			const lookAtErrors = checkNotes(inLookAt, fixtureValidated, rangedCandidates, fixtureRoster).errors;
@@ -2135,7 +2339,7 @@ describe("checkNotes", () => {
 			expect(lookAtErrors[0].message).toBe(message("u001"));
 		}
 		const clean = makeValidNotes();
-		clean.units.u001.blocks[0].text = "코치는 좌측이라고 했다";
+		clean.units.u001.blocks[0].text = "코치는 좌측이라고 했다, 공은 홍길동에게 있다";
 		expect(checkNotes(clean, fixtureValidated, fixtureCandidates, fixtureRoster).errors).toEqual([]);
 	});
 
@@ -2143,7 +2347,7 @@ describe("checkNotes", () => {
 		const plan = makeValidPlan();
 		plan.matches[0].topics[0].units[0].title = "센터백: 첫판부터 정신 놓음";
 		const validated = checkPlan(plan, fixtureContext).validated;
-		const SCENE = "홍길동이 페널티 아크 근처에서 상대 둘 사이에 서 있다";
+		const SCENE = "홍길동이 공 없이 페널티 아크 근처에서 상대 둘 사이에 서 있다";
 		const notes = makeValidNotes();
 		notes.units.u001.fault_scene = SCENE;
 		notes.units.u001.blocks[1].caption = `  ${SCENE} `;
@@ -2158,7 +2362,7 @@ describe("checkNotes", () => {
 		const MESSAGE = "u001: 고칠 사람을 사진에서 못 찾았다고 했지만 이 유닛 범위 전체를 scan-range로 훑은 기록이 없다";
 		const unidentifiedNotes = () => {
 			const notes = makeValidNotes();
-			notes.units.u001.blocks[1].caption = "패스 미스 순간";
+			notes.units.u001.blocks[1].caption = "공을 패스 미스한 순간";
 			notes.units.u001.unidentified_member_ids = ["hong-gildong"];
 			notes.units.u001.look_at = "화면 위쪽 마크 없는 홍길동";
 			return notes;
@@ -2235,8 +2439,8 @@ describe("checkNotes", () => {
 		const notes = makeValidNotes();
 		notes.units.u001 = {
 			blocks: [
-				{ type: "text", text: "센터백은 **빌드업** 때 패스를 짧게 하기가 맞습니다" },
-				{ type: "frame", candidate_id: "c001", caption: "홍길동이 패스를 미스한 순간" },
+				{ type: "text", text: "공을 잡은 센터백은 **빌드업** 때 패스를 짧게 하기가 맞습니다" },
+				{ type: "frame", candidate_id: "c001", caption: "홍길동이 공을 패스 미스한 순간" },
 				{ type: "text", text: "각도가 좁았습니다" },
 				{ type: "frame", candidate_id: "c002", caption: "직후 상황" },
 			],
@@ -2296,7 +2500,7 @@ describe("checkNotes", () => {
 
 	test("blocks가 20개를 넘으면 units.<id>.blocks 경로 에러를 낸다", () => {
 		const notes = makeValidNotes();
-		notes.units.u001.blocks = Array.from({ length: 21 }, () => ({ type: "text", text: "문단" }));
+		notes.units.u001.blocks = Array.from({ length: 21 }, () => ({ type: "text", text: "공을 잡은 문단" }));
 		const result = checkNotes(notes, fixtureValidated, fixtureCandidates, fixtureRoster);
 		expect(findError(result.errors, "units.u001.blocks")).toBe(true);
 	});
@@ -2353,7 +2557,7 @@ describe("checkNotes", () => {
 	test("frame이 6개를 넘으면 units.<id>.blocks 경로 에러를 낸다", () => {
 		const notes = makeValidNotes();
 		notes.units.u001.blocks = [
-			{ type: "text", text: "문단" },
+			{ type: "text", text: "공을 잡은 문단" },
 			...Array.from({ length: 7 }, () => ({ type: "frame", candidate_id: "c001", caption: "x" })),
 		];
 		const result = checkNotes(notes, fixtureValidated, fixtureCandidates, fixtureRoster);
@@ -2363,7 +2567,7 @@ describe("checkNotes", () => {
 	test("존재하지 않는 candidate면 units.<id>.blocks[n].candidate_id 경로 에러를 낸다", () => {
 		const notes = makeValidNotes();
 		notes.units.u001.blocks = [
-			{ type: "text", text: "문단" },
+			{ type: "text", text: "공을 잡은 문단" },
 			{ type: "frame", candidate_id: "c999", caption: "x" },
 		];
 		const result = checkNotes(notes, fixtureValidated, fixtureCandidates, fixtureRoster);
@@ -2373,7 +2577,7 @@ describe("checkNotes", () => {
 	test("다른 video의 candidate면 units.<id>.blocks[n].candidate_id 경로 에러를 낸다", () => {
 		const notes = makeValidNotes();
 		notes.units.u001.blocks = [
-			{ type: "text", text: "문단" },
+			{ type: "text", text: "공을 잡은 문단" },
 			{ type: "frame", candidate_id: "c003", caption: "x" }, // video B
 		];
 		const result = checkNotes(notes, fixtureValidated, fixtureCandidates, fixtureRoster);
@@ -2383,7 +2587,7 @@ describe("checkNotes", () => {
 	test("unit 허용 범위(±5초)를 벗어난 candidate면 units.<id>.blocks[n].candidate_id 경로 에러를 낸다", () => {
 		const notes = makeValidNotes();
 		notes.units.u001.blocks = [
-			{ type: "text", text: "문단" },
+			{ type: "text", text: "공을 잡은 문단" },
 			{ type: "frame", candidate_id: "c004", caption: "x" }, // t=40, u001 범위는 [-5,25]
 		];
 		const result = checkNotes(notes, fixtureValidated, fixtureCandidates, fixtureRoster);
@@ -2393,7 +2597,7 @@ describe("checkNotes", () => {
 	test("unit 내에서 candidate_id가 중복되면 units.<id>.blocks[n].candidate_id 경로 에러를 낸다", () => {
 		const notes = makeValidNotes();
 		notes.units.u001.blocks = [
-			{ type: "text", text: "문단" },
+			{ type: "text", text: "공을 잡은 문단" },
 			{ type: "frame", candidate_id: "c001", caption: "x" },
 			{ type: "frame", candidate_id: "c001", caption: "y" },
 		];
@@ -2404,7 +2608,7 @@ describe("checkNotes", () => {
 	test("블록 순서대로 candidate 시각이 감소하면 units.<id>.blocks[n].candidate_id 경로 에러를 낸다", () => {
 		const notes = makeValidNotes();
 		notes.units.u001.blocks = [
-			{ type: "text", text: "문단" },
+			{ type: "text", text: "공을 잡은 문단" },
 			{ type: "frame", candidate_id: "c002", caption: "x" }, // t=25
 			{ type: "frame", candidate_id: "c001", caption: "y" }, // t=10 (감소)
 		];
@@ -2415,7 +2619,7 @@ describe("checkNotes", () => {
 	test("caption이 trim 후 비어있으면 units.<id>.blocks[n].caption 경로 에러를 낸다", () => {
 		const notes = makeValidNotes();
 		notes.units.u001.blocks = [
-			{ type: "text", text: "문단" },
+			{ type: "text", text: "공을 잡은 문단" },
 			{ type: "frame", candidate_id: "c001", caption: "   " },
 		];
 		const result = checkNotes(notes, fixtureValidated, fixtureCandidates, fixtureRoster);
@@ -2434,22 +2638,22 @@ describe("checkNotes", () => {
 	test("caption이 시계·점수 표기로 시작하면 경기 N분 표기를 안내하는 에러를 낸다", () => {
 		const notes = makeValidNotes();
 		notes.units.u001.blocks = [
-			{ type: "text", text: "문단" },
-			{ type: "frame", candidate_id: "c001", caption: " 34:12, 1-0 홍길동 상황" },
+			{ type: "text", text: "공을 잡은 문단" },
+			{ type: "frame", candidate_id: "c001", caption: " 34:12, 1-0 홍길동 공 상황" },
 		];
 		const result = checkNotes(notes, fixtureValidated, fixtureCandidates, fixtureRoster);
 		const error = result.errors.find((e) => e.path === "units.u001.blocks[1].caption");
 		expect(error?.message).toContain("경기 34분");
-		notes.units.u001.blocks[1].caption = "경기 34분, 1-0 홍길동 상황";
+		notes.units.u001.blocks[1].caption = "경기 34분, 1-0 홍길동 공 상황";
 		expect(checkNotes(notes, fixtureValidated, fixtureCandidates, fixtureRoster).errors).toEqual([]);
-		notes.units.u001.blocks[1].caption = "정지 화면(28:48) — 홍길동 표시 시작";
+		notes.units.u001.blocks[1].caption = "정지 화면(28:48) — 홍길동 공 표시 시작";
 		expect(checkNotes(notes, fixtureValidated, fixtureCandidates, fixtureRoster).errors).toEqual([]);
 	});
 
 	test("caption이 120자를 넘으면 units.<id>.blocks[n].caption 경로 에러를 낸다", () => {
 		const notes = makeValidNotes();
 		notes.units.u001.blocks = [
-			{ type: "text", text: "문단" },
+			{ type: "text", text: "공을 잡은 문단" },
 			{ type: "frame", candidate_id: "c001", caption: "가".repeat(121) },
 		];
 		const result = checkNotes(notes, fixtureValidated, fixtureCandidates, fixtureRoster);
@@ -2459,7 +2663,7 @@ describe("checkNotes", () => {
 	test("caption에 개행이 있으면 units.<id>.blocks[n].caption 경로 에러를 낸다", () => {
 		const notes = makeValidNotes();
 		notes.units.u001.blocks = [
-			{ type: "text", text: "문단" },
+			{ type: "text", text: "공을 잡은 문단" },
 			{ type: "frame", candidate_id: "c001", caption: "첫 줄\n둘째 줄" },
 		];
 		const result = checkNotes(notes, fixtureValidated, fixtureCandidates, fixtureRoster);
@@ -2494,7 +2698,7 @@ describe("checkNotes — direction_check_ko(원문 방향과 프레임이 어긋
 
 	test("캡션의 '이 하프에서' 방향 문장은 더 이상 요구하지 않는다", () => {
 		const notes = makeValidNotes();
-		notes.units.u001.blocks[1].caption = "홍길동이 화면 위쪽에 몰렸다";
+		notes.units.u001.blocks[1].caption = "홍길동이 공을 잡고 화면 위쪽에 몰렸다";
 		expect(checkNotes(notes, fixtureValidated, fixtureCandidates, fixtureRoster).errors).toEqual([]);
 	});
 });
@@ -2503,7 +2707,7 @@ describe("checkNotes — 같은 경기 다른 유닛이 이름표로 짚은 사�
 	const GOOD = { match: 1, member_id: "hong-gildong", color: "분홍", evidence_candidate_id: "c001" };
 	const run = (otherCaption: string, markerColors?: unknown) => {
 		const notes = makeValidNotes();
-		notes.units.u001.blocks[1].caption = "분홍 삼각형 선수가 화면 위쪽에 있다";
+		notes.units.u001.blocks[1].caption = "분홍 삼각형 선수가 공을 잡고 화면 위쪽에 있다";
 		notes.units.u001.unidentified_member_ids = ["hong-gildong"];
 		notes.units.u001.look_at = "화면 위쪽 마크 없는 선수";
 		notes.units.u002.blocks[1].caption = otherCaption;
@@ -2513,18 +2717,18 @@ describe("checkNotes — 같은 경기 다른 유닛이 이름표로 짚은 사�
 	};
 
 	test("다른 유닛 캡션이 이름표로 짚었는데 marker_colors에 그 경기·그 사람 항목이 없으면 유닛 id를 짚은 에러를 낸다", () => {
-		const errors = run("홍길동 이름표가 보이는 골키퍼 앞");
+		const errors = run("홍길동 이름표가 보이는, 공을 잡은 골키퍼 앞");
 		expect(errors.map((e) => e.path)).toEqual(["units.u001.unidentified_member_ids"]);
 		expect(errors[0].message).toBe("u001: 홍길동는 같은 경기 u002 캡션에서 이름표로 짚혔다 — 그 프레임에서 머리 위 색 삼각형을 marker_colors에 적고, 이 유닛 프레임에서 그 색으로 찾아본다");
 	});
 
 	test("그 경기·그 사람의 marker_colors 항목이 있으면 통과한다", () => {
-		expect(run("홍길동 이름표가 보이는 골키퍼 앞", [GOOD])).toEqual([]);
+		expect(run("홍길동 이름표가 보이는, 공을 잡은 골키퍼 앞", [GOOD])).toEqual([]);
 	});
 
 	test("다른 유닛 캡션에 '이름표'가 없거나, 이름표로 확인되지 않는다는 캡션이면 에러가 아니다", () => {
-		expect(run("홍길동이 골키퍼 앞에 있다")).toEqual([]);
-		expect(run("홍길동은 이 프레임에서 이름표로 확인되지 않는다")).toEqual([]);
+		expect(run("홍길동이 공을 잡은 골키퍼 앞에 있다")).toEqual([]);
+		expect(run("공은 골키퍼에게 있고, 홍길동은 이 프레임에서 이름표로 확인되지 않는다")).toEqual([]);
 	});
 });
 
@@ -2574,7 +2778,7 @@ describe("checkNotes — 못 찾았다는 사람의 마커 색은 이 유닛 프
 describe("checkNotes — marker_unresolved_ko 형식", () => {
 	const run = (value: unknown, unidentified: string[] = ["hong-gildong"]) => {
 		const notes = makeValidNotes();
-		notes.units.u001.blocks[1].caption = "마크 없는 선수가 화면 위쪽에 있다";
+		notes.units.u001.blocks[1].caption = "마크 없는 선수가 공을 잡고 화면 위쪽에 있다";
 		notes.units.u001.unidentified_member_ids = unidentified;
 		if (unidentified.length > 0) notes.units.u001.look_at = "화면 위쪽 마크 없는 선수";
 		notes.units.u001.marker_unresolved_ko = value;
@@ -2618,33 +2822,34 @@ describe("checkNotes — marker_colors 나머지 규칙(색 삼각형 찾기)", 
 	});
 });
 
-describe("checkNotes — 패스 카드는 공을 말로 짚는다", () => {
-	const run = (title: string, captions: string[]) => {
-		const plan = makeValidPlan();
-		plan.matches[0].topics[0].units[0].title = title;
-		const validated = checkPlan(plan, fixtureContext).validated;
+describe("checkNotes — 카드는 공 소유로 장면을 연다", () => {
+	const run = (captions: string[], firstText = "상대 공격수가 우리 진영에서 공을 잡았을 때 홍길동은 **라인을 올려야** 합니다") => {
+		const validated = checkPlan(makeValidPlan(), fixtureContext).validated;
 		const notes = makeValidNotes();
-		notes.units.u001.blocks = [notes.units.u001.blocks[0], ...captions.map((caption, index) => ({ type: "frame", candidate_id: index === 0 ? "c001" : "c002", caption }))];
+		notes.units.u001.blocks = [
+			{ type: "text", text: firstText },
+			...captions.map((caption, index) => ({ type: "frame", candidate_id: index === 0 ? "c001" : "c002", caption })),
+		];
 		return checkNotes(notes, validated, rangedCandidates, fixtureRoster).errors;
 	};
 
-	test("제목 조각에 '패스'나 '<이름>에게'가 있는데 어느 캡션에도 단어 '공'이 없으면 유닛 id를 짚은 에러를 낸다", () => {
-		for (const title of ["센터백: 패스 미스하지 않기", "센터백: 김철수에게 붙이기"]) {
-			const errors = run(title, ["홍길동이 김철수 앞 아크에 서 있다 공격 공간 공중"]);
-			expect(errors.map((e) => e.path)).toEqual(["units.u001.blocks"]);
-			expect(errors[0].message).toContain("u001");
-			expect(errors[0].message).toContain("공");
+	test("제목과 상관없이 어느 캡션에도 단어 '공'이 없으면 유닛 id를 짚은 에러를 낸다(공격·공간·공중은 공이 아니다)", () => {
+		const errors = run(["홍길동이 김철수 앞 아크에 서 있다 공격 공간 공중"]);
+		expect(errors.map((e) => e.path)).toEqual(["units.u001.blocks"]);
+		expect(errors[0].message).toContain("u001");
+		expect(errors[0].message).toContain("누가 가졌는지");
+	});
+
+	test("'공이/공을/공은/공의/공과/공도/공에서' 같은 조사 꼴과 단어 '공'은 통과한다", () => {
+		for (const caption of ["공 앞에 홍길동이 있다", "홍길동이 공을 받는다", "홍길동 옆 공이 떠 있다", "홍길동 (공은 아직 멀다)", "홍길동과 공의 거리", "공과 홍길동", "홍길동 공도 멀다", "홍길동 “공” 앞에 있다", "공에서 먼 홍길동"]) {
+			expect(run([caption])).toEqual([]);
 		}
 	});
 
-	test("'공이/공을/공은/공의/공과/공도' 같은 조사 꼴과 단어 '공'은 통과한다", () => {
-		for (const caption of ["공 앞에 홍길동이 있다", "홍길동이 공을 받는다", "홍길동 옆 공이 떠 있다", "홍길동 (공은 아직 멀다)", "홍길동과 공의 거리", "공과 홍길동", "홍길동 공도 멀다", "홍길동 “공” 앞에 있다"]) {
-			expect(run("센터백: 패스 미스하지 않기", [caption])).toEqual([]);
-		}
-	});
-
-	test("패스·받는 사람 제목이 아니면 공을 요구하지 않는다", () => {
-		expect(run("센터백: 더 벌리기", ["홍길동이 아크에 서 있다"])).toEqual([]);
+	test("첫 문단에 공이 없으면 첫 text 블록 경로 에러다 — 첫 문장은 공 가진 팀·선수·위치로 장면을 연다", () => {
+		const errors = run(["공은 화면 왼쪽 홍길동 발 앞"], "홍길동은 **라인을 올려야** 합니다");
+		expect(errors.map((e) => e.path)).toEqual(["units.u001.blocks[0].text"]);
+		expect(errors[0].message).toContain("공을 가진 팀");
 	});
 });
 
@@ -2705,7 +2910,7 @@ describe("checkNotes — 받는 사람이 안 보이면 look_at 필수", () => {
 	});
 
 	test("받는 사람이 보이는 캡션이 하나라도 있으면 look_at을 쓸 수 없다", () => {
-		const errors = run([NOT_VISIBLE, "홍길동 앞쪽 김철수가 열린 순간"], "화면 아래쪽");
+		const errors = run([NOT_VISIBLE, "홍길동 앞쪽 공 옆 김철수가 열린 순간"], "화면 아래쪽");
 		expect(errors.map((e) => e.path)).toEqual(["units.u001.look_at"]);
 		expect(errors[0].message).toContain("unidentified_member_ids");
 	});
@@ -2755,16 +2960,16 @@ describe("checkNotes — unmatched_name_tags(명단에 없는 이름표)", () =>
 	test("이름표를 한글 자판으로 읽은 이름이 명단 이름·별칭과 같으면 그 멤버다(클럽 접두·숫자는 떼고 읽는다)", () => {
 		expect(run("ghdrlfehd 이름표가 보이는 선수가 공을 갖고 있다")).toEqual([]);
 		expect(run("CEF_ghdrlfehd313 이름표가 보이는 선수가 공을 갖고 있다")).toEqual([]);
-		expect(run("화면 왼쪽 선수가 있다", [{ ...TAG, tag: "CEF_ghdrlfehd" }]).map((e) => e.path)).toEqual(["unmatched_name_tags[0].tag"]);
+		expect(run("화면 왼쪽 선수가 공을 갖고 있다", [{ ...TAG, tag: "CEF_ghdrlfehd" }]).map((e) => e.path)).toEqual(["unmatched_name_tags[0].tag"]);
 	});
 
 	test("항목의 tag가 명단 멤버와 같으면 tag 경로 에러다", () => {
-		expect(run("화면 왼쪽 선수가 있다", [{ ...TAG, tag: "honggd" }]).map((e) => e.path)).toEqual(["unmatched_name_tags[0].tag"]);
-		expect(run("화면 왼쪽 선수가 있다", [{ ...TAG, tag: "홍길동" }]).map((e) => e.path)).toEqual(["unmatched_name_tags[0].tag"]);
+		expect(run("화면 왼쪽 선수가 공을 갖고 있다", [{ ...TAG, tag: "honggd" }]).map((e) => e.path)).toEqual(["unmatched_name_tags[0].tag"]);
+		expect(run("화면 왼쪽 선수가 공을 갖고 있다", [{ ...TAG, tag: "홍길동" }]).map((e) => e.path)).toEqual(["unmatched_name_tags[0].tag"]);
 	});
 
 	test("항목 모양이 틀리면 항목 경로에 에러를 낸다", () => {
-		const caption = "화면 왼쪽 선수가 있다";
+		const caption = "화면 왼쪽 선수가 공을 갖고 있다";
 		expect(run(caption, "SAMBA").map((e) => e.path)).toEqual(["unmatched_name_tags"]);
 		expect(run(caption, [3]).map((e) => e.path)).toEqual(["unmatched_name_tags[0]"]);
 		expect(run(caption, [{ ...TAG, match: 2 }]).map((e) => e.path)).toEqual(["unmatched_name_tags[0].match"]);
@@ -2777,9 +2982,9 @@ describe("checkNotes — unmatched_name_tags(명단에 없는 이름표)", () =>
 	});
 
 	test("color는 선택이고, 같은 경기에서 같은 tag 두 번이나 marker_colors와 같은 색은 에러다", () => {
-		expect(run("화면 왼쪽 선수가 있다", [{ match: 1, tag: "SAMBA", evidence_candidate_id: "c001" }])).toEqual([]);
-		expect(run("화면 왼쪽 선수가 있다", [TAG, { ...TAG, tag: "samba", color: "초록" }]).map((e) => e.path)).toEqual(["unmatched_name_tags[1].tag"]);
-		const clash = run("화면 왼쪽 선수가 있다", [TAG], [{ match: 1, member_id: "hong-gildong", color: "자홍", evidence_candidate_id: "c001" }]);
+		expect(run("화면 왼쪽 선수가 공을 갖고 있다", [{ match: 1, tag: "SAMBA", evidence_candidate_id: "c001" }])).toEqual([]);
+		expect(run("화면 왼쪽 선수가 공을 갖고 있다", [TAG, { ...TAG, tag: "samba", color: "초록" }]).map((e) => e.path)).toEqual(["unmatched_name_tags[1].tag"]);
+		const clash = run("화면 왼쪽 선수가 공을 갖고 있다", [TAG], [{ match: 1, member_id: "hong-gildong", color: "자홍", evidence_candidate_id: "c001" }]);
 		expect(clash.map((e) => e.path)).toEqual(["unmatched_name_tags[0].color"]);
 	});
 });
@@ -2800,14 +3005,14 @@ describe("checkNotes — '<색> 삼각형'은 그 경기 범례에 있는 색이
 
 	test("범례에 없는 색이 캡션에 있으면 유닛 id·색·경기를 짚은 에러를 낸다", () => {
 		const errors = run((n) => {
-			n.units.u001.blocks[1].caption = "홍길동 초록 삼각형 선수가 화면 위쪽에 있다";
+			n.units.u001.blocks[1].caption = "공을 잡은 홍길동 초록 삼각형 선수가 화면 위쪽에 있다";
 		});
 		expect(errors.map((e) => e.path)).toEqual(["units.u001"]);
 		expect(errors[0].message).toBe("u001: 초록 삼각형은 1경기 범례에 없다 — marker_colors/unmatched_name_tags에 기록하거나 위치로만 쓴다");
 	});
 
 	test("marker_colors 색과 unmatched_name_tags 색은 통과한다(공백 없는 '분홍삼각형' 포함)", () => {
-		expect(run((n) => (n.units.u001.blocks[1].caption = "홍길동 분홍 삼각형 선수 옆에 자홍삼각형 선수가 있다"))).toEqual([]);
+		expect(run((n) => (n.units.u001.blocks[1].caption = "공을 잡은 홍길동 분홍 삼각형 선수 옆에 자홍삼각형 선수가 있다"))).toEqual([]);
 	});
 
 	test("fault_scene·look_at·direction_check_ko의 범례 밖 색도 에러다", () => {
@@ -2817,13 +3022,13 @@ describe("checkNotes — '<색> 삼각형'은 그 경기 범례에 있는 색이
 	});
 
 	test("같은 쉼표 절에서 색보다 앞에 '상대'가 있으면 상대 선수 이야기라 통과하고, 뒤에 있거나 다른 절이면 에러다", () => {
-		expect(run((n) => (n.units.u001.blocks[1].caption = "홍길동 초록 삼각형이 상대 앞에 있다")).map((e) => e.path)).toEqual(["units.u001"]);
+		expect(run((n) => (n.units.u001.blocks[1].caption = "공을 잡은 홍길동 초록 삼각형이 상대 앞에 있다")).map((e) => e.path)).toEqual(["units.u001"]);
 		expect(run((n) => (n.units.u001.blocks[1].caption = "홍길동 공은 상대 초록 삼각형 발 앞에 있다"))).toEqual([]);
-		expect(run((n) => (n.units.u001.blocks[1].caption = "홍길동 상대가 둘이고, 초록 삼각형은 위쪽에 있다")).map((e) => e.path)).toEqual(["units.u001"]);
+		expect(run((n) => (n.units.u001.blocks[1].caption = "공을 잡은 홍길동 상대가 둘이고, 초록 삼각형은 위쪽에 있다")).map((e) => e.path)).toEqual(["units.u001"]);
 	});
 
 	test("흰 삼각형도 범례에 없으므로 에러다", () => {
-		expect(run((n) => (n.units.u001.blocks[1].caption = "홍길동 흰 삼각형 선수가 있다")).map((e) => e.path)).toEqual(["units.u001"]);
+		expect(run((n) => (n.units.u001.blocks[1].caption = "공을 잡은 홍길동 흰 삼각형 선수가 있다")).map((e) => e.path)).toEqual(["units.u001"]);
 	});
 
 	test("같은 색을 한 유닛에서 여러 번 써도 에러는 한 번이다", () => {
@@ -3824,6 +4029,7 @@ function warnUnit(id: string, matchId: string, namedMemberIds: string[], range: 
 		group_positions: [],
 		comment_authors: [],
 		line_range: null,
+		possession: null,
 	};
 }
 

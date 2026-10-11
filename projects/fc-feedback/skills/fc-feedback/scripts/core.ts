@@ -1206,6 +1206,37 @@ export interface ValidatedUnit {
 	comment_authors: string[];
 	/** The plan unit's `start_line..end_line` (inclusive `lines.json` indices); `null` when its lines did not validate or plan.validated.json predates the field. */
 	line_range: { start_line: number; end_line: number } | null;
+	/** Who had the ball at the moment the feedback points at; `null` when it did not validate or plan.validated.json predates the field. */
+	possession: Possession | null;
+}
+
+/** Who had the ball at the moment a feedback points at, read from one frame before the feedback is interpreted. */
+export interface Possession {
+	team: "ours" | "theirs" | "loose";
+	/** The ball holder as the plan writer names it ("피그리", "상대 센터백"); null only when `team` is "loose" (nobody holds it). */
+	player: string | null;
+	/** Where the ball is ("우리 진영 왼쪽 측면"). */
+	where: string;
+	/** The candidate frame the possession was read from. */
+	evidence_candidate_id: string;
+}
+
+export const POSSESSION_TEAM_LABELS = { ours: "우리", theirs: "상대", loose: "경합" } as const;
+
+export function isPossessionTeam(value: unknown): value is Possession["team"] {
+	return value === "ours" || value === "theirs" || value === "loose";
+}
+
+/**
+ * An excluded scene whose frames (and oracle's frame-by-frame read) could not show which team had the ball. Only excluded scenes
+ * may hold it: a unit needs a known possession, so the scene waits at REVIEW GATE until the user settles it.
+ */
+export interface UnknownPossession {
+	team: "unknown";
+	player: null;
+	where: null;
+	/** The candidate frame that was examined and could not settle the possession. */
+	evidence_candidate_id: string;
 }
 
 /**
@@ -1270,7 +1301,25 @@ export interface CheckPlanResult {
 	pending: boolean;
 	validated: ValidatedPlan;
 	tableMd: string;
+	/** The REVIEW GATE's 뺀 장면 section built from plan.json `excluded_scenes` ("뺀 장면: 없음" when empty). */
+	excludedMd: string;
 	proposed: ProposedTag[];
+}
+
+/** A plan.json `excluded_scenes` entry: feedback-like lines the writer did not turn into a unit, put to the user at the REVIEW GATE. */
+interface ExcludedScene {
+	start_line: number;
+	end_line: number;
+	/** Why the lines are not a unit (unclear actor or meaning, general remark …). */
+	reason_ko: string;
+	/** What the frames around the lines show. */
+	scene_ko: string;
+	/** The unit title the lines would get, in unit-title form — the guessed target and feedback. */
+	guess_title: string;
+	recommendation: "include" | "pass";
+	/** Set only after the user said pass; absent while the user has not decided. */
+	user_decision: "pass" | null;
+	possession: Possession | UnknownPossession;
 }
 
 const TITLE_MAX_LENGTH = 80;
@@ -1704,7 +1753,7 @@ export function checkPlan(plan: unknown, context: CheckPlanContext): CheckPlanRe
 	const emptyValidated: ValidatedPlan = { version: 1, session_title: "", matches: [], units: [], recurring: [], matches_without_feedback: [] };
 	if (!isRecord(plan)) {
 		errors.push({ path: "", message: "plan.json은 객체여야 합니다" });
-		return { errors, pending: false, validated: emptyValidated, tableMd: "", proposed: [] };
+		return { errors, pending: false, validated: emptyValidated, tableMd: "", excludedMd: "", proposed: [] };
 	}
 
 	const session_title = checkTitle(plan.session_title, "session_title", errors);
@@ -1985,6 +2034,18 @@ export function checkPlan(plan: unknown, context: CheckPlanContext): CheckPlanRe
 								}
 							});
 
+							const checkedPossession = checkPossession(
+								unitRaw.possession,
+								linesValid ? { video: unitVideo, start: unitStart, end: unitEnd } : null,
+								candidates,
+								`${unitPath}.possession`,
+								errors,
+								false,
+							);
+							// Units reject "unknown" above (it is an error), so only a known possession reaches the unit.
+							const possession = checkedPossession === null || checkedPossession.team === "unknown" ? null : checkedPossession;
+							if (possession !== null) checkPossessionTopics(possession, topic_tags, `${unitPath}.topic_tags`, errors);
+
 							topicUnitIds.push(unitId);
 							if (linesValid) unitRanges.push({ id: unitId, startLine, endLine });
 							units.push({
@@ -2005,6 +2066,7 @@ export function checkPlan(plan: unknown, context: CheckPlanContext): CheckPlanRe
 								group_positions,
 								comment_authors: linesValid ? commentAuthorsInRange(lines, startLine, endLine) : [],
 								line_range: linesValid ? { start_line: startLine, end_line: endLine } : null,
+								possession,
 							});
 
 							const memberNames = member_ids.map((id) => memberDisplayName(id, roster));
@@ -2015,6 +2077,8 @@ export function checkPlan(plan: unknown, context: CheckPlanContext): CheckPlanRe
 									: "-";
 							rows.push(
 								`| ${escapeTableCell(matchTitle)} | ${formatTime(unitStart)} | ${escapeTableCell(unitTitle)} | ${
+									possession === null ? "-" : escapeTableCell(possessionHolder(possession))
+								} | ${
 									position_tags.length > 0 ? escapeTableCell(position_tags.join(", ")) : "-"
 								} | ${topic_tags.length > 0 ? escapeTableCell(topic_tags.join(", ")) : "-"} | ${memberCell} |`,
 							);
@@ -2044,11 +2108,12 @@ export function checkPlan(plan: unknown, context: CheckPlanContext): CheckPlanRe
 
 	const recurring = checkRecurring(plan.recurring, unitRanges, lines.length, units, roster, errors);
 	const matches_without_feedback = checkMatchesWithoutFeedback(plan.matches_without_feedback, errors);
+	const excludedScenes = checkExcludedScenes(plan.excluded_scenes, lines, candidates, unitRanges, errors);
 
 	const pending = errors.length === 0 && usedProposedTag;
 	const validated: ValidatedPlan = { version: 1, session_title, matches, units, recurring, matches_without_feedback };
 
-	const tableLines = ["| 경기 | 시간 | 제목 | 포지션 | 주제 | 팀원 |", "|---|---|---|---|---|---|", ...rows];
+	const tableLines = ["| 경기 | 시간 | 제목 | 공 | 포지션 | 주제 | 팀원 |", "|---|---|---|---|---|---|---|", ...rows];
 	if (recurring.length > 0) {
 		const startById = new Map(units.map((unit) => [unit.id, unit.start]));
 		tableLines.push(
@@ -2067,7 +2132,245 @@ export function checkPlan(plan: unknown, context: CheckPlanContext): CheckPlanRe
 		tableLines.push("", "제안 태그:", ...proposed.map((entry) => `- ${entry.tag} (${entry.reason})`));
 	}
 
-	return { errors, pending, validated, tableMd: tableLines.join("\n"), proposed };
+	return { errors, pending, validated, tableMd: tableLines.join("\n"), excludedMd: excludedScenesMd(excludedScenes, validated, lines, roster), proposed };
+}
+
+const EXCLUDED_REASON_MAX_LENGTH = 100;
+const EXCLUDED_SCENE_MAX_LENGTH = 160;
+/** Lines of the same video shown before and after an excluded scene. */
+const EXCLUDED_CONTEXT_LINES = 2;
+const EXCLUDED_RECOMMENDATION_LABELS = { include: "넣기", pass: "pass" } as const;
+
+/** A gap between a scene and a unit: "26초" below a minute, "28분 21초" from a minute. */
+function formatGap(seconds: number): string {
+	const total = Math.max(0, Math.round(seconds));
+	return total < 60 ? `${total}초` : `${Math.floor(total / 60)}분 ${total % 60}초`;
+}
+
+const POSSESSION_PLAYER_MAX_LENGTH = 30;
+const POSSESSION_WHERE_MAX_LENGTH = 40;
+/** Topic tags whose play needs the ball on one side: our player cannot build up while the opponent holds the ball, nor press while we hold it. */
+const TOPICS_NEEDING_POSSESSION: Record<"ours" | "theirs", readonly string[]> = { ours: ["빌드업", "탈압박", "파이널서드"], theirs: ["압박", "수비라인"] };
+
+/** "우리 피그리", "상대 센터백", "경합" — the gate table's 공 cell. */
+export function possessionHolder(possession: Possession): string {
+	const team = POSSESSION_TEAM_LABELS[possession.team];
+	return possession.player === null ? team : `${team} ${possession.player}`;
+}
+
+/** "상대 · 상대 센터백 · 우리 진영 왼쪽" — the team, holder and place in one line. */
+export function possessionLine(possession: Possession): string {
+	return [POSSESSION_TEAM_LABELS[possession.team], ...(possession.player === null ? [] : [possession.player]), possession.where].join(" · ");
+}
+
+/**
+ * Validates a `possession` object (required on every unit and excluded scene): who had the ball at the moment the feedback points at,
+ * read from `evidence_candidate_id` — a candidate of the same video within the span ±`KEY_FRAME_TOLERANCE_SECONDS`. `span` is null when the
+ * lines did not validate (their own error), and then the frame's time is not checked. Returns null when anything is invalid.
+ */
+function checkPossession(
+	raw: unknown,
+	span: { video: string; start: number; end: number } | null,
+	candidates: readonly Candidate[],
+	path: string,
+	errors: ValidationError[],
+	unknownAllowed: boolean,
+): Possession | UnknownPossession | null {
+	if (!isRecord(raw)) {
+		errors.push({
+			path,
+			message:
+				'possession이 필요합니다 — 해석하기 전에 그 피드백이 가리키는 순간의 프레임을 보고 공 소유를 정합니다: { "team": "ours"|"theirs"|"loose", "player": 공 가진 선수(loose면 null), "where": 공 위치, "evidence_candidate_id": 본 프레임 }',
+		});
+		return null;
+	}
+	const errorCount = errors.length;
+	const team = raw.team;
+	if (team === "unknown" && !unknownAllowed) {
+		errors.push({
+			path: `${path}.team`,
+			message: '유닛은 공 소유가 정해져야 만듭니다 — 프레임과 oracle로도 가를 수 없으면 이 줄을 excluded_scenes로 옮기고 possession.team을 "unknown"으로 적어 REVIEW GATE에서 묻습니다',
+		});
+	} else if (!isPossessionTeam(team) && team !== "unknown") {
+		errors.push({
+			path: `${path}.team`,
+			message: `team은 "ours"(우리 공), "theirs"(상대 공), "loose"(아무도 잡지 않은 공) 중 하나여야 합니다${unknownAllowed ? '(뺀 장면은 프레임으로 가를 수 없을 때 "unknown")' : ""}`,
+		});
+	}
+	let player: string | null = null;
+	let where: string | null = null;
+	if (team === "unknown") {
+		if (raw.player !== null) errors.push({ path: `${path}.player`, message: 'team이 "unknown"이면 공 가진 선수를 모르므로 player는 null이어야 합니다' });
+		if (raw.where !== null) errors.push({ path: `${path}.where`, message: 'team이 "unknown"이면 공 소유를 정하지 못했으므로 where는 null이어야 합니다 — 프레임에서 본 것은 scene_ko에 씁니다' });
+	} else {
+		if (team === "loose") {
+			if (raw.player !== null) errors.push({ path: `${path}.player`, message: 'team이 "loose"면 공 가진 선수가 없으므로 player는 null이어야 합니다' });
+		} else {
+			player = checkOneLineText(raw.player, POSSESSION_PLAYER_MAX_LENGTH, `${path}.player`, errors);
+		}
+		where = checkOneLineText(raw.where, POSSESSION_WHERE_MAX_LENGTH, `${path}.where`, errors);
+	}
+	const evidenceId = raw.evidence_candidate_id;
+	const candidate = candidates.find((entry) => entry.id === evidenceId);
+	if (candidate === undefined) {
+		errors.push({ path: `${path}.evidence_candidate_id`, message: `존재하지 않는 후보입니다: ${describeUnknown(evidenceId)} — 공 소유를 본 프레임의 후보 id를 씁니다(없으면 add-frame)` });
+	} else if (span !== null && (candidate.video !== span.video || candidate.t < span.start - KEY_FRAME_TOLERANCE_SECONDS || candidate.t > span.end + KEY_FRAME_TOLERANCE_SECONDS)) {
+		errors.push({
+			path: `${path}.evidence_candidate_id`,
+			message: `같은 영상의 장면 ±${KEY_FRAME_TOLERANCE_SECONDS}초 안 후보여야 합니다: ${candidate.id} — 그 피드백이 가리키는 순간의 프레임을 봅니다`,
+		});
+	}
+	if (errors.length > errorCount || candidate === undefined) return null;
+	if (team === "unknown") return { team, player: null, where: null, evidence_candidate_id: candidate.id };
+	if (!isPossessionTeam(team) || where === null) return null;
+	return { team, player, where, evidence_candidate_id: candidate.id };
+}
+
+/** A topic tag that needs the other side's ball contradicts the recorded possession: the reading assumed a possession the frame does not show. */
+function checkPossessionTopics(possession: Possession, topicTags: readonly string[], path: string, errors: ValidationError[]): void {
+	if (possession.team === "loose") return;
+	const other = possession.team === "ours" ? "theirs" : "ours";
+	for (const tag of topicTags.filter((candidate) => TOPICS_NEEDING_POSSESSION[other].includes(candidate))) {
+		errors.push({
+			path,
+			message: `${POSSESSION_TEAM_LABELS[possession.team]} 공(possession.team: ${possession.team})인 장면에 '${tag}' 태그를 달 수 없습니다 — '${tag}'은 ${POSSESSION_TEAM_LABELS[other]} 공일 때만 하는 플레이입니다. 근거 프레임에서 공 가진 팀을 다시 보고, 소유가 맞으면 제목·태그를 그 소유에서 가능한 뜻으로 다시 읽습니다`,
+		});
+	}
+}
+
+function checkOneLineText(raw: unknown, maxLength: number, path: string, errors: ValidationError[]): string {
+	const text = requireNonBlank(raw, path, errors, "비어 있지 않은 문자열이어야 합니다");
+	if (/[\r\n]/u.test(text)) errors.push({ path, message: "한 줄이어야 합니다(개행 금지)" });
+	if (text.length > maxLength) errors.push({ path, message: `${maxLength}자 이하여야 합니다` });
+	return text;
+}
+
+/**
+ * Validates plan.json `excluded_scenes` (required; `[]` when nothing was left out — the validator cannot know that). Entries are
+ * in `start_line` order, do not overlap each other, and hold no line of a unit; only valid entries are returned.
+ */
+function checkExcludedScenes(
+	raw: unknown,
+	lines: readonly Line[],
+	candidates: readonly Candidate[],
+	unitRanges: readonly UnitLineRange[],
+	errors: ValidationError[],
+): ExcludedScene[] {
+	if (!Array.isArray(raw)) {
+		errors.push({
+			path: "excluded_scenes",
+			message: 'excluded_scenes는 배열이어야 합니다 — 유닛으로 만들지 않은 피드백 줄이 없으면 "excluded_scenes": []를 추가하세요',
+		});
+		return [];
+	}
+	const scenes: ExcludedScene[] = [];
+	let previousEndLine = -1;
+	raw.forEach((entry, index) => {
+		const path = `excluded_scenes[${index}]`;
+		if (!isRecord(entry)) {
+			errors.push({ path, message: "excluded_scenes 항목은 객체여야 합니다" });
+			return;
+		}
+		const errorCount = errors.length;
+		const startLine = isNonNegativeInt(entry.start_line) && entry.start_line < lines.length ? entry.start_line : -1;
+		let span: { video: string; start: number; end: number } | null = null;
+		if (startLine === -1) errors.push({ path: `${path}.start_line`, message: `0 이상 lines.length(${lines.length}) 미만의 정수여야 합니다` });
+		const endLine = isNonNegativeInt(entry.end_line) && entry.end_line < lines.length ? entry.end_line : -1;
+		if (endLine === -1) errors.push({ path: `${path}.end_line`, message: `0 이상 lines.length(${lines.length}) 미만의 정수여야 합니다` });
+		if (startLine !== -1 && endLine !== -1) {
+			if (startLine > endLine || lines[startLine].video !== lines[endLine].video) {
+				errors.push({ path: `${path}.end_line`, message: "end_line은 start_line 이상이고 같은 video여야 합니다" });
+			} else {
+				span = { video: lines[startLine].video, start: lines[startLine].start, end: lines[endLine].end };
+				const unit = unitRanges.find((range) => range.startLine <= endLine && startLine <= range.endLine);
+				if (unit !== undefined) {
+					errors.push({ path: `${path}.start_line`, message: `유닛 ${unit.id}의 줄 범위와 겹칩니다 — 유닛에 든 줄은 뺀 장면이 아닙니다` });
+				} else if (startLine <= previousEndLine) {
+					errors.push({ path: `${path}.start_line`, message: "excluded_scenes는 start_line 오름차순이고 서로 겹치지 않아야 합니다" });
+				}
+				previousEndLine = Math.max(previousEndLine, endLine);
+			}
+		}
+		const reason_ko = checkOneLineText(entry.reason_ko, EXCLUDED_REASON_MAX_LENGTH, `${path}.reason_ko`, errors);
+		const scene_ko = checkOneLineText(entry.scene_ko, EXCLUDED_SCENE_MAX_LENGTH, `${path}.scene_ko`, errors);
+		const guess_title = checkTitle(entry.guess_title, `${path}.guess_title`, errors);
+		for (const message of unitTitleFormErrors(guess_title)) errors.push({ path: `${path}.guess_title`, message });
+		if (entry.recommendation !== "include" && entry.recommendation !== "pass") {
+			errors.push({ path: `${path}.recommendation`, message: 'recommendation은 "include"(유닛으로 넣기) 또는 "pass"여야 합니다' });
+		}
+		const possession = checkPossession(entry.possession, span, candidates, `${path}.possession`, errors, true);
+		if (entry.user_decision !== undefined && entry.user_decision !== "pass") {
+			errors.push({
+				path: `${path}.user_decision`,
+				message: 'user_decision은 사용자가 pass라고 답한 장면에만 "pass"로 씁니다 — 넣기로 정했으면 유닛으로 옮기고 이 항목을 지웁니다',
+			});
+		}
+		if (errors.length > errorCount || possession === null) return;
+		scenes.push({
+			start_line: startLine,
+			end_line: endLine,
+			reason_ko,
+			scene_ko,
+			guess_title,
+			recommendation: entry.recommendation === "include" ? "include" : "pass",
+			user_decision: entry.user_decision === "pass" ? "pass" : null,
+			possession,
+		});
+	});
+	return scenes;
+}
+
+/** One context line: `0:15 "text"`, a comment's writer after the time, and the unit holding the line in brackets. */
+function excludedContextLine(line: Line, units: readonly ValidatedUnit[], roster: Roster | null): string {
+	const author = line.source === "comment" ? ` (댓글 ${commentAuthorName(line.author, roster)})` : "";
+	const unit = units.find((candidate) => candidate.line_range !== null && candidate.line_range.start_line <= line.i && line.i <= candidate.line_range.end_line);
+	return `${formatTime(line.start)}${author} "${line.text}"${unit === undefined ? "" : ` [${unit.id}]`}`;
+}
+
+/**
+ * The REVIEW GATE's 뺀 장면 section: each undecided scene in full (source text, context lines, neighbouring units of the same
+ * video with their gap, scene, guessed feedback, reason, recommendation); scenes the user passed fold to one line each.
+ * Numbers follow `excluded_scenes` order, so one number means the same scene in both lists.
+ */
+function excludedScenesMd(scenes: readonly ExcludedScene[], validated: ValidatedPlan, lines: readonly Line[], roster: Roster | null): string {
+	if (scenes.length === 0) return "뺀 장면: 없음";
+	const matchTitle = new Map(validated.matches.map((match) => [match.id, match.title]));
+	const placed = validated.units.filter((unit) => unit.line_range !== null);
+	const unitLabel = (unit: ValidatedUnit) => `${unit.id} ${formatTime(unit.start)} ${unit.title}`;
+	const sceneText = (scene: ExcludedScene) => lines.slice(scene.start_line, scene.end_line + 1).map((line) => line.text).join(" ");
+	const pending = scenes.flatMap((scene, index) => {
+		if (scene.user_decision !== null) return [];
+		const first = lines[scene.start_line];
+		const last = lines[scene.end_line];
+		const sameVideo = lines.filter((line) => line.video === first.video);
+		const before = sameVideo.filter((line) => line.i < scene.start_line).slice(-EXCLUDED_CONTEXT_LINES);
+		const after = sameVideo.filter((line) => line.i > scene.end_line).slice(0, EXCLUDED_CONTEXT_LINES);
+		const videoUnits = placed.filter((unit) => unit.video === first.video);
+		const previous = [...videoUnits].reverse().find((unit) => (unit.line_range?.end_line ?? 0) < scene.start_line);
+		const next = videoUnits.find((unit) => (unit.line_range?.start_line ?? 0) > scene.end_line);
+		const previousText = previous === undefined ? "없음" : `${unitLabel(previous)} (${matchTitle.get(previous.match_id)}, 끝난 지 ${formatGap(first.start - previous.end)})`;
+		const nextText = next === undefined ? "없음" : `${unitLabel(next)} (${matchTitle.get(next.match_id)}, 시작까지 ${formatGap(next.start - last.end)})`;
+		return [
+			"",
+			`${index + 1}. ${formatTime(first.start)} "${sceneText(scene)}" — 추천: ${EXCLUDED_RECOMMENDATION_LABELS[scene.recommendation]}`,
+			...(before.length > 0 ? [`   - 앞 줄: ${before.map((line) => excludedContextLine(line, placed, roster)).join(" · ")}`] : []),
+			...(after.length > 0 ? [`   - 뒤 줄: ${after.map((line) => excludedContextLine(line, placed, roster)).join(" · ")}`] : []),
+			`   - 앞 유닛: ${previousText} · 뒤 유닛: ${nextText}`,
+			`   - 공: ${scene.possession.team === "unknown" ? `미확인 — ${scene.possession.evidence_candidate_id} 등 프레임으로 공 가진 팀을 가르지 못했다(이 장면을 넣으려면 소유를 먼저 정한다)` : possessionLine(scene.possession)}`,
+			`   - 장면: ${scene.scene_ko}`,
+			`   - 추정 피드백: ${scene.guess_title}`,
+			`   - 뺀 이유: ${scene.reason_ko}`,
+		];
+	});
+	const passed = scenes.flatMap((scene, index) =>
+		scene.user_decision === null ? [] : [`- ${index + 1}. ${formatTime(lines[scene.start_line].start)} "${sceneText(scene)}" — ${scene.reason_ko}`],
+	);
+	const pendingCount = scenes.filter((scene) => scene.user_decision === null).length;
+	return [
+		`뺀 장면 (결정 대기 ${pendingCount} · pass ${passed.length})`,
+		...pending,
+		...(passed.length > 0 ? ["", "pass로 정한 장면:", ...passed] : []),
+	].join("\n");
 }
 
 const TITLE_ACTOR_SEPARATOR = "·";
@@ -2477,7 +2780,7 @@ function checkNoteUnit(
 	checkBoldInFirstParagraph(texts, unit.id, path, errors);
 	const rangeScanned = rangeScanCoversUnit(candidates, unit);
 	checkTitleReceiversCaptioned(captions, unit, roster, rangeScanned, path, errors);
-	checkPassCardNamesBall(captions, unit, roster, path, errors);
+	checkCardNamesBall(texts, captions, unit, path, errors);
 	checkMembersCaptioned(entryRaw.unidentified_member_ids, captions, unit, roster, path, errors);
 	checkUnidentifiedRangeScanned(entryRaw.unidentified_member_ids, unit, rangeScanned, path, errors);
 	checkLookAt(entryRaw.look_at, entryRaw.unidentified_member_ids, hasNotVisibleReceiver(captions, unit, roster), unit.id, path, errors);
@@ -2566,21 +2869,24 @@ function checkTitleReceiversCaptioned(captions: readonly string[], unit: Validat
 	}
 }
 
-/** The word "공" (the ball) in a caption, with an optional particle — not 공격/공간/공중. */
-const BALL_WORD_PATTERN = /(^|[\s(“‘"'])공(이|을|은|의|과|도|에|으로|만|까지)?(?=[\s,.)”’"']|$)/u;
+/** The word "공" (the ball) with an optional particle — not 공격/공간/공중. */
+const BALL_WORD_PATTERN = /(^|[\s(“‘"'])공(이|을|은|의|과|도|에|에서|으로|만|까지)?(?=[\s,.)”’"']|$)/u;
 
-/** A title segment that passes the ball: it says "패스" or sends the ball to a roster member ("<이름>에게"). */
-function titlePassesBall(unit: ValidatedUnit, roster: Roster | null): boolean {
-	const title = unit.title.toLowerCase();
-	return title.includes("패스") || (roster?.members ?? []).some((member) => memberLabels(member).some((label) => title.includes(`${label.toLowerCase()}에게`)));
-}
-
-/** A pass card needs at least one frame caption that says where the ball is (the word "공"); a pass without the ball in view cannot be read. */
-function checkPassCardNamesBall(captions: readonly string[], unit: ValidatedUnit, roster: Roster | null, path: string, errors: ValidationError[]): void {
-	if (titlePassesBall(unit, roster) && !captions.some((caption) => BALL_WORD_PATTERN.test(caption))) {
+/**
+ * Every card opens its scene with the ball: the first text block says who holds it ("상대 센터백이 … 공을 잡았을 때") and one
+ * frame caption says where the ball is and who has it. A reading that skips the ball is how a defending scene turns into a build-up one.
+ */
+function checkCardNamesBall(texts: readonly string[], captions: readonly string[], unit: ValidatedUnit, path: string, errors: ValidationError[]): void {
+	if (texts.length > 0 && !BALL_WORD_PATTERN.test(texts[0])) {
+		errors.push({
+			path: `${path}.blocks[0].text`,
+			message: `${unit.id}: 첫 문단에 공이 없다 — 첫 문장은 공을 가진 팀·선수·위치로 장면을 연다("상대 센터백이 자기 진영 가운데에서 공을 잡았을 때, …")`,
+		});
+	}
+	if (captions.length > 0 && !captions.some((caption) => BALL_WORD_PATTERN.test(caption))) {
 		errors.push({
 			path: `${path}.blocks`,
-			message: `${unit.id}: 제목이 패스(또는 받는 사람)를 말하는데 어느 캡션에도 공이 없다 — 공이 어디 있는지 캡션에 '공'이라는 말로 쓴다(공이 안 보이면 그렇게 쓴다)`,
+			message: `${unit.id}: 어느 캡션에도 공이 없다 — 공이 화면 어디 있고 누가 가졌는지 캡션에 '공'이라는 말로 쓴다(공이 안 보이면 그렇게 쓴다)`,
 		});
 	}
 }

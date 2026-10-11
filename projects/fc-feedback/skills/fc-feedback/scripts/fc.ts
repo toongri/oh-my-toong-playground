@@ -75,6 +75,8 @@ import {
 	positionFromLegacyCode,
 	positionTagsFromLegacy,
 	positionTargetMembers,
+	possessionLine,
+	isPossessionTeam,
 	groupMembers,
 	relatedMembers,
 	similarCandidates,
@@ -88,6 +90,7 @@ import {
 	type Lineup,
 	type NotesV2,
 	type PastUnit,
+	type Possession,
 	type Roster,
 	type SimilarCandidate,
 	type SimilarCandidatesResult,
@@ -1256,6 +1259,21 @@ function lineRangeFromLegacyValidated(raw: Record<string, unknown>): ValidatedUn
 	return { start_line: num(raw.line_range.start_line, "unit.line_range.start_line"), end_line: num(raw.line_range.end_line, "unit.line_range.end_line") };
 }
 
+/** Legacy conversion: a plan.validated.json written before `possession` existed recorded no ball holder; it reads as unknown (null). */
+function possessionFromLegacyValidated(raw: Record<string, unknown>): Possession | null {
+	if (raw.possession === undefined || raw.possession === null) return null;
+	const possession = raw.possession;
+	if (!isRecord(possession) || !isPossessionTeam(possession.team)) {
+		throw new Error("fc-feedback: plan.validated.json의 unit.possession이 올바르지 않습니다");
+	}
+	return {
+		team: possession.team,
+		player: possession.player === null ? null : str(possession.player, "unit.possession.player"),
+		where: str(possession.where, "unit.possession.where"),
+		evidence_candidate_id: str(possession.evidence_candidate_id, "unit.possession.evidence_candidate_id"),
+	};
+}
+
 function toValidatedUnit(raw: unknown): ValidatedUnit {
 	if (!isRecord(raw)) {
 		throw new Error("fc-feedback: plan.validated.json의 unit이 올바르지 않습니다");
@@ -1279,6 +1297,7 @@ function toValidatedUnit(raw: unknown): ValidatedUnit {
 		// plan.validated.json written before comment support has no `comment_authors`: its units held speech lines only.
 		comment_authors: raw.comment_authors === undefined ? [] : toStringArray(raw.comment_authors, "unit.comment_authors"),
 		line_range: lineRangeFromLegacyValidated(raw),
+		possession: possessionFromLegacyValidated(raw),
 	};
 }
 
@@ -1403,11 +1422,11 @@ function handleCheckPlan(workDir: string, status: FcStatus): number {
 		process.stderr.write(`${warning}\n`);
 	}
 	if (result.pending) {
-		printJson({ ok: true, pending: true, tableMd: result.tableMd, proposed: result.proposed });
+		printJson({ ok: true, pending: true, tableMd: result.tableMd, excludedMd: result.excludedMd, proposed: result.proposed });
 		return 2;
 	}
 	writeFileSync(join(workDir, "plan.validated.json"), `${JSON.stringify(result.validated, null, 2)}\n`);
-	printJson({ ok: true, pending: false, tableMd: result.tableMd, proposed: result.proposed });
+	printJson({ ok: true, pending: false, tableMd: result.tableMd, excludedMd: result.excludedMd, proposed: result.proposed });
 	return 0;
 }
 
@@ -1499,6 +1518,11 @@ function notesBrief(unit: ValidatedUnit, loop: NotesLoop, notes: NotesDoc, error
 
 	const fixers = unit.member_ids.map((id) => `${nameOf(id)}(${id})${unit.inferred_member_ids.includes(id) ? " 추정" : ""}`);
 	out.push(`고칠 사람: ${fixers.length > 0 ? fixers.join(", ") : "없음"}`);
+	out.push(
+		unit.possession === null
+			? "공: 기록 없음(이 plan은 공 소유를 적기 전에 검증됐다) — 카드를 쓰기 전에 프레임에서 공 가진 팀·선수·위치를 먼저 확인한다"
+			: `공: ${possessionLine(unit.possession)} (근거 ${unit.possession.evidence_candidate_id})`,
+	);
 	const recurring = validated.recurring.filter((entry) => entry.unit_ids.includes(unit.id)).map((entry) => entry.label);
 	if (recurring.length > 0) {
 		out.push(`반복 지적: ${recurring.join(" / ")}`);
