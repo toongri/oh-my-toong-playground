@@ -352,6 +352,18 @@ describe("qa-report renderer", () => {
 		}
 	});
 
+	test("AC 현황 제목에 기록된 요구사항 개수를 표시함", () => {
+		const html = renderQaReport(baseView({ acceptance_criteria: ["first AC", "second AC", "third AC"] }), {}, fakeReader)!;
+		expect(html).toContain("<h2>요구사항(AC) 충족 현황 · 3개</h2>");
+	});
+
+	test("감사 표의 ID 코드가 글자 중간에서 끊기지 않도록 overflow-wrap: anywhere를 쓰지 않음", () => {
+		const html = renderQaReport(baseView(), {}, fakeReader)!;
+		const rule = html.match(/\.audit-story code \{[^}]*\}/)?.[0] ?? "";
+		expect(rule).toContain("overflow-wrap: break-word");
+		expect(rule).not.toContain("anywhere");
+	});
+
 	test("renders Acceptance Criteria from recorded state, and records win over narrative", () => {
 		const view = baseView({ acceptance_criteria: ["recorded: V2 read is category-only"] });
 		const html = renderQaReport(view, { acceptanceCriteria: ["narrative: should be overridden"] }, fakeReader)!;
@@ -507,7 +519,7 @@ describe("qa-report renderer", () => {
 		expect(audit).toContain('<td class="audit-boundary" data-label="driven at">브라우저 경계 미구동<br>');
 		expect(html).toContain("table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.94rem; display: block; overflow-x: auto; }");
 		expect(html).toContain(".audit-story { min-width: 6rem; }");
-		expect(html).toContain(".audit-story code { white-space: normal; overflow-wrap: anywhere; }");
+		expect(html).toContain(".audit-story code { white-space: normal; overflow-wrap: break-word; }");
 		expect(html).toContain(".audit-coverage { min-width: 8rem; word-break: keep-all; overflow-wrap: normal; }");
 		expect(html).toContain(".audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: anywhere; }");
 	});

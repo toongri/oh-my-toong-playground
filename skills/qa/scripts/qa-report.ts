@@ -471,7 +471,7 @@ function renderRequirementFulfillment(view: QaView, narrative: QaReportNarrative
 		})
 		.join("");
 	return (
-		`<h2>요구사항(AC) 충족 현황</h2>` +
+		`<h2>요구사항(AC) 충족 현황 · ${acItems.length}개</h2>` +
 		(acRows || `<p class="evidence-note">기록된 요구사항이 없습니다</p>`)
 	);
 }
@@ -1121,7 +1121,7 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .presentation { margin-bottom: 1rem; }
 .gap { color: var(--fail); background: var(--code-bg); border: 1px dashed var(--fail); border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.92rem; }
 .audit-story { min-width: 6rem; }
-.audit-story code { white-space: normal; overflow-wrap: anywhere; }
+.audit-story code { white-space: normal; overflow-wrap: break-word; }
 .audit-coverage { min-width: 8rem; word-break: keep-all; overflow-wrap: normal; }
 .audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: anywhere; }
 .audit-evidence { display: block; margin-top: 0.4rem; font-size: 0.8rem; }
