@@ -1455,6 +1455,15 @@ describe("regression-guard: frontmatter", () => {
 // ---------------------------------------------------------------------------
 
 describe("new-prose: HTML report is the canonical deliverable", () => {
+	test("presentation-reviewer REQUEST_CHANGES with only renderer-owned findings does not block complete", () => {
+		expect(skillMd).toContain(
+			"(one exception: *Routing report findings* below)",
+		);
+		expect(skillMd).toContain(
+			"whose every finding is renderer-owned, or invalid under the renderer's mapping rules, does not block `complete` and needs no re-review of the unchanged render",
+		);
+	});
+
 	test("STATE terminal sequence renders the report before completing the state", () => {
 		const setVerdict = skillMd.indexOf(
 			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES>",
