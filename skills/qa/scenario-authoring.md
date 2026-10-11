@@ -102,6 +102,8 @@ Every self-authored scenario is written in this shape, in this order:
 
 Omitting a required field, or leaving `why-needed` blank, makes the scenario non-conformant — go back and fill it before running it.
 
+A scenario linked to several acceptance criteria counts as failed for every AC it backs. Give an AC that the report must judge on its own its own scenario; bundle ACs into one scenario only when they stand or fall together.
+
 Commit each scenario to the qa state chain with `qa-state.ts author-scenario --story <story-id> --id <kebab-id> --title "…" --preconditions "…" --steps '["…"]' --expected "…" --why-needed "…" --priority H|M|L [--risks '[2,3]'] [--profile <id>]`. The state CLI is the machine-checkable record of the authored shape, while this document remains the derivation guide.
 
 ### Risk Tagging
