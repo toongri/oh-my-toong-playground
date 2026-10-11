@@ -1460,7 +1460,10 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 			"(one exception: *Routing report findings* below)",
 		);
 		expect(skillMd).toContain(
-			"whose every finding is renderer-owned, or invalid under the renderer's mapping rules, does not block `complete` and needs no re-review of the unchanged render",
+			"whose every finding is renderer-owned layout/readability (not a 거짓/이격 on renderer text), or invalid under the renderer's mapping rules, does not block `complete` and needs no re-review of the unchanged render",
+		);
+		expect(skillMd).toContain(
+			"A 거짓 or 이격 finding against renderer-generated text (a heading, fixed label, or badge that states something the record does not) is different: it is a renderer defect that makes the report misleading, so it blocks `complete`.",
 		);
 	});
 
