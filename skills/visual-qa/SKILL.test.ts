@@ -126,3 +126,11 @@ describe("visual-qa platform dispatch contract", () => {
 		expect(skillMd).toMatch(/spawn_agent\(\{[\s\S]*?"agent_type": "oracle"/);
 	});
 });
+
+describe("visual-qa completion gate", () => {
+	test("empty-BLOCKING REVISE satisfies the gate and a 3-round cap exits to the user", () => {
+		expect(skillMd).toContain("`VERDICT: REVISE` with empty BLOCKING both satisfy it");
+		expect(skillMd).toContain("After 3 fresh-reviewer rounds");
+		expect(skillMd).toContain("The cap does not permit a silent PASS");
+	});
+});

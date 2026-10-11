@@ -161,7 +161,7 @@ CONFIDENCE: HIGH | MEDIUM | LOW
 SUMMARY: 1-3 sentences
 FINDINGS: for each, [product|evidence] [dimension] [severity] what is wrong, where (file/line or capture region), and the concrete fix
 WHAT IS GOOD: correct aspects that must not regress
-BLOCKING: items that must be fixed; empty if PASS
+BLOCKING: items that must be fixed; empty if none. Optional suggestions go in FINDINGS as non-blocking, never here
 """,
   "fork_turns": "none"
 })
@@ -219,7 +219,7 @@ CONFIDENCE: HIGH | MEDIUM | LOW
 SUMMARY: 1-3 sentences
 EVIDENCE TRACE: each hotspot or overflow line mapped to its visual cause
 FINDINGS: for each, [product|evidence] [severity] what is wrong, where (hotspot grid or capture line:col), and the concrete fix
-BLOCKING: items that must be fixed; empty if PASS
+BLOCKING: items that must be fixed, including every CJK break, clipped or overflowing text, and tofu; empty if none. Optional suggestions go in FINDINGS as non-blocking, never here
 """,
   "fork_turns": "none"
 })
@@ -233,11 +233,11 @@ When both passes return, merge them into a single report. Per dimension, mark go
 
 This is a hard stop rule, not a guideline. The UI is NOT done until ALL of these hold at once on the SAME current build:
 
-- An independent read-only reviewer subagent returned PASS with no BLOCKING findings.
+- An independent read-only reviewer subagent returned an empty BLOCKING list. The gate keys on BLOCKING alone: `VERDICT: PASS` and `VERDICT: REVISE` with empty BLOCKING both satisfy it. Record non-blocking suggestions under "Completion gate" in the report; they are not a reason for another round.
 - That reviewer judged a FRESH capture of every enumerated page from Step 2 - no stale artifacts, no skipped pages.
-- Every CJK and layout finding is resolved in the rendered output, not merely noted.
+- Every BLOCKING CJK and layout finding is resolved in the rendered output, not merely noted. A CJK break stays BLOCKING; this gate does not downgrade it.
 
-If any page fails, you are not done - but treat the two blocker kinds differently. `[product]` findings: fix the source, re-capture the pages the fix touched, and dispatch a FRESH reviewer (never a followup to the previous one - stale reviewer context re-litigates settled findings). `[evidence]` findings: the product is not implicated - repair the capture pipeline, re-shoot only the defective artifacts, verify them against the live build, and re-dispatch without touching product code. Loop until the independent reviewer passes on the current build, and make the final approving round judge a complete fresh capture set. Do not stop because the automated script reports zero issues - the script aims the reviewer, it does not replace it. Do not stop because an earlier pass approved an older build. The only non-loop exit is to list the exact remaining gaps and get explicit user acceptance; never self-certify a silent PASS.
+If any page fails, you are not done - but treat the two blocker kinds differently. `[product]` findings: fix the source, re-capture the pages the fix touched, and dispatch a FRESH reviewer (never a followup to the previous one - stale reviewer context re-litigates settled findings). `[evidence]` findings: the product is not implicated - repair the capture pipeline, re-shoot only the defective artifacts, verify them against the live build, and re-dispatch without touching product code. Loop until the independent reviewer passes on the current build, and make the final approving round judge a complete fresh capture set. Do not stop because the automated script reports zero issues - the script aims the reviewer, it does not replace it. Do not stop because an earlier pass approved an older build. The only non-loop exit is to list the exact remaining gaps (each with its `[product]` or `[evidence]` tag) and get explicit user acceptance or direction. After 3 fresh-reviewer rounds on the same task that still return BLOCKING findings, stop looping and take that exit. The cap does not permit a silent PASS; never self-certify a silent PASS.
 
 ```markdown
 # Visual QA - Verdict: GOOD | NEEDS WORK
@@ -259,6 +259,7 @@ If any page fails, you are not done - but treat the two blocker kinds differentl
 
 ## Completion gate
 [Satisfied, or the exact remaining gaps and who accepted them]
+[Non-blocking suggestions from the reviewer, if any]
 ```
 
 ## Step 5 - Reference-fidelity mode (when the task has a concrete visual target)
