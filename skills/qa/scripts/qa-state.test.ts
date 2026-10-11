@@ -1142,16 +1142,26 @@ describe("qa-state CLI wiring", () => {
 		const base = "record-scenario --story story-1 --scenario s3 --status blocked";
 		expect(() => run(`${base} ${rest}`)).toThrow(/obstacle-kind hardware\|third-party\|person/);
 		expect(() => run(`${base} --obstacle-kind account ${rest}`)).toThrow(/setup work/);
-		expect(() => run(`${base} --obstacle-kind person ${rest}`)).toThrow(/user-answer/);
-		const person = `${base} --obstacle-kind person --user-answer "이 단계용 OTP 휴대폰이 없다" ${rest}`;
+		const person = `${base} --obstacle-kind person ${rest}`;
+		expect(() => run(`${person} --user-answer "지어낸 답"`)).toThrow(/user-answer is retired/);
+		expect(() => run(person)).toThrow(/await-user/);
+		// The hook stores only a prompt that arrives while await-user is pending.
+		const hook = join(import.meta.dir, "../../../hooks/qa-user-reply.sh");
+		const reply = (prompt: string) =>
+			execSync(`bash ${hook}`, { input: JSON.stringify({ session_id: S, cwd: tmpDir, prompt }), env: { ...process.env, OMT_DIR: tmpDir, OMT_SESSION_ID: S } });
+		reply("기다리지 않을 때 보낸 말");
 		expect(() => run(person)).toThrow(/await-user/);
 		run("await-user");
-		run("record-scenario --story story-1 --scenario s1 --status blocked --obstacle-kind hardware --obstacle x --attempts '[\"a → b\"]' --deepest-reachable d --attempt-log " + log);
 		expect(() => run(person)).toThrow(/await-user/);
-		run("await-user");
+		reply("이 단계용 OTP 휴대폰이 없다\n");
+		expect(rawState().awaiting_user).toBe(false);
 		run(person);
 		run(person.replace("--scenario s3", "--scenario s2"));
-		expect(scenarioOf("s3").blocked).toMatchObject({ obstacle_kind: "person", user_answer: "이 단계용 OTP 휴대폰이 없다" });
+		expect(scenarioOf("s3").blocked).toMatchObject({ obstacle_kind: "person", user_answer: "이 단계용 OTP 휴대폰이 없다\n" });
+		expect(scenarioOf("s2").blocked).toMatchObject({ user_answer: "이 단계용 OTP 휴대폰이 없다\n" });
+		run("record-scenario --story story-1 --scenario s1 --status blocked --obstacle-kind hardware --obstacle x --attempts '[\"a → b\"]' --deepest-reachable d --attempt-log " + log);
+		expect(rawState().user_reply).toBeUndefined();
+		expect(() => run(person)).toThrow(/await-user/);
 	});
 
 	test("lock serializes concurrent blocked and pass record-scenario writes", () => {

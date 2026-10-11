@@ -198,7 +198,7 @@ export interface QaBlocked {
 	obstacle: string;
 	/** What kind of limit stopped the scenario; absent on records written before the kinds existed and on run checks. */
 	obstacle_kind?: QaObstacleKind;
-	/** The user's own reply, required when the limit is something only a person can give. */
+	/** For a `person` limit: the user's reply as the hook stored it (`user_reply`), never text the agent supplied. */
 	user_answer?: string;
 	/** Each attempt made to reach the surface, with its observed result. */
 	attempts: string[];
@@ -337,12 +337,14 @@ export interface QaChainState {
 	 */
 	awaiting_user?: boolean;
 	/**
-	 * True from `await-user` until the first write that is not a `person` blocker
-	 * record. A `person` blocker is accepted only while it is true, so the user's
-	 * answer is recorded before any other progress and an earlier question cannot
-	 * authorize a later blocker. Unlike `awaiting_user`, it never allows Stop.
+	 * True from the moment the UserPromptSubmit hook (hooks/qa-user-reply.sh)
+	 * stores a reply to `await-user` until the first write that is not a `person`
+	 * blocker record. A `person` blocker is accepted only while it is true. Unlike
+	 * `awaiting_user`, it never allows Stop.
 	 */
 	user_answer_open?: boolean;
+	/** The user's message that arrived while `await-user` was pending, stored verbatim by the hook; present only while `user_answer_open` is true. */
+	user_reply?: string;
 	phase?: QaPhase;
 	cycle?: number;
 	phase_max?: number;

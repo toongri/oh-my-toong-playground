@@ -476,13 +476,15 @@ function mergeWriteUnlocked(sessionId: string, next: Partial<ChainState>): QaSta
 		// any later progress write auto-clears the human-gate pause (mirrors prometheus'
 		// `set --await-user` and explain-diff's grade clearing awaiting_answer).
 		awaiting_user: next.awaiting_user === true,
-		// Same recompute: only await-user and person-blocker records carry it forward.
+		// Same recompute: the UserPromptSubmit hook opens it, and only person-blocker
+		// records carry it (and the stored reply) forward.
 		user_answer_open: next.user_answer_open === true,
 	};
 	const chain: QaStateSeed = { ...prior, ...partial };
 	for (const [key, value] of Object.entries(next)) {
 		if (value !== undefined) chain[key] = value;
 	}
+	if (chain.user_answer_open !== true) delete chain.user_reply;
 	const derived = {
 		chain_complete: chainComplete(chain),
 		record_complete: recordComplete(chain, stateProbe),
@@ -1005,7 +1007,6 @@ export interface RecordScenarioOpts extends ScenarioFieldOpts, EvidenceSlotOpts 
 	status: string;
 	obstacle?: string;
 	obstacleKind?: string;
-	userAnswer?: string;
 	attempts?: string;
 	deepestReachable?: string;
 	attemptLog?: string;
@@ -1020,11 +1021,10 @@ function scenarioBlockedRecord(opts: RecordScenarioOpts, prior: Partial<ChainSta
 	const kind = opts.obstacleKind;
 	if (kind === undefined) throw new Error(`blocked status requires --obstacle-kind ${QA_OBSTACLE_KINDS.join("|")}. ${LOCAL_SETUP_IS_WORK}`);
 	if (!isOneOf(kind, QA_OBSTACLE_KINDS)) throw new Error(`--obstacle-kind must be ${QA_OBSTACLE_KINDS.join("|")}, not "${kind}". ${LOCAL_SETUP_IS_WORK}`);
-	const userAnswer = opts.userAnswer?.trim();
-	if (kind === "person" && !userAnswer) throw new Error("--obstacle-kind person requires --user-answer: ask the user for it (await-user) and record their reply");
-	if (kind === "person" && prior.user_answer_open !== true) throw new Error("--obstacle-kind person requires the user's answer to a question you just asked: ask in plain text, run await-user, end the turn, and record their reply before any other write");
+	const userReply = prior.user_answer_open === true ? prior.user_reply : undefined;
+	if (kind === "person" && !userReply) throw new Error("--obstacle-kind person requires the user's reply to a question you just asked: ask in plain text, run await-user, and end the turn; their next message is stored for you, and you record the blocker before any other write");
 	const { obstacle, ...rest } = blockedRecord(opts);
-	return { obstacle, obstacle_kind: kind, ...(kind === "person" ? { user_answer: userAnswer } : {}), ...rest };
+	return { obstacle, obstacle_kind: kind, ...(kind === "person" ? { user_answer: userReply } : {}), ...rest };
 }
 
 function blockedRecord(opts: Pick<RecordScenarioOpts, "obstacle" | "attempts" | "deepestReachable" | "attemptLog">): QaBlocked {
@@ -1159,7 +1159,7 @@ function recordScenarioUnlocked(sessionId: string, opts: RecordScenarioOpts): vo
 		...(evidence ? { evidence } : {}),
 		...(binding ? { case_run: binding } : {}),
 	};
-	mergeWriteUnlocked(sessionId, { scenarios, ...(blocked?.obstacle_kind === "person" ? { user_answer_open: true } : {}) });
+	mergeWriteUnlocked(sessionId, { scenarios, ...(blocked?.obstacle_kind === "person" ? { user_answer_open: true, user_reply: blocked.user_answer } : {}) });
 }
 
 export function recordScenario(sessionId: string, opts: RecordScenarioOpts): void {
@@ -1349,7 +1349,7 @@ export function setVerdict(sessionId: string, verdict: string): void {
 export function setAwaitingUser(sessionId: string): void {
 	const prior = readPrior(sessionId);
 	if (prior.active !== true) throw new Error("await-user: refused — no active QA cycle");
-	mergeWrite(sessionId, { awaiting_user: true, user_answer_open: true });
+	mergeWrite(sessionId, { awaiting_user: true });
 }
 
 export function declareInert(sessionId: string, reason: string): void {
@@ -1419,6 +1419,7 @@ export function startQa(sessionId: string, target: string): void {
 		delete reset.forced_reason;
 		delete reset.run_checks_history;
 		delete reset.user_answer_open;
+		delete reset.user_reply;
 		reset.derived = {
 			chain_complete: chainComplete(reset),
 			record_complete: recordComplete(reset, stateProbe),
@@ -1599,7 +1600,7 @@ const ROSTER: CliCommand[] = [
 	{ name: "author-scenario", authority: "ai", effect: "authors one user scenario: --story --id (neither contains ':') --title --preconditions --steps '[…]' --expected --why-needed --priority H|M|L [--risks '[1..6]'] [--profile id]" },
 	{ name: "declare-risk-na", authority: "ai", effect: "declares an adversarial axis (--axis 1..6) that no scenario of this change can exercise, with --reason; once per cycle" },
 	{ name: "record-baseline", authority: "ai", effect: "records a story's BASELINE result: fail only when the change adds a build/test/lint failure; a failure the base commit has too is pass with a --note" },
-	{ name: "record-scenario", authority: "ai", effect: "records one scenario's execution result (--story --scenario --status pass|fail|blocked); blocked takes --obstacle-kind hardware|third-party|person (person also --user-answer) with --obstacle --attempts --deepest-reachable --attempt-log; --evidence-surface accepts the actor's own driver or \"test\" for an automated test run that exercises the scenario; optional --case-run RECEIPT binds replay provenance" },
+	{ name: "record-scenario", authority: "ai", effect: "records one scenario's execution result (--story --scenario --status pass|fail|blocked); blocked takes --obstacle-kind hardware|third-party|person (person records the user's reply the hook stored after await-user) with --obstacle --attempts --deepest-reachable --attempt-log; --evidence-surface accepts the actor's own driver or \"test\" for an automated test run that exercises the scenario; optional --case-run RECEIPT binds replay provenance" },
 	{ name: "record-case", authority: "ai", effect: "links a passed scenario to its saved, replayed case or records why it has none: --story --scenario (--case <id> | --none \"<reason>\") [--project DIR]; complete refuses an H scenario proven at its boundary that has neither" },
 	{
 		name: "review-evidence",
@@ -1739,13 +1740,13 @@ function main(): void {
 					evidenceSurface: str(args["evidence-surface"]),
 				});
 			} else if (subcommand === "record-scenario") {
+				if (args["user-answer"] !== undefined) throw new Error("--user-answer is retired: the user's reply to await-user is stored by the UserPromptSubmit hook, and --obstacle-kind person records it");
 				recordScenario(sessionId, {
 					story: requiredArg(args, "story"),
 					scenario: requiredArg(args, "scenario"),
 					status: requiredArg(args, "status"),
 					obstacle: str(args["obstacle"]),
 					obstacleKind: str(args["obstacle-kind"]),
-					userAnswer: str(args["user-answer"]),
 					attempts: str(args["attempts"]),
 					deepestReachable: str(args["deepest-reachable"]),
 					attemptLog: str(args["attempt-log"]),

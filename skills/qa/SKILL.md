@@ -256,11 +256,11 @@ A **caller-provided** scenario runs verbatim at whatever layer it enters; record
 
 **Your stack is yours to change.** The local stack this cycle started and a device you acquired belong to this cycle: log out, clear app data, switch to a documented QA account, finish onboarding with test values, seed through the project's QA tool, or write rows into that local database, whatever puts the surface in reach. On a device or database the user named and you did not create, ask once before you clear data you did not write. A blocker that several scenarios share (every device profile stuck on the same screen) is one setup problem: fix it once, then drive them all.
 
-`blocked` has three causes only, and `record-scenario` refuses any other: `hardware` (a physical device the change needs is absent and nothing substitutes it), `third-party` (an off-network service with no substitute), `person` (something only a person can give: you asked with `await-user`, and their reply goes in `--user-answer` before any other write). An account, seed data, onboarding, a permission, env config, a tool, or app or device state is none of these. When even substitution is impossible, record the scenario `blocked` — never PASS — with its cause and the attempts that hit it:
+`blocked` has three causes only, and `record-scenario` refuses any other: `hardware` (a physical device the change needs is absent and nothing substitutes it), `third-party` (an off-network service with no substitute), `person` (something only a person can give: ask in plain text, run `await-user`, and end the turn; a hook stores the user's next message verbatim, and `--obstacle-kind person` records that message, so record it before any other write). An account, seed data, onboarding, a permission, env config, a tool, or app or device state is none of these. When even substitution is impossible, record the scenario `blocked` — never PASS — with its cause and the attempts that hit it:
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts record-scenario --story … --scenario … --status blocked \
-  --obstacle-kind hardware|third-party|person [--user-answer "<the user's reply>"] \
+  --obstacle-kind hardware|third-party|person \
   --obstacle "<the structural limit>" \
   --attempts '["<command or step> → <observed result>", "…"]' \
   --deepest-reachable "<the deepest point toward the surface that you did reach>" \
@@ -574,7 +574,7 @@ Close the table with exactly one coverage-delta line naming the impact-map domai
 | Scenario state | Meaning | How it is recorded |
 |---|---|---|
 | `pass` / `fail` | Executed at the surface (or by a cited test) | `record-scenario --status pass\|fail` with evidence |
-| `blocked` | Attempted; absent hardware, an off-network third party, or a person stopped it | `record-scenario --status blocked` with obstacle kind (`person` adds the user's answer), obstacle, attempts, deepest reachable point, attempt log |
+| `blocked` | Attempted; absent hardware, an off-network third party, or a person stopped it | `record-scenario --status blocked` with obstacle kind (`person` adds the user's stored reply), obstacle, attempts, deepest reachable point, attempt log |
 | unrecorded | Not executed yet | nothing — this is open work |
 
 A risk that nothing on the changed surface can carry is not a scenario state: it is declared once per cycle with `declare-risk-na` and its reason.

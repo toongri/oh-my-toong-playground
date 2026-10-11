@@ -14,6 +14,10 @@ hooks:
   UserPromptSubmit:
     - component: keyword-detector.sh
       timeout: 10
+    # QA person-blocker 근거: await-user로 멈춘 동안 들어온 사용자 메시지를
+    # 원문 그대로 qa 상태에 저장한다. 에이전트는 이 값을 쓸 수 없다.
+    - component: qa-user-reply.sh
+      timeout: 10
   PreToolUse:
     - component: pre-tool-enforcer.sh
       timeout: 5
