@@ -336,8 +336,13 @@ export interface QaChainState {
 	 * completion; only a satisfied verdict + reviewed report does.
 	 */
 	awaiting_user?: boolean;
-	/** The cycle in which `await-user` last ran; it outlives the pause so a `person` blocker can show the user was asked this cycle. */
-	awaited_user_cycle?: number;
+	/**
+	 * True from `await-user` until the first write that is not a `person` blocker
+	 * record. A `person` blocker is accepted only while it is true, so the user's
+	 * answer is recorded before any other progress and an earlier question cannot
+	 * authorize a later blocker. Unlike `awaiting_user`, it never allows Stop.
+	 */
+	user_answer_open?: boolean;
 	phase?: QaPhase;
 	cycle?: number;
 	phase_max?: number;

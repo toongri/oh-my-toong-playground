@@ -1147,7 +1147,10 @@ describe("qa-state CLI wiring", () => {
 		expect(() => run(person)).toThrow(/await-user/);
 		run("await-user");
 		run("record-scenario --story story-1 --scenario s1 --status blocked --obstacle-kind hardware --obstacle x --attempts '[\"a → b\"]' --deepest-reachable d --attempt-log " + log);
+		expect(() => run(person)).toThrow(/await-user/);
+		run("await-user");
 		run(person);
+		run(person.replace("--scenario s3", "--scenario s2"));
 		expect(scenarioOf("s3").blocked).toMatchObject({ obstacle_kind: "person", user_answer: "이 단계용 OTP 휴대폰이 없다" });
 	});
 

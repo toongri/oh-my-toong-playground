@@ -476,6 +476,8 @@ function mergeWriteUnlocked(sessionId: string, next: Partial<ChainState>): QaSta
 		// any later progress write auto-clears the human-gate pause (mirrors prometheus'
 		// `set --await-user` and explain-diff's grade clearing awaiting_answer).
 		awaiting_user: next.awaiting_user === true,
+		// Same recompute: only await-user and person-blocker records carry it forward.
+		user_answer_open: next.user_answer_open === true,
 	};
 	const chain: QaStateSeed = { ...prior, ...partial };
 	for (const [key, value] of Object.entries(next)) {
@@ -1020,7 +1022,7 @@ function scenarioBlockedRecord(opts: RecordScenarioOpts, prior: Partial<ChainSta
 	if (!isOneOf(kind, QA_OBSTACLE_KINDS)) throw new Error(`--obstacle-kind must be ${QA_OBSTACLE_KINDS.join("|")}, not "${kind}". ${LOCAL_SETUP_IS_WORK}`);
 	const userAnswer = opts.userAnswer?.trim();
 	if (kind === "person" && !userAnswer) throw new Error("--obstacle-kind person requires --user-answer: ask the user for it (await-user) and record their reply");
-	if (kind === "person" && prior.awaited_user_cycle !== currentCycle(prior)) throw new Error("--obstacle-kind person requires await-user this cycle: ask the user in plain text, run await-user, end the turn, and record their reply");
+	if (kind === "person" && prior.user_answer_open !== true) throw new Error("--obstacle-kind person requires the user's answer to a question you just asked: ask in plain text, run await-user, end the turn, and record their reply before any other write");
 	const { obstacle, ...rest } = blockedRecord(opts);
 	return { obstacle, obstacle_kind: kind, ...(kind === "person" ? { user_answer: userAnswer } : {}), ...rest };
 }
@@ -1157,7 +1159,7 @@ function recordScenarioUnlocked(sessionId: string, opts: RecordScenarioOpts): vo
 		...(evidence ? { evidence } : {}),
 		...(binding ? { case_run: binding } : {}),
 	};
-	mergeWriteUnlocked(sessionId, { scenarios });
+	mergeWriteUnlocked(sessionId, { scenarios, ...(blocked?.obstacle_kind === "person" ? { user_answer_open: true } : {}) });
 }
 
 export function recordScenario(sessionId: string, opts: RecordScenarioOpts): void {
@@ -1347,7 +1349,7 @@ export function setVerdict(sessionId: string, verdict: string): void {
 export function setAwaitingUser(sessionId: string): void {
 	const prior = readPrior(sessionId);
 	if (prior.active !== true) throw new Error("await-user: refused — no active QA cycle");
-	mergeWrite(sessionId, { awaiting_user: true, awaited_user_cycle: currentCycle(prior) });
+	mergeWrite(sessionId, { awaiting_user: true, user_answer_open: true });
 }
 
 export function declareInert(sessionId: string, reason: string): void {
@@ -1416,7 +1418,7 @@ export function startQa(sessionId: string, target: string): void {
 		delete reset.forced_complete;
 		delete reset.forced_reason;
 		delete reset.run_checks_history;
-		delete reset.awaited_user_cycle;
+		delete reset.user_answer_open;
 		reset.derived = {
 			chain_complete: chainComplete(reset),
 			record_complete: recordComplete(reset, stateProbe),
