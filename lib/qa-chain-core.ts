@@ -190,8 +190,16 @@ export interface QaRiskNotApplicable {
 	cycle: number;
 }
 
+/** The only limits a scenario may be blocked by; everything on the local stack is setup work. */
+export const QA_OBSTACLE_KINDS = ["hardware", "third-party", "person"] as const;
+export type QaObstacleKind = (typeof QA_OBSTACLE_KINDS)[number];
+
 export interface QaBlocked {
 	obstacle: string;
+	/** What kind of limit stopped the scenario; absent on records written before the kinds existed and on run checks. */
+	obstacle_kind?: QaObstacleKind;
+	/** For a `person` limit: the user's reply as the hook stored it (`user_reply`), never text the agent supplied. */
+	user_answer?: string;
 	/** Each attempt made to reach the surface, with its observed result. */
 	attempts: string[];
 	deepest_reachable: string;
@@ -328,6 +336,15 @@ export interface QaChainState {
 	 * completion; only a satisfied verdict + reviewed report does.
 	 */
 	awaiting_user?: boolean;
+	/**
+	 * True from the moment the UserPromptSubmit hook (hooks/qa-user-reply.sh)
+	 * stores a reply to `await-user` until the first write that is not a `person`
+	 * blocker record. A `person` blocker is accepted only while it is true. Unlike
+	 * `awaiting_user`, it never allows Stop.
+	 */
+	user_answer_open?: boolean;
+	/** The user's message that arrived while `await-user` was pending, stored verbatim by the hook; present only while `user_answer_open` is true. */
+	user_reply?: string;
 	phase?: QaPhase;
 	cycle?: number;
 	phase_max?: number;

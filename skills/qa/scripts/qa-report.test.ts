@@ -539,7 +539,7 @@ describe("qa-report renderer", () => {
 					title: "동시 접속 처리",
 					risks: [4],
 					status: "blocked",
-					blocked: { obstacle: "PGlite는 연결이 하나뿐임", attempts: ["docker compose up → daemon 없음"], deepest_reachable: "PGlite 단일 연결", attempt_log: "/evidence/attempts.txt" },
+					blocked: { obstacle: "PGlite는 연결이 하나뿐임", obstacle_kind: "person", user_answer: "테스트용 두 번째 계정이 없다", attempts: ["docker compose up → daemon 없음"], deepest_reachable: "PGlite 단일 연결", attempt_log: "/evidence/attempts.txt" },
 				}),
 			],
 		});
@@ -555,6 +555,9 @@ describe("qa-report renderer", () => {
 		expect(scenarios).not.toContain("docker compose up");
 		const audit = html.slice(html.indexOf("<h2>시나리오 상세 기록"));
 		expect(audit).toContain("PGlite는 연결이 하나뿐임");
+		expect(audit).toContain("obstacle kind: person");
+		expect(audit).toContain("user answer: 테스트용 두 번째 계정이 없다");
+		expect(card).not.toContain("테스트용 두 번째 계정이 없다");
 		expect(audit).toContain("PGlite 단일 연결");
 		expect(audit).toContain("docker compose up → daemon 없음");
 		expect(audit).toContain("/evidence/attempts.txt");

@@ -103,6 +103,11 @@ hooks:
     - component: codex-qa-seed.sh
       type: command
       timeout: 10
+    # Shared with Claude (no output, so no platform twin): stores the user's
+    # reply to qa-state.ts await-user verbatim for a person blocker.
+    - component: qa-user-reply.sh
+      type: command
+      timeout: 10
     # Record every explicitly mentioned skill sigil and inject model-disabled
     # skill bodies as trusted additionalContext; the marker is a record only,
     # not authorization for a later shell read of a protected SKILL.md.
