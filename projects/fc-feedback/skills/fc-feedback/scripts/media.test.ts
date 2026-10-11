@@ -387,12 +387,12 @@ describe("ytDlpArgs", () => {
 		]);
 	});
 
-	test("video는 540p 이하로 제한한다(16:9는 480p, 32:9 울트라와이드는 1920x540)", () => {
+	test("video는 1080p 이하로 받는다(화면 공유 녹화의 작은 경기 화면에서도 공·이름표·점수판이 읽히게)", () => {
 		expect(ytDlpArgs("video", "https://youtu.be/abc", "/tmp/work", false)).toEqual([
 			"uvx",
 			"yt-dlp",
 			"-f",
-			"bv*[height<=540]",
+			"bv*[height<=1080]",
 			"-P",
 			"/tmp/work",
 			"-o",

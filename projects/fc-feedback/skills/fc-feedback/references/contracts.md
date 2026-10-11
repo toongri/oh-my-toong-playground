@@ -478,7 +478,7 @@ summary 문구나 `recurring` 항목(추가·삭제·label·lines·member_ids)�
 
 | 파일 | 요지 |
 |---|---|
-| `session.json` | `fetch`가 씀. `videos[]`마다 `id`(VID), `part`(URL 순서 1..N), `title`, `channel`, `upload_date`(YYYYMMDD), `duration`, `embeddable`, `width`/`height`(높이 540 이하 최고 스트림 — 16:9는 480p), `files{audio,video,captions,captions_format,wav,comments}` — `comments`는 yt-dlp가 준 댓글 목록 파일(`{id,parent,author,text}[]`). |
+| `session.json` | `fetch`가 씀. `videos[]`마다 `id`(VID), `part`(URL 순서 1..N), `title`, `channel`, `upload_date`(YYYYMMDD), `duration`, `embeddable`, `width`/`height`(높이 1080 이하 최고 스트림 — 화면 공유 녹화의 작은 경기 화면에서도 공·이름표·점수판이 읽히게), `files{audio,video,captions,captions_format,wav,comments}` — `comments`는 yt-dlp가 준 댓글 목록 파일(`{id,parent,author,text}[]`). |
 | `lines.json` | `transcribe`가 씀. `[{i, video, start, end, text, source, author?}]` — `source`는 `speech`(음성·자막) 또는 `comment`(타임스탬프 댓글 한 항목, `author`=작성자 유튜브 handle, `start`=댓글 시각, `end`=그 뒤 15초 또는 영상 끝), `i`는 0부터 연속, video는 파트 순서로 그룹, 그룹 안에서 `start` 오름차순, `0 ≤ start < end ≤ duration+1`, `text` 비어있지 않음. **LLM은 `i`(줄 인덱스)만 고르고 초 단위 시간은 절대 직접 쓰지 않는다** — plan.json의 `start_line`/`end_line`이 이 `i`를 가리키면 스크립트가 초로 변환한다. |
 | `candidates.json` | `scan`(+수동 `add-frame`, 구간 `scan-range`)이 씀. `[{id(c###), video, t, kind: comment\|silence\|scene\|interval\|manual\|range, dur?}]` — `range`는 `scan-range --video <VID> --from <sec> --to <sec> [--step 2]`가 구간을 step초마다 뽑은 후보(같은 video·t는 다시 만들지 않고, `sheets/<VID>-range-<from>-<to>.jpg` 컨택트시트 한 장도 만든다) — `comment`는 댓글 시각 그 자체, video별 그룹·`t` 오름차순. 미리보기는 `cand/<id>.jpg`. |
 | `sheets.json` | `scan`이 씀. `{version, sheets:[{file, video, kind: hud\|grid, cols, rows, times[]}]}` — HUD 시트는 경기 시계/스코어 판독용, grid 시트는 장면 훑어보기용. |

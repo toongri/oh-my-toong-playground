@@ -676,10 +676,10 @@ export const MEDIA_CONSTANTS = {
 			tile: "4x6",
 		},
 	},
-	// 540 rather than 480: 16:9 uploads have no 540p rung, so they still get 480p, while 32:9
-	// ultrawide recordings get 1920x540 instead of 1280x360 — the extra width keeps name tags
-	// and the ball readable in extracted frames.
-	yt: { maxVideoHeight: 540, videoFormat: "bv*[height<=540]" },
+	// 1080: feedback videos are often screen-share recordings where the game is a small window
+	// inside a call app. At 360p that window is ~425x120px and the ball, name tags and score HUD
+	// are unreadable, so possession cannot be read from frames; 1080p keeps them readable.
+	yt: { maxVideoHeight: 1080, videoFormat: "bv*[height<=1080]" },
 	whisper: {
 		default: "mlx-community/whisper-large-v3-turbo",
 		hq: "mlx-community/whisper-large-v3-mlx",
