@@ -2,6 +2,7 @@
   "session_title": "QA 비활성(disabled) 모드 세션",
   "recurring": [],
   "matches_without_feedback": [],
+  "excluded_scenes": [],
   "matches": [
     {
       "title": "QA 경기",
@@ -20,6 +21,12 @@
               "topic_tags": [
                 "빌드업"
               ],
+              "possession": {
+                "team": "ours",
+                "player": "센터백",
+                "where": "우리 진영 가운데",
+                "evidence_candidate_id": "c001"
+              },
               "member_ids": [],
               "key_frame_candidate_ids": [],
               "addressed_to_all": true,

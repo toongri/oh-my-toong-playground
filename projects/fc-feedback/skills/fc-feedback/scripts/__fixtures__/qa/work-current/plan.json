@@ -2,6 +2,7 @@
   "session_title": "1.4 팀 연습 피드백",
   "recurring": [],
   "matches_without_feedback": [],
+  "excluded_scenes": [],
   "matches": [
     {
       "title": "1차전 하프타임 피드백",
@@ -20,6 +21,12 @@
               "topic_tags": [
                 "빌드업"
               ],
+              "possession": {
+                "team": "ours",
+                "player": "송민재",
+                "where": "우리 진영 가운데",
+                "evidence_candidate_id": "c001"
+              },
               "member_ids": [
                 "song-cb"
               ],
@@ -38,6 +45,12 @@
               "topic_tags": [
                 "빌드업"
               ],
+              "possession": {
+                "team": "ours",
+                "player": "센터백",
+                "where": "우리 진영 가운데",
+                "evidence_candidate_id": "c010"
+              },
               "member_ids": [],
               "key_frame_candidate_ids": [],
               "group_positions": []
@@ -51,6 +64,12 @@
                 "빌드업",
                 "오버래핑"
               ],
+              "possession": {
+                "team": "ours",
+                "player": "센터백",
+                "where": "우리 진영 가운데",
+                "evidence_candidate_id": "c011"
+              },
               "member_ids": [],
               "key_frame_candidate_ids": [],
               "addressed_to_all": true,
@@ -72,6 +91,12 @@
               "topic_tags": [
                 "오버래핑"
               ],
+              "possession": {
+                "team": "ours",
+                "player": "윙어",
+                "where": "상대 진영 측면",
+                "evidence_candidate_id": "c002"
+              },
               "member_ids": [
                 "yoon-fb"
               ],
@@ -91,6 +116,12 @@
               "topic_tags": [
                 "오버래핑"
               ],
+              "possession": {
+                "team": "ours",
+                "player": "레프트백",
+                "where": "상대 진영 측면",
+                "evidence_candidate_id": "c012"
+              },
               "member_ids": [],
               "key_frame_candidate_ids": [],
               "group_positions": []
@@ -120,6 +151,12 @@
               "topic_tags": [
                 "세트피스"
               ],
+              "possession": {
+                "team": "theirs",
+                "player": "상대 키커",
+                "where": "상대 코너 아크",
+                "evidence_candidate_id": "c013"
+              },
               "member_ids": [
                 "song-cb"
               ],
@@ -137,6 +174,12 @@
                 "세트피스",
                 "수비전환"
               ],
+              "possession": {
+                "team": "theirs",
+                "player": "상대 미드필더",
+                "where": "우리 진영 가운데",
+                "evidence_candidate_id": "c014"
+              },
               "member_ids": [],
               "key_frame_candidate_ids": [],
               "group_positions": []
@@ -157,6 +200,12 @@
               "topic_tags": [
                 "수비전환"
               ],
+              "possession": {
+                "team": "theirs",
+                "player": "상대 미드필더",
+                "where": "우리 진영 가운데",
+                "evidence_candidate_id": "c004"
+              },
               "member_ids": [
                 "cho-mf"
               ],
@@ -177,6 +226,12 @@
               "topic_tags": [
                 "수비전환"
               ],
+              "possession": {
+                "team": "theirs",
+                "player": "상대 미드필더",
+                "where": "우리 진영 가운데",
+                "evidence_candidate_id": "c015"
+              },
               "member_ids": [],
               "key_frame_candidate_ids": [],
               "group_positions": []
@@ -192,6 +247,12 @@
                 "수비전환",
                 "역습"
               ],
+              "possession": {
+                "team": "ours",
+                "player": "미드필더",
+                "where": "상대 진영 가운데",
+                "evidence_candidate_id": "c016"
+              },
               "member_ids": [],
               "key_frame_candidate_ids": [],
               "group_positions": []
@@ -221,6 +282,12 @@
               "topic_tags": [
                 "역습"
               ],
+              "possession": {
+                "team": "ours",
+                "player": "미드필더",
+                "where": "상대 진영 가운데",
+                "evidence_candidate_id": "c007"
+              },
               "member_ids": [
                 "han-fw"
               ],
@@ -239,6 +306,12 @@
               "topic_tags": [
                 "역습"
               ],
+              "possession": {
+                "team": "ours",
+                "player": "미드필더",
+                "where": "상대 진영 가운데",
+                "evidence_candidate_id": "c017"
+              },
               "member_ids": [],
               "key_frame_candidate_ids": [],
               "group_positions": []
@@ -259,6 +332,12 @@
               "topic_tags": [
                 "마무리"
               ],
+              "possession": {
+                "team": "ours",
+                "player": "윙어",
+                "where": "상대 진영 측면",
+                "evidence_candidate_id": "c008"
+              },
               "member_ids": [
                 "han-fw"
               ],
@@ -278,6 +357,12 @@
               "topic_tags": [
                 "마무리"
               ],
+              "possession": {
+                "team": "ours",
+                "player": "스트라이커",
+                "where": "상대 진영 가운데",
+                "evidence_candidate_id": "c018"
+              },
               "member_ids": [],
               "key_frame_candidate_ids": [],
               "group_positions": []
@@ -291,6 +376,12 @@
                 "마무리",
                 "오버래핑"
               ],
+              "possession": {
+                "team": "ours",
+                "player": "스트라이커",
+                "where": "상대 진영 박스 앞",
+                "evidence_candidate_id": "c019"
+              },
               "member_ids": [
                 "cho-mf"
               ],

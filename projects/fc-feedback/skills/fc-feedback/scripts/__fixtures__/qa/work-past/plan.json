@@ -2,6 +2,7 @@
   "session_title": "과거 세션(24.1.3)",
   "recurring": [],
   "matches_without_feedback": [],
+  "excluded_scenes": [],
   "matches": [
     {
       "title": "지난 세션 리뷰",
@@ -20,6 +21,12 @@
               "topic_tags": [
                 "빌드업"
               ],
+              "possession": {
+                "team": "ours",
+                "player": "송민재",
+                "where": "우리 진영 가운데",
+                "evidence_candidate_id": "c001"
+              },
               "member_ids": [
                 "song-cb"
               ],
@@ -42,6 +49,12 @@
               "topic_tags": [
                 "오버래핑"
               ],
+              "possession": {
+                "team": "ours",
+                "player": "윙어",
+                "where": "상대 진영 측면",
+                "evidence_candidate_id": "c002"
+              },
               "member_ids": [
                 "yoon-fb"
               ],
@@ -64,6 +77,12 @@
               "topic_tags": [
                 "마무리"
               ],
+              "possession": {
+                "team": "ours",
+                "player": "윙어",
+                "where": "상대 진영 측면",
+                "evidence_candidate_id": "c003"
+              },
               "member_ids": [
                 "han-fw"
               ],

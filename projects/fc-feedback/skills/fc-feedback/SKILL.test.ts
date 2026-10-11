@@ -215,6 +215,58 @@ describe("round-0 RED 기준선 실패 대응 (진입점/재개, bare fc 금지,
 	test("REVIEW GATE 승인 후 PUBLISH GATE까지 멈추지 않고 이어간다는 문구가 있다", () => {
 		expect(skillMd).toContain("승인 후에는 멈추지 말고 11단계 PUBLISH GATE까지");
 	});
+
+	test("게이트 보고는 요약 → 확인 사항 → 뺀 장면 → 분할안 → 질문 순서이고, 승인까지 다시 보고한다", () => {
+		const order = ["**요약**", "**확인 사항**", "**뺀 장면**", "**분할안**", "**질문**"].map((heading) => skillMd.indexOf(heading));
+		expect(order.every((position) => position !== -1)).toBe(true);
+		expect([...order].sort((a, b) => a - b)).toEqual(order);
+		expect(skillMd).toContain("사용자가 승인할 때까지 이를 되풀이한다");
+		expect(skillMd).toContain('"user_decision": "pass"');
+		expect(contractsMd).toContain("`excluded_scenes`");
+		expect(contractsMd).toContain("`excludedMd`");
+	});
+});
+
+describe("공 소유와 프레임 확인", () => {
+	const section = skillMd.slice(skillMd.indexOf("### 공 소유와 프레임 확인"), skillMd.indexOf("### 카드 본문"));
+
+	test("말만으로 판단하지 않고 프레임을 먼저 보며, 공 소유를 possession에 기록한다", () => {
+		expect(section).toContain("말만으로 장면을 판단하지 않는다");
+		expect(section).toContain("프레임 단위로 따라간다");
+		expect(section).toContain("`possession`");
+		expect(skillMd.slice(skillMd.indexOf("4. **분할안 작성"), skillMd.indexOf("5. **REVIEW GATE**"))).toContain("공 소유부터 정하고");
+	});
+
+	test("소유별로 가능한 피드백 표와, 말과 소유가 어긋날 때 우리 공으로 바꿔 읽지 않는 규칙이 있다", () => {
+		for (const row of ["| 우리(`ours`) |", "| 상대(`theirs`) |", "| 경합(`loose`) |"]) expect(section).toContain(row);
+		expect(section).toContain("우리 공으로 바꿔 읽지 않는다");
+	});
+
+	test("직접 가르기 어려우면 관찰 가능한 조건에서 oracle에게 프레임 단위 분석을 맡긴다", () => {
+		expect(section).toContain("`oracle`");
+		expect(section).toContain("공이 보이지 않거나");
+		expect(section).toContain("프레임 단위로 확인해 답하라고");
+	});
+
+	test("oracle로도 가를 수 없으면 유닛 대신 뺀 장면에 unknown으로 적고 게이트에서 소유를 묻는다", () => {
+		expect(section).toContain('"team": "unknown"');
+		expect(section).toContain("REVIEW GATE에서 그 장면의 공");
+		expect(contractsMd).toContain("unit의 `team: \"unknown\"`은 에러다");
+	});
+
+	test("선수가 헷갈리면 경기 안에서 고정된 머리 위 색으로 가리고, 다른 경기의 색은 쓰지 않는다", () => {
+		expect(section).toContain("선수가 헷갈리면 머리 위 색으로 가린다");
+		expect(section).toContain("경기마다 무작위로 정해지지만, 한 경기 안에서는 바뀌지 않는다");
+		expect(section).toContain("다른 경기에서\n     본 색으로는 사람을 정하지 않는다");
+		expect(skillMd).toContain("경기마다 따로 찾는다");
+	});
+
+	test("카드 첫 문장과 캡션이 공 가진 팀·선수·위치를 말한다", () => {
+		expect(skillMd).toContain("첫 문장은 공을 가진 팀·선수·위치로 장면을 연다");
+		expect(skillMd).toContain("공이 화면 어디 있고 누가 가졌는지");
+		expect(contractsMd).toContain("possessionFromLegacyValidated");
+		expect(contractsMd).toContain("첫 문단에 공이 없다");
+	});
 });
 
 describe("이름표 읽기", () => {
