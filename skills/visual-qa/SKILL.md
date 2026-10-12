@@ -153,7 +153,7 @@ CHECK EACH:
 5. Responsive and resize behavior across viewport sizes (web) or terminal resize (TUI).
 6. Do the user-intended FEATURES actually work: interactions, states, navigation (web); input handling, resize, scroll (TUI)? Trace the code paths.
 7. Reference packet coverage: every reference page, state, viewport, and annotated requirement is implemented or explicitly marked out of scope by the user. Missing copy, missing overview content, swapped hierarchy, or unimplemented reference states are BLOCKING.
-8. Slop animation: flag motion that signals nothing. A hover-without-action (a hover that produces no state change or affordance), motion on a non-interactive element, or a decorative micro-animation with no informational purpose is slop and a REVISE finding. Motion must map to a real interaction, state, or affordance; the hero may carry one signature moment, nothing else earns decoration.
+8. Slop animation: flag motion that signals nothing. A hover-without-action (a hover that produces no state change or affordance), motion on a non-interactive element, or a decorative micro-animation with no informational purpose is slop and a BLOCKING REVISE finding. Motion must map to a real interaction, state, or affordance; the hero may carry one signature moment, nothing else earns decoration.
 
 OUTPUT:
 VERDICT: PASS | REVISE | FAIL
@@ -161,7 +161,7 @@ CONFIDENCE: HIGH | MEDIUM | LOW
 SUMMARY: 1-3 sentences
 FINDINGS: for each, [product|evidence] [dimension] [severity] what is wrong, where (file/line or capture region), and the concrete fix
 WHAT IS GOOD: correct aspects that must not regress
-BLOCKING: items that must be fixed; empty if none. Optional suggestions go in FINDINGS as non-blocking, never here
+BLOCKING: items that must be fixed; empty if none. Every finding this checklist classifies as REVISE or FAIL goes here; only optional suggestions stay in FINDINGS as non-blocking
 """,
   "fork_turns": "none"
 })
@@ -203,7 +203,7 @@ USE THE EVIDENCE:
 
 CHECK:
 1. Does the rendered output match what the user requested: layout, spacing, color, type, alignment?
-2. When a reference packet exists, compare ACTUAL against REFERENCE pixel-perfectly, region by region: page bounds, header/nav, hero, cards, grids, charts, media, typography, copy, color tokens, radius, shadow, border, icon size, spacing, alignment, scroll position, and state. Anything off beyond unavoidable rasterization/rounding is a finding. The overview text is part of the target: missing or rearranged reference content is a finding even if the screenshot looks plausible.
+2. When a reference packet exists, compare ACTUAL against REFERENCE pixel-perfectly, region by region: page bounds, header/nav, hero, cards, grids, charts, media, typography, copy, color tokens, radius, shadow, border, icon size, spacing, alignment, scroll position, and state. Anything off beyond unavoidable rasterization/rounding is a BLOCKING finding. The overview text is part of the target: missing or rearranged reference content is a BLOCKING finding even if the screenshot looks plausible.
 3. CJK precision:
    - Web: natural CJK line breaking for display and body text. Inspect every page's screenshot for this, not a sample. A high `similarityScore` never excuses a break: each class below is REVISE/FAIL and blocking regardless of similarityScore. Flag every one of:
      - a particle or ending orphaned onto its own line, for example `핵심 자료 / 도` or `끝에서 / 만난다`.
@@ -219,7 +219,7 @@ CONFIDENCE: HIGH | MEDIUM | LOW
 SUMMARY: 1-3 sentences
 EVIDENCE TRACE: each hotspot or overflow line mapped to its visual cause
 FINDINGS: for each, [product|evidence] [severity] what is wrong, where (hotspot grid or capture line:col), and the concrete fix
-BLOCKING: items that must be fixed, including every CJK break, clipped or overflowing text, and tofu; empty if none. Optional suggestions go in FINDINGS as non-blocking, never here
+BLOCKING: items that must be fixed, including every CJK break, clipped or overflowing text, and tofu; empty if none. Every finding this checklist classifies as REVISE or FAIL goes here; only optional suggestions stay in FINDINGS as non-blocking
 """,
   "fork_turns": "none"
 })

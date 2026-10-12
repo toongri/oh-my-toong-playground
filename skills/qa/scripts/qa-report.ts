@@ -160,6 +160,11 @@ function escapeHtml(s: string): string {
 		.replace(/"/g, "&quot;");
 }
 
+/** Escapes an audit ID and offers line breaks only after `_ - / .` (never mid-token). */
+function breakableId(id: string): string {
+	return escapeHtml(id).replace(/([_\-/.])/g, "$1<wbr>");
+}
+
 export function scenarioKey(scenario: { story: string; id: string }): string {
 	return `${scenario.story}:${scenario.id}`;
 }
@@ -656,7 +661,7 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
 			storyAnchors.add(scenario.story);
 			const risks = (scenario.risks ?? []).map((axis) => `${axis} ${RISK_LABEL[axis] ?? ""}`).join(", ") || "정상 흐름";
 			return (
-				`<tr${storyAnchor}><td class="audit-story" data-label="story / scenario"><code>${escapeHtml(scenario.story)}</code><br><code>${escapeHtml(scenario.id)}</code>${scenario.profile ? `<br><span class="audit-note">${escapeHtml(scenario.profile)}</span>` : ""}</td>` +
+				`<tr${storyAnchor}><td class="audit-story" data-label="story / scenario"><code>${breakableId(scenario.story)}</code><br><code>${breakableId(scenario.id)}</code>${scenario.profile ? `<br><span class="audit-note">${escapeHtml(scenario.profile)}</span>` : ""}</td>` +
 				`<td class="audit-coverage" data-label="priority · risks">${escapeHtml(scenario.priority ?? "")} · ${escapeHtml(risks)}</td>` +
 				`<td data-label="scenario · why needed">${escapeHtml(scenario.title ?? "")}${scenario.why_needed ? `<br><span class="audit-note">${escapeHtml(scenario.why_needed)}</span>` : ""}</td>` +
 				`<td class="audit-boundary" data-label="driven at">${escapeHtml(boundary ?? "")}${driver ? `<br><span class="audit-note">${escapeHtml(driver)}</span>` : ""}</td>` +
@@ -1121,7 +1126,7 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .presentation { margin-bottom: 1rem; }
 .gap { color: var(--fail); background: var(--code-bg); border: 1px dashed var(--fail); border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.92rem; }
 .audit-story { min-width: 6rem; }
-.audit-story code { white-space: normal; overflow-wrap: break-word; }
+.audit-story code { white-space: normal; overflow-wrap: normal; display: inline-block; max-width: 100%; overflow-x: auto; vertical-align: bottom; }
 .audit-coverage { min-width: 8rem; word-break: keep-all; overflow-wrap: normal; }
 .audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: anywhere; }
 .audit-evidence { display: block; margin-top: 0.4rem; font-size: 0.8rem; }

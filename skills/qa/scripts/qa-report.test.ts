@@ -360,8 +360,23 @@ describe("qa-report renderer", () => {
 	test("감사 표의 ID 코드가 글자 중간에서 끊기지 않도록 overflow-wrap: anywhere를 쓰지 않음", () => {
 		const html = renderQaReport(baseView(), {}, fakeReader)!;
 		const rule = html.match(/\.audit-story code \{[^}]*\}/)?.[0] ?? "";
-		expect(rule).toContain("overflow-wrap: break-word");
+		expect(rule).toContain("overflow-wrap: normal");
+		expect(rule).toContain("overflow-x: auto");
 		expect(rule).not.toContain("anywhere");
+		expect(rule).not.toContain("break-word");
+	});
+
+	test("감사 표 ID는 구분자 뒤에만 <wbr>을 넣고 앵커 id는 그대로 둠", () => {
+		const view = baseView();
+		view.scenarios![0].id = "category_api_contract";
+		view.stories![0].id = "story-a.b/c";
+		for (const sc of view.scenarios!) sc.story = "story-a.b/c";
+		attachReviews(view);
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const audit = auditSection(html);
+		expect(audit).toContain("<code>category_<wbr>api_<wbr>contract</code>");
+		expect(audit).toContain("<code>story-<wbr>a.<wbr>b/<wbr>c</code>");
+		expect(audit).toContain('id="audit-story-story-a.b/c"');
 	});
 
 	test("renders Acceptance Criteria from recorded state, and records win over narrative", () => {
@@ -514,12 +529,12 @@ describe("qa-report renderer", () => {
 		const html = renderQaReport(view, {}, fakeReader)!;
 		const audit = auditSection(html);
 
-		expect(audit).toContain('<td class="audit-story" data-label="story / scenario"><code>story-1</code><br><code>sc-1</code></td>');
+		expect(audit).toContain('<td class="audit-story" data-label="story / scenario"><code>story-<wbr>1</code><br><code>sc-<wbr>1</code></td>');
 		expect(audit).toContain('<td class="audit-coverage" data-label="priority · risks">H · 1 실패 경로</td>');
 		expect(audit).toContain('<td class="audit-boundary" data-label="driven at">브라우저 경계 미구동<br>');
 		expect(html).toContain("table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.94rem; display: block; overflow-x: auto; }");
 		expect(html).toContain(".audit-story { min-width: 6rem; }");
-		expect(html).toContain(".audit-story code { white-space: normal; overflow-wrap: break-word; }");
+		expect(html).toContain(".audit-story code { white-space: normal; overflow-wrap: normal; display: inline-block; max-width: 100%; overflow-x: auto; vertical-align: bottom; }");
 		expect(html).toContain(".audit-coverage { min-width: 8rem; word-break: keep-all; overflow-wrap: normal; }");
 		expect(html).toContain(".audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: anywhere; }");
 	});

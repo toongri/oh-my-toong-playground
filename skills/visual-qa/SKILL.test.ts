@@ -133,4 +133,9 @@ describe("visual-qa completion gate", () => {
 		expect(skillMd).toContain("After 3 fresh-reviewer rounds");
 		expect(skillMd).toContain("The cap does not permit a silent PASS");
 	});
+
+	test("mandatory REVISE/FAIL findings, including slop animation, are BLOCKING", () => {
+		expect(skillMd).toContain("is slop and a BLOCKING REVISE finding");
+		expect(skillMd.split("Every finding this checklist classifies as REVISE or FAIL goes here").length - 1).toBe(2);
+	});
 });
