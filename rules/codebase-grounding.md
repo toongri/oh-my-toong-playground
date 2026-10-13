@@ -6,9 +6,15 @@ When gathering codebase facts — locating symbols, tracing callers/usages, mapp
 
 When the `codegraph_explore` tool is in your tool list, prefer it over a `Grep`+`Read` loop for "how does X work", "where/what is X", symbol and reference questions, and surveying an area before an edit. It is Read-equivalent: one call takes a natural-language question or a bag of symbol/file names and returns the verbatim, line-numbered source grouped by file — plus the call path among those symbols and a blast-radius summary of what depends on them. One call usually answers the whole question, at a fraction of the tokens and round-trips of a manual grep/read sweep, and it resolves which definition each usage actually binds to.
 
+### A deferred listing counts as present
+
+A harness can list a tool by name only and load its schema on demand — Claude Code's deferred tools, Codex's `tool_search`. When `codegraph_explore` appears in such a listing, it is present: load it before your first code search (Claude Code: `ToolSearch` with `select:mcp__codegraph__codegraph_explore`; Codex: `tool_search` for `codegraph_explore`), then use it. An unloaded schema is not a reason to fall back to grep. Subagents fell into exactly that fallback: across one session's 26 exploration subagents, only those that ran the tool-search step called codegraph (5 calls), and the rest ran 325 `grep`/`git grep` sweeps that stacked into CPU spikes.
+
+When you delegate code search to a subagent, write the same order into the prompt — "load `codegraph_explore` first, use `grep` only for text the graph does not index (configs, docs, string literals)". Do not write "use codegraph if available, else grep": the subagent reads an unloaded tool as unavailable and takes the `else`.
+
 ## Fall back when absent
 
-When `codegraph_explore` is not in your tool list, there is no semantic symbol-graph tool here: degrade to `Grep` / `ast-grep` + targeted `Read`, and treat the result as a textual/syntactic approximation — name-collision false positives, no scope/type/import resolution, a candidate set to verify rather than a ground-truth reference set. This rule is then a no-op: nothing about the fallback path changes, so it is harmless in a project where codegraph is not connected.
+When `codegraph_explore` is neither in your tool list nor in a deferred/tool-search listing, there is no semantic symbol-graph tool here: degrade to `Grep` / `ast-grep` + targeted `Read`, and treat the result as a textual/syntactic approximation — name-collision false positives, no scope/type/import resolution, a candidate set to verify rather than a ground-truth reference set. This rule is then a no-op: nothing about the fallback path changes, so it is harmless in a project where codegraph is not connected.
 
 ## Just-written code: read the changed files directly
 

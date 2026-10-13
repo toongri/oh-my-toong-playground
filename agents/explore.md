@@ -103,18 +103,20 @@ Response is failed if:
 Route by query type first, not by tool brand. Pick the entry that matches what you know about the target:
 
 > **Tool availability**: `Glob`, `Grep`, `Read`, and `git` are always present. `ast-grep` may not be installed in a given target environment — when it is unavailable, degrade structural and outline work to `Grep` (declaration/shape patterns) plus targeted `Read`. This is already an approximation, so it stays consistent with the capability note below.
+>
+> **First action when codegraph is listed**: `codegraph_explore` may appear only by name in a deferred or tool-search listing, with its schema not yet loaded. That still counts as present. Load it before your first search — Claude Code: `ToolSearch` with `select:mcp__codegraph__codegraph_explore`; Codex: `tool_search` for `codegraph_explore` — then route symbol, structure, and "how does X work" questions to it.
 
 1. **Filename / location known** → file/glob discovery (`Glob`).
 2. **Text / string / config / log / comment** → text pattern search (`Grep`).
 3. **Code-structure shape** (a syntactic form: a call shape, a decorator, a function signature) → structural search (`ast-grep`).
-4. **Symbol / reference work** (definitions, callers, usages) → **prefer `codegraph_*` when present** (see the Symbol / Reference section below); when absent, approximate with `ast-grep` + `Grep`, **with the capability loss stated openly**.
+4. **Symbol / reference work** (definitions, callers, usages) → **prefer `codegraph_explore` when present, including a deferred listing you load first** (see the Symbol / Reference section below); when absent, approximate with `ast-grep` + `Grep`, **with the capability loss stated openly**.
 5. **History / evolution** → `git` (only when freshness or how-it-changed is actually required by the request).
 
 ### Symbol / Reference: code-graph first, else approximate (read before doing reference work)
 
-**Code-graph first when present.** When `codegraph_*` tools exist (check `codegraph_status`), prefer them for symbol, reference, structure, and dependency work — `codegraph_explore`/`codegraph_search` for symbol/file inventory, `codegraph_callers`/`codegraph_callees`/`codegraph_impact` for reference centrality and blast radius — and ground every load-bearing claim in that graph data instead of inferring from convention. Code-graph is the semantic symbol-graph tool this repo otherwise lacks: it resolves which definition each usage actually binds to.
+**Code-graph first when present.** The codegraph MCP server exposes one tool, `codegraph_explore`. When it is callable or listed as deferred (load it first, as above), use it first for symbol, reference, structure, and dependency work. One call takes a natural-language question or a bag of symbol/file names and returns their verbatim line-numbered source, the call path among them, and a blast-radius summary of what depends on them — so it covers inventory, callers/callees, and impact in one query. Ground every load-bearing claim in that graph data instead of inferring from convention. Code-graph is the semantic symbol-graph tool this repo otherwise lacks: it resolves which definition each usage actually binds to. Keep `Grep` for text the graph does not index — configs, docs, string literals, comments.
 
-When `codegraph_*` is absent, inactive, or uninitialized, this repo has no semantic symbol-graph tool (no LSP / language server), so symbol and reference work degrades to a textual/syntactic **approximation**, and you MUST treat it as one:
+When `codegraph_explore` is neither callable nor listed, or it reports the project is not indexed, this repo has no semantic symbol-graph tool (no LSP / language server), so symbol and reference work degrades to a textual/syntactic **approximation**, and you MUST treat it as one:
 
 - `Grep` find-references is **textual**. It matches a name as a string, so expect name-collision false positives across methods, variables, comments, and strings. It resolves no scope, no type, and no imports — it cannot tell a real caller from an unrelated identical name.
 - `ast-grep` find-references is **syntactic**. It matches a code shape within a single language and has no cross-file semantic binding — it does not follow imports or resolve which definition a usage actually refers to.
@@ -140,7 +142,8 @@ Known directory only
   -> ast-grep structural outline per file
 
 Known symbol name only
-  -> repo-wide ast-grep + grep for the name (no path restriction)
+  -> codegraph_explore with the name (when present — load it first if deferred)
+  -> without codegraph: repo-wide ast-grep + grep for the name (no path restriction)
   -> drill into located definitions
 
 Unknown target
@@ -154,7 +157,7 @@ Unknown target
 ### Workflow Patterns
 
 - Locate implementation path: ast-grep structural search + grep text search in parallel
-- Find callers of a method: locate the definition first, then run an approximate reference search (grep + ast-grep) and flag it as a candidate set, not a verified reference list
+- Find callers of a method: with codegraph, one `codegraph_explore` call naming the method returns its callers and blast radius; without it, locate the definition first, then run an approximate reference search (grep + ast-grep) and flag it as a candidate set, not a verified reference list
 - Validate pattern prevalence: run ast-grep structural search and grep text search together
 - Map cross-module flow: collect touched files then produce the relationships section
 
