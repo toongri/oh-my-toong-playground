@@ -16,7 +16,7 @@ make validate-skill-refs # Skill path-reference validation
 make typecheck          # TypeScript strict type-check (tsc --noEmit)
 make test               # Run all tests (Shell + TypeScript); writes an untruncated log (path printed; override with OMT_TEST_LOG)
 make sync-dry           # Preview sync changes (no writes)
-make sync               # Deploy to target projects (requires default branch + clean tree; runs validate + tests first)
+make sync               # Deploy to target projects (requires default branch + clean tree; runs validate + tests first; whole run at background priority via `taskpolicy -b`)
 ```
 
 `make sync` refuses to run unless the current branch is this repo's default branch and the working tree is clean (no staged, unstaged, or untracked changes) — commit first, then sync. There is no supported env var or CLI flag to bypass this gate, and it should not be worked around. `make sync-dry` is exempt from this gate since it only previews and writes nothing. See `docs/sync-deploy-targets.md` for the full gate mechanics and known scope.

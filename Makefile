@@ -1,6 +1,6 @@
 BUN_MIN := 1.2.21
 
-.PHONY: sync sync-dry install-frozen validate validate-schema validate-components validate-lib-imports validate-ac-rules-ssot validate-skill-refs validate-tests typecheck lint test help
+.PHONY: sync _sync sync-dry install-frozen validate validate-schema validate-components validate-lib-imports validate-ac-rules-ssot validate-skill-refs validate-tests typecheck lint test help
 
 help:
 	@echo "사용 가능한 명령어:"
@@ -16,7 +16,12 @@ help:
 	@echo "  make lint               - ESLint 정적 검사 (eslint .)"
 	@echo "  make test               - 전체 테스트 실행 (Shell + TypeScript)"
 
-sync: validate validate-tests
+# taskpolicy -b(PRIO_DARWIN_BG)는 자식 프로세스에 상속되므로, 자기 자신을 그 아래서
+# 다시 실행해 validate·테스트·배포 전체가 포그라운드 작업에 자원을 양보하게 한다.
+sync:
+	@taskpolicy -b $(MAKE) --no-print-directory _sync
+
+_sync: validate validate-tests
 	@bun run tools/sync.ts
 
 install-frozen:

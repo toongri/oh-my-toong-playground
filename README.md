@@ -138,7 +138,7 @@ fail-open하지만, mandatory presentation render는 `mmdc`와 headless shell이
    make sync        # 동기화 적용
    ```
 
-   `make sync`는 현재 브랜치가 default 브랜치가 아니거나 워킹트리에 staged/unstaged/untracked 변경이 하나라도 있으면 실패합니다 — 즉 커밋 후에만 동기화할 수 있습니다. 게이트를 끄는 전용 환경변수나 CLI 플래그는 없지만, `HOME`을 갈아끼우면 전역 git 설정을 통해 우회할 수 있습니다. `make sync-dry`는 이 게이트 대상이 아니므로 커밋 전에도 미리보기용으로 쓸 수 있습니다. 게이트가 실제로 막는 범위와 트레이드오프는 `docs/sync-deploy-targets.md` 참고.
+   `make sync`는 현재 브랜치가 default 브랜치가 아니거나 워킹트리에 staged/unstaged/untracked 변경이 하나라도 있으면 실패합니다 — 즉 커밋 후에만 동기화할 수 있습니다. 게이트를 끄는 전용 환경변수나 CLI 플래그는 없지만, `HOME`을 갈아끼우면 전역 git 설정을 통해 우회할 수 있습니다. `make sync-dry`는 이 게이트 대상이 아니므로 커밋 전에도 미리보기용으로 쓸 수 있습니다. 게이트가 실제로 막는 범위와 트레이드오프는 `docs/sync-deploy-targets.md` 참고. `make sync`는 검증·테스트·배포 전체를 `taskpolicy -b`(macOS 백그라운드 우선순위)로 돌리므로, 다른 작업이 있으면 CPU·디스크 I/O를 양보해 그만큼 느려질 수 있습니다.
 
 ### Git lifecycle hooks (Husky)
 
