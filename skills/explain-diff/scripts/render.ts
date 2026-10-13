@@ -218,7 +218,7 @@ export function mmdcRenderSvg(source: string, index: number): string {
 			if (e !== null && typeof e === "object") Object.assign(rec, e);
 			if (rec["code"] === "ENOENT") {
 				throw new Error(
-					"mmdc 가 없습니다 — `npm i -g @mermaid-js/mermaid-cli` 후 `npx puppeteer browsers install chrome-headless-shell` 로 설치하세요.",
+					"mmdc 가 없습니다 — `npm i -g @mermaid-js/mermaid-cli` 후 `\"$(dirname \"$(realpath \"$(command -v mmdc)\")\")/../node_modules/.bin/puppeteer\" browsers install chrome-headless-shell` 로 설치하세요.",
 					{ cause: e },
 				);
 			}

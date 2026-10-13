@@ -86,8 +86,10 @@ the repository, and are needed when rendering presentations directly. `make sync
 applies the root `sync.yaml` provision items to each deploy target in declaration
 order. If `mmdc` is missing, it runs `npm i -g @mermaid-js/mermaid-cli`, then renders
 a tiny flowchart to a temporary SVG with the real `mmdc` command to check the
-headless shell. If that smoke check fails, it runs
-`npx --yes puppeteer browsers install chrome-headless-shell`.
+headless shell. If that smoke check fails, it installs `chrome-headless-shell` with
+the Puppeteer bundled inside `mmdc`. `npx puppeteer` would fetch the latest Puppeteer
+from npm and install that version's Chrome, which can differ from the one `mmdc`'s
+Puppeteer looks for.
 
 Provisioning is per-target and non-fatal, and `make sync-dry` only previews the
 intent without executing it. The renderer itself never installs npm packages. If a
@@ -96,7 +98,7 @@ run these commands manually:
 
 ```bash
 npm i -g @mermaid-js/mermaid-cli
-npx --yes puppeteer browsers install chrome-headless-shell
+"$(dirname "$(realpath "$(command -v mmdc)")")/../node_modules/.bin/puppeteer" browsers install chrome-headless-shell
 ```
 
 The Mermaid render-gate hook fails open when `mmdc` is absent so ordinary Markdown

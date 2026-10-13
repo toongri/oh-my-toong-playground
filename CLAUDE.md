@@ -48,8 +48,9 @@ The root `sync.yaml` provisions the external Mermaid presentation renderer durin
 `npm i -g @mermaid-js/mermaid-cli`; it then renders a tiny flowchart to a temporary
 SVG with the real `mmdc` command. Because `mmdc` uses Puppeteer's `headless: "shell"`
 path by default, this smoke check also catches a missing or unusable
-`chrome-headless-shell`. A failed smoke check runs
-`npx --yes puppeteer browsers install chrome-headless-shell`.
+`chrome-headless-shell`. A failed smoke check installs it with the Puppeteer bundled
+inside `mmdc` (`npx puppeteer` would install the Chrome version of npm's latest
+Puppeteer, which can differ from the one `mmdc`'s Puppeteer looks for).
 
 Provision items remain ordered, per-target, dry-run-safe, and non-fatal: a failed
 check or install is warned about and does not abort sync, while `make sync-dry`
@@ -59,7 +60,7 @@ sync, install the two external pieces manually:
 
 ```bash
 npm i -g @mermaid-js/mermaid-cli
-npx puppeteer browsers install chrome-headless-shell
+"$(dirname "$(realpath "$(command -v mmdc)")")/../node_modules/.bin/puppeteer" browsers install chrome-headless-shell
 ```
 
 The Mermaid render-gate hook fails open when `mmdc` is absent so ordinary markdown

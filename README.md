@@ -86,8 +86,9 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 `sync.yaml`의 provision을 선언 순서대로 각 배포 대상에 적용합니다. `mmdc`가
 없으면 `npm i -g @mermaid-js/mermaid-cli`를 실행하고, 이어서 작은 flowchart를
 실제 `mmdc`로 임시 SVG에 렌더해 headless shell을 확인합니다. 이 smoke check가
-실패하면 `npx --yes puppeteer browsers install chrome-headless-shell`을
-실행합니다.
+실패하면 `mmdc`에 들어 있는 Puppeteer로 `chrome-headless-shell`을 설치합니다.
+`npx puppeteer`는 npm 최신 Puppeteer를 받아 그 버전의 Chrome을 설치하므로,
+`mmdc`의 Puppeteer가 찾는 버전과 어긋날 수 있습니다.
 
 이 provision은 대상별·비치명적이며 `make sync-dry`에서는 실행하지 않고 의도만
 미리 보여줍니다. 렌더러 자체는 npm 패키지를 설치하지 않습니다. `make sync`를
@@ -96,7 +97,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 
 ```bash
 npm i -g @mermaid-js/mermaid-cli
-npx --yes puppeteer browsers install chrome-headless-shell
+"$(dirname "$(realpath "$(command -v mmdc)")")/../node_modules/.bin/puppeteer" browsers install chrome-headless-shell
 ```
 
 Mermaid render-gate 훅은 `mmdc`가 없을 때 일반 Markdown 작성을 막지 않도록

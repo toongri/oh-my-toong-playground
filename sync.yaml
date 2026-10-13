@@ -22,9 +22,11 @@ provision:
   # mmdc 기본 설정은 Puppeteer의 headless shell을 실제로 띄운다. 작은
   # flowchart를 SVG로 렌더하고 결과가 비어 있지 않은지 확인해, CLI만 있고
   # chrome-headless-shell이 빠진 상태도 프로비저닝 대상으로 만든다.
+  # 설치는 mmdc에 든 Puppeteer로 한다. npx puppeteer는 npm 최신판을 받아 그
+  # 버전의 Chrome을 깔기 때문에, mmdc의 Puppeteer가 찾는 버전과 어긋난다.
   - check: 'tmp=$(mktemp -d "${TMPDIR:-/tmp}/omt-mmdc-smoke.XXXXXX") || exit 1; printf "%s\n" "flowchart LR" "  A --> B" >"$tmp/input.mmd" || { rm -rf "$tmp"; exit 1; }; mmdc -i "$tmp/input.mmd" -o "$tmp/output.svg" -q >/dev/null 2>&1; status=$?; if [ "$status" -eq 0 ] && [ -s "$tmp/output.svg" ]; then status=0; elif [ "$status" -eq 0 ]; then status=1; fi; rm -rf "$tmp"; exit "$status"'
     commands:
-      - "npx --yes puppeteer browsers install chrome-headless-shell"
+      - '"$(dirname "$(realpath "$(command -v mmdc)")")/../node_modules/.bin/puppeteer" browsers install chrome-headless-shell'
   # 버전을 명시 pin한다. 재vendoring한 skills/agent-device/SKILL.md는 더 이상
   # 버전 하한을 요구하지 않으므로(업스트림이 >= 0.20.0 문구를 삭제), pin의
   # 근거는 "신뢰 설치본을 알려진 최신으로 고정"이다. 낡은 설치본이 있으면
