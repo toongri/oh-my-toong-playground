@@ -35,7 +35,7 @@ describe("기기 프로필 저장소", () => {
 	test("기본 목록은 그대로 저장할 수 있고 폰·폴더블·태블릿·데스크톱을 모두 담음", () => {
 		expect(validateDeviceProfiles(DEFAULT_DEVICE_PROFILES)).toEqual([...DEFAULT_DEVICE_PROFILES]);
 		const ids = DEFAULT_DEVICE_PROFILES.map((profile) => profile.id);
-		for (const id of ["iphone-se", "fold8-cover", "fold8-main", "iphone-duo-unfolded", "ipad-portrait", "desktop-ultrawide"]) expect(ids).toContain(id);
+		for (const id of ["iphone-se", "fold8-cover", "fold8-main", "ipad-portrait", "desktop-ultrawide"]) expect(ids).toContain(id);
 	});
 
 	test("프로젝트가 지원하지 않는 기기는 지우고, 크기는 고치고, 전용 화면은 추가함", () => {

@@ -27,8 +27,6 @@ export const DEFAULT_DEVICE_PROFILES: readonly QaDeviceProfile[] = [
 	{ id: "galaxy-360", label: "갤럭시 360폭 (가장 좁은 안드로이드)", platform: "android", width: 360, height: 780 },
 	{ id: "fold8-cover", label: "Galaxy Z Fold8 커버 화면", platform: "android", width: 475, height: 751 },
 	{ id: "fold8-main", label: "Galaxy Z Fold8 펼친 메인 화면", platform: "android", width: 696, height: 933 },
-	{ id: "iphone-duo-folded", label: "iPhone Duo 접힘", platform: "ios", width: 466, height: 678 },
-	{ id: "iphone-duo-unfolded", label: "iPhone Duo 펼침", platform: "ios", width: 626, height: 890 },
 	{ id: "ipad-portrait", label: "iPad Air 11 세로", platform: "ios", width: 820, height: 1180 },
 	{ id: "ipad-landscape", label: "iPad Air 11 가로", platform: "ios", width: 1180, height: 820 },
 	{ id: "desktop-laptop", label: "노트북 (1920 화면 125% 배율)", platform: "web", width: 1536, height: 864 },
