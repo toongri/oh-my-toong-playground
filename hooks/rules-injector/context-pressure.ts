@@ -45,15 +45,18 @@ function readLastNonEmptyLine(path: string): string {
 	const fd = openSync(path, "r");
 	try {
 		let position = fstatSync(fd).size;
-		let tail = Buffer.alloc(0);
+		const chunks: Buffer[] = [];
 		while (position > 0) {
 			const length = Math.min(TAIL_CHUNK_BYTES, position);
 			position -= length;
 			const chunk = Buffer.alloc(length);
 			readSync(fd, chunk, 0, length, position);
-			tail = Buffer.concat([chunk, tail]);
-			const lines = tail.toString("utf8").split("\n");
-			// While bytes remain before `tail`, its first line may be cut mid-line
+			chunks.unshift(chunk);
+			// Decode only once a line boundary arrived (0x0a never occurs inside a
+			// multi-byte UTF-8 sequence), so a line spanning many chunks is joined once.
+			if (position > 0 && !chunk.includes(0x0a)) continue;
+			const lines = Buffer.concat(chunks).toString("utf8").split("\n");
+			// While bytes remain before the joined chunks, its first line may be cut mid-line
 			// (or mid-character), so it is not trusted until the next chunk.
 			for (let i = lines.length - 1; i >= (position > 0 ? 1 : 0); i--) {
 				const line = lines[i] ?? "";

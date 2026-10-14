@@ -55,3 +55,13 @@ test("조각 경계에 걸린 여러 바이트 문자를 깨뜨리지 않는다"
 test("소문자 변환으로 길이가 바뀌는 문자가 표시 뒤 활동을 가리지 않는다", () => {
 	expect(transcriptHasContextPressureMarker(transcript(`${"İ".repeat(20)} context compacted\nok`))).toBe(false);
 });
+
+test("조각 수백 개에 걸친 마지막 줄도 읽는 시간이 줄 길이에 비례한다", () => {
+	const line = `${"가".repeat(5_600_000)} context compacted`;
+	const path = transcript(`context compacted\n${line}\n`);
+	const start = performance.now();
+	expect(transcriptHasContextPressureMarker(path)).toBe(true);
+	expect(performance.now() - start).toBeLessThan(300);
+	const activity = transcript(`${line}\nnext turn\n`);
+	expect(transcriptHasContextPressureMarker(activity)).toBe(false);
+});
