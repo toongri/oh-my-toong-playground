@@ -80,7 +80,8 @@ test_modes_and_fail_open() {
     bun "$ROOT/scripts/pretool-trace/index.ts" claude disabled "$TMP/bin/child.sh" >"$out" 2>"$err" <<< "$GENERATED_PAYLOAD"); status=$?; set -e
   [ "$status" -eq 7 ] && cmp -s "$out" "$EVIDENCE_DIR/baseline.stdout.txt" && cmp -s "$err" "$EVIDENCE_DIR/baseline.stderr.txt" || fail "opt-out parity"
   fallback="$TMP/fallback-home"; mkdir -p "$fallback"; blocked="$TMP/omt-regular-file"; printf sentinel > "$blocked"
-  set +e; (cd "$TMP/work" && HOME="$fallback" OMT_DIR="$blocked" TRACE_TEST_ENV=preserved TRACE_TEST_STATUS=7 \
+  # Bun keeps its own transpiler cache under HOME; disable it so only the wrapper could write there.
+  set +e; (cd "$TMP/work" && BUN_RUNTIME_TRANSPILER_CACHE_PATH=0 HOME="$fallback" OMT_DIR="$blocked" TRACE_TEST_ENV=preserved TRACE_TEST_STATUS=7 \
     bun "$ROOT/scripts/pretool-trace/index.ts" codex fail-open "$TMP/bin/child.sh" >"$out" 2>"$err" <<< "$GENERATED_PAYLOAD"); status=$?; set -e
   after=$(cksum "$OMT_DIR/pretool-trace/events.jsonl")
   [ "$status" -eq 7 ] && cmp -s "$out" "$EVIDENCE_DIR/baseline.stdout.txt" && cmp -s "$err" "$EVIDENCE_DIR/baseline.stderr.txt" || fail "fail-open parity"
