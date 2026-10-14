@@ -137,7 +137,7 @@ bun "${CLAUDE_SKILL_DIR}/scripts/qa-device-profiles.ts" get --project .
 ```
 
 - `status: "ok"` → use those profiles. Pick every profile whose platform the actor's client ships on: a React Native or Flutter app ships on `ios` and `android`, so it takes the profiles of both; a phone app does not run on a 1440 px desktop, nor on another product's device that shares its platform (a kiosk or dispenser tablet profile belongs to that device's app). The project's QA runbook names the platforms it ships.
-- `status: "unconfigured"` (first run for this project, or a new machine) → the result carries the built-in `defaults` (phones, Galaxy Z Fold8 and iPhone Duo folded/unfolded, iPad portrait/landscape, laptop, FHD and 21:9 desktops). Ask the user once: show that list and ask which platforms the project ships and which screens it must support. Then:
+- `status: "unconfigured"` (first run for this project, or a new machine) → the result carries the built-in `defaults` (phones, foldables, tablets, desktops). Ask the user once: show that list and ask which platforms the project ships and which screens it must support. Then:
   - The user accepts the list or does not know → `set --defaults`.
   - The user gives a list → `set --file <json>`.
 - Fit a saved list to the project whenever the user or the project docs say so:
@@ -277,7 +277,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts record-scenario --story … --scenar
 |---------|---------|
 | "Only the server changed, but users see it on the app — boot a simulator" | `curl` the API. The app is not under test. |
 | "It's React Native — check iOS and Android" | One platform, unless native or platform-branching code changed. Device profiles still cover every size the app ships to: size that one platform's device to each. |
-| "The iPhone Duo / newest model isn't installed, so that profile is blocked" | A profile is a size. Use an installed device of that size, or size the Android emulator to it. |
+| "The device model the profile names isn't installed, so that profile is blocked" | A profile is a size. Use an installed device of that size, or size the Android emulator to it. |
 | "My setup hit an obstacle, so the scenario is blocked" | Setup is your work, not a limit outside the change. Find the cause and try another approach. `blocked` takes only `hardware`, `third-party` or `person`, and the CLI refuses the rest. `await-user` only for a person's identity or decision. |
 | "The emulator's logged-in account is stuck in onboarding; switching accounts or changing its data might break something, so `blocked`" | The stack and the device are this cycle's. Read the project's QA runbook for a seeded account past onboarding, log out or clear app data, log in with it, and seed what the screen needs through the QA tool or the local database. One fix unblocks every profile. |
 | "The screen or response is not what I expected, so it fails" | First show it is the product: check that `expected` is what the PR or spec promised, find the product code that causes it, and compare the base commit. A setup cause is setup work. |
