@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -108,15 +108,25 @@ describe("qa case native replay", () => {
 	test("실행 중 변경된 native 파일을 거부한다", async () => {
 		const root = tempDir();
 		const native = join(root, "fixture.txt");
-		const promise = runQaCase(record(root, [process.execPath, "-e", "setTimeout(() => {}, 80)"]), context(root));
-		setTimeout(() => writeFileSync(native, "changed\n"), 20);
+		const startedFile = join(root, "runner-started");
+		const gateFile = join(root, "runner-gate");
+		// The runner stays alive until the test has changed the native file (barrier, not a sleep).
+		const runnerSource = `const fs = require("fs"); fs.writeFileSync(${JSON.stringify(startedFile)}, "1"); setInterval(() => { if (fs.existsSync(${JSON.stringify(gateFile)})) process.exit(0); }, 10)`;
+		const promise = runQaCase(record(root, [process.execPath, "-e", runnerSource]), context(root));
+		const deadline = Date.now() + 30_000;
+		while (!existsSync(startedFile)) {
+			if (Date.now() > deadline) throw new Error("timed out waiting for runner start");
+			await new Promise((resolve) => setTimeout(resolve, 10));
+		}
+		writeFileSync(native, "changed\n");
+		writeFileSync(gateFile, "");
 		await expect(promise).rejects.toThrow(/native file changed/);
 	});
 
 	test("정확한 reset 확인을 요구하고 정지 runner를 제한한다", async () => {
 		const root = tempDir();
 		await expect(runQaCase(record(root, [process.execPath, "-e", "setTimeout(() => {}, 500)"]), context(root, { resetConfirmed: "guessed" }))).rejects.toThrow(/reset confirmation/);
-		const result = await runQaCase(record(root, [process.execPath, "-e", "setTimeout(() => {}, 500)"]), context(root, { timeoutMs: 30 }));
+		const result = await runQaCase(record(root, [process.execPath, "-e", "setInterval(() => {}, 1000)"]), context(root, { timeoutMs: 30 }));
 		expect(result.receipt.exit_status.timedout).toBe(true);
 		expect(result.receipt.exit_status.code).not.toBe(0);
 	});
@@ -141,12 +151,20 @@ describe("qa case native replay", () => {
 		}
 	});
 
-	test("SIGTERM을 무시하는 runner도 bounded timeout으로 종료한다", async () => {
+	test("SIGTERM을 무시하는 runner도 SIGKILL로 강제 종료한다", async () => {
 		const root = tempDir();
-		const started = Date.now();
-		const result = await runQaCase(record(root, [process.execPath, "-e", "process.on('SIGTERM',()=>{}); setInterval(()=>{},1000)"]), context(root, { timeoutMs: 25 }));
-		expect(result.receipt.exit_status.timedout).toBe(true);
-		expect(Date.now() - started).toBeLessThan(1500);
+		const pidFile = join(root, "runner.pid");
+		const termSeenFile = join(root, "term-seen");
+		// The runner installs its SIGTERM-ignoring handler before it overflows maxBuffer, so the
+		// termination it triggers always meets the handler — no timer races runner startup.
+		// The timeout path into the same terminate() is covered by the stuck-runner test above.
+		const runnerSource = `const fs = require("fs"); fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); process.on("SIGTERM", () => fs.writeFileSync(${JSON.stringify(termSeenFile)}, "1")); process.stdout.write("x".repeat(4096)); setInterval(() => {}, 1000)`;
+		const result = await runQaCase(record(root, [process.execPath, "-e", runnerSource]), context(root, { maxBuffer: 1024 }));
+		expect(result.receipt.exit_status.max_buffer_exceeded).toBe(true);
+		expect(result.receipt.exit_status.signal).toBe("SIGKILL");
+		expect(readFileSync(termSeenFile, "utf8")).toBe("1");
+		const runnerPid = Number(readFileSync(pidFile, "utf8"));
+		expect(() => process.kill(runnerPid, 0)).toThrow();
 	});
 
 	test("receipt validator가 필수 중첩 필드를 검증한다", () => {

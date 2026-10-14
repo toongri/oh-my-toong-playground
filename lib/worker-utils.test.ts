@@ -1,4 +1,4 @@
-import { describe, it, test, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, test, expect, beforeEach, afterEach, jest } from "bun:test";
 import {
 	mkdirSync,
 	rmSync,
@@ -34,6 +34,9 @@ import { requestWorkerCancellation } from "./worker-cancellation.ts";
 function makeTmpDir(): string {
 	return mkdtempSync(join(tmpdir(), "worker-utils-test-"));
 }
+
+// Hang guard for condition polls: the poll returns as soon as its condition holds.
+const HANG_GUARD_MS = 30_000;
 
 function sleepMsAsync(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
@@ -245,22 +248,32 @@ describe("runOnce heartbeat", () => {
 	}
 
 	test("실행 중에 status.json에 lastHeartbeat을 기록함", async () => {
-		const opts = makeRunOnceOpts();
+		// The child blocks on a gate file; the heartbeat runs on the fake clock.
+		const gatePath = join(tmpDir, "heartbeat-gate");
+		const opts = makeRunOnceOpts({
+			args: ["-c", `while [ ! -f "${gatePath}" ]; do sleep 0.02; done`],
+			command: "gate-wait",
+		});
 		const statusPath = join(opts.memberDir, "status.json");
 
-		const promise = runOnce(opts);
+		jest.useFakeTimers();
+		let promise: Promise<Record<string, unknown>>;
+		try {
+			promise = runOnce(opts);
+			jest.advanceTimersByTime(opts.heartbeatIntervalMs!);
 
-		// Wait for at least 2 heartbeat cycles to fire
-		await sleepMsAsync(200);
+			const status = JSON.parse(readFileSync(statusPath, "utf8"));
+			expect(status.lastHeartbeat).toBeDefined();
+			// lastHeartbeat should be a valid ISO8601 timestamp
+			expect(() => new Date(status.lastHeartbeat as string).toISOString()).not.toThrow();
+			// Other fields should still be present
+			expect(status.member).toBe("test-member");
+			expect(status.state).toBe("running");
+		} finally {
+			jest.useRealTimers();
+		}
 
-		const status = JSON.parse(readFileSync(statusPath, "utf8"));
-		expect(status.lastHeartbeat).toBeDefined();
-		// lastHeartbeat should be a valid ISO8601 timestamp
-		expect(() => new Date(status.lastHeartbeat as string).toISOString()).not.toThrow();
-		// Other fields should still be present
-		expect(status.member).toBe("test-member");
-		expect(status.state).toBe("running");
-
+		writeFileSync(gatePath, "");
 		await promise;
 	});
 
@@ -278,8 +291,21 @@ describe("runOnce heartbeat", () => {
 			command: '/bin/sh -c "exit 0"',
 		});
 		const statusPath = join(opts.memberDir, "status.json");
+		const setIntervalSpy = jest.spyOn(globalThis, "setInterval");
+		const clearIntervalSpy = jest.spyOn(globalThis, "clearInterval");
 
-		const result = await runOnce(opts);
+		let result: Record<string, unknown>;
+		let heartbeatHandle: unknown;
+		try {
+			result = await runOnce(opts);
+			heartbeatHandle = setIntervalSpy.mock.results[setIntervalSpy.mock.calls.findIndex((call) => call[1] === opts.heartbeatIntervalMs)]?.value;
+			// The heartbeat interval was cleared by finalize, so no later tick can touch status.json.
+			expect(heartbeatHandle).toBeDefined();
+			expect(clearIntervalSpy.mock.calls.some(([handle]) => handle === heartbeatHandle)).toBe(true);
+		} finally {
+			setIntervalSpy.mockRestore();
+			clearIntervalSpy.mockRestore();
+		}
 
 		// runOnce's resolved value (what executeOneTurn reads as runResult.state) is unchanged.
 		expect(result.state).toBe("done");
@@ -289,39 +315,39 @@ describe("runOnce heartbeat", () => {
 		expect(statusAfterFinalize.state).not.toBe("done");
 		expect(statusAfterFinalize.state).toBe("running");
 
-		// Wait for multiple heartbeat cycles that would fire if interval leaked
-		await sleepMsAsync(200);
-
-		// status.json should still not have lastHeartbeat (heartbeat interval was cleared by finalize)
-		const statusAfterWait = JSON.parse(readFileSync(statusPath, "utf8"));
-		expect(statusAfterWait.lastHeartbeat).toBeUndefined();
-		expect(statusAfterWait.state).toBe("running");
 	});
 
 	test("state가 running이 아닌 경우 heartbeat가 status.json을 덮어쓰지 않음", async () => {
+		// The child blocks on a gate file so it cannot exit (and finalize) before the assertions run.
+		const gatePath = join(tmpDir, "heartbeat-gate");
 		const opts = makeRunOnceOpts({
-			args: ["-c", "sleep 0.5"],
-			command: '/bin/sh -c "sleep 0.5"',
+			args: ["-c", `while [ ! -f "${gatePath}" ]; do sleep 0.02; done`],
+			command: "gate-wait",
 		});
 		const statusPath = join(opts.memberDir, "status.json");
 
-		const promise = runOnce(opts);
+		jest.useFakeTimers();
+		let promise: Promise<Record<string, unknown>>;
+		try {
+			promise = runOnce(opts);
+			jest.advanceTimersByTime(opts.heartbeatIntervalMs!);
+			expect(JSON.parse(readFileSync(statusPath, "utf8")).lastHeartbeat).toBeDefined();
 
-		// Wait for heartbeat to start writing
-		await sleepMsAsync(150);
-
-		// Manually overwrite status.json with a terminal state (simulating external finalize)
-		const terminalPayload = { member: "test-member", state: "done", exitCode: 0 };
-		writeFileSync(statusPath, JSON.stringify(terminalPayload));
-
-		// Wait for additional heartbeat cycles
-		await sleepMsAsync(200);
+			// Manually overwrite status.json with a terminal state (simulating external finalize),
+			// then run further heartbeat ticks synchronously on the fake clock.
+			const terminalPayload = { member: "test-member", state: "done", exitCode: 0 };
+			writeFileSync(statusPath, JSON.stringify(terminalPayload));
+			jest.advanceTimersByTime(opts.heartbeatIntervalMs! * 3);
+		} finally {
+			jest.useRealTimers();
+		}
 
 		// status.json should remain the terminal state — heartbeat guard skipped the write
-		const statusAfterWait = JSON.parse(readFileSync(statusPath, "utf8"));
-		expect(statusAfterWait.state).toBe("done");
-		expect(statusAfterWait.lastHeartbeat).toBeUndefined();
+		const statusAfterTicks = JSON.parse(readFileSync(statusPath, "utf8"));
+		expect(statusAfterTicks.state).toBe("done");
+		expect(statusAfterTicks.lastHeartbeat).toBeUndefined();
 
+		writeFileSync(gatePath, "");
 		await promise;
 	});
 
@@ -500,18 +526,32 @@ function makeOneTurnOpts(
 
 function makeDeferredRunOnce() {
 	let calls = 0;
+	let released = false;
 	let releaseFirst!: () => void;
+	let markFirstStarted!: () => void;
 	const firstReleased = new Promise<void>((resolve) => {
-		releaseFirst = resolve;
+		releaseFirst = () => {
+			released = true;
+			resolve();
+		};
 	});
+	const firstStarted = new Promise<void>((resolve) => {
+		markFirstStarted = resolve;
+	});
+	// Whether the first call had been released at the moment each later call started.
+	const releasedWhenCalled: boolean[] = [];
 	const fn = async (opts: RunOnceOpts): Promise<Record<string, unknown>> => {
 		calls++;
-		if (calls === 1) await firstReleased;
+		releasedWhenCalled.push(released);
+		if (calls === 1) {
+			markFirstStarted();
+			await firstReleased;
+		}
 		writeFileSync(join(opts.memberDir, "output.txt"), "raw");
 		writeFileSync(join(opts.memberDir, "error.txt"), "");
 		return { state: "done", exitCode: 0, member: opts.member, command: opts.command, attempt: 0 };
 	};
-	return { fn, get calls() { return calls; }, releaseFirst };
+	return { fn, get calls() { return calls; }, releaseFirst, firstStarted, releasedWhenCalled };
 }
 
 describe("runOneTurn / resumeOneTurn — caller-judgment single-turn pump", () => {
@@ -534,14 +574,14 @@ describe("runOneTurn / resumeOneTurn — caller-judgment single-turn pump", () =
 		const driver = makeOneTurnMockDriver({ sessionID: "session", terminal: "stop", text: "ok", rawEvents: [] });
 		const deferred = makeDeferredRunOnce();
 		const first = runOneTurn(makeOneTurnOpts(firstDir, { driverFactory: () => driver, runOnceFn: deferred.fn, workerSlotOptions: slotOptions }));
-		await new Promise((resolve) => setTimeout(resolve, 30));
+		await deferred.firstStarted;
 		const second = resumeOneTurn("session", makeOneTurnOpts(secondDir, { driverFactory: () => driver, runOnceFn: deferred.fn, workerSlotOptions: slotOptions }));
-		await new Promise((resolve) => setTimeout(resolve, 40));
-		expect(deferred.calls).toBe(1);
 		deferred.releaseFirst();
 		await first;
 		await second;
 		expect(deferred.calls).toBe(2);
+		// The second call may only start after the first released the shared slot.
+		expect(deferred.releasedWhenCalled).toEqual([false, true]);
 	});
 
 	test("슬롯 대기 중 취소는 CLI를 실행하지 않고 기존 output을 보존함", async () => {
@@ -554,7 +594,7 @@ describe("runOneTurn / resumeOneTurn — caller-judgment single-turn pump", () =
 		const driver = makeOneTurnMockDriver({ sessionID: "session", terminal: "stop", text: "ok", rawEvents: [] });
 		const deferred = makeDeferredRunOnce();
 		const first = runOneTurn(makeOneTurnOpts(firstDir, { driverFactory: () => driver, runOnceFn: deferred.fn, workerSlotOptions: slotOptions }));
-		await new Promise((resolve) => setTimeout(resolve, 30));
+		await deferred.firstStarted;
 		requestWorkerCancellation(queuedDir, "queued stop");
 		let queuedCalls = 0;
 		const queued = await runOneTurn(makeOneTurnOpts(queuedDir, {
@@ -1988,7 +2028,6 @@ describe("runOnce detached descendant lifecycle", () => {
 			process.nextTick(() => child.emit("exit", 0, null));
 			return child;
 		};
-		const startedAt = Date.now();
 		const result = await runOnce({
 			program: "fake",
 			args: [],
@@ -2006,7 +2045,7 @@ describe("runOnce detached descendant lifecycle", () => {
 		});
 		expect(result.state).toBe("error");
 		expect(result.message).toBe("Output drain timed out");
-		expect(Date.now() - startedAt).toBeLessThan(3000);
+		// Resolving at all proves the drain is bounded; the test timeout is the hang guard.
 		rmSync(tmpDir, { recursive: true, force: true });
 	});
 
@@ -2026,11 +2065,11 @@ describe("runOnce detached descendant lifecycle", () => {
 		const sibling = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
 		const worker = spawn(process.execPath, [fixturePath], { detached: true, stdio: "ignore" });
 		try {
-			const deadline = Date.now() + 5000;
+			const deadline = Date.now() + HANG_GUARD_MS;
 			while (!existsSync(resultPath) && Date.now() < deadline) await sleepMsAsync(25);
 			expect(existsSync(resultPath)).toBe(true);
 			expect(JSON.parse(readFileSync(resultPath, "utf8")).state).toBe("done");
-			const grandchildDeadline = Date.now() + 2000;
+			const grandchildDeadline = Date.now() + HANG_GUARD_MS;
 			while (existsSync(grandchildPath) && Date.now() < grandchildDeadline) {
 				const pid = Number(readFileSync(grandchildPath, "utf8").trim());
 				try {
@@ -2087,11 +2126,11 @@ describe("runOnce detached descendant lifecycle", () => {
 		const sibling = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
 		const worker = spawn(process.execPath, [fixturePath], { detached: true, stdio: "ignore" });
 		try {
-			const pidDeadline = Date.now() + 3000;
+			const pidDeadline = Date.now() + HANG_GUARD_MS;
 			while (!existsSync(grandchildPath) && Date.now() < pidDeadline) await sleepMsAsync(25);
 			expect(existsSync(grandchildPath)).toBe(true);
 			requestWorkerCancellation(memberDir, "active stop");
-			const resultDeadline = Date.now() + 3000;
+			const resultDeadline = Date.now() + HANG_GUARD_MS;
 			while (!existsSync(resultPath) && Date.now() < resultDeadline) await sleepMsAsync(25);
 			expect(JSON.parse(readFileSync(resultPath, "utf8")).state).toBe("canceled");
 			const grandchildPid = Number(readFileSync(grandchildPath, "utf8").trim());

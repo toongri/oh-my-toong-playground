@@ -50,7 +50,10 @@ afterEach(() => {
 	rmSync(scratchDir, { recursive: true, force: true });
 });
 
-const TTL_MS = 1_000;
+// Far larger than any test runtime, so a "fresh" fixture can never age past it under load.
+const TTL_MS = 60_000;
+// Stale fixtures are aged well beyond TTL_MS.
+const STALE_AGE_MS = 60 * TTL_MS;
 
 // Ages a file's mtime to `ageMs` in the past, well beyond any TTL used in these tests.
 function age(path: string, ageMs: number): void {
@@ -69,7 +72,7 @@ test("sweeps stale sibling json and lock", () => {
 
 	const siblingPath = join(scratchDir, "sibling.json");
 	writeFileSync(siblingPath, SESSION_STATE_JSON);
-	age(siblingPath, 10_000);
+	age(siblingPath, STALE_AGE_MS);
 	const lockPath = `${siblingPath}.lock`;
 	mkdirSync(lockPath);
 
@@ -90,13 +93,13 @@ test("preserves stale foreign json that is not a session-state record", () => {
 	// past the TTL. Deleting it would be data loss outside our ownership.
 	const foreignPath = join(scratchDir, "package.json");
 	writeFileSync(foreignPath, JSON.stringify({ name: "unrelated", dependencies: {} }));
-	age(foreignPath, 10_000);
+	age(foreignPath, STALE_AGE_MS);
 
 	// A stale, corrupt/truncated .json: also not positively one of our records,
 	// so preserved rather than deleted (leak over destroy on ambiguity).
 	const corruptPath = join(scratchDir, "corrupt.json");
 	writeFileSync(corruptPath, "{ not valid json");
-	age(corruptPath, 10_000);
+	age(corruptPath, STALE_AGE_MS);
 
 	sweepStaleSessionStates(scratchDir, TTL_MS, ownCachePath);
 
@@ -119,7 +122,7 @@ test("preserves fresh sibling", () => {
 test("preserves current session on stale-mtime resume", () => {
 	const ownCachePath = join(scratchDir, "own.json");
 	writeFileSync(ownCachePath, "{}");
-	age(ownCachePath, 10_000);
+	age(ownCachePath, STALE_AGE_MS);
 
 	sweepStaleSessionStates(scratchDir, TTL_MS, ownCachePath);
 
@@ -132,11 +135,11 @@ test("ignores non-session files and respects 24h throttle", () => {
 
 	const errorLogPath = join(scratchDir, "error.log");
 	writeFileSync(errorLogPath, "boom\n");
-	age(errorLogPath, 10_000);
+	age(errorLogPath, STALE_AGE_MS);
 
 	const firstSiblingPath = join(scratchDir, "sibling-a.json");
 	writeFileSync(firstSiblingPath, SESSION_STATE_JSON);
-	age(firstSiblingPath, 10_000);
+	age(firstSiblingPath, STALE_AGE_MS);
 
 	sweepStaleSessionStates(scratchDir, TTL_MS, ownCachePath);
 
@@ -147,7 +150,7 @@ test("ignores non-session files and respects 24h throttle", () => {
 
 	const secondSiblingPath = join(scratchDir, "sibling-b.json");
 	writeFileSync(secondSiblingPath, SESSION_STATE_JSON);
-	age(secondSiblingPath, 10_000);
+	age(secondSiblingPath, STALE_AGE_MS);
 
 	sweepStaleSessionStates(scratchDir, TTL_MS, ownCachePath);
 

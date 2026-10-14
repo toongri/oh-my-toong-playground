@@ -1651,7 +1651,6 @@ describe("touchSessionStates", () => {
 
 		touchSessionStates(sid);
 
-		const nowMs = Date.now();
 		for (const filename of [
 			`goal-state-${sid}.json`,
 			`ultragoal-state-${sid}.json`,
@@ -1660,8 +1659,7 @@ describe("touchSessionStates", () => {
 			`qa-state-${sid}.json`,
 		]) {
 			const parsed = readState(omtDir, filename) as Record<string, unknown>;
-			const touchedMs = Date.parse(parsed["last_touched_at"] as string);
-			expect(Math.abs(nowMs - touchedMs)).toBeLessThan(5000);
+			expectStampedDuringThisTest(parsed["last_touched_at"] as string);
 		}
 
 		// The heartbeat must preserve every pre-existing payload field, not just

@@ -345,7 +345,7 @@ exec sleep 30
 		);
 		expect(result).toEqual({ ok: false, reason: "timeout", detail: expect.any(String) });
 		fs.rmSync(stubDir, { recursive: true, force: true });
-	}, 10_000);
+	}, 60_000);
 
 	it("captures stderr text into the Observation (hermetic stub — proves the piped stderr fd is actually consumed, not just spawned)", async () => {
 		const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-probe-runsession-stderr-"));

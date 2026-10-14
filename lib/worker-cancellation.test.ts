@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, jest } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -19,7 +19,10 @@ function makeMemberDir(): string {
 	return dir;
 }
 
-function waitForAbort(signal: AbortSignal, timeoutMs = 2_000): Promise<void> {
+// Hang guard only: every wait below returns as soon as its condition holds.
+const HANG_GUARD_MS = 30_000;
+
+function waitForAbort(signal: AbortSignal, timeoutMs = HANG_GUARD_MS): Promise<void> {
 	if (signal.aborted) return Promise.resolve();
 	return new Promise((resolve, reject) => {
 		const timer = setTimeout(() => reject(new Error("timed out waiting for cancellation")), timeoutMs);
@@ -36,7 +39,7 @@ function waitForAbort(signal: AbortSignal, timeoutMs = 2_000): Promise<void> {
 
 function waitForChildExit(
 	child: ReturnType<typeof spawn>,
-	timeoutMs = 2_000,
+	timeoutMs = HANG_GUARD_MS,
 ): Promise<{ code: number | null; stdout: string }> {
 	return new Promise((resolve, reject) => {
 		let stdout = "";
@@ -107,11 +110,13 @@ describe("worker cancellation", () => {
 			memberDir,
 		]);
 
-		await new Promise((resolve) => setTimeout(resolve, 300));
-		expect(existsSync(join(memberDir, CANCELLATION_MARKER))).toBe(true);
-		await waitForAbort(observation.signal);
-		observation.dispose();
-		child.kill();
+		try {
+			await waitForAbort(observation.signal);
+			expect(existsSync(join(memberDir, CANCELLATION_MARKER))).toBe(true);
+		} finally {
+			observation.dispose();
+			child.kill();
+		}
 	});
 
 	it("이미 취소된 상태로 시작하고 외부 abort를 relay한다", async () => {
@@ -141,16 +146,23 @@ describe("worker cancellation", () => {
 		expect(result.stdout).toContain("aborted");
 	});
 
-	it("dispose가 polling과 upstream listener를 정리한다", async () => {
+	it("dispose가 polling과 upstream listener를 정리한다", () => {
 		const memberDir = makeMemberDir();
 		const upstream = new AbortController();
-		const observation = observeWorkerCancellation(memberDir, upstream.signal);
+		jest.useFakeTimers();
+		try {
+			const observation = observeWorkerCancellation(memberDir, upstream.signal);
+			expect(jest.getTimerCount()).toBe(1);
+			observation.dispose();
+			expect(jest.getTimerCount()).toBe(0);
 
-		observation.dispose();
-		requestWorkerCancellation(memberDir);
-		await new Promise((resolve) => setTimeout(resolve, 250));
-		expect(observation.signal.aborted).toBe(false);
-		upstream.abort();
-		expect(observation.signal.aborted).toBe(false);
+			requestWorkerCancellation(memberDir);
+			jest.advanceTimersByTime(10_000);
+			expect(observation.signal.aborted).toBe(false);
+			upstream.abort();
+			expect(observation.signal.aborted).toBe(false);
+		} finally {
+			jest.useRealTimers();
+		}
 	});
 });

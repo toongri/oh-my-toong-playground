@@ -1854,37 +1854,96 @@ test_heredoc_multiple_sequential_real_command_after_denies() {
     return "$result"
 }
 
-# Performance regression guard: 1000 lines of harmless text NONE of which
-# sit inside a heredoc body (the fork-per-line hot path the old
-# implementation took on every such line), followed by one real dangerous
-# command. Measured on the pre-fix implementation this took ~14s per
-# invocation on this machine -- close enough to this hook's 10s PreToolUse
-# timeout to be a real incident risk under CPU pressure; the single-awk-
-# process rewrite completes in ~2s for the same input. The bound below
-# (well under the 10s timeout, comfortably above the measured ~2s to avoid
-# flaking on a loaded/slower machine) exists to catch a reintroduced
-# per-line fork, not to pin an exact duration.
+# Fork-scaling regression guards. The old implementation forked a new
+# subprocess pipeline per input line (~14s for 1000 lines on the deny shape,
+# ~6s on the pure allow shape), close enough to this hook's 10s PreToolUse
+# timeout to be a real incident risk under CPU pressure. Wall-clock bounds on
+# that are scheduling-dependent, so these tests count forks structurally
+# instead: PATH shims log every external text-processing command the hook
+# runs, and the fork count for a 1000-line input must not exceed the count
+# for a 100-line input by more than FORK_SCALING_SLACK. A per-line fork adds
+# hundreds, a constant-fork implementation adds zero.
+FORK_SCALING_SLACK=20
+
+# build_fork_shims: creates $SBX/shims with a logging wrapper per command the
+# hook could plausibly fork per line. Each wrapper appends its name to
+# $SHIM_LOG and execs the real binary.
+build_fork_shims() {
+    local c real
+    FORK_SHIMS="$SBX/shims"
+    FORK_LOG="$SBX/forks.log"
+    mkdir -p "$FORK_SHIMS"
+    for c in awk sed grep tr cut head tail cat sort uniq wc jq git basename dirname date mktemp realpath readlink expr seq; do
+        real=$(command -v "$c" 2>/dev/null) || continue
+        printf '#!/bin/bash\nprintf "x\\n" >> "$SHIM_LOG"\nexec "%s" "$@"\n' "$real" > "$FORK_SHIMS/$c"
+        chmod +x "$FORK_SHIMS/$c"
+    done
+}
+
+# run_hook_counting: runs the hook on command string $1 with the shims first
+# on PATH. Sets HOOK_OUT, HOOK_RC and FORK_COUNT.
+run_hook_counting() {
+    local cmd="$1"
+    : > "$FORK_LOG"
+    HOOK_RC=0
+    HOOK_OUT=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' \
+        | env -u OMT_DIR -u OMT_SESSION_ID HOME="$SBX" CODEX_THREAD_ID=cx PATH="$FORK_SHIMS:$PATH" SHIM_LOG="$FORK_LOG" bash "$HOOK") || HOOK_RC=$?
+    FORK_COUNT=$(wc -l < "$FORK_LOG" | tr -d ' ')
+}
+
+# Builds a command of $2 lines of shape $1 (see the three tests below).
+build_perf_command() {
+    local kind="$1" n="$2" i cmd=""
+    case "$kind" in
+        deny)
+            for i in $(seq 1 "$n"); do
+                cmd="${cmd}echo padding line $i with some text here"$'\n'
+            done
+            cmd="${cmd}rm -rf /tmp/real"
+            ;;
+        allow)
+            for i in $(seq 1 "$n"); do
+                cmd="${cmd}echo line $i with some text here"$'\n'
+            done
+            cmd="${cmd%$'\n'}"
+            ;;
+        heredoc)
+            cmd="cat <<'EOF'"$'\n'
+            for i in $(seq 1 "$n"); do
+                cmd="${cmd}body line $i rm -rf /tmp/fake${i}"$'\n'
+            done
+            cmd="${cmd}EOF"
+            ;;
+    esac
+    printf '%s' "$cmd"
+}
+
+# assert_fork_scaling: label, kind. Runs 100 then 1000 lines, leaving the
+# 1000-line result in HOOK_OUT / HOOK_RC for the caller's allow/deny check.
+# Returns 1 when the fork count grew with the line count.
+assert_fork_scaling() {
+    local label="$1" kind="$2" small_forks
+    build_fork_shims
+    run_hook_counting "$(build_perf_command "$kind" 100)"
+    small_forks="$FORK_COUNT"
+    run_hook_counting "$(build_perf_command "$kind" 1000)"
+    if [ "$FORK_COUNT" -gt $((small_forks + FORK_SCALING_SLACK)) ]; then
+        echo "ASSERTION FAILED $label: 100 lines forked $small_forks external commands, 1000 lines forked $FORK_COUNT (O(lines) fork regression?)"
+        return 1
+    fi
+    return 0
+}
+
+# 1000 lines of harmless text NONE of which sit inside a heredoc body (the
+# fork-per-line hot path the old implementation took on every such line),
+# followed by one real dangerous command: must DENY with O(1) forks.
 test_perf_1000_non_heredoc_lines_denies_within_timeout() {
     new_sandbox
-    local cmd out start end elapsed result=0 i
+    local result=0
 
-    cmd=""
-    for i in $(seq 1 1000); do
-        cmd="${cmd}echo padding line $i with some text here"$'\n'
-    done
-    cmd="${cmd}rm -rf /tmp/real"
-
-    start=$(date +%s)
-    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
-    end=$(date +%s)
-    elapsed=$((end - start))
-
-    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        echo "ASSERTION FAILED perf-1000-non-heredoc-lines: expected deny for the trailing real command, got '$out'"
-        result=1
-    fi
-    if [ "$elapsed" -ge 8 ]; then
-        echo "ASSERTION FAILED perf-1000-non-heredoc-lines: expected completion well under the 10s hook timeout, took ${elapsed}s (O(lines) fork regression?)"
+    assert_fork_scaling "perf-1000-non-heredoc-lines" deny || result=1
+    if ! printf '%s' "$HOOK_OUT" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED perf-1000-non-heredoc-lines: expected deny for the trailing real command, got '$HOOK_OUT'"
         result=1
     fi
 
@@ -1892,30 +1951,15 @@ test_perf_1000_non_heredoc_lines_denies_within_timeout() {
     return "$result"
 }
 
-# Same performance guard, correctness-only companion: 1000 lines all inside
-# ONE heredoc body (dangerous-looking text that must never be read as live),
-# nothing dangerous outside it -- must ALLOW, and must also complete quickly
-# under the merged single-awk-process implementation.
+# 1000 lines all inside ONE heredoc body (dangerous-looking text that must
+# never be read as live), nothing dangerous outside it: must ALLOW with O(1)
+# forks.
 test_perf_1000_line_heredoc_body_allows_within_timeout() {
     new_sandbox
-    local cmd out start end elapsed rc=0 result=0 i
+    local result=0
 
-    cmd="cat <<'EOF'"$'\n'
-    for i in $(seq 1 1000); do
-        cmd="${cmd}body line $i rm -rf /tmp/fake${i}"$'\n'
-    done
-    cmd="${cmd}EOF"
-
-    start=$(date +%s)
-    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
-    end=$(date +%s)
-    elapsed=$((end - start))
-
-    if ! assert_allow "$out" "$rc" "perf-1000-line-heredoc-body"; then
-        result=1
-    fi
-    if [ "$elapsed" -ge 8 ]; then
-        echo "ASSERTION FAILED perf-1000-line-heredoc-body: expected completion well under the 10s hook timeout, took ${elapsed}s"
+    assert_fork_scaling "perf-1000-line-heredoc-body" heredoc || result=1
+    if ! assert_allow "$HOOK_OUT" "$HOOK_RC" "perf-1000-line-heredoc-body"; then
         result=1
     fi
 
@@ -1923,44 +1967,19 @@ test_perf_1000_line_heredoc_body_allows_within_timeout() {
     return "$result"
 }
 
-# Second O(N)-fork bottleneck regression guard (codex-write-guard second-
-# optimization story): 1000 lines of harmless, non-heredoc, non-dangerous
-# text with NO trailing real command at all -- the pure ALLOW path a
-# multi-line `echo` sequence takes. This is a DIFFERENT scenario from
-# test_perf_1000_non_heredoc_lines_denies_within_timeout above: that test's
-# trailing `rm -rf` still exercises the same segment loops (the deny fires
-# only after they run over every earlier padding line), but this test proves
-# the ALLOW path itself -- with no deny to short-circuit early exit -- is
-# fast, which is what actually caught the second bottleneck (the dangerous-
-# command segment loop and the redirect/rm target-extraction segment loop
-# both used to fork a NEW subprocess pipeline per line even when nothing
-# ever matched). Measured on the pre-fix implementation: ~6.3s for this exact
-# shape at 1000 lines (10 lines/150ms /.../ 1000 lines/6256ms, roughly linear
-# per line); the O(1)-fork rewrite (_cwg_dc_scan_dangerous +
-# _cwg_extract_shell_targets_bulk) completes in well under 1s for the same
-# input. The bound below is tighter than the sibling perf tests' `-ge 8`
-# (which only guards the 10s hook timeout) specifically to catch a
-# reintroduced per-line fork before it grows back toward that ceiling.
+# Second O(N)-fork bottleneck guard: 1000 lines of harmless, non-heredoc,
+# non-dangerous text with NO trailing real command -- the pure ALLOW path a
+# multi-line `echo` sequence takes. Distinct from the deny test above: with no
+# deny to short-circuit early exit, this proves the dangerous-command segment
+# loop (_cwg_dc_scan_dangerous) and the redirect/rm target-extraction segment
+# loop (_cwg_extract_shell_targets_bulk) stay O(1) in forks even when nothing
+# ever matches.
 test_perf_1000_non_heredoc_lines_allows_within_timeout() {
     new_sandbox
-    local cmd out start end elapsed rc=0 result=0 i
+    local result=0
 
-    cmd=""
-    for i in $(seq 1 1000); do
-        cmd="${cmd}echo line $i with some text here"$'\n'
-    done
-    cmd="${cmd%$'\n'}"
-
-    start=$(date +%s)
-    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
-    end=$(date +%s)
-    elapsed=$((end - start))
-
-    if ! assert_allow "$out" "$rc" "perf-1000-non-heredoc-lines-allows"; then
-        result=1
-    fi
-    if [ "$elapsed" -ge 3 ]; then
-        echo "ASSERTION FAILED perf-1000-non-heredoc-lines-allows: expected sub-second-class completion on the pure allow path, took ${elapsed}s (O(lines) fork regression in the dangerous-command scan or the redirect/rm target extraction?)"
+    assert_fork_scaling "perf-1000-non-heredoc-lines-allows" allow || result=1
+    if ! assert_allow "$HOOK_OUT" "$HOOK_RC" "perf-1000-non-heredoc-lines-allows"; then
         result=1
     fi
 

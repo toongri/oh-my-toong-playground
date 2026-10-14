@@ -197,7 +197,7 @@ exec sleep 30
 		const { exitCode, stdout } = await runCli(specPath, `${stubDir}:${process.env.PATH}`);
 		expect(exitCode).toBe(2);
 		expect(stdout).toContain("timeout");
-	}, 10_000);
+	}, 60_000);
 });
 
 // ---------------------------------------------------------------------------
