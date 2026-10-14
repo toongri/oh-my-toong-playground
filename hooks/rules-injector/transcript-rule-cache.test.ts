@@ -150,13 +150,13 @@ test("큰 안정 접두부에서 추가 후 대기 미리보기 보존", () => {
 	expect(queryTranscriptRuleCache(transcript, [query])).toEqual([true]);
 });
 
-test("디코딩된 JSON 문자열은 추가 레코드 사이 구분자를 보존", () => {
+test("디코딩된 블록은 다음 레코드로 이어지지 않음", () => {
 	const transcript = join(dir, "t.jsonl");
 	writeFileSync(transcript, `${JSON.stringify({ text: '<rules name="x">\nab' })}\n`);
 	appendFileSync(transcript, `${JSON.stringify({ text: "cd" })}\n`);
 	const marker = '<rules name="x">';
 	expect(queryTranscriptRuleCache(transcript, [{ body: "abcd", marker }])).toEqual([false]);
-	expect(queryTranscriptRuleCache(transcript, [{ body: "ab\ncd", marker }])).toEqual([true]);
+	expect(queryTranscriptRuleCache(transcript, [{ body: "ab\ncd", marker }])).toEqual([false]);
 });
 
 test("최신 모드는 줄바꿈 없는 유효한 압축 레코드를 미리보기", () => {
@@ -230,7 +230,7 @@ test("본문 앞 2000자로 판정하고 그보다 짧게 잘린 블록은 주�
 	expect(queryTranscriptRuleCache(transcript, [{ body, marker }])).toEqual([false]);
 });
 
-test("여러 추가에 걸쳐 이어진 블록 본문을 이어 붙여 판정", () => {
+test("한 레코드의 짧은 블록 본문은 다음 추가 레코드와 이어 붙이지 않고 판정", () => {
 	const transcript = join(dir, "t.jsonl");
 	const marker = '<rules name="x">';
 	writeFileSync(transcript, `${JSON.stringify({ text: `${marker}\nfirst half` })}\n`);
@@ -238,7 +238,19 @@ test("여러 추가에 걸쳐 이어진 블록 본문을 이어 붙여 판정", 
 	appendFileSync(transcript, `${JSON.stringify({ text: "second half" })}\n`);
 	expect(
 		queryTranscriptRuleCache(transcript, [{ body: "first half\nsecond half", marker }]),
-	).toEqual([true]);
+	).toEqual([false]);
+	expect(queryTranscriptRuleCache(transcript, [{ body: "first half", marker }])).toEqual([true]);
+});
+
+test("레코드 끝의 태그와 다음 레코드의 본문은 같은 블록으로 보지 않음", () => {
+	const transcript = join(dir, "t.jsonl");
+	writeFileSync(
+		transcript,
+		`${JSON.stringify({ text: 'user says <rules name="x">' })}\n${JSON.stringify({ text: "body" })}\n`,
+	);
+	expect(
+		queryTranscriptRuleCache(transcript, [{ body: "body", marker: '<rules name="x">' }]),
+	).toEqual([false]);
 });
 
 test("새 쿼리는 처음부터 다시 읽지 않고 색인에서 답함", () => {

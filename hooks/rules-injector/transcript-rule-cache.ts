@@ -22,18 +22,18 @@ export interface TranscriptRuleCacheOptions {
 
 /**
  * Rule blocks seen in one scope of the transcript. `blocks` maps an open tag to
- * the normalized starts of the bodies that followed it. A block whose body has
- * not reached BODY_PREFIX_CHARS yet stays in `open` (per stream) until more
- * text arrives, and queries read it from there.
+ * the normalized starts of the bodies that followed it. In the raw stream a
+ * block whose body has not reached BODY_PREFIX_CHARS yet stays in `rawOpen`
+ * until more lines arrive, and queries read it from there. A decoded block
+ * never outlives its record, so the decoded stream keeps no open state.
  */
 interface Evidence {
 	blocks: Record<string, string[]>;
 	rawOpen: string;
-	decodedOpen: string;
 }
 
 interface CacheState {
-	version: 3;
+	version: 4;
 	identity: { dev: number; ino: number; size: number; mtimeMs: number };
 	cursor: number;
 	pending: string;
@@ -104,11 +104,10 @@ function hasBlock(evidence: Evidence, query: TranscriptRuleQuery): boolean {
 	for (const marker of markers) {
 		if (evidence.blocks[marker]?.some((start) => start.startsWith(body)) === true) return true;
 	}
-	for (const open of [evidence.rawOpen, evidence.decodedOpen]) {
-		for (const match of open.matchAll(RULE_MARKER_PATTERN)) {
-			if (!markers.includes(match[0])) continue;
-			if (blockStart(open.slice(match.index + match[0].length)).startsWith(body)) return true;
-		}
+	for (const match of evidence.rawOpen.matchAll(RULE_MARKER_PATTERN)) {
+		if (!markers.includes(match[0])) continue;
+		if (blockStart(evidence.rawOpen.slice(match.index + match[0].length)).startsWith(body))
+			return true;
 	}
 	return false;
 }
@@ -176,27 +175,26 @@ function applyLine(state: CacheState, rawLine: string): void {
 	if (replacement !== null) {
 		state.compactSeen = true;
 		state.latest = emptyEvidence();
-		feed(state.latest, "decoded", replacement.join("\n"));
+		feedDecoded(state.latest, replacement.join("\n"));
 	} else if (state.compactSeen) {
 		feedLine(state.latest, line, decoded);
 	}
 }
 
 function feedLine(evidence: Evidence, line: string, decoded: string | null): void {
-	feed(evidence, "raw", `${line}\n`);
-	if (decoded !== null) feed(evidence, "decoded", decoded);
+	feedRaw(evidence, `${line}\n`);
+	if (decoded !== null) feedDecoded(evidence, decoded);
 }
 
 /**
- * Appends text to one stream of the evidence and records every block whose
- * body start is complete. Decoded strings are joined with "\n", matching how
- * separate transcript strings were searched before.
+ * Appends a raw line to the raw stream and records every block whose body
+ * start is complete. A block still short stays open, so a tag line and its
+ * body on separate lines are joined.
  */
-function feed(evidence: Evidence, stream: "raw" | "decoded", text: string): void {
-	const key = stream === "raw" ? "rawOpen" : "decodedOpen";
-	const open = evidence[key];
+function feedRaw(evidence: Evidence, text: string): void {
+	const open = evidence.rawOpen;
 	if (open.length === 0 && !text.includes(MARKER_PREFIX)) return;
-	const combined = open.length > 0 && stream === "decoded" ? `${open}\n${text}` : open + text;
+	const combined = open + text;
 	let nextOpen = "";
 	for (const match of combined.matchAll(RULE_MARKER_PATTERN)) {
 		const after = combined.slice(match.index + match[0].length);
@@ -207,7 +205,18 @@ function feed(evidence: Evidence, stream: "raw" | "decoded", text: string): void
 		}
 		addBlock(evidence, match[0], start);
 	}
-	evidence[key] = nextOpen;
+	evidence.rawOpen = nextOpen;
+}
+
+/**
+ * Records every block in one record's decoded text (its strings joined with
+ * "\n"). The record delimits the block: a block that ends with the record keeps
+ * the short body start it has, and nothing carries into the next record.
+ */
+function feedDecoded(evidence: Evidence, text: string): void {
+	if (!text.includes(MARKER_PREFIX)) return;
+	for (const match of text.matchAll(RULE_MARKER_PATTERN))
+		addBlock(evidence, match[0], blockStart(text.slice(match.index + match[0].length)));
 }
 
 /** Copy-on-write, so a pending-line view never writes into the stored index. */
@@ -226,16 +235,16 @@ function normalizeBody(text: string): string {
 }
 
 function isOpen(evidence: Evidence): boolean {
-	return evidence.rawOpen.length > 0 || evidence.decodedOpen.length > 0;
+	return evidence.rawOpen.length > 0;
 }
 
 function emptyEvidence(): Evidence {
-	return { blocks: {}, rawOpen: "", decodedOpen: "" };
+	return { blocks: {}, rawOpen: "" };
 }
 
 function emptyState(identity: CacheState["identity"], head: string): CacheState {
 	return {
-		version: 3,
+		version: 4,
 		identity: { ...identity, size: 0 },
 		cursor: 0,
 		pending: "",
@@ -292,7 +301,7 @@ function readHead(path: string, size: number): string {
 function readCache(path: string): CacheState | null {
 	try {
 		const value: unknown = JSON.parse(readFileSync(path, "utf8"));
-		if (!isRecord(value) || value.version !== 3 || !isRecord(value.identity)) return null;
+		if (!isRecord(value) || value.version !== 4 || !isRecord(value.identity)) return null;
 		const identity = value.identity;
 		const all = readEvidence(value.all);
 		const latest = readEvidence(value.latest);
@@ -310,7 +319,7 @@ function readCache(path: string): CacheState | null {
 		)
 			return null;
 		return {
-			version: 3,
+			version: 4,
 			identity: {
 				dev: identity.dev,
 				ino: identity.ino,
@@ -332,8 +341,7 @@ function readEvidence(value: unknown): Evidence | null {
 	if (
 		!isRecord(value) ||
 		!isRecord(value.blocks) ||
-		typeof value.rawOpen !== "string" ||
-		typeof value.decodedOpen !== "string"
+		typeof value.rawOpen !== "string"
 	)
 		return null;
 	const blocks: Record<string, string[]> = {};
@@ -342,7 +350,7 @@ function readEvidence(value: unknown): Evidence | null {
 			return null;
 		blocks[marker] = starts;
 	}
-	return { blocks, rawOpen: value.rawOpen, decodedOpen: value.decodedOpen };
+	return { blocks, rawOpen: value.rawOpen };
 }
 function writeCache(path: string, state: CacheState): void {
 	const temp = join(dirname(path), `.${path.split("/").at(-1)}.${process.pid}.tmp`);
