@@ -55,6 +55,12 @@ export function ruleMarkerLine(path: string): string {
 }
 
 /**
+ * Matches every open tag ruleMarkerLine produces, so a consumer that indexes
+ * transcript blocks by tag finds exactly the tags the producer emitted.
+ */
+export const RULE_MARKER_PATTERN = /<rules name="[^\n]*?">/g;
+
+/**
  * Derive the rule name from a path: take the basename, then strip the last
  * extension (everything from the final "." onward). If there is no extension,
  * use the basename as-is.

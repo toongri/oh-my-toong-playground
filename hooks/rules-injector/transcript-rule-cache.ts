@@ -9,6 +9,7 @@ import {
 	unlinkSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import { RULE_MARKER_PATTERN } from "./rules/index.js";
 
 export interface TranscriptRuleQuery {
 	readonly body: string;
@@ -19,333 +20,247 @@ export interface TranscriptRuleCacheOptions {
 	readonly latestCompactedReplacementOnly?: boolean;
 }
 
-interface CacheQuery {
-	body: string;
-	marker: string[];
-	bodySeen: boolean;
-	markerSeen: boolean;
-	bodyPending: boolean;
-	markerPending: boolean;
+/**
+ * Rule blocks seen in one scope of the transcript. `blocks` maps an open tag to
+ * the normalized starts of the bodies that followed it. In the raw stream a
+ * block whose body has not reached BODY_PREFIX_CHARS yet stays in `rawOpen`
+ * until more lines arrive, and queries read it from there. A decoded block
+ * never outlives its record, so the decoded stream keeps no open state.
+ */
+interface Evidence {
+	blocks: Record<string, string[]>;
+	rawOpen: string;
 }
 
 interface CacheState {
-	version: 2;
+	version: 4;
 	identity: { dev: number; ino: number; size: number; mtimeMs: number };
 	cursor: number;
 	pending: string;
-	rawTail: string;
-	decodedTail: string;
-	requestedLatest: boolean;
-	compactSeen: boolean;
 	head: string;
-	queries: Record<string, CacheQuery>;
-	preview?: Record<string, CacheQuery>;
-	previewReset?: boolean;
-}
-interface PreviewResult {
-	queries: Record<string, CacheQuery>;
-	reset: boolean;
+	compactSeen: boolean;
+	/** Every block in the transcript (default mode). */
+	all: Evidence;
+	/** Blocks in the latest compaction's replacement history and after it. */
+	latest: Evidence;
 }
 
-const MAX_TAIL_CHARS = 4_096;
-const MAX_QUERIES = 256;
+// Same length the query body is cut to; a stored block start this long can
+// decide any query.
+const BODY_PREFIX_CHARS = 2_000;
+// An open block is closed after this much raw text even if leading whitespace
+// kept its normalized start short, so `open` stays bounded.
+const MAX_OPEN_CHARS = 4 * BODY_PREFIX_CHARS;
+const MARKER_PREFIX = "<rules name=";
+const ESCAPED_MARKER_PREFIX = "\\u003crules name=";
 const MAX_HEAD_BYTES = 1_024;
+const READ_CHUNK_BYTES = 8 * 1024 * 1024;
 
+/**
+ * Answers, per query, whether the transcript carries a hook-emitted rule block:
+ * one of the query's open tags followed by a body that starts with the query's
+ * body. Blocks are indexed while new bytes are read, so a query never seen
+ * before is answered from the index instead of a rescan from offset 0.
+ */
 export function queryTranscriptRuleCache(
 	path: string,
 	input: ReadonlyArray<TranscriptRuleQuery>,
 	options: TranscriptRuleCacheOptions = {},
 ): boolean[] {
 	if (input.length === 0) return [];
-	const queries = input.map(normalizeQuery);
 	let stat;
 	try {
 		stat = statSync(path);
-		if (!stat.isFile()) return queries.map(() => false);
+		if (!stat.isFile()) return input.map(() => false);
 	} catch {
-		return queries.map(() => false);
+		return input.map(() => false);
 	}
-	const latest = options.latestCompactedReplacementOnly === true;
 	const identity = { dev: stat.dev, ino: stat.ino, size: stat.size, mtimeMs: stat.mtimeMs };
+	const head = readHead(path, identity.size);
 	let state = readCache(`${path}.rule-cache.json`);
-	const keys = queries.map(queryKey);
-	const modeChanged = state !== null && state.requestedLatest !== latest;
-	const fileChanged =
-		state === null || state.identity.dev !== identity.dev || state.identity.ino !== identity.ino;
-	const sameSizeRewrite =
-		state !== null &&
-		state.identity.size === identity.size &&
-		state.identity.mtimeMs !== identity.mtimeMs;
-	const truncated = state !== null && identity.size < state.cursor;
-	const headChanged =
-		state !== null && identity.size >= state.cursor && state.head !== readHead(path, identity.size);
-	if (fileChanged || modeChanged || sameSizeRewrite || truncated || headChanged)
-		state = emptyState(identity, latest, readHead(path, identity.size));
-	if (state === null) return queries.map(() => false);
-	const activeState = state;
-	const missing = keys.some((key) => activeState.queries[key] === undefined);
-	const needsAppend = activeState.cursor < identity.size;
-	const retainedQueries = Object.values(activeState.queries).map((query) => ({
-		body: query.body,
-		marker: query.marker,
-	}));
-	const retainedKeys = Object.keys(activeState.queries);
-	const allQueries = missing ? [...retainedQueries, ...queries] : retainedQueries;
-	const allKeys = missing ? [...retainedKeys, ...keys] : retainedKeys;
-	const deduped = dedupeQueries(allQueries, allKeys);
-	if (missing) {
-		state = emptyState(identity, latest, readHead(path, identity.size));
-		readAndApply(state, path, 0, identity.size, deduped.queries, deduped.keys, latest);
-	} else if (needsAppend) {
-		readAndApply(
-			activeState,
-			path,
-			activeState.cursor,
-			identity.size,
-			deduped.queries,
-			deduped.keys,
-			latest,
-		);
-	}
+	const rebuild =
+		state === null ||
+		state.identity.dev !== identity.dev ||
+		state.identity.ino !== identity.ino ||
+		(state.identity.size === identity.size && state.identity.mtimeMs !== identity.mtimeMs) ||
+		identity.size < state.cursor ||
+		state.head !== head;
+	if (state === null || rebuild) state = emptyState(identity, head);
+	if (state.cursor < identity.size) readAndApply(state, path, identity.size);
 	state.identity = identity;
-	state.head = readHead(path, identity.size);
-	for (const [index, query] of queries.entries()) {
-		const key = keys[index];
-		if (key !== undefined && state.queries[key] === undefined)
-			state.queries[key] = blankQuery(query);
-	}
-	if (state.preview === undefined && state.pending.length > 0) {
-		const result = previewPending(
-			state,
-			Buffer.from(state.pending, "base64").toString("utf8"),
-			latest,
-			queries,
-			keys,
-		);
-		state.preview = result.queries;
-		state.previewReset = result.reset;
-	}
-	trimQueries(state, keys);
-	const preview = state.preview;
-	const previewReset = state.previewReset === true;
-	delete state.preview;
-	delete state.previewReset;
+	state.head = head;
 	writeCache(`${path}.rule-cache.json`, state);
-	return keys.map((key) => {
-		const query = state.queries[key];
-		const pending = preview?.[key];
-		return (
-			query !== undefined &&
-			(previewReset ? pending?.bodySeen === true : query.bodySeen || pending?.bodySeen === true) &&
-			(previewReset
-				? pending?.markerSeen === true
-				: query.markerSeen || pending?.markerSeen === true)
-		);
-	});
+
+	const latest = options.latestCompactedReplacementOnly === true;
+	const view = withPending(state);
+	const evidence = latest ? (view.compactSeen ? view.latest : null) : view.all;
+	return input.map((query) => evidence !== null && hasBlock(evidence, query));
 }
 
-function normalizeQuery(query: TranscriptRuleQuery): TranscriptRuleQuery {
-	return {
-		body: query.body.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().slice(0, 2_000),
-		marker: typeof query.marker === "string" ? query.marker : [...query.marker],
-	};
-}
-function dedupeQueries(
-	queries: ReadonlyArray<TranscriptRuleQuery>,
-	keys: ReadonlyArray<string>,
-): { queries: TranscriptRuleQuery[]; keys: string[] } {
-	const seen = new Set<string>();
-	const resultQueries: TranscriptRuleQuery[] = [];
-	const resultKeys: string[] = [];
-	for (const [index, query] of queries.entries()) {
-		const key = keys[index];
-		if (key === undefined || seen.has(key)) continue;
-		seen.add(key);
-		resultQueries.push(query);
-		resultKeys.push(key);
+function hasBlock(evidence: Evidence, query: TranscriptRuleQuery): boolean {
+	const body = normalizeBody(query.body).trim().slice(0, BODY_PREFIX_CHARS);
+	if (body.length === 0) return false;
+	const markers = typeof query.marker === "string" ? [query.marker] : query.marker;
+	for (const marker of markers) {
+		if (evidence.blocks[marker]?.some((start) => start.startsWith(body)) === true) return true;
 	}
-	return { queries: resultQueries, keys: resultKeys };
-}
-function queryKey(query: TranscriptRuleQuery): string {
-	return JSON.stringify([query.body, query.marker]);
-}
-function blankQuery(query: TranscriptRuleQuery): CacheQuery {
-	return {
-		body: query.body,
-		marker: typeof query.marker === "string" ? [query.marker] : [...query.marker],
-		bodySeen: false,
-		markerSeen: false,
-		bodyPending: false,
-		markerPending: false,
-	};
-}
-function emptyState(identity: CacheState["identity"], latest: boolean, head: string): CacheState {
-	return {
-		version: 2,
-		identity: { ...identity, size: 0 },
-		cursor: 0,
-		pending: "",
-		rawTail: "",
-		decodedTail: "",
-		requestedLatest: latest,
-		compactSeen: false,
-		head,
-		queries: {},
-	};
+	for (const match of evidence.rawOpen.matchAll(RULE_MARKER_PATTERN)) {
+		if (!markers.includes(match[0])) continue;
+		if (blockStart(evidence.rawOpen.slice(match.index + match[0].length)).startsWith(body))
+			return true;
+	}
+	return false;
 }
 
-function readAndApply(
-	state: CacheState,
-	path: string,
-	start: number,
-	end: number,
-	queries: ReadonlyArray<TranscriptRuleQuery>,
-	keys: ReadonlyArray<string>,
-	latest: boolean,
-): void {
-	if (end < start) return;
-	let bytes: Buffer;
+/** Reads [cursor, end) in chunks, keeping an unfinished last line as `pending`. */
+function readAndApply(state: CacheState, path: string, end: number): void {
+	let fd: number;
 	try {
-		const fd = openSync(path, "r");
-		try {
-			bytes = Buffer.alloc(end - start);
-			readSync(fd, bytes, 0, bytes.length, start);
-		} finally {
-			closeSync(fd);
-		}
+		fd = openSync(path, "r");
 	} catch {
 		return;
 	}
-	const combined = Buffer.concat([Buffer.from(state.pending, "base64"), bytes]);
-	const newline = combined.lastIndexOf(0x0a);
-	const completeBytes = newline < 0 ? Buffer.alloc(0) : combined.subarray(0, newline + 1);
-	const pendingBytes = newline < 0 ? combined : combined.subarray(newline + 1);
-	const completeText = completeBytes.toString("utf8");
-	const pendingText = pendingBytes.toString("utf8");
-	const lines = completeText.length === 0 ? [] : completeText.split("\n").slice(0, -1);
-	const decoded: string[] = [];
-	for (const line of lines) {
-		const parsed = parseJsonLine(line.replace(/\r$/, ""));
-		if (parsed !== null) collectStrings(parsed, decoded);
-	}
-	if (latest) {
-		let latestIndex = -1;
-		let replacement: string[] | null = null;
-		for (const [index, line] of lines.entries()) {
-			const value = compactedReplacement(parseJsonLine(line.replace(/\r$/, "")));
-			if (value !== null) {
-				latestIndex = index;
-				replacement = value;
+	// The unfinished record stays a list of buffers, joined only when a chunk
+	// completes a line, so a record spanning many chunks is copied once.
+	let pending = [Buffer.from(state.pending, "base64")];
+	let position = state.cursor;
+	try {
+		while (position < end) {
+			const chunk = Buffer.alloc(Math.min(READ_CHUNK_BYTES, end - position));
+			const read = readSync(fd, chunk, 0, chunk.length, position);
+			if (read <= 0) break;
+			const bytes = chunk.subarray(0, read);
+			if (bytes.includes(0x0a)) {
+				const combined = Buffer.concat([...pending, bytes]);
+				const newline = combined.lastIndexOf(0x0a);
+				for (const line of combined.subarray(0, newline).toString("utf8").split("\n"))
+					applyLine(state, line);
+				pending = [Buffer.from(combined.subarray(newline + 1))];
+			} else {
+				pending.push(bytes);
 			}
+			// advanced only once the chunk is applied or held, so cursor and pending agree
+			position += read;
 		}
-		if (replacement !== null) {
-			state.compactSeen = true;
-			resetQueries(state);
-			state.rawTail = "";
-			state.decodedTail = "";
-			applyText(state, "", replacement.join("\n"), queries, keys, false);
-			const later = lines.slice(latestIndex + 1);
-			const laterDecoded: string[] = [];
-			for (const line of later) {
-				const parsed = parseJsonLine(line.replace(/\r$/, ""));
-				if (parsed !== null) collectStrings(parsed, laterDecoded);
-			}
-			applyText(
-				state,
-				later.join("\n") + (later.length ? "\n" : ""),
-				laterDecoded.join("\n"),
-				queries,
-				keys,
-				false,
-			);
-		} else if (state.compactSeen)
-			applyText(state, completeText, decoded.join("\n"), queries, keys, false);
-	} else {
-		// Default mode intentionally retains all pre-compaction evidence.
-		applyText(state, completeText, decoded.join("\n"), queries, keys, false);
+	} catch {
+		/* keep what was applied; the cursor marks the last applied chunk */
+	} finally {
+		state.pending = Buffer.concat(pending).toString("base64");
+		state.cursor = position;
+		closeSync(fd);
 	}
-	const previewResult = previewPending(state, pendingText, latest, queries, keys);
-	state.preview = previewResult.queries;
-	state.previewReset = previewResult.reset;
-	state.pending = pendingBytes.toString("base64");
-	state.cursor = end;
 }
 
-function applyText(
-	state: CacheState,
-	raw: string,
-	decoded: string,
-	queries: ReadonlyArray<TranscriptRuleQuery>,
-	keys: ReadonlyArray<string>,
-	pending: boolean,
-): void {
-	const rawSearch = state.rawTail + raw;
-	const decodedSearch =
-		state.decodedTail.length > 0 && decoded.length > 0
-			? `${state.decodedTail}\n${decoded}`
-			: state.decodedTail + decoded;
-	for (const [index, query] of queries.entries()) {
-		const key = keys[index];
-		if (key === undefined) continue;
-		const entry = state.queries[key] ?? blankQuery(query);
-		const body = query.body;
-		const markers = typeof query.marker === "string" ? [query.marker] : query.marker;
-		if (body.length > 0 && (rawSearch.includes(body) || decodedSearch.includes(body))) {
-			if (pending) entry.bodyPending = true;
-			else entry.bodySeen = true;
-		}
-		if (markers.some((marker) => rawSearch.includes(marker) || decodedSearch.includes(marker))) {
-			if (pending) entry.markerPending = true;
-			else entry.markerSeen = true;
-		}
-		state.queries[key] = entry;
-	}
-	state.rawTail = rawSearch.slice(-MAX_TAIL_CHARS);
-	state.decodedTail = decodedSearch.slice(-MAX_TAIL_CHARS);
-}
-function previewPending(
-	state: CacheState,
-	pendingText: string,
-	latest: boolean,
-	queries: ReadonlyArray<TranscriptRuleQuery>,
-	keys: ReadonlyArray<string>,
-): PreviewResult {
-	const preview: CacheState = {
+/** The state as if the unfinished last line were complete, without storing it. */
+function withPending(state: CacheState): CacheState {
+	if (state.pending.length === 0) return state;
+	const view: CacheState = {
 		...state,
-		queries: Object.fromEntries(
-			Object.entries(state.queries).map(([key, query]) => [key, { ...query }]),
-		),
+		all: { ...state.all },
+		latest: { ...state.latest },
 	};
-	const parsed = parseJsonLine(pendingText);
+	applyLine(view, Buffer.from(state.pending, "base64").toString("utf8"));
+	return view;
+}
+
+function applyLine(state: CacheState, rawLine: string): void {
+	const line = rawLine.replace(/\r$/, "");
+	// Lines are parsed only when they can matter: they name a rule tag (plain or
+	// with "<" JSON-escaped), continue an open block, or may be a compaction record.
+	const relevant =
+		line.includes(MARKER_PREFIX) ||
+		line.includes(ESCAPED_MARKER_PREFIX) ||
+		line.includes("compacted") ||
+		isOpen(state.all) ||
+		(state.compactSeen && isOpen(state.latest));
+	if (!relevant) return;
+	const parsed = parseJsonLine(line);
 	const replacement = compactedReplacement(parsed);
-	if (latest && replacement !== null) {
-		preview.previewReset = true;
-		preview.compactSeen = true;
-		resetQueries(preview);
-		preview.rawTail = "";
-		preview.decodedTail = "";
-		applyText(preview, "", replacement.join("\n"), queries, keys, false);
-		return { queries: preview.queries, reset: true };
-	}
-	if (!latest || preview.compactSeen)
-		applyText(
-			preview,
-			pendingText,
-			parsed === null ? "" : collectStringsToString(parsed),
-			queries,
-			keys,
-			false,
-		);
-	return { queries: preview.queries, reset: false };
-}
-function resetQueries(state: CacheState): void {
-	for (const query of Object.values(state.queries)) {
-		query.bodySeen = false;
-		query.markerSeen = false;
-		query.bodyPending = false;
-		query.markerPending = false;
+	const decoded = parsed === null ? null : collectStringsToString(parsed);
+	feedLine(state.all, line, decoded);
+	if (replacement !== null) {
+		state.compactSeen = true;
+		state.latest = emptyEvidence();
+		feedDecoded(state.latest, replacement.join("\n"));
+	} else if (state.compactSeen) {
+		feedLine(state.latest, line, decoded);
 	}
 }
+
+function feedLine(evidence: Evidence, line: string, decoded: string | null): void {
+	feedRaw(evidence, `${line}\n`);
+	if (decoded !== null) feedDecoded(evidence, decoded);
+}
+
+/**
+ * Appends a raw line to the raw stream and records every block whose body
+ * start is complete. A block still short stays open, so a tag line and its
+ * body on separate lines are joined.
+ */
+function feedRaw(evidence: Evidence, text: string): void {
+	const open = evidence.rawOpen;
+	if (open.length === 0 && !text.includes(MARKER_PREFIX)) return;
+	const combined = open + text;
+	let nextOpen = "";
+	for (const match of combined.matchAll(RULE_MARKER_PATTERN)) {
+		const after = combined.slice(match.index + match[0].length);
+		const start = blockStart(after);
+		if (start.length < BODY_PREFIX_CHARS && after.length < MAX_OPEN_CHARS) {
+			if (nextOpen.length === 0) nextOpen = combined.slice(match.index);
+			continue;
+		}
+		addBlock(evidence, match[0], start);
+	}
+	evidence.rawOpen = nextOpen;
+}
+
+/**
+ * Records every block in one record's decoded text (its strings joined with
+ * "\n"). The record delimits the block: a block that ends with the record keeps
+ * the short body start it has, and nothing carries into the next record.
+ */
+function feedDecoded(evidence: Evidence, text: string): void {
+	if (!text.includes(MARKER_PREFIX)) return;
+	for (const match of text.matchAll(RULE_MARKER_PATTERN))
+		addBlock(evidence, match[0], blockStart(text.slice(match.index + match[0].length)));
+}
+
+/** Copy-on-write, so a pending-line view never writes into the stored index. */
+function addBlock(evidence: Evidence, marker: string, start: string): void {
+	const starts = evidence.blocks[marker] ?? [];
+	if (starts.includes(start)) return;
+	evidence.blocks = { ...evidence.blocks, [marker]: [...starts, start] };
+}
+
+function blockStart(afterMarker: string): string {
+	return normalizeBody(afterMarker).trimStart().slice(0, BODY_PREFIX_CHARS);
+}
+
+function normalizeBody(text: string): string {
+	return text.slice(0, MAX_OPEN_CHARS).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function isOpen(evidence: Evidence): boolean {
+	return evidence.rawOpen.length > 0;
+}
+
+function emptyEvidence(): Evidence {
+	return { blocks: {}, rawOpen: "" };
+}
+
+function emptyState(identity: CacheState["identity"], head: string): CacheState {
+	return {
+		version: 4,
+		identity: { ...identity, size: 0 },
+		cursor: 0,
+		pending: "",
+		head,
+		compactSeen: false,
+		all: emptyEvidence(),
+		latest: emptyEvidence(),
+	};
+}
+
 function compactedReplacement(value: unknown): string[] | null {
 	if (
 		!isRecord(value) ||
@@ -375,15 +290,6 @@ function collectStrings(value: unknown, output: string[]): void {
 	if (isRecord(value)) for (const item of Object.values(value)) collectStrings(item, output);
 }
 
-function trimQueries(state: CacheState, wanted: ReadonlyArray<string>): void {
-	const keys = Object.keys(state.queries);
-	if (keys.length <= MAX_QUERIES) return;
-	const keep = new Set(wanted);
-	for (const key of keys) {
-		if (Object.keys(state.queries).length <= MAX_QUERIES) break;
-		if (!keep.has(key)) delete state.queries[key];
-	}
-}
 function readHead(path: string, size: number): string {
 	try {
 		const fd = openSync(path, "r");
@@ -401,14 +307,10 @@ function readHead(path: string, size: number): string {
 function readCache(path: string): CacheState | null {
 	try {
 		const value: unknown = JSON.parse(readFileSync(path, "utf8"));
-		if (
-			!isRecord(value) ||
-			value.version !== 2 ||
-			!isRecord(value.identity) ||
-			!isRecord(value.queries)
-		)
-			return null;
+		if (!isRecord(value) || value.version !== 4 || !isRecord(value.identity)) return null;
 		const identity = value.identity;
+		const all = readEvidence(value.all);
+		const latest = readEvidence(value.latest);
 		if (
 			!isNumber(identity.dev) ||
 			!isNumber(identity.ino) ||
@@ -416,37 +318,14 @@ function readCache(path: string): CacheState | null {
 			!isNumber(identity.mtimeMs) ||
 			!isNumber(value.cursor) ||
 			typeof value.pending !== "string" ||
-			typeof value.rawTail !== "string" ||
-			typeof value.decodedTail !== "string" ||
-			typeof value.requestedLatest !== "boolean" ||
+			typeof value.head !== "string" ||
 			typeof value.compactSeen !== "boolean" ||
-			typeof value.head !== "string"
+			all === null ||
+			latest === null
 		)
 			return null;
-		const queries: Record<string, CacheQuery> = {};
-		for (const [key, item] of Object.entries(value.queries)) {
-			if (
-				!isRecord(item) ||
-				typeof item.body !== "string" ||
-				!Array.isArray(item.marker) ||
-				!item.marker.every((marker) => typeof marker === "string") ||
-				typeof item.bodySeen !== "boolean" ||
-				typeof item.markerSeen !== "boolean" ||
-				typeof item.bodyPending !== "boolean" ||
-				typeof item.markerPending !== "boolean"
-			)
-				return null;
-			queries[key] = {
-				body: item.body,
-				marker: item.marker,
-				bodySeen: item.bodySeen,
-				markerSeen: item.markerSeen,
-				bodyPending: item.bodyPending,
-				markerPending: item.markerPending,
-			};
-		}
 		return {
-			version: 2,
+			version: 4,
 			identity: {
 				dev: identity.dev,
 				ino: identity.ino,
@@ -455,16 +334,29 @@ function readCache(path: string): CacheState | null {
 			},
 			cursor: value.cursor,
 			pending: value.pending,
-			rawTail: value.rawTail,
-			decodedTail: value.decodedTail,
-			requestedLatest: value.requestedLatest,
-			compactSeen: value.compactSeen,
 			head: value.head,
-			queries,
+			compactSeen: value.compactSeen,
+			all,
+			latest,
 		};
 	} catch {
 		return null;
 	}
+}
+function readEvidence(value: unknown): Evidence | null {
+	if (
+		!isRecord(value) ||
+		!isRecord(value.blocks) ||
+		typeof value.rawOpen !== "string"
+	)
+		return null;
+	const blocks: Record<string, string[]> = {};
+	for (const [marker, starts] of Object.entries(value.blocks)) {
+		if (!Array.isArray(starts) || !starts.every((start) => typeof start === "string"))
+			return null;
+		blocks[marker] = starts;
+	}
+	return { blocks, rawOpen: value.rawOpen };
 }
 function writeCache(path: string, state: CacheState): void {
 	const temp = join(dirname(path), `.${path.split("/").at(-1)}.${process.pid}.tmp`);
