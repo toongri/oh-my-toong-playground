@@ -1,5 +1,5 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { afterEach, expect, spyOn, test } from "bun:test";
+import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -56,12 +56,20 @@ test("소문자 변환으로 길이가 바뀌는 문자가 표시 뒤 활동을 
 	expect(transcriptHasContextPressureMarker(transcript(`${"İ".repeat(20)} context compacted\nok`))).toBe(false);
 });
 
-test("조각 수백 개에 걸친 마지막 줄도 읽는 시간이 줄 길이에 비례한다", () => {
+test("조각 수백 개에 걸친 마지막 줄도 한 번만 이어 붙인다", () => {
 	const line = `${"가".repeat(5_600_000)} context compacted`;
 	const path = transcript(`context compacted\n${line}\n`);
-	const start = performance.now();
-	expect(transcriptHasContextPressureMarker(path)).toBe(true);
-	expect(performance.now() - start).toBeLessThan(300);
+	const fileBytes = statSync(path).size;
+	const concat = spyOn(Buffer, "concat");
+	let concatBytes = 0;
+	try {
+		expect(transcriptHasContextPressureMarker(path)).toBe(true);
+		for (const result of concat.mock.results) concatBytes += (result.value as Buffer).length;
+	} finally {
+		concat.mockRestore();
+	}
+	// A per-chunk prepend copies O(n^2/chunk) bytes; one join copies about the line once.
+	expect(concatBytes).toBeLessThanOrEqual(2 * fileBytes);
 	const activity = transcript(`${line}\nnext turn\n`);
 	expect(transcriptHasContextPressureMarker(activity)).toBe(false);
 });
