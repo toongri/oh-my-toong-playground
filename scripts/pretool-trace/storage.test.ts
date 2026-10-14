@@ -195,7 +195,9 @@ describe("pre-tool trace storage", () => {
 	test("owner lock — initialization metadata failure cleans up for retry", async () => {
 		root();
 		const modulePath = join(import.meta.dir, "storage.ts");
-		const script = `import {mock} from "bun:test"; const actual=await import("node:fs"); let fail=true; mock.module("node:fs",()=>({...actual.default,...actual,writeFileSync(...args){if(fail && String(args[0]).includes(".append.lock/owner-")){fail=false; throw new Error("injected owner write failure");} return actual.writeFileSync(...args);}})); const {appendEvent,storagePaths}=await import(${JSON.stringify(modulePath)}); const first=appendEvent({first:true}); const lockAfterFirst=actual.existsSync(storagePaths().lock); process.stdout.write(JSON.stringify({first,lockAfterFirst}));`;
+		// Copy node:fs before mocking: Bun swaps the live namespace, so calling through it would recurse into the mock.
+		// The owner metadata is written through its fd, so the injected failure matches the payload, not a path.
+		const script = `import {mock} from "bun:test"; const actual={...await import("node:fs")}; let fail=true; mock.module("node:fs",()=>({...actual.default,...actual,writeFileSync(...args){if(fail && typeof args[0]==="number" && String(args[1]).startsWith('{"pid":')){fail=false; throw new Error("injected owner write failure");} return actual.writeFileSync(...args);}})); const {appendEvent,storagePaths}=await import(${JSON.stringify(modulePath)}); const first=appendEvent({first:true}); const lockAfterFirst=actual.existsSync(storagePaths().lock); process.stdout.write(JSON.stringify({first,lockAfterFirst}));`;
 		const child = Bun.spawn([process.execPath, "-e", script], { env: { ...process.env, OMT_DIR: process.env.OMT_DIR! }, stdout: "pipe", stderr: "pipe" });
 		const output = await new Response(child.stdout).text();
 		const stderr = await new Response(child.stderr).text();
