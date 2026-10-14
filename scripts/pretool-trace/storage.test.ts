@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -33,16 +33,31 @@ async function concurrentChildren(script: string, count: number, env: Record<str
 	}));
 }
 
+/** True when appendEvent returned false without ever sleeping (structural "drops immediately"). */
+function dropsWithoutWaiting(): boolean {
+	const wait = spyOn(Atomics, "wait");
+	try {
+		const result = appendEvent({ dropped: true });
+		return result === false && wait.mock.calls.length === 0;
+	} finally { wait.mockRestore(); }
+}
+
 describe("pre-tool trace storage", () => {
 	test("concurrent key and append — converges one atomic key per locator", async () => {
 		root();
 		const locator = "a".repeat(64);
 		const modulePath = join(import.meta.dir, "storage.ts");
 		const keys = await concurrentChildren(`import {getSessionKey} from ${JSON.stringify(modulePath)}; process.stdout.write(Buffer.from(getSessionKey(${JSON.stringify(locator)})).toString("hex"));`, 20, { OMT_DIR: process.env.OMT_DIR! });
-		expect(new Set(keys.map((key) => Buffer.from(key).toString("hex"))).size).toBe(1);
-		expect(Buffer.from(keys[0], "hex")).toHaveLength(32);
-		const keyFile = readdirSync(storagePaths().keys).find((name) => name.endsWith(".key"));
-		expect(keyFile).toBe(`${locator}.key`);
+		// Fail-open contract: a loser that cannot take the lease lock returns an empty key,
+		// so only the non-empty keys must agree, and they must equal the one stored key.
+		const nonEmpty = keys.filter((key) => key.length > 0);
+		expect(nonEmpty.length).toBeGreaterThan(0);
+		expect(new Set(nonEmpty).size).toBe(1);
+		expect(Buffer.from(nonEmpty[0], "hex")).toHaveLength(32);
+		const keyFiles = readdirSync(storagePaths().keys).filter((name) => name.endsWith(".key"));
+		expect(keyFiles).toEqual([`${locator}.key`]);
+		const keyFile = keyFiles[0];
+		expect(readFileSync(join(storagePaths().keys, keyFile)).toString("hex")).toBe(nonEmpty[0]);
 		expect(statSync(storagePaths().keys).mode & 0o777).toBe(0o700);
 		expect(statSync(join(storagePaths().keys, keyFile!)).mode & 0o777).toBe(0o600);
 	});
@@ -102,9 +117,7 @@ describe("pre-tool trace storage", () => {
 		appendEvent({ setup: true });
 		const before = statSync(storagePaths().events).size;
 		mkdirSync(storagePaths().lock);
-		const started = performance.now();
-		expect(appendEvent({ dropped: true })).toBe(false);
-		expect(performance.now() - started).toBeLessThan(100);
+		expect(dropsWithoutWaiting()).toBe(true);
 		expect(statSync(storagePaths().events).size).toBe(before);
 	});
 
@@ -113,9 +126,7 @@ describe("pre-tool trace storage", () => {
 		mkdirSync(storagePaths().dir, { recursive: true });
 		mkdirSync(storagePaths().lock);
 		writeFileSync(join(storagePaths().lock, `owner-${process.pid}-live`), "");
-		const started = performance.now();
-		expect(appendEvent({ dropped: true })).toBe(false);
-		expect(performance.now() - started).toBeLessThan(100);
+		expect(dropsWithoutWaiting()).toBe(true);
 	});
 
 	test("owner lock — dead owner is recovered and append succeeds", () => {
@@ -131,9 +142,10 @@ describe("pre-tool trace storage", () => {
 		root();
 		mkdirSync(storagePaths().dir, { recursive: true });
 		mkdirSync(storagePaths().lock);
-		const started = performance.now();
-		expect(appendEvent({ dropped: true })).toBe(false);
-		expect(performance.now() - started).toBeLessThan(100);
+		// Pin the lock mtime in the future so "fresh" does not depend on elapsed time.
+		const future = new Date(Date.now() + 3600_000);
+		utimesSync(storagePaths().lock, future, future);
+		expect(dropsWithoutWaiting()).toBe(true);
 	});
 
 	test("owner lock — stale empty initialization is recovered", () => {

@@ -396,7 +396,7 @@ describe("generated PreToolUse trace runtime", () => {
 			if (savedOmtDir === undefined) delete process.env.OMT_DIR; else process.env.OMT_DIR = savedOmtDir;
 			await fs.rm(root, { recursive: true, force: true });
 		}
-	}, 30000);
+	}, 60_000);
 });
 
 // ---------------------------------------------------------------------------

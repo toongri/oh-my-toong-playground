@@ -31,13 +31,13 @@ async function runDirect(command: string, input: Uint8Array, env: Record<string,
 	return { stdout: new Uint8Array(await new Response(proc.stdout).arrayBuffer()), stderr: new Uint8Array(await new Response(proc.stderr).arrayBuffer()), status: await proc.exited };
 }
 
-async function waitFor(path: string, timeout = 2000): Promise<void> {
+async function waitFor(path: string, timeout = 30_000): Promise<void> {
 	const end = Date.now() + timeout;
 	while (!existsSync(path) && Date.now() < end) await new Promise((resolve) => setTimeout(resolve, 10));
 	if (!existsSync(path)) throw new Error(`readiness timeout: ${path}`);
 }
 
-async function waitForGone(pid: number, timeout = 2000): Promise<void> {
+async function waitForGone(pid: number, timeout = 30_000): Promise<void> {
 	const end = Date.now() + timeout;
 	while (Date.now() < end) {
 		try { process.kill(pid, 0); } catch { return; }

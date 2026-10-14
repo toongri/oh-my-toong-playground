@@ -31,11 +31,11 @@ group=$$
   kill -KILL -"$group" 2>/dev/null
 ) &
 watchdog=$!
-trap 'kill -KILL "$watchdog" 2>/dev/null; wait "$watchdog" 2>/dev/null' EXIT
+disown "$watchdog"
+trap 'kill -KILL "$watchdog" 2>/dev/null' EXIT
 eval "set --; $1"
 status=$?
 kill -KILL "$watchdog" 2>/dev/null
-wait "$watchdog" 2>/dev/null
 trap - EXIT
 exit "$status"
 `;
