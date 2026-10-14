@@ -1512,7 +1512,10 @@ export async function cmdStop(
 	_options: Record<string, unknown>,
 	jobDir: string,
 	config: JobConfig,
+	opts: { sleepFn?: typeof sleepMs; cooperativeGraceMs?: number } = {},
 ): Promise<void> {
+	const sleep = opts.sleepFn ?? sleepMs;
+	const cooperativeGraceMs = opts.cooperativeGraceMs ?? STOP_COOPERATIVE_GRACE_MS;
 	const resolvedJobDir = path.resolve(jobDir);
 	const entitiesRoot = path.join(resolvedJobDir, config.entityDirName);
 	if (!fs.existsSync(entitiesRoot))
@@ -1543,9 +1546,9 @@ export async function cmdStop(
 		);
 	};
 	const waitStart = Date.now();
-	const cooperativeDeadline = waitStart + Math.min(STOP_COOPERATIVE_GRACE_MS, STOP_WAIT_CAP_MS);
+	const cooperativeDeadline = waitStart + Math.min(cooperativeGraceMs, STOP_WAIT_CAP_MS);
 	while (waitEntries.some(stillActive) && Date.now() < cooperativeDeadline) {
-		await sleepMs(250);
+		await sleep(250);
 	}
 
 	// Cooperative cancellation gets the full bounded wait above. Only if a member is
@@ -1575,7 +1578,7 @@ export async function cmdStop(
 	const fallbackAttempted = fallbackCleanups.length > 0;
 	const waitDeadline = waitStart + STOP_WAIT_CAP_MS;
 	while (waitEntries.some(stillActive) && Date.now() < waitDeadline) {
-		await sleepMs(250);
+		await sleep(250);
 	}
 
 	const manifest = buildManifest(jobDir, config);
@@ -2104,6 +2107,9 @@ export function findOrphanJobs(jobsDir: string, config: JobConfig): OrphanJob[] 
 	return orphans;
 }
 
+const REAP_SETTLE_POLL_MS = 10;
+const REAP_SETTLE_MAX_POLLS = 100;
+
 /**
  * Reap every orphan job's process group: SIGTERM, wait opts.graceMs (default
  * REAP_GRACE_MS_DEFAULT), then SIGKILL. Does NOT delete job directories —
@@ -2131,7 +2137,7 @@ export function findOrphanJobs(jobsDir: string, config: JobConfig): OrphanJob[] 
 export async function reapOrphanJobs(
 	jobsDir: string,
 	config: JobConfig,
-	opts: { graceMs?: number; getSnapshotFn?: () => PgidSnapshot } = {},
+	opts: { graceMs?: number; getSnapshotFn?: () => PgidSnapshot; sleepFn?: typeof sleepMs } = {},
 ): Promise<{ reaped: OrphanJob[]; survivingPids: number[] }> {
 	const orphans = findOrphanJobs(jobsDir, config);
 	const graceMs = opts.graceMs ?? REAP_GRACE_MS_DEFAULT;
@@ -2151,8 +2157,9 @@ export async function reapOrphanJobs(
 	// period anyway would idle a background process (e.g. the SessionStart
 	// hook's detached reap) for no reason on every session start, which fights
 	// the exact process-accumulation problem this reaper exists to fix.
-	if (orphans.length > 0 && graceMs > 0) await sleepMs(graceMs);
+	if (orphans.length > 0 && graceMs > 0) await (opts.sleepFn ?? sleepMs)(graceMs);
 
+	const sigkilledPgids: number[] = [];
 	if (orphans.length > 0) {
 		// See (iv) above: re-snapshot and re-judge every candidate against its
 		// own carried witness before escalating to SIGKILL. Snapshot failure
@@ -2177,6 +2184,7 @@ export async function reapOrphanJobs(
 					);
 					continue;
 				}
+				sigkilledPgids.push(pgid);
 				try {
 					process.kill(-pgid, "SIGKILL");
 				} catch {
@@ -2188,6 +2196,22 @@ export async function reapOrphanJobs(
 
 	const survivingPids: number[] = [];
 	const allPgids = orphans.flatMap((o) => o.pgids);
+	// SIGKILL is delivered asynchronously: right after process.kill returns, a
+	// group we just SIGKILLed can still answer a `kill(-pgid, 0)` probe. Let it
+	// settle (bounded by poll count, so a faked clock cannot hang it) before
+	// reporting survivors, or a group microseconds from dead counts as
+	// surviving. A zombie answers EPERM, i.e. already dead.
+	const groupAlive = (pgid: number): boolean => {
+		try {
+			process.kill(-pgid, 0);
+			return true;
+		} catch {
+			return false;
+		}
+	};
+	for (let i = 0; i < REAP_SETTLE_MAX_POLLS && sigkilledPgids.some(groupAlive); i++) {
+		await new Promise((resolve) => setTimeout(resolve, REAP_SETTLE_POLL_MS));
+	}
 	if (allPgids.length > 0) {
 		try {
 			const psOutput = execSync("ps -o pgid=,pid= -A", { encoding: "utf8" });

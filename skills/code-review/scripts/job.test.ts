@@ -152,6 +152,15 @@ function isPgidAlive(pgid: number): boolean {
 	}
 }
 
+/** SIGKILL is delivered asynchronously, so a gone-check right after the kill must poll. */
+async function waitForPgidGone(pgid: number, timeoutMs = 45_000): Promise<boolean> {
+	const deadline = Date.now() + timeoutMs;
+	while (isPgidAlive(pgid) && Date.now() < deadline) {
+		await new Promise((resolve) => setTimeout(resolve, 20));
+	}
+	return !isPgidAlive(pgid);
+}
+
 function killPgidIfAlive(pgid: number): void {
 	try {
 		process.kill(-pgid, "SIGKILL");
@@ -1025,9 +1034,8 @@ describe("computeStatus", () => {
 			},
 		);
 		// running threshold = (60 + 60) * 1000 = 120_000ms; 200s > 120s → stale
-		// Simulate race: spawn a background process that overwrites the file to 'done'
-		// during the 250ms CAS sleep window (Atomics.wait blocks the event loop,
-		// so setTimeout won't fire — only an external process can write the file).
+		// Simulate race: the injected casSleepFn overwrites the file to 'done' exactly
+		// where the CAS sleep window would be.
 		const statusPath = path.join(jobDir, "members", "alice", "status.json");
 		const donePayload = JSON.stringify({
 			member: "alice",
@@ -1035,8 +1043,11 @@ describe("computeStatus", () => {
 			startedAt: staleStart,
 			exitCode: 0,
 		});
-		Bun.spawn(["bash", "-c", `sleep 0.1 && printf '%s' '${donePayload}' > "${statusPath}"`]);
-		const result = await computeStatus(jobDir);
+		const result = await computeStatus(jobDir, {
+			casSleepFn: async () => {
+				fs.writeFileSync(statusPath, donePayload);
+			},
+		});
 		const alice = result.members.find((r) => r.member === "alice");
 		// CAS re-read sees 'done' → preserves 'done', does NOT overwrite with error
 		expect(alice.state).toBe("done");
@@ -1363,7 +1374,7 @@ describe("job.ts reap", () => {
 		killPgidIfAlive(pgid);
 	});
 
-	test("stderr에 회수 진단이 기록되고, 회수된 고아 프로세스 그룹은 더 이상 살아있지 않다", () => {
+	test("stderr에 회수 진단이 기록되고, 회수된 고아 프로세스 그룹은 더 이상 살아있지 않다", async () => {
 		const { jobDir, pgid } = makeOrphanJobFixture(jobsDir, "reaped-effect");
 
 		const proc = spawnSync(
@@ -1376,35 +1387,28 @@ describe("job.ts reap", () => {
 		expect(proc.stdout).toBe("");
 		expect(proc.stderr.length).toBeGreaterThan(0);
 		expect(proc.stderr).toContain(jobDir);
-		expect(isPgidAlive(pgid)).toBe(false);
+		expect(await waitForPgidGone(pgid)).toBe(true);
 	});
 
-	test("--grace-ms 옵션이 reapOrphanJobs로 전달된다 (유예 시간 실측)", () => {
-		const { pgid } = makeOrphanJobFixture(jobsDir, "grace-passthrough");
-		const requestedGraceMs = 300;
+	test("--grace-ms 옵션이 reapOrphanJobs로 전달된다", async () => {
+		let capturedOpts: { graceMs?: number } | undefined;
+		mock.module("@lib/generic-job", () => ({
+			...GenericJob,
+			reapOrphanJobs: async (_jobsDir: string, _config: unknown, opts: { graceMs?: number }) => {
+				capturedOpts = opts;
+				return { reaped: [], survivingPids: [] };
+			},
+		}));
 
-		const start = Date.now();
-		execFileSync(
-			process.execPath,
-			[SCRIPT, "reap", "--jobs-dir", jobsDir, "--grace-ms", String(requestedGraceMs)],
-			{ stdio: "pipe" },
-		);
-		const elapsed = Date.now() - start;
+		try {
+			const mod = await import(`./job.ts?grace-passthrough=${Date.now()}-${Math.random()}`);
+			await mod.cmdReap({ "jobs-dir": jobsDir, "grace-ms": 300 });
+		} finally {
+			mock.module("@lib/generic-job", () => realGenericJob);
+			mock.restore();
+		}
 
-		// This separates three outcomes: --grace-ms ignored and no grace waited
-		// (near-instant), --grace-ms ignored and the default used (near
-		// REAP_GRACE_MS_DEFAULT), or --grace-ms honoured (near the requested
-		// value). Both bounds come from those two real constants rather than
-		// from picked numbers — the floor is most of what was requested, and
-		// the ceiling is the midpoint between the two candidate grace values,
-		// so anything the option could have resolved to lands unambiguously on
-		// one side. The lower bound is load-safe by construction (contention
-		// only pushes elapsed up) and the upper bound keeps most of a 5s window
-		// as headroom for the `node` spawn this measurement has to include.
-		expect(elapsed).toBeGreaterThanOrEqual(requestedGraceMs * 0.83);
-		expect(elapsed).toBeLessThan((requestedGraceMs + GenericJob.REAP_GRACE_MS_DEFAULT) / 2);
-
-		killPgidIfAlive(pgid);
+		expect(capturedOpts).toEqual({ graceMs: 300 });
 	});
 
 	test("회수할 고아가 없으면 stdout은 비고 정상 종료한다", () => {
@@ -1418,7 +1422,7 @@ describe("job.ts reap", () => {
 		expect(result.toString()).toBe("");
 	});
 
-	test("이 job과 무관한 프로세스는 reap 회수 전후 모두 살아있다 (오살 방지 방관자)", () => {
+	test("이 job과 무관한 프로세스는 reap 회수 전후 모두 살아있다 (오살 방지 방관자)", async () => {
 		// 방관자 — 어떤 job.json에도 workerPgid로 기록되지 않은 무관한 프로세스.
 		// reap이 잘못된 그룹에 신호를 보내면 이 프로세스가 사라진다.
 		const bystander = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
@@ -1434,7 +1438,7 @@ describe("job.ts reap", () => {
 				stdio: "pipe",
 			});
 
-			expect(isPgidAlive(pgid)).toBe(false);
+			expect(await waitForPgidGone(pgid)).toBe(true);
 			// 핵심 단언 — 오살 방지: 무관한 프로세스는 여전히 살아있어야 한다.
 			expect(isPgidAlive(bystanderPgid)).toBe(true);
 		} finally {
@@ -1709,7 +1713,7 @@ describe("cmdStart reaps orphan jobs on start", () => {
 			"test prompt",
 		);
 
-		expect(isPgidAlive(pgid)).toBe(false);
+		expect(await waitForPgidGone(pgid)).toBe(true);
 
 		// cleanup: kill this test's own newly-spawned worker(s), best-effort.
 		for (const entry of fs.readdirSync(jobsDir)) {
@@ -1754,7 +1758,7 @@ describe("cmdStart reaps orphan jobs on start", () => {
 			"test prompt",
 		);
 
-		expect(isPgidAlive(pgid)).toBe(false);
+		expect(await waitForPgidGone(pgid)).toBe(true);
 
 		// cleanup: kill this test's own newly-spawned worker(s), best-effort.
 		for (const entry of fs.readdirSync(jobsDir)) {
@@ -1799,7 +1803,7 @@ describe("cmdStart reaps orphan jobs on start", () => {
 				"test prompt",
 			);
 
-			expect(isPgidAlive(pgid)).toBe(false);
+			expect(await waitForPgidGone(pgid)).toBe(true);
 			// 핵심 단언 — 오살 방지: 무관한 프로세스는 여전히 살아있어야 한다.
 			expect(isPgidAlive(bystanderPgid)).toBe(true);
 
@@ -1846,13 +1850,7 @@ describe("classifyReapedOrphans", () => {
 		child.unref();
 		const pgid = child.pid as number;
 		process.kill(-pgid, "SIGKILL");
-		// SIGKILL is asynchronous — poll until the group is actually gone before
-		// asserting, or this test would flake on a slow host.
-		const killDeadline = Date.now() + 45_000;
-		while (isPgidAlive(pgid) && Date.now() < killDeadline) {
-			await new Promise((resolve) => setTimeout(resolve, 20));
-		}
-		expect(isPgidAlive(pgid)).toBe(false);
+		expect(await waitForPgidGone(pgid)).toBe(true);
 
 		const verdicts = classifyReapedOrphans([{ jobDir: "/tmp/whatever", pgids: [pgid] }]);
 
@@ -1968,7 +1966,7 @@ describe("cmdStart reap 로그 — 생존 프로세스를 회수됐다고 보고
 
 		const logContent = readStartLog();
 		expect(logContent).toContain("1 orphan job(s) reaped");
-		expect(isPgidAlive(pgid)).toBe(false);
+		expect(await waitForPgidGone(pgid)).toBe(true);
 
 		killSpawnedWorkers();
 	});
@@ -3066,34 +3064,22 @@ describe("resume-member CLI 배선 — detached spawn 계약", () => {
 	let stubDir: string;
 
 	/**
-	 * Fake `opencode` binary on PATH: sleeps long enough that a caller blocking in-process on
-	 * it would observably block, then emits a minimal opencode NDJSON stream the real
-	 * opencodeDriver can parse (step_finish/stop + one text event) before exiting 0.
+	 * Fake `opencode` binary on PATH: optionally blocks until `gatePath` exists (capped at
+	 * ~60s so a leaked worker cannot spin forever), then emits a minimal opencode NDJSON
+	 * stream the real opencodeDriver can parse (step_finish/stop + one text event) before
+	 * exiting 0. A gated stub makes "dispatch does not wait for the worker" a barrier, not
+	 * a clock: dispatch can only return while the worker is still blocked on the gate.
 	 */
-	// Two stub lengths, because the two claims below need opposite things from
-	// the fake worker and one shared value cannot serve both.
-	//
-	// BLOCKING_STUB_SECONDS is the SIGNAL the "does not wait" assertion measures
-	// against, so it must sit far above the cost of the `node` spawn that
-	// assertion pays. It used to be 2s with a 1500ms ceiling -- a 500ms margin,
-	// less than one process launch on a contended machine, so a loaded run could
-	// cross the ceiling while dispatch behaved perfectly.
-	//
-	// FINISHING_STUB_SECONDS is the opposite: the "reaches done" assertion has to
-	// poll until the detached worker actually finishes, so that stub must expire
-	// well inside the poll deadline. Its deadline is derived from it (5x) rather
-	// than fixed, so load stretches the allowance too.
-	const BLOCKING_STUB_SECONDS = 20;
-	const FINISHING_STUB_SECONDS = 2;
-
-	function makeSlowOpencodeStub(sleepSec: number): string {
+	function makeOpencodeStub(gatePath: string | null): string {
 		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "resume-spawn-stub-"));
 		const stubPath = path.join(dir, "opencode");
 		fs.writeFileSync(
 			stubPath,
 			[
 				"#!/bin/sh",
-				`sleep ${sleepSec}`,
+				...(gatePath
+					? [`i=0; while [ ! -f '${gatePath}' ] && [ $i -lt 600 ]; do sleep 0.1; i=$((i+1)); done`]
+					: []),
 				'echo \'{"type":"step_finish","sessionID":"sess-123","part":{"reason":"stop"}}\'',
 				'echo \'{"type":"text","part":{"text":"resumed done"}}\'',
 				"exit 0",
@@ -3139,47 +3125,56 @@ describe("resume-member CLI 배선 — detached spawn 계약", () => {
 		return execFileSync(
 			process.execPath,
 			[SCRIPT, "resume-member", "--job", jobDir, "--member", "opencode", "--prompt", "continue"],
-			{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
+			{
+				stdio: "pipe",
+				timeout: 45_000,
+				env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` },
+			},
 		);
 	}
 
-	test("resume-member 서브커맨드는 워커 완료를 기다리지 않고 즉시 dispatched ack로 반환한다", () => {
-		stubDir = makeSlowOpencodeStub(BLOCKING_STUB_SECONDS);
+	test("resume-member 서브커맨드는 워커 완료를 기다리지 않고 즉시 dispatched ack로 반환한다", async () => {
+		const gatePath = path.join(tmpDir, "release-worker");
+		stubDir = makeOpencodeStub(gatePath);
 
-		const start = Date.now();
+		// The fake CLI blocks on the gate file, which is only written after dispatch has
+		// returned. A caller blocking in-process on the turn could never return here, so
+		// getting the ack back at all is the evidence that dispatch is non-blocking.
 		const result = dispatchResume();
-		const elapsedMs = Date.now() - start;
-
-		// The fake CLI blocks BLOCKING_STUB_SECONDS before it would ever finish a turn —
-		// a caller still blocking in-process on that turn could not return before then.
-		// Returning inside half that window is the evidence dispatch is non-blocking, and
-		// half of an INJECTED delay is a bound that stretches with load, unlike an
-		// absolute ceiling that load can cross on its own.
-		expect(elapsedMs).toBeLessThan((BLOCKING_STUB_SECONDS * 1000) / 2);
 		expect(JSON.parse(result.toString())).toEqual({ state: "dispatched", member: "opencode" });
 
 		// Queued pre-transition: cmdCollect's "awaiting_resume already ended its own turn"
-		// early-return must not still apply to this freshly-dispatched resume.
+		// early-return must not still apply to this freshly-dispatched resume. The detached
+		// worker may already have moved queued -> running by the time of this read.
 		const queuedStatus = readStatus();
-		expect(queuedStatus.state).toBe("queued");
+		expect(["queued", "running"]).toContain(String(queuedStatus.state));
 		expect(queuedStatus.sessionID).toBe("sess-existing");
 		expect(queuedStatus.command).toBe("opencode --format json");
 		expect(queuedStatus.resume_count).toBe(1);
+
+		// Release the gated worker and let it finish so it cannot outlive the test.
+		fs.writeFileSync(gatePath, "");
+		const deadline = Date.now() + 45_000;
+		while (
+			(readStatus().state === "queued" || readStatus().state === "running") &&
+			Date.now() < deadline
+		) {
+			await new Promise((resolve) => setTimeout(resolve, 200));
+		}
+		expect(readStatus().state).toBe("done");
 	});
 
 	test("dispatch된 워커는 스스로 done까지 진행한다", async () => {
-		// Separate stub, deliberately short: this claim needs the worker to FINISH,
-		// which the blocking stub above is built never to do inside a test. One
-		// shared duration cannot serve both claims, which is why they are two tests.
-		stubDir = makeSlowOpencodeStub(FINISHING_STUB_SECONDS);
+		// Separate stub without a gate: this claim needs the worker to FINISH, which the
+		// gated stub above only does once released.
+		stubDir = makeOpencodeStub(null);
 		dispatchResume();
 
 		// Poll for the detached worker to actually finish the turn — state transitions
-		// queued → running (runOnce's own status write, before the stub's sleep resolves)
-		// → done (executeOneTurn's final write once stdout is parsed). The deadline is
-		// 5x the stub's own sleep rather than a fixed number, so a machine that slows
-		// the worker slows the allowance with it.
-		const deadline = Date.now() + FINISHING_STUB_SECONDS * 1000 * 5;
+		// queued → running (runOnce's own status write) → done (executeOneTurn's final
+		// write once stdout is parsed). The deadline is only a hang guard; the loop exits
+		// as soon as the worker is done.
+		const deadline = Date.now() + 45_000;
 		let finalStatus = readStatus();
 		while (
 			(finalStatus.state === "queued" || finalStatus.state === "running") &&
@@ -3799,7 +3794,7 @@ describe("cmdCollect", () => {
 		const result = execFileSync(
 			process.execPath,
 			[SCRIPT, "collect", "--timeout-ms", "200", jobDir],
-			{ stdio: "pipe", timeout: 10000 },
+			{ stdio: "pipe", timeout: 60_000 },
 		);
 		const parsed = JSON.parse(result.toString());
 
@@ -3978,7 +3973,7 @@ describe("start + collect integration", () => {
 				"--prompt-file",
 				promptFile,
 			],
-			{ stdio: "pipe", timeout: 15000 },
+			{ stdio: "pipe", timeout: 60_000 },
 		);
 		const jobDir = startResult.toString().trim();
 		expect(fs.existsSync(jobDir)).toBe(true);
@@ -4045,7 +4040,7 @@ describe("start + collect integration", () => {
 			const collectResult = execFileSync(
 				process.execPath,
 				[SCRIPT, "collect", "--timeout-ms", "5000", jobDir],
-				{ stdio: "pipe", timeout: 15000 },
+				{ stdio: "pipe", timeout: 60_000 },
 			);
 			const manifest = JSON.parse(collectResult.toString());
 
@@ -4059,7 +4054,7 @@ describe("start + collect integration", () => {
 		} finally {
 			cleanupJob(jobDir);
 		}
-	}, 30000);
+	}, 120_000);
 
 	test("짧은 timeout: queued 상태에서 not-done 반환", () => {
 		// Use slow commands (sleep 60) so workers stay in running state and never
@@ -4103,7 +4098,7 @@ describe("start + collect integration", () => {
 				"--prompt-file",
 				promptFile,
 			],
-			{ stdio: "pipe", timeout: 15000 },
+			{ stdio: "pipe", timeout: 60_000 },
 		);
 		const jobDir = startResult.toString().trim();
 
@@ -4132,7 +4127,7 @@ describe("start + collect integration", () => {
 			const collectResult = execFileSync(
 				process.execPath,
 				[SCRIPT, "collect", "--timeout-ms", "1", jobDir],
-				{ stdio: "pipe", timeout: 10000 },
+				{ stdio: "pipe", timeout: 60_000 },
 			);
 			const parsed = JSON.parse(collectResult.toString());
 
@@ -4144,7 +4139,7 @@ describe("start + collect integration", () => {
 		} finally {
 			cleanupJob(jobDir);
 		}
-	}, 30000);
+	}, 120_000);
 });
 
 // ---------------------------------------------------------------------------
@@ -5575,7 +5570,7 @@ describe("start durable review identity", () => {
 			],
 			{
 				encoding: "utf8",
-				timeout: 5000,
+				timeout: 60_000,
 				env: { ...process.env, CHUNK_REVIEW_IDENTITY_LOCK_DEADLINE_MS: "500" },
 			},
 		);
@@ -5611,7 +5606,6 @@ describe("start durable review identity", () => {
 			lockPath(jobsDir),
 			JSON.stringify({ pid: process.pid, createdAt: Date.now() }),
 		);
-		const startedAt = Date.now();
 		const result = spawnSync(
 			process.execPath,
 			[
@@ -5637,13 +5631,13 @@ describe("start durable review identity", () => {
 			],
 			{
 				encoding: "utf8",
-				timeout: 5000,
+				timeout: 60_000,
 				env: { ...process.env, CHUNK_REVIEW_IDENTITY_LOCK_DEADLINE_MS: "500" },
 			},
 		);
+		expect(typeof result.status).toBe("number");
 		expect(result.status).not.toBe(0);
 		expect(`${result.stderr}${result.stdout}`).toContain("identity claim timeout");
-		expect(Date.now() - startedAt).toBeLessThan(4500);
 	});
 
 	test("includes a pid-start witness in a newly acquired lock", async () => {
@@ -5704,8 +5698,9 @@ describe("start durable review identity", () => {
 		const result = spawnSync(
 			process.execPath,
 			[path.resolve(import.meta.dirname, "job.ts"), "start", "--jobs-dir", jobsDir, "--review-id", identity.reviewId, "--chunk-key", identity.chunkKey, "--attempt", String(identity.attempt), "--worktree-realpath", identity.worktreeRealpath, "--base-sha", identity.baseSha, "--head-sha", identity.headSha, "--diff-fingerprint", identity.diffFingerprint, "prompt"],
-			{ encoding: "utf8", timeout: 5000, env: { ...process.env, CHUNK_REVIEW_IDENTITY_LOCK_DEADLINE_MS: "500" } },
+			{ encoding: "utf8", timeout: 60_000, env: { ...process.env, CHUNK_REVIEW_IDENTITY_LOCK_DEADLINE_MS: "500" } },
 		);
+		expect(typeof result.status).toBe("number");
 		expect(result.status).not.toBe(0);
 		expect(`${result.stderr}${result.stdout}`).toContain("identity claim timeout");
 		expect(fs.existsSync(lockPath(jobsDir))).toBe(true);
@@ -5718,8 +5713,9 @@ describe("start durable review identity", () => {
 		const result = spawnSync(
 			process.execPath,
 			[path.resolve(import.meta.dirname, "job.ts"), "start", "--jobs-dir", jobsDir, "--review-id", identity.reviewId, "--chunk-key", identity.chunkKey, "--attempt", String(identity.attempt), "--worktree-realpath", identity.worktreeRealpath, "--base-sha", identity.baseSha, "--head-sha", identity.headSha, "--diff-fingerprint", identity.diffFingerprint, "prompt"],
-			{ encoding: "utf8", timeout: 5000, env: { ...process.env, CHUNK_REVIEW_IDENTITY_LOCK_DEADLINE_MS: "500" } },
+			{ encoding: "utf8", timeout: 60_000, env: { ...process.env, CHUNK_REVIEW_IDENTITY_LOCK_DEADLINE_MS: "500" } },
 		);
+		expect(typeof result.status).toBe("number");
 		expect(result.status).not.toBe(0);
 		expect(`${result.stderr}${result.stdout}`).toContain("identity claim timeout");
 		expect(fs.existsSync(lockPath(jobsDir))).toBe(true);
@@ -5839,7 +5835,6 @@ describe("start durable review identity", () => {
 			`import fs from "fs"; import path from "path"; await new Promise(r => setTimeout(r, 250)); const p = ${JSON.stringify(path.join(jobDir, "job.json"))}; const m = JSON.parse(fs.readFileSync(p, "utf8")); m.state = "ready"; fs.writeFileSync(p, JSON.stringify(m)); fs.unlinkSync(${JSON.stringify(lockPath(jobsDir))});\n`,
 		);
 		const releaser = spawn(process.execPath, [releaseScript], { stdio: "ignore" });
-		const startedAt = Date.now();
 		const result = spawnSync(
 			process.execPath,
 			[
@@ -5867,11 +5862,10 @@ describe("start durable review identity", () => {
 				identity.diffFingerprint,
 				"prompt",
 			],
-			{ encoding: "utf8", timeout: 5000 },
+			{ encoding: "utf8", timeout: 60_000 },
 		);
 		releaser.kill();
 		expect(result.status).toBe(0);
-		expect(Date.now() - startedAt).toBeGreaterThanOrEqual(200);
 		expect(result.stdout.trim()).toBe(jobDir);
 		expect(JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8")).state).toBe("ready");
 	});

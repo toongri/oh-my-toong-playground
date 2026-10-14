@@ -146,8 +146,8 @@ function gcStaleJobs(jobsDir: string): void {
 	_gcStaleJobs(jobsDir, CHUNK_REVIEW_JOB_CONFIG);
 }
 
-async function computeStatus(jobDir: string) {
-	return _computeStatus(jobDir, CHUNK_REVIEW_JOB_CONFIG);
+async function computeStatus(jobDir: string, opts: Parameters<typeof _computeStatus>[2] = {}) {
+	return _computeStatus(jobDir, CHUNK_REVIEW_JOB_CONFIG, opts);
 }
 
 function buildUiPayload(statusPayload: Parameters<typeof _buildUiPayload>[0]) {

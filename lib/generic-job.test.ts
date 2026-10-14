@@ -2442,9 +2442,24 @@ describe("cmdCollect", () => {
 			"status.json",
 		);
 
-		// Transition to done after COLLECT_POLL_INTERVAL_MS (5000ms) so the second poll sees 'done'
+		// The first poll sleep is the only await point; the fake sleep flips the member to
+		// done there, so the second poll sees 'done' without any real wall-clock wait.
 		const donePayload = JSON.stringify({ member: "alice", state: "done", exitCode: 0 });
-		Bun.spawn(["bash", "-c", `sleep 1 && printf '%s' '${donePayload}' > "${aliceStatusPath}"`]);
+		let sleepCallCount = 0;
+		const clock = { now: 1_000_000 };
+		mock.module("./job-utils", () => ({
+			...JobUtils,
+			sleepMs: async (ms: number) => {
+				const msNum = Number(ms);
+				if (Number.isFinite(msNum) && msNum > 0) {
+					sleepCallCount++;
+					if (sleepCallCount === 1) fs.writeFileSync(aliceStatusPath, donePayload);
+					clock.now += msNum;
+				}
+			},
+		}));
+		const realDateNow = Date.now;
+		Date.now = () => clock.now;
 
 		const output: string[] = [];
 		const origWrite = process.stdout.write.bind(process.stdout);
@@ -2454,15 +2469,21 @@ describe("cmdCollect", () => {
 		};
 
 		try {
-			await cmdCollect({ "timeout-ms": 0 }, jobDir, chunkReviewConfig);
+			const cacheBust = `${realDateNow()}-${Math.random()}`;
+			const freshGenericJob = await import(`./generic-job.ts?collect-timeout0=${cacheBust}`);
+			await freshGenericJob.cmdCollect({ "timeout-ms": 0 }, jobDir, chunkReviewConfig);
 		} finally {
 			process.stdout.write = origWrite;
+			Date.now = realDateNow;
+			mock.module("./job-utils", () => realJobUtils);
+			mock.restore();
 		}
 
+		expect(sleepCallCount).toBe(1);
 		expect(output.length).toBeGreaterThan(0);
 		const result = JSON.parse(output[0]);
 		expect(result.overallState).toBe("done");
-	}, 15000);
+	});
 
 	test("initializing job with a complete terminal set returns done", async () => {
 		const jobDir = path.join(tmpDir, "job-collect-initializing-done");
@@ -3863,14 +3884,23 @@ describe("cmdCollect — awaiting_resume 조기 반환", () => {
 		if (pid === undefined) throw new Error("stop fixture did not spawn a worker leader");
 		setupStopJob(jobDir, pid);
 		const statusPath = path.join(jobDir, chunkReviewConfig.entityDirName, "alice", "status.json");
-		setTimeout(() => fs.writeFileSync(statusPath, JSON.stringify({ member: "alice", state: "canceled" })), 300);
+		// cooperativeGraceMs 0: the cooperative wait is skipped, so the member is still
+		// active when the fallback runs; the first post-fallback poll sleep then
+		// records the cancellation.
+		let sleepCallCount = 0;
+		await cmdStop({}, jobDir, chunkReviewConfig, {
+			cooperativeGraceMs: 0,
+			sleepFn: async () => {
+				sleepCallCount++;
+				fs.writeFileSync(statusPath, JSON.stringify({ member: "alice", state: "canceled" }));
+			},
+		});
 
-		await cmdStop({}, jobDir, chunkReviewConfig);
-
+		expect(sleepCallCount).toBe(1);
 		expect(isAlive(pid)).toBe(true);
 		const status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
 		expect(status.state).toBe("canceled");
-	}, 10000);
+	}, 60000);
 
 	test("`pid가 죽어 있는 running 멤버는 status가 done으로 바뀌길 기다린 뒤 매니페스트에 outputFilePath가 채워진다`", async () => {
 		const jobDir = path.join(tmpDir, "job-stop-dead-pid-output");
@@ -3885,13 +3915,13 @@ describe("cmdCollect — awaiting_resume 조기 반환", () => {
 		// stop 직전 이미 완료된 파인더를 모사: 자식은 죽어 있지만(SIGTERM은 ESRCH로 실패),
 		// 워커 자신은 output.txt를 다 쓰고 나서야 status를 done으로 뒤집는다 — 그 지연을
 		// 흉내내기 위해 짧은 딜레이 뒤 output.txt + done 전이를 함께 반영한다.
-		setTimeout(() => {
+		const finishWorker = async () => {
 			fs.writeFileSync(outputPath, "review output");
 			fs.writeFileSync(
 				statusPath,
 				JSON.stringify({ member: "alice", state: "done", pid: deadPid, size_bytes: 13 }),
 			);
-		}, 150);
+		};
 
 		// 검증 대상은 cmdStop이 스스로 대기 후 재스냅샷해 stdout으로 찍는 JSON이다 —
 		// 테스트가 별도로 buildManifest를 다시 만들면 cmdStop이 재스냅샷을 안 해도
@@ -3904,7 +3934,12 @@ describe("cmdCollect — awaiting_resume 조기 반환", () => {
 		}) as any;
 
 		try {
-			await cmdStop({}, jobDir, chunkReviewConfig);
+			// Large cooperative grace + a sleep that finishes the worker: the transition
+			// always lands inside the cooperative wait, whatever the machine load.
+			await cmdStop({}, jobDir, chunkReviewConfig, {
+				cooperativeGraceMs: 60_000,
+				sleepFn: finishWorker,
+			});
 		} finally {
 			process.stdout.write = origWrite;
 		}
@@ -3975,9 +4010,13 @@ describe("cmdCollect — awaiting_resume 조기 반환", () => {
 		fs.writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ id: "stop-test" }));
 		const statusPath = path.join(memberDir, "status.json");
 		fs.writeFileSync(statusPath, JSON.stringify({ member: "alice", state: "retrying" }));
-		setTimeout(() => fs.writeFileSync(statusPath, JSON.stringify({ member: "alice", state: "canceled" })), 50);
 
-		await cmdStop({}, jobDir, chunkReviewConfig);
+		await cmdStop({}, jobDir, chunkReviewConfig, {
+			cooperativeGraceMs: 60_000,
+			sleepFn: async () => {
+				fs.writeFileSync(statusPath, JSON.stringify({ member: "alice", state: "canceled" }));
+			},
+		});
 		expect(fs.existsSync(path.join(memberDir, "cancel.json"))).toBe(true);
 		expect(JSON.parse(fs.readFileSync(statusPath, "utf8")).state).toBe("canceled");
 	});
@@ -4062,15 +4101,13 @@ describe("cmdClean 활성 멤버 guard — heartbeat stale 판정 공유", () =>
 		fs.writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ id: "stop-test" }));
 		const statusPath = path.join(jobDir, "members", "alice", "status.json");
 		fs.writeFileSync(statusPath, JSON.stringify({ member: "alice", state: "queued", pid: null }));
-		const transition = new Promise<void>((resolve) =>
-			setTimeout(() => {
-				fs.writeFileSync(statusPath, JSON.stringify({ member: "alice", state: "canceled" }));
-				resolve();
-			}, 20),
-		);
 
-		await cmdStop({}, jobDir, chunkReviewConfig);
-		await transition;
+		await cmdStop({}, jobDir, chunkReviewConfig, {
+			cooperativeGraceMs: 60_000,
+			sleepFn: async () => {
+				fs.writeFileSync(statusPath, JSON.stringify({ member: "alice", state: "canceled" }));
+			},
+		});
 		expect(fs.existsSync(path.join(jobDir, "members", "alice", "cancel.json"))).toBe(true);
 	});
 
@@ -4602,12 +4639,12 @@ describe("findOrphanJobs / reapOrphanJobs / doctorOrphanJobs", () => {
 			return true;
 		};
 
-		const killCalls: Array<[number, string | undefined]> = [];
+		const killCalls: Array<[number, string | number | undefined]> = [];
 		const originalKill = process.kill;
 		// kill을 no-op으로 바꿔 실제로는 신호를 보내지 않는다 — 그러면 프로세스는
 		// 반드시 살아남으므로 survivingPids가 타이밍에 의존하지 않고 결정적으로
 		// 채워진다.
-		(process as unknown as { kill: unknown }).kill = (pid: number, signal?: string) => {
+		(process as unknown as { kill: unknown }).kill = (pid: number, signal?: string | number) => {
 			killCalls.push([pid, signal]);
 			return true;
 		};
@@ -4617,7 +4654,8 @@ describe("findOrphanJobs / reapOrphanJobs / doctorOrphanJobs", () => {
 			expect(survivingPids).toContain(pgid);
 			expect(stderrChunks.some((c) => c.includes(String(pgid)))).toBe(true);
 			// SIGTERM 한 번, SIGKILL 한 번 — 생존을 관측한 뒤에도 추가 kill은 없다.
-			const killsForGroup = killCalls.filter(([p]) => p === -pgid);
+			// signal 0 is the reaper's settle probe, not a kill.
+			const killsForGroup = killCalls.filter(([p, sig]) => p === -pgid && sig !== 0);
 			expect(killsForGroup.length).toBe(2);
 			expect(killsForGroup.map(([, sig]) => sig)).toEqual(["SIGTERM", "SIGKILL"]);
 		} finally {
@@ -4654,15 +4692,16 @@ describe("findOrphanJobs / reapOrphanJobs / doctorOrphanJobs", () => {
 		// 없는데도 SIGTERM/SIGKILL 사이의 유예를 기다리는 것은 세션 시작마다 백그
 		// 라운드 bun 프로세스가 아무 이유 없이 노는 것과 같다.
 		const graceMs = 5000;
-		const start = Date.now();
-		const { reaped } = await reapOrphanJobs(jobsDir, chunkReviewConfig, { graceMs });
-		const elapsed = Date.now() - start;
+		const sleepCalls: number[] = [];
+		const { reaped } = await reapOrphanJobs(jobsDir, chunkReviewConfig, {
+			graceMs,
+			sleepFn: async (ms) => {
+				sleepCalls.push(ms);
+			},
+		});
 
 		expect(reaped.length).toBe(0);
-		// 이 경계는 "유예를 기다렸는가"만 가른다 — 머신 속도를 재는 것이 아니다.
-		// 유예를 기다렸다면 graceMs에 근접하므로 그 절반 미만이면 안 기다린 것이다.
-		// 절대값(500ms)으로 두면 부하가 걸린 머신에서 간헐 실패한다(실측 538ms).
-		expect(elapsed).toBeLessThan(graceMs / 2);
+		expect(sleepCalls).toEqual([]);
 	});
 
 	test("고아가 1개 이상이면 유예를 여전히 기다린다 (음성 대조군)", async () => {
@@ -4677,12 +4716,16 @@ describe("findOrphanJobs / reapOrphanJobs / doctorOrphanJobs", () => {
 			{ member: "alice", state: "done" },
 		);
 
-		const start = Date.now();
-		const { reaped } = await reapOrphanJobs(jobsDir, chunkReviewConfig, { graceMs: 300 });
-		const elapsed = Date.now() - start;
+		const sleepCalls: number[] = [];
+		const { reaped } = await reapOrphanJobs(jobsDir, chunkReviewConfig, {
+			graceMs: 300,
+			sleepFn: async (ms) => {
+				sleepCalls.push(ms);
+			},
+		});
 
 		expect(reaped.length).toBe(1);
-		expect(elapsed).toBeGreaterThanOrEqual(250);
+		expect(sleepCalls).toEqual([300]);
 	});
 
 	// -------------------------------------------------------------------------
@@ -4710,8 +4753,8 @@ describe("findOrphanJobs / reapOrphanJobs / doctorOrphanJobs", () => {
 
 			fs.writeFileSync(goPath, "go");
 			await new Promise<void>((resolve) => harness.on("exit", () => resolve()));
-			// 그룹 리더가 좀비에서 완전히 회수될 여유 시간.
-			await new Promise((resolve) => setTimeout(resolve, 300));
+			// 그룹 리더가 좀비에서 완전히 회수될 때까지 기다린다.
+			expect(await waitUntil(() => !hasLiveLeaderRow(pgid))).toBe(true);
 
 			// 선행 단언 — 픽스처가 실제로 의도한 상태인지 먼저 확인한다: 이 pgid에
 			// 살아있는 행(자손)이 있고, pid === pgid인 리더 행은 없다. 이 확인 없이는
@@ -4730,7 +4773,7 @@ describe("findOrphanJobs / reapOrphanJobs / doctorOrphanJobs", () => {
 			expect(reaped.find((o) => o.jobDir.includes("leaderdead-001"))).toBeDefined();
 			expect(await waitUntil(() => !isPidAlive(sleepPid))).toBe(true);
 		},
-		10000,
+		60000,
 	);
 
 	// 결함 A의 안전 방향 (음성 대조군): 리더가 죽었어도, 살아있는 멤버 중
@@ -4750,7 +4793,7 @@ describe("findOrphanJobs / reapOrphanJobs / doctorOrphanJobs", () => {
 
 			fs.writeFileSync(goPath, "go");
 			await new Promise<void>((resolve) => harness.on("exit", () => resolve()));
-			await new Promise((resolve) => setTimeout(resolve, 300));
+			expect(await waitUntil(() => !hasLiveLeaderRow(pgid))).toBe(true);
 
 			// 선행 단언: 픽스처가 의도한 상태(리더 없음, 자손 살아있음)인지 확인.
 			expect(isPidAlive(sleepPid)).toBe(true);
@@ -4772,7 +4815,7 @@ describe("findOrphanJobs / reapOrphanJobs / doctorOrphanJobs", () => {
 			// 핵심 단언 — 오살 방지: 우리 것이 아니라고 판단된 살아있는 자손은 살아남아야 한다.
 			expect(isPidAlive(sleepPid)).toBe(true);
 		},
-		10000,
+		60000,
 	);
 
 	// -------------------------------------------------------------------------
