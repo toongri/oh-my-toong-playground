@@ -52,6 +52,8 @@ export interface AcquireWorkerSlotOptions {
 	pollMs?: number;
 	/** Cancel acquisition while waiting, or immediately after a race wins. */
 	signal?: AbortSignal;
+	/** Wait between polls while every slot is occupied. Defaults to an abortable timer. */
+	sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 }
 
 const DEFAULT_POLL_MS = 1500;
@@ -311,11 +313,12 @@ export function tryAcquireWorkerSlot(options: AcquireWorkerSlotOptions = {}): Wo
 export async function acquireWorkerSlot(options: AcquireWorkerSlotOptions = {}): Promise<WorkerSlot> {
 	const pollMs = options.pollMs ?? DEFAULT_POLL_MS;
 	const signal = options.signal;
+	const sleep = options.sleep ?? waitForPoll;
 
 	for (;;) {
 		const slot = tryAcquireWorkerSlot(options);
 		if (slot !== null) return slot;
-		await waitForPoll(pollMs, signal);
+		await sleep(pollMs, signal);
 	}
 }
 

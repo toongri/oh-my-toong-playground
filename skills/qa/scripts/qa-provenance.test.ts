@@ -285,10 +285,26 @@ test("feature lock 대기 중 feature가 바뀌면 provenance를 기록하지 �
 	const featurePath = join(f.home, "features", "feature-a.md");
 	const featureLock = join(f.home, "features", ".feature-map-state.lock");
 	const qaLock = `${resolveStatePath(f.sid)}.lock`;
+	const waitingPath = join(f.home, "child-waiting-on-feature-lock");
+	const goPath = join(f.home, "parent-finished-edit");
 	const before = f.bytes();
 	mkdirSync(featureLock);
+	// The child parks on its first contended feature-lock retry until the parent
+	// has finished editing, so the lock's finite retry budget never races the parent.
 	const script = `
-		import { recordStoryProvenance } from ${JSON.stringify(fileURLToPath(new URL("./qa-state.ts", import.meta.url)))};
+		import { existsSync, writeFileSync } from "node:fs";
+		const realWait = Atomics.wait;
+		const gate = new Int32Array(new SharedArrayBuffer(4));
+		let parked = false;
+		Atomics.wait = (...args) => {
+			if (!parked) {
+				parked = true;
+				writeFileSync(${JSON.stringify(waitingPath)}, "1");
+				while (!existsSync(${JSON.stringify(goPath)})) realWait(gate, 0, 0, 5);
+			}
+			return realWait(...args);
+		};
+		const { recordStoryProvenance } = await import(${JSON.stringify(fileURLToPath(new URL("./qa-state.ts", import.meta.url)))});
 		try {
 			recordStoryProvenance(${JSON.stringify(f.sid)}, "story", ${JSON.stringify(f.input())}, ${JSON.stringify({ cwd: f.cwd, home: f.home })});
 			console.log("OK");
@@ -305,14 +321,16 @@ test("feature lock 대기 중 feature가 바뀌면 provenance를 기록하지 �
 	child.stdout.on("data", (chunk) => { output += chunk.toString(); });
 	child.stderr.on("data", (chunk) => { output += chunk.toString(); });
 	try {
-		const deadline = Date.now() + 2000;
-		while (!(existsSync(qaLock) && child.exitCode === null) && Date.now() < deadline) {
+		// Hang guard only: a fast child reaches the barrier almost immediately.
+		const deadline = Date.now() + 45_000;
+		while (!(existsSync(waitingPath) && child.exitCode === null) && Date.now() < deadline) {
 			await new Promise((resolve) => setTimeout(resolve, 10));
 		}
-		if (!existsSync(qaLock)) throw new Error(`QA lock barrier not reached; exit=${child.exitCode}; output=${output}`);
-		expect(child.exitCode).toBeNull();
+		if (!existsSync(waitingPath)) throw new Error(`feature lock barrier not reached; exit=${child.exitCode}; output=${output}`);
+		expect(existsSync(qaLock)).toBe(true);
 		writeFileSync(featurePath, readFileSync(featurePath, "utf8").replace("body", "changed"));
 		rmSync(featureLock, { recursive: true, force: true });
+		writeFileSync(goPath, "1");
 		const exitCode = await new Promise<number | null>((resolve) => child.once("close", resolve));
 		expect(exitCode).toBe(0);
 		expect(output).toMatch(/revision mismatch/);

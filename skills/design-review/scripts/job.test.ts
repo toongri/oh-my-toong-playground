@@ -6,6 +6,8 @@ import path from "path";
 import os from "os";
 import { execFileSync } from "child_process";
 
+import { getPgidSnapshot, judgePgidSignal } from "@lib/generic-job";
+
 const SCRIPT = path.join(import.meta.dirname, "job.ts");
 
 function makeTmpDir() {
@@ -31,44 +33,55 @@ const ACTIVE_STATES = new Set(["queued", "running", "retrying", "awaiting_resume
 
 /**
  * Detached workers can still be in their queued startup window after `stop`
- * returns. Keep the job directory until the terminal state has been stable
- * long enough for that worker process to exit, then `clean` can safely enforce
- * its active-member guard without racing the worker's final status write.
+ * returns. Wait until every recorded worker process group has exited and every
+ * member state is terminal, so `clean` can safely enforce its active-member
+ * guard without racing a worker's final status write. Exit is observed from
+ * the process group itself, never inferred from state staying unchanged.
  */
-async function waitForStableTerminal(jobDir: string, stableMs = 500): Promise<void> {
-	// 상한은 실패 선언 시점만 정한다 — 안정 종료에 끝내 도달 못 하면 아래에서
-	// 그대로 throw한다. 부하 걸린 머신의 워커 기동 지연에 밀리지 않도록 넉넉히.
+async function waitForWorkersExited(jobDir: string): Promise<void> {
+	// 상한은 hang guard일 뿐이다 — 워커가 이미 끝났다면 첫 확인에서 바로 반환한다.
 	const deadline = Date.now() + 45_000;
-	let terminalSince: number | null = null;
 	while (Date.now() < deadline) {
-		const membersDir = path.join(jobDir, "reviewers");
-		let allTerminal = fs.existsSync(membersDir);
-		if (allTerminal) {
-			for (const entry of fs.readdirSync(membersDir)) {
-				try {
-					const status = JSON.parse(
-						fs.readFileSync(path.join(membersDir, entry, "status.json"), "utf8"),
-					);
-					if (ACTIVE_STATES.has(String(status.state))) {
-						allTerminal = false;
-						break;
-					}
-				} catch {
-					allTerminal = false;
-					break;
-				}
-			}
-		}
-
-		if (allTerminal) {
-			terminalSince ??= Date.now();
-			if (Date.now() - terminalSince >= stableMs) return;
-		} else {
-			terminalSince = null;
-		}
-		await new Promise<void>((resolve) => setTimeout(resolve, 50));
+		if (workersExited(jobDir) && memberStatesTerminal(jobDir)) return;
+		await new Promise<void>((resolve) => setTimeout(resolve, 25));
 	}
-	throw new Error(`worker did not reach a stable terminal state: ${jobDir}`);
+	throw new Error(`worker did not exit with a terminal state: ${jobDir}`);
+}
+
+function workersExited(jobDir: string): boolean {
+	let members: Array<{ workerPgid?: unknown; workerPgidStartedAt?: unknown }>;
+	try {
+		members = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8")).members ?? [];
+	} catch {
+		return false;
+	}
+	const snapshot = getPgidSnapshot();
+	return members.every(({ workerPgid, workerPgidStartedAt }) => {
+		if (typeof workerPgid !== "number") return true;
+		if (typeof workerPgidStartedAt === "string" && workerPgidStartedAt.trim() !== "") {
+			return judgePgidSignal(workerPgid, workerPgidStartedAt, snapshot) !== "signal";
+		}
+		try {
+			process.kill(-workerPgid, 0);
+			return false;
+		} catch {
+			return true;
+		}
+	});
+}
+
+function memberStatesTerminal(jobDir: string): boolean {
+	const membersDir = path.join(jobDir, "reviewers");
+	if (!fs.existsSync(membersDir)) return false;
+	for (const entry of fs.readdirSync(membersDir)) {
+		try {
+			const status = JSON.parse(fs.readFileSync(path.join(membersDir, entry, "status.json"), "utf8"));
+			if (ACTIVE_STATES.has(String(status.state))) return false;
+		} catch {
+			return false;
+		}
+	}
+	return true;
 }
 
 describe("design-review job lifecycle", () => {
@@ -128,7 +141,7 @@ describe("design-review job lifecycle", () => {
 		try {
 			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
 		} catch {}
-		await waitForStableTerminal(output.jobDir);
+		await waitForWorkersExited(output.jobDir);
 		try {
 			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir, "--jobs-dir", jobsDir], {
 				stdio: "pipe",
@@ -164,7 +177,7 @@ describe("design-review job lifecycle", () => {
 		try {
 			execFileSync(process.execPath, [SCRIPT, "stop", jobDir], { stdio: "pipe" });
 		} catch {}
-		await waitForStableTerminal(jobDir);
+		await waitForWorkersExited(jobDir);
 		execFileSync(process.execPath, [SCRIPT, "clean", jobDir, "--jobs-dir", jobsDir], {
 			stdio: "pipe",
 		});
@@ -203,7 +216,7 @@ describe("design-review job lifecycle", () => {
 		try {
 			execFileSync(process.execPath, [SCRIPT, "stop", jobDir], { stdio: "pipe" });
 		} catch {}
-		await waitForStableTerminal(jobDir);
+		await waitForWorkersExited(jobDir);
 		execFileSync(process.execPath, [SCRIPT, "clean", jobDir, "--jobs-dir", jobsDir], {
 			stdio: "pipe",
 		});
@@ -231,7 +244,7 @@ describe("design-review job lifecycle", () => {
 		try {
 			execFileSync(process.execPath, [SCRIPT, "stop", jobDir], { stdio: "pipe" });
 		} catch {}
-		await waitForStableTerminal(jobDir);
+		await waitForWorkersExited(jobDir);
 		try {
 			execFileSync(process.execPath, [SCRIPT, "clean", jobDir, "--jobs-dir", jobsDir], {
 				stdio: "pipe",
@@ -305,7 +318,7 @@ describe("design-review job lifecycle", () => {
 		try {
 			execFileSync(process.execPath, [SCRIPT, "stop", jobDir], { stdio: "pipe" });
 		} catch {}
-		await waitForStableTerminal(jobDir);
+		await waitForWorkersExited(jobDir);
 		try {
 			execFileSync(process.execPath, [SCRIPT, "clean", jobDir, "--jobs-dir", jobsDir], {
 				stdio: "pipe",

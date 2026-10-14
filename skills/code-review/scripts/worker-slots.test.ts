@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "bun:test";
+import { describe, it, expect, afterEach, jest } from "bun:test";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -9,6 +9,24 @@ import { tryAcquireWorkerSlot } from "../../../lib/worker-slots.ts";
 
 function makeTmpDir(): string {
 	return fs.mkdtempSync(path.join(os.tmpdir(), "worker-slots-test-"));
+}
+
+/** Poll-wait seam: counts failed scans and yields to the event loop instead of timing. */
+function countingSleep() {
+	let polls = 0;
+	const waiters: Array<{ n: number; resolve: () => void }> = [];
+	return {
+		sleep: async () => {
+			polls += 1;
+			for (const w of waiters) if (polls >= w.n) w.resolve();
+			await new Promise((resolve) => setImmediate(resolve));
+		},
+		waitForPolls: (n: number) =>
+			polls >= n ? Promise.resolve() : new Promise<void>((resolve) => waiters.push({ n, resolve })),
+		get polls() {
+			return polls;
+		},
+	};
 }
 
 describe("resolveSlotCount", () => {
@@ -103,15 +121,16 @@ describe("acquireWorkerSlot / releaseWorkerSlot", () => {
 		dir = makeTmpDir();
 		const first = await acquireWorkerSlot({ dir, slotCount: 1, pollMs: 20 });
 
+		const poller = countingSleep();
 		let secondAcquired = false;
-		const secondPromise = acquireWorkerSlot({ dir, slotCount: 1, pollMs: 20 }).then((slot) => {
+		const secondPromise = acquireWorkerSlot({ dir, slotCount: 1, sleep: poller.sleep }).then((slot) => {
 			secondAcquired = true;
 			return slot;
 		});
 
-		// Pool is size 1 and still held by `first` — give the poller several
-		// cycles to prove it does NOT get through while occupied.
-		await new Promise((resolve) => setTimeout(resolve, 80));
+		// Pool is size 1 and still held by `first` — wait until the poller has
+		// scanned and failed several times to prove it does NOT get through.
+		await poller.waitForPolls(3);
 		expect(secondAcquired).toBe(false);
 
 		releaseWorkerSlot(first);
@@ -154,15 +173,13 @@ describe("acquireWorkerSlot / releaseWorkerSlot", () => {
 
 	it("풀이 가득 찬 동안 abort하면 polling timer를 남기지 않고 즉시 거부한다", async () => {
 		dir = makeTmpDir();
-		const first = await acquireWorkerSlot({ dir, slotCount: 1, pollMs: 5000 });
+		const first = await acquireWorkerSlot({ dir, slotCount: 1 });
 		const controller = new AbortController();
-		const startedAt = Date.now();
-		const pending = acquireWorkerSlot({ dir, slotCount: 1, pollMs: 5000, signal: controller.signal });
+		// pollMs far beyond any test timeout: only the abort can settle `pending`.
+		const pending = acquireWorkerSlot({ dir, slotCount: 1, pollMs: 3_600_000, signal: controller.signal });
 
-		await new Promise((resolve) => setTimeout(resolve, 20));
 		controller.abort();
 		await expect(pending).rejects.toMatchObject({ name: "AbortError" });
-		expect(Date.now() - startedAt).toBeLessThan(1000);
 		expect(fs.existsSync(first.slotPath)).toBe(true);
 
 		releaseWorkerSlot(first);
@@ -226,13 +243,21 @@ function countCalls() {
 const first = await acquireWorkerSlot({ dir, slotCount: 1, pollMs: 20 });
 const callsAfterAcquire = countCalls();
 let contenderAcquired = 0;
+let polls = 0;
+let enoughPolls;
+const enough = new Promise((resolve) => (enoughPolls = resolve));
+const sleep = async () => {
+\tpolls++;
+\tif (polls >= 9) enoughPolls();
+\tawait new Promise((resolve) => setImmediate(resolve));
+};
 const contenders = [1, 2, 3].map(() =>
-\tacquireWorkerSlot({ dir, slotCount: 1, pollMs: 20 }).then((slot) => {
+\tacquireWorkerSlot({ dir, slotCount: 1, sleep }).then((slot) => {
 \t\tcontenderAcquired++;
 \t\treturn slot;
 \t}),
 );
-await new Promise((resolve) => setTimeout(resolve, 120));
+await enough;
 const callsWhileOccupied = countCalls();
 const marker = { callsAfterAcquire, callsWhileOccupied, contenderAcquired };
 
@@ -254,6 +279,7 @@ console.log(JSON.stringify(marker));
 					WORKER_SLOTS_TEST_DIR: dir,
 					WORKER_SLOTS_TEST_PS_CALLS: psCallsPath,
 				},
+				timeout: 45_000,
 			});
 
 			expect(child.status).toBe(0);
@@ -266,57 +292,24 @@ console.log(JSON.stringify(marker));
 		}
 	});
 
-	it("heartbeat는 owner record를 갱신하고 release 뒤에는 같은 경로를 갱신하지 않는다", async () => {
+	it("heartbeat는 owner record를 갱신하고 release 시 heartbeat timer를 해제한다", async () => {
 		dir = makeTmpDir();
-		const script = `
-import fs from "fs";
-import { acquireWorkerSlot, releaseWorkerSlot } from ${JSON.stringify(path.resolve(import.meta.dirname, "worker-slots.ts"))};
+		jest.useFakeTimers();
+		try {
+			const slot = tryAcquireWorkerSlot({ dir, slotCount: 1 });
+			expect(slot).not.toBeNull();
+			expect(jest.getTimerCount()).toBe(1);
+			const initialMtimeMs = fs.statSync(slot!.ownerRecordPath).mtimeMs;
 
-const dir = process.env.WORKER_SLOTS_TEST_DIR;
-if (typeof dir !== "string") process.exit(2);
+			// Fake clock: heartbeat ticks run synchronously and stamp the faked "now".
+			jest.advanceTimersByTime(60_000);
+			expect(fs.statSync(slot!.ownerRecordPath).mtimeMs).toBeGreaterThan(initialMtimeMs);
 
-const slot = await acquireWorkerSlot({ dir, slotCount: 1, pollMs: 20 });
-let heartbeatObserved = false;
-let markerChangedAfterRelease = false;
-try {
-\tconst initialMtimeMs = fs.statSync(slot.ownerRecordPath).mtimeMs;
-\tconst heartbeatDeadline = Date.now() + 2500;
-\twhile (Date.now() < heartbeatDeadline) {
-\t\tif (fs.statSync(slot.ownerRecordPath).mtimeMs > initialMtimeMs) {
-\t\t\theartbeatObserved = true;
-\t\t\tbreak;
-\t\t}
-\t\tawait new Promise((resolve) => setTimeout(resolve, 20));
-\t}
-
-\treleaseWorkerSlot(slot);
-\tfs.mkdirSync(slot.slotPath);
-\tfs.writeFileSync(slot.ownerRecordPath, "released-owner-marker");
-\tconst markerMtimeMs = fs.statSync(slot.ownerRecordPath).mtimeMs;
-\tconst releaseDeadline = Date.now() + 1500;
-\twhile (Date.now() < releaseDeadline) {
-\t\tif (fs.statSync(slot.ownerRecordPath).mtimeMs !== markerMtimeMs) {
-\t\t\tmarkerChangedAfterRelease = true;
-\t\t\tbreak;
-\t\t}
-\t\tawait new Promise((resolve) => setTimeout(resolve, 20));
-\t}
-} finally {
-\treleaseWorkerSlot(slot);
-\tif (fs.existsSync(slot.slotPath)) fs.rmSync(slot.slotPath, { recursive: true, force: true });
-}
-console.log(JSON.stringify({ heartbeatObserved, markerChangedAfterRelease }));
-`;
-		const child = spawnSync(process.execPath, ["-e", script], {
-			cwd: path.resolve(import.meta.dirname, "../../.."),
-			encoding: "utf8",
-			env: { ...process.env, WORKER_SLOTS_TEST_DIR: dir },
-		});
-
-		expect(child.status).toBe(0);
-		const marker = JSON.parse(child.stdout.trim());
-		expect(marker.heartbeatObserved).toBe(true);
-		expect(marker.markerChangedAfterRelease).toBe(false);
+			releaseWorkerSlot(slot!);
+			expect(jest.getTimerCount()).toBe(0);
+		} finally {
+			jest.useRealTimers();
+		}
 	});
 
 	it("점유 중이던 프로세스가 이미 죽었으면 대기 없이(폴링 주기를 기다리지 않고) 슬롯을 즉시 회수한다", async () => {
@@ -338,15 +331,13 @@ console.log(JSON.stringify({ heartbeatObserved, markerChangedAfterRelease }));
 			JSON.stringify({ pid: deadPid, pidStartedAt: "Thu Jan  1 00:00:00 1970" }),
 		);
 
-		const before = Date.now();
-		// pollMs is set deliberately large: if reclaim required waiting a full
-		// poll cycle instead of happening on the first synchronous scan, this
-		// assertion below on elapsed time would fail.
-		const slot = await acquireWorkerSlot({ dir, slotCount: 1, pollMs: 5000 });
-		const elapsed = Date.now() - before;
+		// Reclaim must happen on the first synchronous scan: the poll wait is
+		// never entered.
+		const poller = countingSleep();
+		const slot = await acquireWorkerSlot({ dir, slotCount: 1, sleep: poller.sleep });
 
 		expect(slot.slotPath).toBe(path.join(dir, "slot-0"));
-		expect(elapsed).toBeLessThan(2000);
+		expect(poller.polls).toBe(0);
 
 		releaseWorkerSlot(slot);
 	});
@@ -361,12 +352,13 @@ console.log(JSON.stringify({ heartbeatObserved, markerChangedAfterRelease }));
 		fs.mkdirSync(slotPath);
 		// Fresh (mtime "now"): must NOT be reclaimed yet — indistinguishable
 		// from the normal sub-millisecond open/write race.
+		const poller = countingSleep();
 		let claimedWhileFresh = false;
-		const pending = acquireWorkerSlot({ dir, slotCount: 1, pollMs: 20 }).then((slot) => {
+		const pending = acquireWorkerSlot({ dir, slotCount: 1, sleep: poller.sleep }).then((slot) => {
 			claimedWhileFresh = true;
 			return slot;
 		});
-		await new Promise((resolve) => setTimeout(resolve, 80));
+		await poller.waitForPolls(3);
 		expect(claimedWhileFresh).toBe(false);
 
 		// Backdate it past the staleness bound — now it reads as truly abandoned.
@@ -413,35 +405,45 @@ console.log(JSON.stringify({ heartbeatObserved, markerChangedAfterRelease }));
 			path.join(slotPath, "owner-dead.json"),
 			JSON.stringify({ pid: dead.pid, pidStartedAt: "Thu Jan  1 00:00:00 1970" }),
 		);
+		// A hit holds its slot until the parent closes stdin, which happens only
+		// after both contenders reported — a late starter can never see a free slot.
 		const script = `
 import { tryAcquireWorkerSlot, releaseWorkerSlot } from ${JSON.stringify(path.resolve(import.meta.dirname, "../../../lib/worker-slots.ts"))};
 const slot = tryAcquireWorkerSlot({ dir: process.env.WORKER_SLOTS_TEST_DIR, slotCount: 1 });
 if (slot === null) process.stdout.write("miss");
 else {
   process.stdout.write("hit");
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  process.stdin.resume();
+  await new Promise((resolve) => process.stdin.on("end", resolve));
   releaseWorkerSlot(slot);
 }
 `;
-		const children = [1, 2].map(
-			() =>
-				new Promise<string>((resolve, reject) => {
-					const child = spawn(process.execPath, ["-e", script], {
-						cwd: path.resolve(import.meta.dirname, "../../.."),
-						env: { ...process.env, WORKER_SLOTS_TEST_DIR: dir },
-					});
-					let output = "";
-					if (child.stdout === null) {
-						reject(new Error("child stdout unavailable"));
-						return;
-					}
-					child.stdout.on("data", (chunk: Buffer) => (output += chunk.toString("utf8")));
-					child.on("error", reject);
-					child.on("close", (code) => (code === 0 ? resolve(output) : reject(new Error(`child exited ${code}`))));
-				}),
-		);
-		const results = await Promise.all(children);
+		const contenders = [1, 2].map(() => {
+			const child = spawn(process.execPath, ["-e", script], {
+				cwd: path.resolve(import.meta.dirname, "../../.."),
+				env: { ...process.env, WORKER_SLOTS_TEST_DIR: dir },
+				stdio: ["pipe", "pipe", "inherit"],
+			});
+			let output = "";
+			const reported = new Promise<void>((resolve, reject) => {
+				child.stdout.on("data", (chunk: Buffer) => {
+					output += chunk.toString("utf8");
+					resolve();
+				});
+				child.on("error", reject);
+				child.on("close", () => reject(new Error("child exited without reporting")));
+			});
+			const closed = new Promise<string>((resolve, reject) => {
+				child.on("error", reject);
+				child.on("close", (code) => (code === 0 ? resolve(output) : reject(new Error(`child exited ${code}`))));
+			});
+			return { child, reported, closed };
+		});
+		await Promise.all(contenders.map((c) => c.reported));
+		for (const c of contenders) c.child.stdin.end();
+		const results = await Promise.all(contenders.map((c) => c.closed));
 		expect(results.filter((result) => result === "hit")).toHaveLength(1);
+		expect(results.filter((result) => result === "miss")).toHaveLength(1);
 	});
 
 	it("malformed owner record는 fresh 상태에서 유지되고 stale 상태에서만 회수한다", async () => {
@@ -451,12 +453,13 @@ else {
 		fs.mkdirSync(slotPath);
 		fs.writeFileSync(ownerRecordPath, "not-json");
 
+		const poller = countingSleep();
 		let claimedWhileFresh = false;
-		const pending = acquireWorkerSlot({ dir, slotCount: 1, pollMs: 20 }).then((slot) => {
+		const pending = acquireWorkerSlot({ dir, slotCount: 1, sleep: poller.sleep }).then((slot) => {
 			claimedWhileFresh = true;
 			return slot;
 		});
-		await new Promise((resolve) => setTimeout(resolve, 80));
+		await poller.waitForPolls(3);
 		expect(claimedWhileFresh).toBe(false);
 
 		const past = new Date(Date.now() - 5 * 60 * 1000);

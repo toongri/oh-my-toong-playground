@@ -175,7 +175,7 @@ describe("qa replay CLI", () => {
 		const record: QaCaseRecord = {
 			id: "cli-timeout-case", title: "CLI timeout", goal: "run", given: ["case exists"], when: ["run"], then: ["timed out"],
 			feature_refs: ["checkout"], surface: "bash",
-			runner: [process.execPath, "-e", "setTimeout(() => {}, 1000)"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset",
+			runner: [process.execPath, "-e", "setTimeout(() => {}, 60000)"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset",
 		};
 		saveCase(root, record, home);
 		const result = runCli(["--case", record.id, "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset", "--timeout-ms", "25"], { ...process.env, HOME: home });

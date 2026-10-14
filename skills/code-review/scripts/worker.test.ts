@@ -437,6 +437,7 @@ describe("worker.ts 종료 경로 — reapOwnProcessGroup 연결", () => {
 			const tmpDir = makeTmpDir();
 			try {
 				const markerPath = path.join(tmpDir, "sleep-spawned.marker");
+				const releasePath = path.join(tmpDir, "release-leak-child");
 				const scriptPath = path.join(tmpDir, "leak-child.sh");
 				fs.writeFileSync(
 					scriptPath,
@@ -448,9 +449,9 @@ describe("worker.ts 종료 경로 — reapOwnProcessGroup 연결", () => {
 						// (sleep 30초 동안) 지연된다.
 						"sleep 30 </dev/null >/dev/null 2>&1 &",
 						`echo $! > ${JSON.stringify(markerPath)}`,
-						// 마커를 남긴 뒤 고정된 3초를 대기한다 — 테스트가 "자손이 실제로
-						// 살아 있었음"을 관찰할 확정적인 창(타이밍 레이스가 아님)을 준다.
-						"sleep 3",
+						// 마커를 남긴 뒤 테스트가 "자손이 실제로 살아 있었음"을 관찰하고
+						// 릴리스 파일을 만들 때까지 대기한다 — 고정 시간 창이 아니다.
+						`while [ ! -e ${JSON.stringify(releasePath)} ]; do sleep 0.05; done`,
 						"exit 0",
 					].join("\n"),
 					"utf8",
@@ -503,8 +504,9 @@ describe("worker.ts 종료 경로 — reapOwnProcessGroup 연결", () => {
 					const aliveBeforeReap = processesInGroup(workerPgid);
 					expect(aliveBeforeReap.length).toBeGreaterThanOrEqual(2);
 					expect(aliveBeforeReap.some((p) => p.comm.includes("sleep"))).toBe(true);
+					fs.writeFileSync(releasePath, "1");
 
-					// 워커 종료(스크립트의 3초 대기 + close 이벤트) + 자가회수 유예(5초) +
+					// 워커 종료(릴리스 후 스크립트 종료 + close 이벤트) + 자가회수 유예(5초) +
 					// 여유분을 기다린 뒤, 그룹이 완전히 회수됐는지 확인한다.
 					const reapDeadline = Date.now() + 45_000;
 					let remaining = processesInGroup(workerPgid);
