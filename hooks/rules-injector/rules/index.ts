@@ -42,6 +42,7 @@ export {
 export {
 	formatDynamicBlock,
 	formatStaticBlock,
+	RULE_MARKER_PATTERN,
 	ruleMarkerLine,
 	transcriptHasRuleMarker,
 } from "./formatter.js";
