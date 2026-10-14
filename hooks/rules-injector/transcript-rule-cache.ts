@@ -120,27 +120,33 @@ function readAndApply(state: CacheState, path: string, end: number): void {
 	} catch {
 		return;
 	}
+	// The unfinished record stays a list of buffers, joined only when a chunk
+	// completes a line, so a record spanning many chunks is copied once.
+	let pending = [Buffer.from(state.pending, "base64")];
+	let position = state.cursor;
 	try {
-		let pending = Buffer.from(state.pending, "base64");
-		let position = state.cursor;
 		while (position < end) {
 			const chunk = Buffer.alloc(Math.min(READ_CHUNK_BYTES, end - position));
 			const read = readSync(fd, chunk, 0, chunk.length, position);
 			if (read <= 0) break;
-			position += read;
-			const combined = Buffer.concat([pending, chunk.subarray(0, read)]);
-			const newline = combined.lastIndexOf(0x0a);
-			if (newline >= 0) {
+			const bytes = chunk.subarray(0, read);
+			if (bytes.includes(0x0a)) {
+				const combined = Buffer.concat([...pending, bytes]);
+				const newline = combined.lastIndexOf(0x0a);
 				for (const line of combined.subarray(0, newline).toString("utf8").split("\n"))
 					applyLine(state, line);
+				pending = [Buffer.from(combined.subarray(newline + 1))];
+			} else {
+				pending.push(bytes);
 			}
-			pending = Buffer.from(combined.subarray(newline + 1));
-			state.pending = pending.toString("base64");
-			state.cursor = position;
+			// advanced only once the chunk is applied or held, so cursor and pending agree
+			position += read;
 		}
 	} catch {
 		/* keep what was applied; the cursor marks the last applied chunk */
 	} finally {
+		state.pending = Buffer.concat(pending).toString("base64");
+		state.cursor = position;
 		closeSync(fd);
 	}
 }

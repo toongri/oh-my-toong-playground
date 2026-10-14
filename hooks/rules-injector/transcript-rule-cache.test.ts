@@ -1,4 +1,4 @@
-import { test, expect, beforeEach, afterEach } from "bun:test";
+import { test, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import {
 	appendFileSync,
 	closeSync,
@@ -322,4 +322,23 @@ test("JSON에서 <를 이스케이프한 태그도 색인", () => {
 	expect(
 		queryTranscriptRuleCache(transcript, [{ body: "body", marker: '<rules name="x">' }]),
 	).toEqual([true]);
+});
+
+test("청크 경계를 넘는 긴 레코드는 이어 붙이기 복사량이 파일 크기에 비례", () => {
+	const transcript = join(dir, "t.jsonl");
+	const filler = "a".repeat(40 * 1024 * 1024);
+	writeFileSync(transcript, `${JSON.stringify({ text: `<rules name="x">\nbody ${filler}` })}\n`);
+	const size = statSync(transcript).size;
+	const concat = spyOn(Buffer, "concat");
+	let copied = 0;
+	try {
+		const result = queryTranscriptRuleCache(transcript, [
+			{ body: "body", marker: '<rules name="x">' },
+		]);
+		for (const value of concat.mock.results) copied += (value.value as Buffer).length;
+		expect(result).toEqual([true]);
+	} finally {
+		concat.mockRestore();
+	}
+	expect(copied).toBeLessThanOrEqual(size * 2);
 });
