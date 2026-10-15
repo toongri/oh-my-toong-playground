@@ -440,12 +440,21 @@ describe("qa-report renderer", () => {
 	});
 
 	test("도달이 막힌 액터는 리더에 중립 배지만 보이고 기록된 원문 사유는 감사에 남는다", () => {
-		const view = baseView({ actors: [{ ...baseView().actors![0], reachable: "no: adb 연결 거부됨" }] });
+		const view = baseView({ actors: [{ ...baseView().actors![0], reachable: "blocked", reach_obstacle: "adb 연결 거부됨" }] });
 		const html = renderQaReport(view, {}, fakeReader)!;
 		const actorSection = html.slice(html.indexOf("<h2>액터"), html.indexOf(READER_START));
 		expect(actorSection).toContain("도달 막힘");
 		expect(actorSection).not.toContain("adb 연결 거부됨");
 		expect(auditSection(html)).toContain("adb 연결 거부됨");
+	});
+
+	test("분리 이전에 저장된 기록(reachable에 사유 원문)도 리더에 「도달 막힘」, 감사에 사유로 보인다", () => {
+		const view = baseView({ actors: [{ ...baseView().actors![0], reachable: "no: adb 연결 거부됨" } as never] });
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const actorSection = html.slice(html.indexOf("<h2>액터"), html.indexOf(READER_START));
+		expect(actorSection).toContain("도달 막힘");
+		expect(actorSection).not.toContain("adb 연결 거부됨");
+		expect(auditSection(html)).toContain("reach obstacle: no: adb 연결 거부됨");
 	});
 
 	test("도달을 아직 확인하지 않은 액터(unknown)는 막힘이 아니라 중립 「도달 미확인」 배지로 보이고 감사의 도달 기록에 오르지 않는다", () => {
