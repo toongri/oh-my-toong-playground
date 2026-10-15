@@ -15,7 +15,8 @@ git_grep_deny_reason_codex() {
 
 # Return success (0) when ANY shell segment of the command runs `git grep`
 # without -I.  One awk pass: quoted text is flattened into inert word
-# characters (so `echo "git grep x"` is not a command), heredoc bodies are
+# characters (so `echo "git grep x"` is not a command) except command
+# substitutions inside double quotes, which still run; heredoc bodies are
 # skipped, the line is split at ; & | ( ) < > backtick, runner wrappers and
 # git global options are skipped, and the grep options before a bare `--`
 # are checked for -I (alone or inside a short-option cluster).
@@ -24,14 +25,29 @@ git_grep_command_lacks_binary_skip() {
     printf '%s\n' "$1" | LC_ALL=C awk '
         function basename(w) { sub(/^.*\//, "", w); return w }
         function is_assign(w) { return w ~ /^[A-Za-z_][A-Za-z0-9_]*=/ }
-        function mask(s,    out, i, n, c, nc, q) {
-            out = ""; q = ""; n = length(s)
+        # $(...) and backticks inside double quotes still run, so they are
+        # left live: L counts open substitutions, each remembering the
+        # double quote to resume (bt = backtick form, pd = paren depth).
+        function mask(s,    out, i, n, c, nc, q, L, bt, pd) {
+            out = ""; q = ""; L = 0; n = length(s)
             for (i = 1; i <= n; i++) {
                 c = substr(s, i, 1)
                 if (q == "" && c == "\\" && i < n) {
                     nc = substr(s, i + 1, 1)
                     out = out ((nc ~ /[;&|()<> \t`]/) ? "_" : c nc)
                     i++; continue
+                }
+                if (q == "\"" && c == "$" && substr(s, i + 1, 1) == "(") {
+                    L++; bt[L] = 0; pd[L] = 0; q = ""; out = out "$("; i++; continue
+                }
+                if (q == "\"" && c == "`") { L++; bt[L] = 1; q = ""; out = out c; continue }
+                if (q == "" && L > 0) {
+                    if (bt[L] && c == "`") { L--; q = "\""; out = out c; continue }
+                    if (!bt[L] && c == "(") pd[L]++
+                    if (!bt[L] && c == ")") {
+                        if (pd[L] == 0) { L--; q = "\""; out = out c; continue }
+                        pd[L]--
+                    }
                 }
                 if (q == "" && (c == "\047" || c == "\"")) { q = c; continue }
                 if (q != "" && c == q) { q = ""; continue }
@@ -46,7 +62,7 @@ git_grep_command_lacks_binary_skip() {
             while (moved && i <= n) {
                 moved = 0
                 t = basename(w[i])
-                if (is_assign(w[i]) || t ~ /^(if|then|else|elif|while|until|do|!|\{|time|exec|nohup|command|builtin)$/) { i++; moved = 1; continue }
+                if (is_assign(w[i]) || t ~ /^(if|then|else|elif|while|until|do|!|\{|time|exec|nohup|command|builtin|--)$/) { i++; moved = 1; continue }
                 if (t == "env") {
                     i++
                     while (i <= n && (is_assign(w[i]) || w[i] ~ /^-/)) i += (w[i] ~ /^(-u|-C|-S)$/) ? 2 : 1

@@ -32,6 +32,10 @@ expect_lacks 'git grep -e -I foo'
 expect_lacks "$(printf 'echo hi\ngit grep foo')"
 expect_lacks 'x=$(git grep foo)'
 expect_lacks "git grep -n '섭취 기록' -- apps"
+expect_lacks 'm="$(git grep foo)"'
+expect_lacks 'echo "found: `git grep foo`"'
+expect_lacks 'echo "n=$(echo "$(git grep foo)" | wc -l)"'
+expect_lacks 'command -- git grep foo'
 expect_lacks 'git grep -I -a foo'
 expect_lacks 'git grep -Ia foo'
 expect_lacks 'git grep -I --text foo'
@@ -47,6 +51,9 @@ expect_ok "git commit -m 'a; git grep fix'"
 expect_ok 'rg foo'
 expect_ok 'git commit -m "fix: git grep 사용 제거"'
 expect_ok "git grep -I -n '섭취'"
+expect_ok 'm="$(git grep -I foo)"'
+expect_ok 'git commit -m "fix: $(date) git grep 제거 (a; b)"'
+expect_ok 'echo "$((1 + 2)) git grep foo"'
 expect_ok 'git grep -a -I foo'
 expect_ok 'git grep -aI foo'
 expect_ok 'git grep --text -I foo'
