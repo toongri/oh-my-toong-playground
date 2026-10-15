@@ -122,7 +122,7 @@ Enumerate every actor whose observable behavior this change alters and pin where
   - `contract` — a client reads changed data or a changed API, but its rendering code did not change. Prove it at the request that client really sends (its auth, its route, its parameters). No screenshot is needed.
   - `render` — the client's rendering code changed, or what a person reads on the screen changes. Prove it on the screen, on every device profile the actor's client runs on.
 - **profiles** — for `render` only: the device profile ids from the project manifest (see *Device profiles*).
-- **reachable** — `yes`, or the named obstacle plus the deepest point toward the surface that IS reachable (see *Boundary substitution*). This is audit text; the reader sees only a "도달 막힘" badge.
+- **reachable** — `yes`, or the named obstacle plus the deepest point toward the surface that IS reachable (see *Boundary substitution*). This is audit text; the reader sees only a "도달 막힘" badge. `unknown` (the value before the PLAN.1 probe) shows a neutral "도달 미확인" badge instead.
 
 **Enumerate actors from the clients, not from the files.** For each client the project ships (mobile app, dispenser/device app, commerce web, admin web, partner API), ask: does any code path of that client read data or call an API the change touches? Each yes is an actor with `contract` or `render`. Each no needs no actor. "The screen did not change" moves the actor from `render` to `contract`. It never moves the boundary inward to a service test or an internal function.
 
@@ -522,7 +522,7 @@ The report file is self-contained: inline `<style>`, zero runtime `<script>`, no
 | actor | boundary | driver | client impact (reason) | profiles | reachable |
 |---|---|---|---|---|---|
 
-One row per actor the changed surface serves, from PLAN.1. `boundary` names the verification surface. `reachable` is `yes` or the obstacle plus the deepest reachable point toward that boundary (audit-only; the reader sees a "도달 막힘" badge). On a PRE-FLIGHT fail-fast the cycle never reaches PLAN, so this section is absent rather than empty — same as the scenario roster below.
+One row per actor the changed surface serves, from PLAN.1. `boundary` names the verification surface. `reachable` is `yes` or the obstacle plus the deepest reachable point toward that boundary (audit-only; the reader sees a "도달 막힘" badge, or a neutral "도달 미확인" badge while it is still `unknown`). On a PRE-FLIGHT fail-fast the cycle never reaches PLAN, so this section is absent rather than empty — same as the scenario roster below.
 
 ## Story Planning Context
 

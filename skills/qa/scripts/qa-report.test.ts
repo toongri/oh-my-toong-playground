@@ -448,6 +448,15 @@ describe("qa-report renderer", () => {
 		expect(auditSection(html)).toContain("adb 연결 거부됨");
 	});
 
+	test("도달을 아직 확인하지 않은 액터(unknown)는 막힘이 아니라 중립 「도달 미확인」 배지로 보이고 감사의 도달 기록에 오르지 않는다", () => {
+		const view = baseView({ actors: [{ ...baseView().actors![0], reachable: "unknown" }] });
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const actorSection = html.slice(html.indexOf("<h2>액터"), html.indexOf(READER_START));
+		expect(actorSection).toContain(`<span class="badge">도달 미확인</span>`);
+		expect(actorSection).not.toContain("도달 막힘");
+		expect(auditSection(html)).not.toContain("액터 도달 기록");
+	});
+
 	test("renders recorded PASS/FAIL and evidence paths verbatim from state, not re-narrated", () => {
 		const html = renderQaReport(baseView(), {}, fakeReader)!;
 		expect(html).toContain("/evidence/before.png");

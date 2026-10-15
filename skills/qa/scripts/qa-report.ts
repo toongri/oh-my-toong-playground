@@ -435,7 +435,12 @@ function renderActors(view: QaView, narrative: QaReportNarrative): string {
 	const blocks = (view.actors ?? [])
 		.map((actor) => {
 			const r = String(actor.reachable ?? "");
-			const reach = r === "yes" ? ` <span class="badge badge-pass">도달함</span>` : r ? ` <span class="badge badge-fail">도달 막힘</span>` : "";
+			// `unknown` is the add-actor value before the PLAN.1 probe: not attempted, so not blocked.
+			const reach =
+				r === "yes" ? ` <span class="badge badge-pass">도달함</span>`
+				: r === "unknown" ? ` <span class="badge">도달 미확인</span>`
+				: r ? ` <span class="badge badge-fail">도달 막힘</span>`
+				: "";
 			const impact = actor.client_impact
 				? `<p class="client-impact"><strong>${escapeHtml(CLIENT_IMPACT_LABEL[actor.client_impact] ?? actor.client_impact)}</strong>${actor.client_impact_reason ? ` · ${escapeHtml(actor.client_impact_reason)}` : ""}</p>`
 				: gap("이 유저의 클라이언트 영향 판단이 기록되지 않았습니다");
@@ -608,7 +613,7 @@ function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidenc
 /** Raw `reachable` text of actors whose boundary was not reached; the reader block shows only a neutral badge. */
 function renderUnreachedActorsAudit(view: QaView): string {
 	const rows = (view.actors ?? [])
-		.filter((actor) => actor.reachable && actor.reachable !== "yes")
+		.filter((actor) => actor.reachable && actor.reachable !== "yes" && actor.reachable !== "unknown")
 		.map((actor) => `<li><code>${escapeHtml(actor.id)}</code> — <span class="audit-note">reachable: ${escapeHtml(String(actor.reachable))}</span></li>`)
 		.join("");
 	return rows ? `<h3>액터 도달 기록 (감사용)</h3><ul>${rows}</ul>` : "";
