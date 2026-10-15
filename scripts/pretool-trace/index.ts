@@ -14,7 +14,7 @@ parent=$PPID
 group=$$
 (
   trap '' TERM INT
-  while kill -0 "$parent" 2>/dev/null; do sleep 0.05; done
+  while kill -0 "$parent" 2>/dev/null; do sleep 0.5; done
   cores=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null)
   load=$(sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' | awk '{print $1}')
   if [ -z "$load" ] && [ -r /proc/loadavg ]; then load=$(awk '{print $1}' /proc/loadavg); fi
