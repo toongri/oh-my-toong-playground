@@ -1570,6 +1570,7 @@ describe("help subcommand", () => {
 		const out = run("help");
 		const aiSection = out.slice(out.indexOf("AI-USABLE"), out.indexOf("USER-ONLY"));
 		for (const name of ["author-scenario", "record-scenario", "declare-risk-na"]) expect(aiSection).toContain(`${name} —`);
+		expect(aiSection.split("\n").find((line) => line.includes("amend-scenario —"))).toContain("--reason");
 	});
 
 	test("set and get are listed under AI-USABLE", () => {
