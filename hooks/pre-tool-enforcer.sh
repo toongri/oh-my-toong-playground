@@ -28,6 +28,22 @@ EOF
     exit 0
 fi
 
+# Deny `git grep` without -I (binary files get read and scanned: several GB of
+# memory per search). Independent of the session-gated write-guard below.
+# Fails open when jq is absent or the pattern library cannot be sourced.
+if [[ "$toolName" == "Bash" ]] && command -v jq > /dev/null 2>&1; then
+    _gg_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    # shellcheck source=hooks/lib/git-grep-patterns.sh
+    if source "$_gg_script_dir/lib/git-grep-patterns.sh" 2> /dev/null; then
+        _gg_cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2> /dev/null) || _gg_cmd=""
+        if [[ -n "$_gg_cmd" ]] && git_grep_command_lacks_binary_skip "$_gg_cmd"; then
+            jq -nc --arg reason "$(git_grep_deny_reason_claude)" \
+                '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}'
+            exit 0
+        fi
+    fi
+fi
+
 # =============================================================================
 # Skill state write-guard: a best-effort append-only guard for the current
 # session's skill state files ($OMT_DIR/qa-state-<sid>.json,

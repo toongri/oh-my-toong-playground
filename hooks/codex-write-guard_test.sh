@@ -195,6 +195,43 @@ test_ac_dangerous_rm_rf_denies() {
     fi
 }
 
+test_git_grep_without_binary_skip_denies() {
+    new_sandbox
+    local out
+    out=$(printf '{"tool_name":"exec_command","tool_input":{"cmd":"git grep -n foo"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook)
+    rm -rf "$SBX"
+    if printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecision == "deny" and (.hookSpecificOutput.permissionDecisionReason | test("rg"))' >/dev/null; then
+        return 0
+    else
+        echo "ASSERTION FAILED git-grep: expected deny for 'git grep -n foo', got '$out'"
+        return 1
+    fi
+}
+
+test_git_grep_with_binary_skip_allows() {
+    new_sandbox
+    local out
+    out=$(printf '{"tool_name":"exec_command","tool_input":{"cmd":"git grep -I -n foo"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook)
+    rm -rf "$SBX"
+    if printf '%s' "$out" | grep -q '"permissionDecision"'; then
+        echo "ASSERTION FAILED git-grep: expected allow for 'git grep -I -n foo', got '$out'"
+        return 1
+    fi
+    return 0
+}
+
+test_git_grep_in_non_shell_tool_allows() {
+    new_sandbox
+    local out
+    out=$(printf '{"tool_name":"Read","tool_input":{"command":"git grep -n foo"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook)
+    rm -rf "$SBX"
+    if printf '%s' "$out" | grep -q '"permissionDecision"'; then
+        echo "ASSERTION FAILED git-grep: expected allow for non-shell tool, got '$out'"
+        return 1
+    fi
+    return 0
+}
+
 test_ac_dangerous_git_push_force_denies() {
     new_sandbox
     local out
@@ -2003,6 +2040,9 @@ main() {
     run_test test_ac_dangerous_rm_rf_denies
     run_test test_ac_dangerous_git_push_force_denies
     run_test test_ac_dangerous_exec_command_rm_rf_denies
+    run_test test_git_grep_without_binary_skip_denies
+    run_test test_git_grep_with_binary_skip_allows
+    run_test test_git_grep_in_non_shell_tool_allows
     run_test test_resume_pursuit_allowed_through_codex_shim
     run_test test_user_authorized_force_complete_direct_denies
     run_test test_user_authorized_force_complete_variable_indirection_denies
