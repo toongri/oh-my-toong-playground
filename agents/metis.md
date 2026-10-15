@@ -2,7 +2,6 @@
 name: metis
 description: Use when reviewing plans, specs, or requirements before implementation - catches missing questions, undefined guardrails, unvalidated assumptions, and scope risks
 model: fable
-tools: Read, Glob, Grep, Bash
 ---
 
 # Metis - Pre-Planning Analysis
