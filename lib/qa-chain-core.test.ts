@@ -203,6 +203,13 @@ describe("qa chain core", () => {
 		state.scenarios[0] = { ...state.scenarios[0], evidence_review: undefined };
 		expect(recordGaps(state, probe)).toEqual([`${state.scenarios[0].story}/${state.scenarios[0].id}: evidence review incomplete (review-evidence)`]);
 	});
+	test("도달을 탐침하지 않아 unknown으로 남은 액터는 기록 공백이라 APPROVE·COMMENT를 막음", () => {
+		const state = authoredState();
+		state.actors[0] = { ...state.actors[0], reachable: "unknown" };
+		expect(recordGaps(state, probe)).toEqual(["actor a1: reachable still unknown — probe its boundary, then add-actor --id a1 --reachable yes|<obstacle>"]);
+		expect(approveOk(state, probe)).toBe(false);
+		expect(commentOk(state, probe)).toBe(false);
+	});
 	test("프로필 시나리오는 테스트 근거로 기록해도 화면 증거를 요구함", () => {
 		const state = authoredState();
 		state.scenarios[1] = { ...state.scenarios[1], evidence: { path: "/vitest.txt", surface: "test" } };

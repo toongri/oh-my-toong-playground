@@ -554,6 +554,10 @@ export function recordComplete(state: QaChainState, probe: EvidenceProbe): boole
 /** What keeps the current cycle's record incomplete, one line per gap, so a refused verdict names what to record. */
 export function recordGaps(state: QaChainState, probe: EvidenceProbe): string[] {
 	const gaps: string[] = [];
+	// `unknown` is the add-actor value before the PLAN.1 probe; a verdict needs every actor's reach settled.
+	for (const actor of state.actors ?? []) {
+		if (actor.reachable === "unknown") gaps.push(`actor ${actor.id}: reachable still unknown — probe its boundary, then add-actor --id ${actor.id} --reachable yes|<obstacle>`);
+	}
 	for (const story of state.stories ?? []) {
 		const actor = actorFor(state, story);
 		const baseline = story.baseline;
