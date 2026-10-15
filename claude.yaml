@@ -19,7 +19,11 @@ hooks:
     - component: qa-user-reply.sh
       timeout: 10
   PreToolUse:
+    # 훅은 이 7개 도구에서만 분기한다(hooks/pre-tool-enforcer.sh의 tool_name 분기).
+    # matcher가 없으면 Read/Grep/Glob/MCP 호출마다 bun 트레이스 래퍼와 bash가
+    # 헛되이 떴다. 훅에 도구 분기를 새로 추가하면 이 matcher도 함께 갱신한다.
     - component: pre-tool-enforcer.sh
+      matcher: "TaskOutput|Bash|Write|Edit|MultiEdit|Agent|Skill"
       timeout: 5
     # QA mid-loop gate: while the persisted chain is incomplete, deny the two
     # registered E2E driver CLIs. The shim reads only derived booleans; the
