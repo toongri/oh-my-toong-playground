@@ -36,9 +36,10 @@ export async function resolveShellDependencies(
 		return [];
 	}
 
-	// Match: source "$VAR/rel/path.sh" or . "$VAR/rel/path.sh"
+	// Match: source "$VAR/rel/path.sh" or . "$VAR/rel/path.sh", also as the
+	// condition of if/elif/while/until or after `!` (fail-open guards).
 	// Handles both ${VAR} and $VAR, single or double quotes, optional quotes
-	const SOURCE_RE = /^\s*(?:source|\.)\s+["']?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?[/]([\w./-]+\.sh)["']?/;
+	const SOURCE_RE = /^\s*(?:(?:if|elif|while|until|!)\s+)*(?:source|\.)\s+["']?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?[/]([\w./-]+\.sh)["']?/;
 
 	// Explicit companion-dependency directive: `# omt-hook-dep: <relpath>.sh|.mjs`.
 	// Declares a file the scanner otherwise can't see (e.g. a path only

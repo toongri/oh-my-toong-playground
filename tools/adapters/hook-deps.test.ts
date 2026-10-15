@@ -200,6 +200,17 @@ describe("resolveShellDependencies", () => {
 		expect(deps).toEqual([libFile]);
 	});
 
+	it("if 조건으로 쓴 source 매칭 — 실패 시 통과시키는 가드 형태", async () => {
+		const libFile = path.join(hooksDir, "lib", "cond.sh");
+		await writeFile(libFile, "# cond");
+
+		const entryFile = path.join(hooksDir, "entry.sh");
+		await writeFile(entryFile, 'if source "$SCRIPT_DIR/lib/cond.sh" 2> /dev/null; then\n  :\nfi\n');
+
+		const deps = await resolveShellDependencies(entryFile, hooksDir);
+		expect(deps).toEqual([libFile]);
+	});
+
 	it("no quotes 매칭", async () => {
 		const libFile = path.join(hooksDir, "lib", "nq.sh");
 		await writeFile(libFile, "# nq");
