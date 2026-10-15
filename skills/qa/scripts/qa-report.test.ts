@@ -1644,6 +1644,49 @@ describe("qa-report per-scenario evidence", () => {
 	});
 });
 
+describe("qa-report scenario amendments", () => {
+	const amendedView = (reason = "기대 결과가 실제 화면 문구와 달랐다"): QaView => {
+		const view = baseView();
+		const failed = view.scenarios![1]; // sc-2 is the recorded fail
+		view.scenario_amendments = [
+			{ story: failed.story, id: failed.id, cycle: view.cycle ?? 1, reason, previous: { ...failed, status: "fail", title: "이전 제목", expected: "이전 기대 결과 문구" } },
+		];
+		view.scenarios![1] = { ...failed, status: undefined, evidence: undefined, evidence_review: undefined };
+		return view;
+	};
+	const cards = (html: string): string[] => readerSection(html).split('class="scenario-card').slice(1);
+
+	test("수정된 실패 시나리오 카드는 사유 · 이전 결과 실패 · 이전 기대 결과를 보여준다", () => {
+		const card = cards(renderQaReport(amendedView(), {}, fakeReader)!)[1];
+		expect(card).toContain("결과 기록 뒤 시나리오 수정");
+		expect(card).toContain("기대 결과가 실제 화면 문구와 달랐다");
+		expect(card).toContain("이전 결과</strong> 실패");
+		expect(card).toContain("이전 기대 결과 문구");
+		expect(card).toContain("이전 제목");
+	});
+
+	test("수정 이력이 없는 카드에는 안내가 없고 다른 시나리오의 수정이 새지 않는다", () => {
+		const [first, second] = cards(renderQaReport(amendedView(), {}, fakeReader)!);
+		expect(first).not.toContain("결과 기록 뒤 시나리오 수정");
+		expect(second).toContain("결과 기록 뒤 시나리오 수정");
+		expect(readerSection(renderQaReport(baseView(), {}, fakeReader)!)).not.toContain("결과 기록 뒤 시나리오 수정");
+	});
+
+	test("감사 표 행에 수정 횟수를 표시한다", () => {
+		const view = amendedView();
+		view.scenario_amendments!.push({ ...view.scenario_amendments![0], reason: "두 번째 수정" });
+		const audit = auditSection(renderQaReport(view, {}, fakeReader)!);
+		expect(audit).toContain("수정 2회");
+		expect(audit.match(/수정 \d회/g)).toHaveLength(1);
+	});
+
+	test("사유 텍스트는 HTML 이스케이프된다", () => {
+		const html = renderQaReport(amendedView("<img src=x onerror=1> 사유"), {}, fakeReader)!;
+		expect(readerSection(html)).not.toContain("<img src=x");
+		expect(readerSection(html)).toContain("&lt;img src=x onerror=1&gt; 사유");
+	});
+});
+
 describe("defaultEvidenceReader", () => {
 	test("returns missing for a nonexistent path", () => {
 		expect(defaultEvidenceReader("/definitely/not/here.png").kind).toBe("missing");

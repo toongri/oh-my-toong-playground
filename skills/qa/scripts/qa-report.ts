@@ -513,6 +513,28 @@ function shotSlots(e: QaScenario["evidence"], readEvidence: EvidenceReader, cont
 		: "";
 }
 
+/** Current-cycle `amend-scenario` corrections of one scenario, oldest first: why it changed after a result, and the old result and expectation, so an amended fail stays visible. */
+function scenarioAmendments(view: QaView, scenario: QaScenario) {
+	return (view.scenario_amendments ?? []).filter((entry) => entry.story === scenario.story && entry.id === scenario.id);
+}
+
+function renderAmendmentNotice(view: QaView, scenario: QaScenario): string {
+	const entries = scenarioAmendments(view, scenario);
+	if (!entries.length) return "";
+	const items = entries
+		.map((entry) => {
+			const old = entry.previous;
+			return (
+				`<li><strong>사유</strong> ${escapeHtml(entry.reason)}<br>` +
+				`<strong>이전 결과</strong> ${escapeHtml(STATUS_LABEL[old.status ?? "unrecorded"] ?? String(old.status))}<br>` +
+				(old.title && old.title !== scenario.title ? `<strong>이전 제목</strong> ${escapeHtml(old.title)}<br>` : "") +
+				`<strong>이전 기대 결과</strong> ${escapeHtml(old.expected ?? "")}</li>`
+			);
+		})
+		.join("");
+	return `<div class="sc-amended"><p><strong>결과 기록 뒤 시나리오 수정</strong></p><ul>${items}</ul></div>`;
+}
+
 /** One reader card for one user scenario: what the user did, what they should see, what QA saw. */
 function renderScenarioCard(view: QaView, scenario: QaScenario, actor: QaActor | undefined, narrative: QaReportNarrative, readEvidence: EvidenceReader, context: EvidenceRenderContext, unverified: Set<string>): string {
 	const key = scenarioKey(scenario);
@@ -528,17 +550,18 @@ function renderScenarioCard(view: QaView, scenario: QaScenario, actor: QaActor |
 		`<ol>${(scenario.steps ?? []).map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ol></details>` +
 		riskTags(scenario);
 	const observed = narrative.scenarios?.[key]?.observed;
+	const amended = renderAmendmentNotice(view, scenario);
 	if (scenario.status === "blocked") {
 		// The raw obstacle / deepest-reachable text is audit-only; the reader gets a fixed status line plus the product-terms observation and any recorded screenshots.
 		const blockedShots = shotSlots(scenario.evidence, readEvidence, context);
-		return `<div class="scenario-card sc-blocked">${head}<div class="sc-body">${plan}${gap("검증 불가 — 아래 설명의 한계로 이 시나리오를 끝까지 입증하지 못했습니다")}` +
+		return `<div class="scenario-card sc-blocked">${head}<div class="sc-body">${amended}${plan}${gap("검증 불가 — 아래 설명의 한계로 이 시나리오를 끝까지 입증하지 못했습니다")}` +
 			imageSlot("행동 전 화면", scenario.evidence?.before, readEvidence, context) +
 			(observed?.trim() ? `<p class="sc-observed">${escapeHtml(observed)}</p>` : "") +
 			(blockedShots ? `<div class="sc-shots">${blockedShots}</div>` : "") +
 			`</div></div>`;
 	}
 	if (scenario.status !== "pass" && scenario.status !== "fail") {
-		return `<div class="scenario-card sc-unrecorded">${head}<div class="sc-body">${plan}${gap("아직 실행 결과가 기록되지 않은 시나리오입니다")}</div></div>`;
+		return `<div class="scenario-card sc-unrecorded">${head}<div class="sc-body">${amended}${plan}${gap("아직 실행 결과가 기록되지 않은 시나리오입니다")}</div></div>`;
 	}
 	const observedBlock = observed?.trim() ? `<p class="sc-observed">${evidenceGap ? "검토 전 실행자 서술: " : ""}${escapeHtml(observed)}</p>` : "";
 	const e = scenario.evidence;
@@ -560,7 +583,7 @@ function renderScenarioCard(view: QaView, scenario: QaScenario, actor: QaActor |
 		beforeBlock || observedBlock || shotBlock
 			? beforeBlock + observedBlock + shotBlock
 			: gap("이 시나리오의 실제 소프트웨어 관찰 근거가 없습니다 — qa는 검증 시나리오에 근거를 필수로 요구합니다 (raw 로그만으로는 리더 근거가 되지 않습니다)");
-	return `<div class="scenario-card sc-${escapeHtml(status)}">${head}<div class="sc-body">${plan}${evidenceGap ? gap("근거 미검증 — 제품 실패나 미실행을 뜻하지 않습니다. 주장별 근거를 보완하고 다시 검토해야 합니다.") : ""}${body}</div></div>`;
+	return `<div class="scenario-card sc-${escapeHtml(status)}">${head}<div class="sc-body">${amended}${plan}${evidenceGap ? gap("근거 미검증 — 제품 실패나 미실행을 뜻하지 않습니다. 주장별 근거를 보완하고 다시 검토해야 합니다.") : ""}${body}</div></div>`;
 }
 
 /** For a story whose screen changed: one line per device profile with the worst scenario result on it. */
@@ -671,7 +694,7 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
 			return (
 				`<tr${storyAnchor}><td class="audit-story" data-label="story / scenario"><code>${breakableId(scenario.story)}</code><br><code>${breakableId(scenario.id)}</code>${scenario.profile ? `<br><span class="audit-note">${escapeHtml(scenario.profile)}</span>` : ""}</td>` +
 				`<td class="audit-coverage" data-label="priority · risks">${escapeHtml(scenario.priority ?? "")} · ${escapeHtml(risks)}</td>` +
-				`<td data-label="scenario · why needed">${escapeHtml(scenario.title ?? "")}${scenario.why_needed ? `<br><span class="audit-note">${escapeHtml(scenario.why_needed)}</span>` : ""}</td>` +
+				`<td data-label="scenario · why needed">${escapeHtml(scenario.title ?? "")}${scenario.why_needed ? `<br><span class="audit-note">${escapeHtml(scenario.why_needed)}</span>` : ""}${scenarioAmendments(view, scenario).length ? `<br><span class="audit-note">수정 ${scenarioAmendments(view, scenario).length}회</span>` : ""}</td>` +
 				`<td class="audit-boundary" data-label="driven at">${escapeHtml(boundary ?? "")}${driver ? `<br><span class="audit-note">${escapeHtml(driver)}</span>` : ""}</td>` +
 				// Evidence paths sit under the result: a sixth column would overflow the reading width and hide behind an invisible scrollbar.
 				`<td data-label="result · evidence">${result}${paths.length ? `<span class="audit-evidence">${paths.map((pth) => `<code>${escapeHtml(pth)}</code>`).join("")}</span>` : ""}</td></tr>`
@@ -1132,6 +1155,8 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .issue-CRITICAL { color: var(--fail); }
 .issue-LOW { color: var(--na); }
 .presentation { margin-bottom: 1rem; }
+.sc-amended { border: 1px dashed var(--fail); border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.92rem; background: var(--code-bg); }
+.sc-amended p, .sc-amended ul { margin: 0.2rem 0; }
 .gap { color: var(--fail); background: var(--code-bg); border: 1px dashed var(--fail); border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.92rem; }
 .audit-story { min-width: 6rem; }
 .audit-story code { white-space: normal; overflow-wrap: normal; display: inline-block; max-width: 100%; overflow-x: auto; vertical-align: bottom; }
