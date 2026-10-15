@@ -191,6 +191,15 @@ export interface QaScenario {
 	source?: "self-authored" | "caller-provided";
 }
 
+/** One `amend-scenario` correction: why an already-run scenario was rewritten, and the full record it replaced (result included). */
+export interface QaScenarioAmendment {
+	story: string;
+	id: string;
+	cycle: number;
+	reason: string;
+	previous: QaScenario;
+}
+
 /** An adversarial axis that no scenario of this change can exercise, declared once per cycle. */
 export interface QaRiskNotApplicable {
 	axis: number;
@@ -363,6 +372,7 @@ export interface QaChainState {
 	device_profiles?: QaDeviceProfile[];
 	run_checks?: QaRunChecks | null;
 	run_checks_history?: QaRunCheckHistory;
+	scenario_amendments?: QaScenarioAmendment[];
 	inert?: QaInert;
 	verdict?: QaVerdict;
 	/** Acceptance criteria captured at PLAN; rendered by the report from records. */
@@ -376,7 +386,7 @@ export interface QaChainState {
 }
 
 export function qaReportSnapshot(state: QaChainState): string {
-	return JSON.stringify([state.target, state.cycle, state.acceptance_criteria, state.actors, state.stories, state.scenarios, state.risk_not_applicable, state.device_profiles, state.run_checks, state.inert, state.verdict]);
+	return JSON.stringify([state.target, state.cycle, state.acceptance_criteria, state.actors, state.stories, state.scenarios, state.risk_not_applicable, state.device_profiles, state.run_checks, state.inert, state.verdict, state.scenario_amendments]);
 }
 
 export function qaReportComplete(state: QaChainState, probe: EvidenceProbe): boolean {

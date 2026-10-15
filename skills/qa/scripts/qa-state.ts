@@ -71,6 +71,7 @@ import {
 	type QaBaseline,
 	type QaBlocked,
 	QA_OBSTACLE_KINDS,
+	type QaScenarioAmendment,
 	type QaScenario,
 	type QaScenarioStatus,
 	type QaCaseRunBinding,
@@ -908,8 +909,12 @@ export interface AuthorScenarioOpts extends ScenarioFieldOpts {
 	profile?: string;
 }
 
-/** Authors one user scenario: who does what, in which state, and what they must observe. */
-export function authorScenario(sessionId: string, opts: AuthorScenarioOpts): void {
+/**
+ * Validates the authored scenario fields against the prior state and builds the
+ * scenario record. Shared by author-scenario and amend-scenario so both enforce
+ * the same rules; `command` prefixes the error messages.
+ */
+function buildScenario(command: string, prior: QaChainState, opts: AuthorScenarioOpts): QaScenario {
 	const story = localId(opts.story, "story");
 	const id = localId(opts.id, "id");
 	const priority = opts.priority;
@@ -917,38 +922,78 @@ export function authorScenario(sessionId: string, opts: AuthorScenarioOpts): voi
 	const steps = opts.steps.map((step) => nonEmpty(step, "steps item"));
 	if (!steps.length) throw new Error("steps must be a non-empty JSON array of strings");
 	const risks = parseRisks(opts.risks ?? []);
+	if (!(prior.stories ?? []).some((candidate) => candidate.id === story)) throw new Error(`${command}: unknown story "${story}"`);
+	const actor = storyActor(prior, story);
+	if (actor.client_impact === "render") {
+		if (opts.profile !== undefined && !(actor.profiles ?? []).includes(opts.profile)) throw new Error(`${command}: --profile must be one of ${(actor.profiles ?? []).join("|")}, the device profiles of actor "${actor.id}"`);
+	} else if (opts.profile !== undefined) {
+		throw new Error(`${command}: --profile applies only to a client-impact render actor; "${actor.id}" is ${actor.client_impact ?? "unset"}`);
+	}
+	const cycle = currentCycle(prior);
+	const declared = (prior.risk_not_applicable ?? []).filter((entry) => entry.cycle === cycle && risks.includes(entry.axis));
+	if (declared.length) throw new Error(`${command}: axis ${declared.map((entry) => entry.axis).join(",")} was declared not applicable this cycle; a scenario cannot exercise it`);
+	return {
+		story,
+		id,
+		title: readerProse(opts.title, "title"),
+		preconditions: nonEmpty(opts.preconditions, "preconditions"),
+		steps,
+		expected: readerProse(opts.expected, "expected"),
+		why_needed: nonEmpty(opts.whyNeeded, "why-needed"),
+		priority,
+		risks,
+		...(opts.profile !== undefined ? { profile: opts.profile } : {}),
+		cycle,
+		...scenarioFieldPatch(opts),
+	};
+}
+
+/** Authors one user scenario: who does what, in which state, and what they must observe. */
+export function authorScenario(sessionId: string, opts: AuthorScenarioOpts): void {
 	withStateLock(resolveStatePath(sessionId), () => {
 		const prior = readPrior(sessionId);
-		if (!(prior.stories ?? []).some((candidate) => candidate.id === story)) throw new Error(`author-scenario: unknown story "${story}"`);
-		const actor = storyActor(prior, story);
-		if (actor.client_impact === "render") {
-			if (opts.profile !== undefined && !(actor.profiles ?? []).includes(opts.profile)) throw new Error(`author-scenario: --profile must be one of ${(actor.profiles ?? []).join("|")}, the device profiles of actor "${actor.id}"`);
-		} else if (opts.profile !== undefined) {
-			throw new Error(`author-scenario: --profile applies only to a client-impact render actor; "${actor.id}" is ${actor.client_impact ?? "unset"}`);
-		}
-		const cycle = currentCycle(prior);
-		const declared = (prior.risk_not_applicable ?? []).filter((entry) => entry.cycle === cycle && risks.includes(entry.axis));
-		if (declared.length) throw new Error(`author-scenario: axis ${declared.map((entry) => entry.axis).join(",")} was declared not applicable this cycle; a scenario cannot exercise it`);
+		const next = buildScenario("author-scenario", prior, opts);
 		const scenarios = [...(prior.scenarios ?? [])];
-		const index = scenarios.findIndex((candidate) => candidate.cycle === cycle && sameScenario(candidate, { story, id }));
-		if (index >= 0 && scenarios[index].status) throw new Error("author-scenario: this scenario already has a recorded result this cycle; changing it requires the next FIX cycle");
-		const next: QaScenario = {
-			story,
-			id,
-			title: readerProse(opts.title, "title"),
-			preconditions: nonEmpty(opts.preconditions, "preconditions"),
-			steps,
-			expected: readerProse(opts.expected, "expected"),
-			why_needed: nonEmpty(opts.whyNeeded, "why-needed"),
-			priority,
-			risks,
-			...(opts.profile !== undefined ? { profile: opts.profile } : {}),
-			cycle,
-			...scenarioFieldPatch(opts),
-		};
+		const index = scenarios.findIndex((candidate) => candidate.cycle === next.cycle && sameScenario(candidate, next));
+		if (index >= 0 && scenarios[index].status) throw new Error("author-scenario: this scenario already has a recorded result this cycle; if the scenario itself is wrong, correct it with amend-scenario --reason (it resets the result and keeps the old version in scenario_amendments)");
 		if (index >= 0) scenarios[index] = next;
 		else scenarios.push(next);
 		mergeWriteUnlocked(sessionId, { scenarios });
+	});
+}
+
+export interface AmendScenarioOpts extends AuthorScenarioOpts {
+	reason: string;
+}
+
+/**
+ * Corrects a scenario that already has a recorded result this cycle: replaces its
+ * authored fields, drops the result (it must be re-run), and keeps the replaced
+ * record in `scenario_amendments`. The verdict and a flaky-rerun that covered an H
+ * scenario were decided on the old result, so they are cleared too.
+ */
+export function amendScenario(sessionId: string, opts: AmendScenarioOpts): void {
+	const reason = readerProse(opts.reason, "reason");
+	withStateLock(resolveStatePath(sessionId), () => {
+		const prior = readPrior(sessionId);
+		const next = buildScenario("amend-scenario", prior, opts);
+		const cycle = next.cycle as number;
+		const scenarios = [...(prior.scenarios ?? [])];
+		const index = scenarios.findIndex((candidate) => candidate.cycle === cycle && sameScenario(candidate, next));
+		if (index < 0) throw new Error(`amend-scenario: no scenario "${next.story}:${next.id}" authored this cycle`);
+		const previous = scenarios[index];
+		if (!previous.status) throw new Error("amend-scenario: this scenario has no recorded result yet; rewrite it with author-scenario");
+		scenarios[index] = clearScenarioRecord(next);
+		const amendments = [...(prior.scenario_amendments ?? []), { story: next.story, id: next.id, cycle, reason, previous }];
+		const flaky = prior.run_checks?.flaky_rerun;
+		const rerunStale = (previous.priority === "H" || next.priority === "H") && typeof flaky === "object" && flaky !== null && flaky.cycle === cycle;
+		mergeWriteUnlocked(sessionId, {
+			scenarios,
+			scenario_amendments: amendments,
+			// mergeWriteUnlocked skips `undefined`, so a cleared verdict is stored as null (as startQa does).
+			verdict: null,
+			...(rerunStale ? { run_checks: { ...prior.run_checks, flaky_rerun: null } } : {}),
+		});
 	});
 }
 
@@ -1424,6 +1469,7 @@ export function startQa(sessionId: string, target: string): void {
 		delete reset.forced_complete;
 		delete reset.forced_reason;
 		delete reset.run_checks_history;
+		delete reset.scenario_amendments;
 		delete reset.user_answer_open;
 		delete reset.user_reply;
 		reset.derived = {
@@ -1504,6 +1550,8 @@ export function forceCompleteQa(sessionId: string, reason: string): { id: string
 export type QaView = QaState & {
 	report_source_snapshot?: string;
 	prior_cycle_scenarios: QaScenario[];
+	/** Current-cycle `amend-scenario` corrections, each with the record it replaced. */
+	scenario_amendments?: QaScenarioAmendment[];
 	verdict_report: { verdict: QaState["verdict"]; cycle: number; inert?: QaInert };
 };
 
@@ -1553,6 +1601,7 @@ export function readQaView(sessionId: string): QaView | null {
 		scenarios: scenarios.filter((scenario) => scenario.cycle === cycle),
 		risk_not_applicable: (state.risk_not_applicable ?? []).filter((entry) => entry.cycle === cycle),
 		prior_cycle_scenarios: scenarios.filter((scenario) => scenario.cycle !== cycle),
+		scenario_amendments: (state.scenario_amendments ?? []).filter((entry) => entry.cycle === cycle),
 		verdict_report: { verdict: state.verdict, cycle, ...(currentInert ? { inert: currentInert } : {}) },
 	};
 }
@@ -1604,6 +1653,7 @@ const ROSTER: CliCommand[] = [
 	{ name: "add-story", authority: "ai", effect: "adds a story with goal, given/when/then JSON arrays, and acceptance-criteria index links; --id must not contain ':'" },
 	{ name: "record-story-provenance", authority: "ai", effect: "records JSON {features:[{id,revision,entrypoints,states}],code_ref}; features non-empty, entrypoints/states may be empty" },
 	{ name: "author-scenario", authority: "ai", effect: "authors one user scenario: --story --id (neither contains ':') --title --preconditions --steps '[…]' --expected --why-needed --priority H|M|L [--risks '[1..6]'] [--profile id]" },
+	{ name: "amend-scenario", authority: "ai", effect: "corrects a scenario that already has a result because the scenario itself is wrong: same fields as author-scenario plus --reason; resets its result (re-run it with record-scenario), clears the verdict, clears a flaky-rerun when an H scenario is involved, and keeps the old version in scenario_amendments" },
 	{ name: "declare-risk-na", authority: "ai", effect: "declares an adversarial axis (--axis 1..6) that no scenario of this change can exercise, with --reason; once per cycle" },
 	{ name: "record-baseline", authority: "ai", effect: "records a story's BASELINE result: fail only when the change adds a build/test/lint failure; a failure the base commit has too is pass with a --note" },
 	{ name: "record-scenario", authority: "ai", effect: "records one scenario's execution result (--story --scenario --status pass|fail|blocked); blocked takes --obstacle-kind hardware|third-party|person (person records the user's reply the hook stored after await-user) with --obstacle --attempts --deepest-reachable --attempt-log; --evidence-surface accepts the actor's own driver or \"test\" for an automated test run that exercises the scenario; optional --case-run RECEIPT binds replay provenance" },
@@ -1732,6 +1782,22 @@ function main(): void {
 					profile: str(args["profile"]),
 					drivenAt: str(args["driven-at"]),
 					source: str(args["source"]),
+				});
+			} else if (subcommand === "amend-scenario") {
+				amendScenario(sessionId, {
+					story: requiredArg(args, "story"),
+					id: requiredArg(args, "id"),
+					title: requiredArg(args, "title"),
+					preconditions: requiredArg(args, "preconditions"),
+					steps: parseJsonArray(requiredArg(args, "steps"), "steps"),
+					expected: requiredArg(args, "expected"),
+					whyNeeded: requiredArg(args, "why-needed"),
+					priority: requiredArg(args, "priority"),
+					risks: args["risks"] === undefined ? undefined : parseJsonArray(requiredArg(args, "risks"), "risks"),
+					profile: str(args["profile"]),
+					drivenAt: str(args["driven-at"]),
+					source: str(args["source"]),
+					reason: requiredArg(args, "reason"),
 				});
 			} else if (subcommand === "declare-risk-na") {
 				declareRiskNotApplicable(sessionId, Number(requiredArg(args, "axis")), requiredArg(args, "reason"));
