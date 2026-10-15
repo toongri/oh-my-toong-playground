@@ -26,7 +26,13 @@ export type QaDriver = "agent-device" | "agent-browser" | "curl" | "bash";
  * wherever evidence surface is matched.
  */
 export const TEST_EVIDENCE_SURFACE = "test";
-export type QaReachability = "yes" | "unknown" | (string & {});
+/**
+ * Whether the actor's boundary can be reached. `unknown`: not yet probed (the value
+ * add-actor starts with before the PLAN.1 probe). `yes`: reached. `blocked`: something
+ * stopped it; the text naming that lives in `QaActor.reach_obstacle`.
+ */
+export const REACHABILITIES = ["unknown", "yes", "blocked"] as const;
+export type QaReachability = (typeof REACHABILITIES)[number];
 export type QaPriority = "H" | "M" | "L";
 export type QaResult = "pass" | "fail" | "na";
 /**
@@ -52,6 +58,8 @@ export interface QaActor {
 	boundary?: string;
 	driver?: QaDriver;
 	reachable?: QaReachability;
+	/** Audit-only text naming what blocked the boundary and the deepest point reached; present only when `reachable` is `blocked`. */
+	reach_obstacle?: string;
 	client_impact?: QaClientImpact;
 	client_impact_reason?: string;
 	/** Device profile ids (from state.device_profiles); required for `render`. */
@@ -547,6 +555,20 @@ function storyFor(state: QaChainState, scenario: QaScenario): QaStory | undefine
 	return (state.stories ?? []).find((story) => story.id === scenario.story);
 }
 
+/**
+ * Legacy conversion boundary: the one place that reads an actor's reach.
+ * Records persisted before the split stored the obstacle text itself in `reachable`
+ * (any string other than yes/unknown). Those are read as `blocked` with that text as
+ * the obstacle. Persisted state files are never rewritten; every reader goes through here.
+ */
+export function actorReach(actor: Pick<QaActor, "reachable" | "reach_obstacle">): { reachable: QaReachability | undefined; obstacle?: string } {
+	const raw: string | undefined = actor.reachable;
+	if (raw === undefined) return { reachable: undefined };
+	if (raw === "yes" || raw === "unknown") return { reachable: raw };
+	if (raw === "blocked") return { reachable: "blocked", ...(actor.reach_obstacle !== undefined ? { obstacle: actor.reach_obstacle } : {}) };
+	return { reachable: "blocked", obstacle: raw };
+}
+
 export function recordComplete(state: QaChainState, probe: EvidenceProbe): boolean {
 	return recordGaps(state, probe).length === 0;
 }
@@ -556,7 +578,7 @@ export function recordGaps(state: QaChainState, probe: EvidenceProbe): string[] 
 	const gaps: string[] = [];
 	// `unknown` is the add-actor value before the PLAN.1 probe; a verdict needs every actor's reach settled.
 	for (const actor of state.actors ?? []) {
-		if (actor.reachable === "unknown") gaps.push(`actor ${actor.id}: reachable still unknown — probe its boundary, then add-actor --id ${actor.id} --reachable yes|<obstacle>`);
+		if (actorReach(actor).reachable === "unknown") gaps.push(`actor ${actor.id}: reachable still unknown — probe its boundary, then add-actor --id ${actor.id} --reachable yes|blocked [--reach-obstacle "…"]`);
 	}
 	for (const story of state.stories ?? []) {
 		const actor = actorFor(state, story);
