@@ -56,6 +56,7 @@ import {
 	scenariosMissingCase,
 	visualEvidenceComplete,
 	CLIENT_IMPACTS,
+	REACHABILITIES,
 	RISK_AXES,
 	CAUSE_CHECKS,
 	LAYOUT_CHECKS,
@@ -608,6 +609,8 @@ export interface AddActorOpts {
 	boundary?: string;
 	driver?: string;
 	reachable: string;
+	/** Audit text naming what blocked the boundary and the deepest point reached; required for `blocked`, refused otherwise. */
+	reachObstacle?: string;
 	clientImpact?: string;
 	clientImpactReason?: string;
 	/** Device profile ids from the project's device-profiles manifest; required for client impact `render`. */
@@ -636,6 +639,9 @@ function resolveProfiles(ids: string[], opts: AddActorOpts): QaDeviceProfile[] {
 export function addActor(sessionId: string, opts: AddActorOpts): void {
 	const id = nonEmpty(opts.id, "id");
 	const reachable = nonEmpty(opts.reachable, "reachable");
+	if (!isOneOf(reachable, REACHABILITIES)) throw new Error(`reachable must be one of ${REACHABILITIES.join("|")}: unknown (not probed yet), yes (boundary reached), blocked (needs --reach-obstacle)`);
+	const reachObstacle = reachable === "blocked" ? nonEmpty(opts.reachObstacle, "reach-obstacle") : undefined;
+	if (reachable !== "blocked" && opts.reachObstacle !== undefined) throw new Error(`reach-obstacle applies only to reachable blocked, not ${reachable}`);
 	const prior = readPrior(sessionId);
 	const actors = [...(prior.actors ?? [])];
 	const index = actors.findIndex((candidate) => candidate.id === id);
@@ -664,7 +670,7 @@ export function addActor(sessionId: string, opts: AddActorOpts): void {
 	} else if (profileIds.length) {
 		throw new Error(`--profiles applies only to client-impact render; a ${clientImpact} actor has no rendered screen under test`);
 	}
-	const actor: QaActor = { id, name, boundary, driver, reachable, client_impact: clientImpact, client_impact_reason: reason, ...(clientImpact === "render" ? { profiles: [...profileIds] } : {}) };
+	const actor: QaActor = { id, name, boundary, driver, reachable, ...(reachObstacle !== undefined ? { reach_obstacle: reachObstacle } : {}), client_impact: clientImpact, client_impact_reason: reason, ...(clientImpact === "render" ? { profiles: [...profileIds] } : {}) };
 	if (index >= 0) actors[index] = actor;
 	else actors.push(actor);
 	const changedSurface = existing && (existing.boundary !== boundary || existing.driver !== driver || existing.client_impact !== clientImpact || JSON.stringify(existing.profiles ?? []) !== JSON.stringify(actor.profiles ?? []));
@@ -1594,7 +1600,7 @@ const ROSTER: CliCommand[] = [
 	{ name: "set", authority: "ai", effect: "writes phase/target state" },
 	{ name: "advance-phase", authority: "ai", effect: "advances to the named phase (chain-gated)" },
 	{ name: "inc-cycle", authority: "ai", effect: "increments the fix-loop cycle counter" },
-	{ name: "add-actor", authority: "ai", effect: "adds one actor: --client-impact none|contract|render with --client-impact-reason; render needs a screen driver and --profiles '[ids]' from qa-device-profiles.ts" },
+	{ name: "add-actor", authority: "ai", effect: "adds one actor: --reachable unknown|yes|blocked (blocked needs --reach-obstacle \"what stopped it, deepest point reached\"); --client-impact none|contract|render with --client-impact-reason; render needs a screen driver and --profiles '[ids]' from qa-device-profiles.ts" },
 	{ name: "add-story", authority: "ai", effect: "adds a story with goal, given/when/then JSON arrays, and acceptance-criteria index links; --id must not contain ':'" },
 	{ name: "record-story-provenance", authority: "ai", effect: "records JSON {features:[{id,revision,entrypoints,states}],code_ref}; features non-empty, entrypoints/states may be empty" },
 	{ name: "author-scenario", authority: "ai", effect: "authors one user scenario: --story --id (neither contains ':') --title --preconditions --steps '[…]' --expected --why-needed --priority H|M|L [--risks '[1..6]'] [--profile id]" },
@@ -1687,6 +1693,7 @@ function main(): void {
 					boundary: str(args["boundary"]),
 					driver: str(args["driver"]),
 					reachable: requiredArg(args, "reachable"),
+					reachObstacle: str(args["reach-obstacle"]),
 					clientImpact: str(args["client-impact"]),
 					clientImpactReason: str(args["client-impact-reason"]),
 					profiles: args["profiles"] === undefined ? undefined : parseJsonArray(requiredArg(args, "profiles"), "profiles").map((id) => nonEmpty(id, "profiles item")),

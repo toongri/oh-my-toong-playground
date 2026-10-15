@@ -20,7 +20,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from "os";
 import { dirname, extname, join, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
-import { RISK_AXES, scenarioNeedsVisualProof, evidenceReviewComplete, type QaActor, type QaBaseline, type QaResult, type QaRunCheck, type QaScenario, type QaStory } from "@lib/qa-chain-core";
+import { RISK_AXES, actorReach, scenarioNeedsVisualProof, evidenceReviewComplete, type QaActor, type QaBaseline, type QaReachability, type QaResult, type QaRunCheck, type QaScenario, type QaStory } from "@lib/qa-chain-core";
 import { CODE_IDENTIFIER, readQaView, recordRenderedReport, stateProbe, type QaView } from "./qa-state.ts";
 
 // Keep individual evidence files small enough to inspect, and cap the total
@@ -430,12 +430,19 @@ function profileLabel(view: QaView, id: string): string {
 	return profile ? `${profile.label} (${profile.width}×${profile.height})` : id;
 }
 
+const REACH_BADGE: Record<QaReachability, string> = {
+	yes: ` <span class="badge badge-pass">도달함</span>`,
+	unknown: ` <span class="badge">도달 미확인</span>`,
+	blocked: ` <span class="badge badge-fail">도달 막힘</span>`,
+};
+
 function renderActors(view: QaView, narrative: QaReportNarrative): string {
 	const p = narrative.presentation;
 	const blocks = (view.actors ?? [])
 		.map((actor) => {
-			const r = String(actor.reachable ?? "");
-			const reach = r === "yes" ? ` <span class="badge badge-pass">도달함</span>` : r ? ` <span class="badge badge-fail">도달 막힘</span>` : "";
+			// `unknown` is the add-actor value before the PLAN.1 probe: not attempted, so not blocked.
+			const reachState = actorReach(actor).reachable;
+			const reach = reachState ? REACH_BADGE[reachState] : "";
 			const impact = actor.client_impact
 				? `<p class="client-impact"><strong>${escapeHtml(CLIENT_IMPACT_LABEL[actor.client_impact] ?? actor.client_impact)}</strong>${actor.client_impact_reason ? ` · ${escapeHtml(actor.client_impact_reason)}` : ""}</p>`
 				: gap("이 유저의 클라이언트 영향 판단이 기록되지 않았습니다");
@@ -605,11 +612,12 @@ function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidenc
 	return `<h2>유저 시나리오 · 근거</h2>` + inert + (stories || `<p class="evidence-note">기록된 story 없음</p>`) + renderRiskNotApplicable(view);
 }
 
-/** Raw `reachable` text of actors whose boundary was not reached; the reader block shows only a neutral badge. */
+/** Recorded obstacle of actors whose boundary was blocked; the reader block shows only a neutral badge. */
 function renderUnreachedActorsAudit(view: QaView): string {
 	const rows = (view.actors ?? [])
-		.filter((actor) => actor.reachable && actor.reachable !== "yes")
-		.map((actor) => `<li><code>${escapeHtml(actor.id)}</code> — <span class="audit-note">reachable: ${escapeHtml(String(actor.reachable))}</span></li>`)
+		.map((actor) => ({ id: actor.id, ...actorReach(actor) }))
+		.filter((actor) => actor.reachable === "blocked")
+		.map((actor) => `<li><code>${escapeHtml(actor.id)}</code> — <span class="audit-note">reach obstacle: ${escapeHtml(actor.obstacle ?? "(기록 없음)")}</span></li>`)
 		.join("");
 	return rows ? `<h3>액터 도달 기록 (감사용)</h3><ul>${rows}</ul>` : "";
 }

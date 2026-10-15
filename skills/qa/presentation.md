@@ -195,7 +195,7 @@ there is no separate actor-roster table).
   that use — at their boundary, per the hard rule above. The reader block shows the
   actor's name, this impact narrative, how far the change reaches their client
   (the recorded client impact and its reason, plus the device profiles for a
-  screen change), and whether the boundary was reachable (a blocked boundary shows only a "도달 막힘" badge; the raw `reachable` text is audit-only); the
+  screen change), and whether the boundary was reachable (a blocked boundary shows only a "도달 막힘" badge, a still-`unknown` one a neutral "도달 미확인" badge; the `reach_obstacle` text is audit-only); the
   concrete per-scenario boundary + driver live in the 시나리오 상세 기록 audit, not
   here — do not restate them in prose.
 - **Scenario overview (`scenarioFlows`, keyed by story id)** — for each recorded

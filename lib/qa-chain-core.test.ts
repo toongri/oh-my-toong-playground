@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	BASELINE_INDEX,
 	QA_PHASES,
+	actorReach,
 	approveOk,
 	chainComplete,
 	commentOk,
@@ -24,6 +25,24 @@ import {
 	type QaStoryProvenance,
 	type QaStory,
 } from "./qa-chain-core";
+
+describe("actorReach: 분리 이전 기록을 읽는 변환 경계", () => {
+	test("enum 값 yes는 그대로 돌려줌", () => {
+		expect(actorReach({ reachable: "yes" })).toEqual({ reachable: "yes" });
+	});
+	test("blocked는 reach_obstacle을 obstacle로 함께 돌려줌", () => {
+		expect(actorReach({ reachable: "blocked", reach_obstacle: "adb 연결 거부됨, 기기 목록까지 도달" })).toEqual({ reachable: "blocked", obstacle: "adb 연결 거부됨, 기기 목록까지 도달" });
+	});
+	test("unknown은 그대로 돌려줌", () => {
+		expect(actorReach({ reachable: "unknown" })).toEqual({ reachable: "unknown" });
+	});
+	test("reachable이 없으면 reachable도 없음", () => {
+		expect(actorReach({})).toEqual({ reachable: undefined });
+	});
+	test("분리 이전의 자유 텍스트는 그 텍스트를 obstacle로 갖는 blocked로 변환함", () => {
+		expect(actorReach({ reachable: "no: adb 연결 거부됨" as any })).toEqual({ reachable: "blocked", obstacle: "no: adb 연결 거부됨" });
+	});
+});
 
 const _serializedHistoryShape: QaStory = {
 	id: "history-story",
@@ -202,6 +221,13 @@ describe("qa chain core", () => {
 		expect(recordGaps(state, probe)).toEqual([]);
 		state.scenarios[0] = { ...state.scenarios[0], evidence_review: undefined };
 		expect(recordGaps(state, probe)).toEqual([`${state.scenarios[0].story}/${state.scenarios[0].id}: evidence review incomplete (review-evidence)`]);
+	});
+	test("도달을 탐침하지 않아 unknown으로 남은 액터는 기록 공백이라 APPROVE·COMMENT를 막음", () => {
+		const state = authoredState();
+		state.actors[0] = { ...state.actors[0], reachable: "unknown" };
+		expect(recordGaps(state, probe)).toEqual(["actor a1: reachable still unknown — probe its boundary, then add-actor --id a1 --reachable yes|blocked [--reach-obstacle \"…\"]"]);
+		expect(approveOk(state, probe)).toBe(false);
+		expect(commentOk(state, probe)).toBe(false);
 	});
 	test("프로필 시나리오는 테스트 근거로 기록해도 화면 증거를 요구함", () => {
 		const state = authoredState();

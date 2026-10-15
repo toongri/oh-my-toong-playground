@@ -360,6 +360,46 @@ describe("qa state: actor client impact", () => {
 		expect(rawState().actors ?? []).toEqual([]);
 	});
 
+	test("add-actor는 reachable이 enum 밖이면 거부한다", () => {
+		setQaState(S, { phase: "PLAN" });
+		const base = { id: "actor-1", name: "User", boundary: "home", driver: "bash", ...NO_CLIENT };
+		expect(() => addActor(S, { ...base, reachable: "no: x" })).toThrow(/reachable must be one of unknown\|yes\|blocked/);
+		expect(rawState().actors ?? []).toEqual([]);
+	});
+
+	test("add-actor는 blocked에 reach-obstacle이 없으면 거부한다", () => {
+		setQaState(S, { phase: "PLAN" });
+		const base = { id: "actor-1", name: "User", boundary: "home", driver: "bash", reachable: "blocked", ...NO_CLIENT };
+		expect(() => addActor(S, base)).toThrow(/reach-obstacle is required/);
+		expect(() => addActor(S, { ...base, reachObstacle: "  " })).toThrow(/reach-obstacle is required/);
+		expect(rawState().actors ?? []).toEqual([]);
+	});
+
+	test("add-actor는 yes나 unknown에 reach-obstacle을 주면 거부한다", () => {
+		setQaState(S, { phase: "PLAN" });
+		const base = { id: "actor-1", name: "User", boundary: "home", driver: "bash", reachObstacle: "adb 거부", ...NO_CLIENT };
+		expect(() => addActor(S, { ...base, reachable: "yes" })).toThrow(/reach-obstacle applies only to reachable blocked/);
+		expect(() => addActor(S, { ...base, reachable: "unknown" })).toThrow(/reach-obstacle applies only to reachable blocked/);
+		expect(rawState().actors ?? []).toEqual([]);
+	});
+
+	test("add-actor는 blocked와 reach-obstacle을 각자의 필드로 저장한다", () => {
+		setQaState(S, { phase: "PLAN" });
+		addActor(S, { id: "actor-1", name: "User", boundary: "home", driver: "bash", reachable: "blocked", reachObstacle: "adb 연결 거부됨, 기기 목록까지 도달", ...NO_CLIENT });
+		const actor = rawState().actors[0];
+		expect(actor.reachable).toBe("blocked");
+		expect(actor.reach_obstacle).toBe("adb 연결 거부됨, 기기 목록까지 도달");
+	});
+
+	test("blocked 액터를 yes로 갱신하면 이전 reach_obstacle을 버린다", () => {
+		setQaState(S, { phase: "PLAN" });
+		addActor(S, { id: "actor-1", name: "User", boundary: "home", driver: "bash", reachable: "blocked", reachObstacle: "adb 거부", ...NO_CLIENT });
+		addActor(S, { id: "actor-1", reachable: "yes", ...NO_CLIENT });
+		const actor = rawState().actors[0];
+		expect(actor.reachable).toBe("yes");
+		expect("reach_obstacle" in actor).toBe(false);
+	});
+
 	test("none과 contract 액터는 profile 없이 완성되고 profile을 주면 거부한다", () => {
 		setQaState(S, { phase: "PLAN" });
 		addActor(S, { id: "a-none", name: "Job", boundary: "worker", driver: "bash", reachable: "yes", ...NO_CLIENT });
