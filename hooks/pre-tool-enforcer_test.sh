@@ -113,6 +113,36 @@ test_taskoutput_is_blocked() {
     fi
 }
 
+test_git_grep_without_binary_skip_is_denied() {
+    local output
+    output=$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"git grep -n foo -- apps"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+
+    if echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny" and (.hookSpecificOutput.permissionDecisionReason | test("Grep"))' >/dev/null; then
+        return 0
+    else
+        echo "ASSERTION FAILED: git grep without -I should be denied"
+        echo "  Output: $output"
+        return 1
+    fi
+}
+
+test_git_grep_with_binary_skip_is_allowed() {
+    local output
+    output=$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"git grep -I -n foo"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+
+    assert_output_not_contains "$output" "permissionDecision" "git grep -I should not be denied"
+}
+
+test_git_grep_text_in_non_bash_tool_is_allowed() {
+    local output
+    output=$(printf '%s' '{"tool_name":"Write","tool_input":{"command":"git grep -n foo"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+
+    assert_output_not_contains "$output" "permissionDecision" "non-Bash tool should not be denied"
+}
+
 test_other_tools_allowed() {
     local output
     output=$(printf '%s' '{"tool_name":"Read","tool_input":{}}' \
@@ -1371,6 +1401,9 @@ main() {
 
     # Existing behavior
     run_test test_taskoutput_is_blocked
+    run_test test_git_grep_without_binary_skip_is_denied
+    run_test test_git_grep_with_binary_skip_is_allowed
+    run_test test_git_grep_text_in_non_bash_tool_is_allowed
     run_test test_other_tools_allowed
 
     # Prometheus state seeding

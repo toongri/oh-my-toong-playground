@@ -2,7 +2,6 @@
 name: presentation-reviewer
 description: Use when a skill has produced a reader-facing presentation (explainer/plan/spec/QA report) and needs it contrasted against its source material before completion — checks source fidelity, persona fit, and whether every concept is introduced. Returns findings + APPROVE/REQUEST_CHANGES/COMMENT, or INCONCLUSIVE when required inputs cannot be reviewed.
 model: opus
-tools: Read, Glob, Grep, Bash
 disallowedTools: Agent
 ---
 

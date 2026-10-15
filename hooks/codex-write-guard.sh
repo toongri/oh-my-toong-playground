@@ -668,6 +668,15 @@ case "$tool_name" in
                 printf '%s\n' "$_wg_core_dangerous_deny_json"
                 exit 0
             fi
+            # `git grep` without -I reads binary files (several GB per search).
+            # Raw command, not the masked one: the lib masks quotes and
+            # heredocs itself. Fails open when the lib cannot be sourced.
+            if source "$SCRIPT_DIR/lib/git-grep-patterns.sh" 2> /dev/null \
+                && git_grep_command_lacks_binary_skip "$_cwg_dc_cmd"; then
+                jq -nc --arg reason "$(git_grep_deny_reason_codex)" \
+                    '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}'
+                exit 0
+            fi
         done
         ;;
 esac
