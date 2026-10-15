@@ -72,19 +72,24 @@ git_grep_command_lacks_binary_skip() {
             }
             return i
         }
-        # 1 when the grep options (words from i, up to a bare --) include -I.
-        function has_binary_skip(i,    j, k, cl, ch, len) {
+        # 1 when -I is still in effect after the grep options (words from i,
+        # up to a bare --).  git applies the last of -I / -a / --text /
+        # --no-text, so a later -a or --text re-enables the binary scan.
+        function has_binary_skip(i,    skip, k, cl, ch, len) {
+            skip = 0
             for (; i <= n; i++) {
-                if (w[i] == "--") return 0
+                if (w[i] == "--") break
+                if (w[i] == "--text" || w[i] == "--no-text") { skip = 0; continue }
                 if (w[i] !~ /^-[^-]/) continue
                 cl = substr(w[i], 2); len = length(cl)
                 for (k = 1; k <= len; k++) {
                     ch = substr(cl, k, 1)
-                    if (ch == "I") return 1
+                    if (ch == "I") skip = 1
+                    else if (ch == "a") skip = 0
                     if (ch ~ /[efABC]/) { if (k == len) i++; break }
                 }
             }
-            return 0
+            return skip
         }
         function check_segment(seg,    i, t) {
             n = split(seg, w, /[ \t]+/)
