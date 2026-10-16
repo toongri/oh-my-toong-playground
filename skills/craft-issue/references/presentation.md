@@ -63,7 +63,7 @@ The first paragraph names the affected user and the concrete current-to-required
 | 로컬 | 위와 같고 앱 버전만 5.1.3 | 재현됨 — 500 | 서버 로그 한 줄 |
 | 로컬 | `REFUND_ASYNC=on`, 워커 1회 실행 후 | 재현 안 됨 — 200 | 응답 본문 |
 
-"로컬에서 재현 안 됨"은 로컬 기본 설정이 `REFUND_ASYNC=off`라서 생겼다.
+결과를 가르는 조건은 `REFUND_ASYNC=on`과 환불 대기가 **함께** 있는 것이다. 재현된 구성에서 둘 중 하나만 되돌려도 재현되지 않는다(1행: 설정 off, 4행: 워커가 대기를 처리). 앱 버전은 바꿔도 결과가 같다(3행). "로컬에서 재현 안 됨"은 로컬 기본 설정이 `REFUND_ASYNC=off`라서 생겼다.
 
 근본 원인: 비동기 환불 경로의 `requestRefund`(환불 요청 함수)는 주문에 환불 번호를 먼저 기록하고, 환불 행은 워커가 나중에 만든다(`src/refund.ts:5-7`). 그 사이 `listOrders`(주문내역 응답 함수)가 없는 환불 행의 금액을 읽어 예외가 나고 응답 전체가 500이 된다(`src/orders.ts:8-9`). 운영 로그에서도 환불 요청 → 500 → 워커 실행 → 200 순서가 두 회원에게 같다.
 

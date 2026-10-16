@@ -54,6 +54,13 @@ test("재현 결과는 확신도 게이트·근본 원인·본문 재현 표 조
 	expect(presentationMd).toContain("two or more environments or axis values were attempted");
 });
 
+test("차등 재현은 재현되는 구성에서 축을 되돌려 필요조건을 모두 남긴다", () => {
+	const reproduceMd = readFileSync(join(import.meta.dir, "references/reproduce.md"), "utf8");
+	expect(reproduceMd).toContain("Start from the **reproducing configuration**");
+	expect(reproduceMd).toContain("Keep every necessary axis");
+	expect(reproduceMd).not.toContain("from the non-reproducing configuration toward the reproducing one");
+});
+
 describe("A1: agents/issue-reviewer.md frontmatter", () => {
 	test("declares name: issue-reviewer", () => {
 		expect(reviewerMd).toMatch(/^name: issue-reviewer$/m);

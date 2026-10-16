@@ -110,19 +110,31 @@ suspicion sent across the boundary (the request body, the amount, the header). R
 and a control run can show which input changes that value. The production error itself is then
 established by the production trace, not by the reproduction.
 
-Always pair the reproducing run with a **control run** that differs in exactly the trigger axis and
-does not reproduce. The pair — reproduces with the axis value, does not reproduce without it — is
-what shows the axis is the trigger.
+Always pair the reproducing run with **control runs**: for each axis of the trigger condition (§4),
+one run that is the reproducing configuration with only that axis reverted, and that does not
+reproduce. The pair — reproduces with the axis value, does not reproduce without it — is what shows
+the axis is part of the trigger.
 
 ## 4. Differential Reproduction (cause from reproduction)
 
-Change one axis at a time, from the non-reproducing configuration toward the reproducing one, and
-re-run. The axis whose change flips the outcome is the trigger. Use this to settle the hypothesis
-ledger (`references/diagnose-rootcause.md` §3): every competing hypothesis that names an axis gets a
-run that varies that axis while holding the trigger fixed.
+Start from the **reproducing configuration** and revert one candidate axis at a time to its
+non-reproducing value, keeping every other axis as in the reproducing run. Re-run each time.
 
-- A hypothesis whose axis varies without flipping the outcome is **REFUTED by reproduction** (for
-  example: same 500 with app version 5.1.3 and 5.2.0 → the app version is not the trigger).
+- An axis whose reversion stops the reproduction is **necessary**. Keep every necessary axis: the
+  trigger condition is all of them together (for example: `REFUND_ASYNC=on` **and** a refund still
+  pending — either one alone does not reproduce). Never record only one of them as the trigger.
+- An axis whose change leaves the reproduction in place is **not necessary**.
+
+Do not build up from the non-reproducing configuration one axis at a time and read a non-flip as a
+refutation. When the symptom needs two axes together, setting the first one alone does not flip the
+outcome, and that run says nothing about whether the first axis matters.
+
+Use this to settle the hypothesis ledger (`references/diagnose-rootcause.md` §3): every competing
+hypothesis that names an axis gets a run that changes that axis inside the reproducing configuration.
+
+- A hypothesis whose axis changes inside the reproducing configuration without stopping the
+  reproduction is **REFUTED by reproduction** (for example: same 500 with app version 5.1.3 and
+  5.2.0 while the refund is pending → the app version is not the trigger).
 - A hypothesis whose axis cannot be set on any reachable environment stays **NOT-DISTINGUISHED**,
   with the environment that could set it named as the separating test.
 
@@ -167,7 +179,7 @@ environment or person that could set it: that is the `{method}` in `TBD — need
   (for example: `경계까지만 — 결제사는 직접 만든 모의 서버, 서버가 보낸 금액 13591.5`), never
   `재현됨`. An environment you did not attempt gets no row. A forecast without an attempt goes in Pre-Context
   as `TBD — needs validation via {method}`, never as a matrix row.
-- **Trigger condition** — the trigger axis from §4 is the condition that exposes the defect (which
+- **Trigger condition** — the necessary axes from §4, all of them, are the condition that exposes the defect (which
   environments hit it and why "재현 안 됨" happened elsewhere). Write it with the Reproduction and in
   Pre-Context's per-path status (경로별 상태). It is not the Root Cause: the Root Cause is the
   code-level mechanism the diagnosis established (`references/diagnose-rootcause.md` §6), such as

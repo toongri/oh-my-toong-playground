@@ -67,7 +67,7 @@ like — match it. You are the synthesizer; the workers supply the tracks you tr
 | **Causal judgment & cross-module reasoning** | `oracle` | Whether the proposed mechanism actually produces the symptom, change propagation, and **active disproof of competing hypotheses** (§3). Fire oracle whenever the mechanism crosses module boundaries or stays unclear after `explore` returns — for symptom diagnosis that is the default, not the exception. |
 | **External / library / protocol behavior** | `librarian` | How an external dependency actually behaves when the mechanism touches one — PG/payment semantics, third-party API error contracts, framework/ORM edge behavior, library defaults. Use it instead of guessing what a dependency does. |
 | **Runtime evidence** | **you, directly** (observability / log tools) | The production trace that proves the mechanism fired: timelines, error signatures, the entity's actual history. `explore` cannot reach logs/observability — this track is yours (§4). |
-| **Reproduction** | **you, directly** (your own isolated instance first, then shared stg/dev) | The environment matrix, the attempt records, the raw output of the reproducing run and its control run, and the trigger axis found by differential reproduction. **Read `references/reproduce.md` now** and run it. It is a runtime-evidence track (§4), and it runs even when logs are wired. |
+| **Reproduction** | **you, directly** (your own isolated instance first, then shared stg/dev) | The environment matrix, the attempt records, the raw output of the reproducing run and its control runs, and the trigger condition (every necessary axis) found by differential reproduction. **Read `references/reproduce.md` now** and run it. It is a runtime-evidence track (§4), and it runs even when logs are wired. |
 | **Non-code context** | **you, directly** (PM / messenger / docs tools) | The witness account, the originating thread, related decisions. Inline per gather-crosslink.md. |
 
 Dispatch the independent tracks **concurrently** (one message, multiple agents) — they have no shared
@@ -134,8 +134,8 @@ Runtime evidence comes in two forms, and either one satisfies this gate:
 - **a production trace** — logs, metrics, or records showing the mechanism fired for the affected
   entity; or
 - **a matching reproduction** — a run whose observed output matches the production signature
-  literally (same error string, same wrong value, same status), paired with a control run that
-  differs only in the trigger axis and does not reproduce (`references/reproduce.md` §3). The
+  literally (same error string, same wrong value, same status), paired with control runs that each
+  revert one axis of the trigger condition and do not reproduce (`references/reproduce.md` §3). The
   matching output must come from the code under suspicion. An error returned by a mock or stub you
   wrote is not a matching reproduction (`references/reproduce.md` §3, `BOUNDARY ONLY`).
 
