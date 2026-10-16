@@ -191,7 +191,7 @@ Bug issues carry the following investigation information. This is required infor
 
 | Field | Content |
 |---|---|
-| **Reproduction** | The run that reproduced the bug, in this order: (1) the environment and the axis values that matter (flags, runtime/`TZ`, data state, client); (2) minimal numbered steps you actually ran, with data setup; (3) the observed raw output (status + body, log line) next to the expected result; (4) whether it matches the production signature literally. Add a reproduction matrix (환경 \| 조건 (차이 나는 축) \| 결과 \| 근거) when two or more environments or axis values were attempted, so the reader sees which difference flips the outcome. When nothing reproduced, state the attempts and the axis you could not set. Procedure and evidence rules: `references/reproduce.md`. |
+| **Reproduction** | Minimal numbered steps you actually ran, with the environment, the axis values that matter (flags, `TZ`, data state, client), and data setup; then the observed raw output next to the expected result. Add the reproduction matrix when two or more environments or axis values were attempted (`references/reproduce.md` §6). When nothing reproduced, state the attempts and the axis you could not set. |
 | **Root Cause** | (promoted from standard, filled from Stage 3 code investigation output) |
 | **Evidence** | Logs, stack traces, error output, or metric anomalies that confirm the symptom. |
 
@@ -523,9 +523,10 @@ remains the Reproduction re-run: a defined, executable method that satisfies the
 gate (SKILL.md). So a reproducible bug always carries an actionable AC even while its cause is
 unconfirmed. A bug that passed the `No consistent reproduction` gate on log evidence or a witness
 account alone has no steps to re-run: its Reproduction records the attempts instead, and its AC
-Verification is the targeted test with the traced input in `references/reproduce.md` §6. The check
-that the production signature drops to zero goes in the Post-Release Observation section (Form 2),
-not in the AC.
+Verification is a targeted test that drives the traced code path with the traced input (e.g., call
+the function with the amount and coupon rate from the failing log line). The check that the
+production signature drops to zero goes in the Post-Release Observation section (Form 2), not in
+the AC.
 
 ---
 

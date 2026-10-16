@@ -7,7 +7,7 @@ The deliverable is the issue body as rendered in Linear, GitHub, or Jira. Its re
 | Observable input | Body order |
 |---|---|
 | Requirement or improvement | Problem → relevant confirmed context → acceptance criteria → non-goals → available references |
-| Reproducible bug, cause not established | Problem → reproduction (environment, steps, observed raw output next to the expected result, and a reproduction matrix when two or more environments or axis values were attempted, including two configurations of one environment — see reproduce.md §6) → confirmed context and next diagnostic check → acceptance criteria → non-goals → available references |
+| Reproducible bug, cause not established | Problem → reproduction with actual/expected result (plus the matrix when attempted, reproduce.md §6) → confirmed context and next diagnostic check → acceptance criteria → non-goals → available references |
 | Established cause | Same bug body, with a causal explanation beside the reproduction; link or append the detailed investigation when it is needed to assess the conclusion |
 | User explicitly requests a full incident/RCA report | Full investigation shape in issue-craft.md §3 |
 
@@ -67,7 +67,8 @@ The first paragraph names the affected user and the concrete current-to-required
 
 근본 원인: 비동기 환불 경로의 `requestRefund`(환불 요청 함수)는 주문에 환불 번호를 먼저 기록하고, 환불 행은 워커가 나중에 만든다(`src/refund.ts:5-7`). 그 사이 `listOrders`(주문내역 응답 함수)가 없는 환불 행의 금액을 읽어 예외가 나고 응답 전체가 500이 된다(`src/orders.ts:8-9`). 운영 로그에서도 환불 요청 → 500 → 워커 실행 → 200 순서가 두 회원에게 같다.
 
-확신도: 확인됨 — 운영 로그, 재현과 대조 실행, 코드가 같은 메커니즘을 가리킨다. 재현은 운영과 런타임 버전과 배포 커밋이 다르고 워커를 손으로 돌렸다. 오류 문구가 같으므로 이 차이가 결론을 바꿀 여지는 작다. 앱 5.2.0 원인설은 위 표의 5.1.3 행과 운영 5.1.3 사용자의 같은 오류로 배제했다.
+확신도: 확인됨 — 운영 로그, 재현과 대조 실행, 코드가 같은 메커니즘을 가리킨다. 앱 5.2.0 원인설은 표의 3행으로 배제했다.
+운영과 다른 점: 런타임 버전, 배포 커밋, 워커를 손으로 실행. 오류 문구가 같아 결론이 바뀔 여지는 작다.
 
 ## 사전 확인
 - 경로별 상태: 결함은 `REFUND_ASYNC=on` 경로(stg·운영)에만 있다. `off` 경로는 환불 행을 먼저 만든다.

@@ -23,10 +23,9 @@ down. Three specific failures recur, and each is countered by a section below:
   the cause. (Countered by §4.)
 - **Single-hypothesis lock-in** — the first plausible cause is accepted; competing explanations are
   never enumerated, so a wrong-but-plausible cause survives. (Countered by §3.)
-- **"재현 안 됨" accepted as a fact** — the symptom does not appear in one environment, and the
-  investigation stops there instead of asking which environment difference hides it, or a
-  reproduction that matches production is obtained and then not counted as evidence. (Countered by
-  the reproduction track, `references/reproduce.md`, and §4.)
+- **"재현 안 됨" accepted as a fact** — the symptom does not appear in one environment and the
+  investigation stops instead of asking which environment difference hides it. (Countered by
+  `references/reproduce.md`.)
 
 The orchestration in §2 is what makes the depth affordable: you delegate breadth and judgment, and
 spend your own turns on the runtime evidence and the synthesis only a context-holder can do.
@@ -67,7 +66,7 @@ like — match it. You are the synthesizer; the workers supply the tracks you tr
 | **Causal judgment & cross-module reasoning** | `oracle` | Whether the proposed mechanism actually produces the symptom, change propagation, and **active disproof of competing hypotheses** (§3). Fire oracle whenever the mechanism crosses module boundaries or stays unclear after `explore` returns — for symptom diagnosis that is the default, not the exception. |
 | **External / library / protocol behavior** | `librarian` | How an external dependency actually behaves when the mechanism touches one — PG/payment semantics, third-party API error contracts, framework/ORM edge behavior, library defaults. Use it instead of guessing what a dependency does. |
 | **Runtime evidence** | **you, directly** (observability / log tools) | The production trace that proves the mechanism fired: timelines, error signatures, the entity's actual history. `explore` cannot reach logs/observability — this track is yours (§4). |
-| **Reproduction** | **you, directly** (your own isolated instance first, then shared stg/dev) | The environment matrix, the attempt records, the raw output of the reproducing run and its control runs, and the trigger condition (every necessary axis) found by differential reproduction. **Read `references/reproduce.md` now** and run it. It is a runtime-evidence track (§4), and it runs even when logs are wired. |
+| **Reproduction** | **you, directly** (your own isolated instance first, then shared stg/dev) | The environment matrix, attempt records, the matching run with its control runs, and the trigger condition. **Read `references/reproduce.md` now** and run it — a runtime-evidence track (§4) that runs even when logs are wired. |
 | **Non-code context** | **you, directly** (PM / messenger / docs tools) | The witness account, the originating thread, related decisions. Inline per gather-crosslink.md. |
 
 Dispatch the independent tracks **concurrently** (one message, multiple agents) — they have no shared
@@ -129,26 +128,15 @@ Rules:
 Code tells you the *mechanism*; runtime evidence proves the mechanism *actually fired* and is what the
 user is hitting. You need both.
 
-Runtime evidence comes in two forms, and either one satisfies this gate:
+Runtime evidence is either **a production trace** (logs, metrics, or records showing the mechanism
+fired for the affected entity) or **a matching reproduction** with its control runs
+(`references/reproduce.md` §3).
 
-- **a production trace** — logs, metrics, or records showing the mechanism fired for the affected
-  entity; or
-- **a matching reproduction** — a run whose observed output matches the production signature
-  literally (same error string, same wrong value — a status code alone is too generic to count),
-  paired with control runs that each
-  revert one axis of the trigger condition and do not reproduce (`references/reproduce.md` §3). The
-  matching output must come from the code under suspicion. An error returned by a mock or stub you
-  wrote is not a matching reproduction (`references/reproduce.md` §3, `BOUNDARY ONLY`).
-
-**Gate:** a Root Cause may be marked Confirmed (§6) only with at least one of the two. If an
-observability/log tool is wired, the trace is still required: query it. If neither a trace nor a
-matching reproduction is obtained, the Root Cause is capped at hypothesis-grade and is written as
-`TBD — needs validation via {runtime method}`.
-
-A matching reproduction is not hypothesis-grade because production itself was not observed. Do not
-downgrade it for that reason. State its fidelity statement (which axes still differ from
-production), and keep any production-only fact you could not see (how many users, since when) as its
-own `TBD`.
+**Gate:** a Root Cause may be marked Confirmed (§6) only with at least one of the two, and with the
+trace whenever an observability/log tool is wired — query it. With neither, the Root Cause is
+hypothesis-grade: `TBD — needs validation via {runtime method}`. A matching reproduction is not
+downgraded for missing production; its fidelity statement names the remaining gap, and a
+production-only fact you could not see (how many users, since when) stays its own `TBD`.
 
 How to run the runtime track (this is **targeted depth**, the opposite of the gather logs cap):
 
@@ -196,9 +184,7 @@ A Root Cause may be written as **Confirmed** (and the issue filed with it) only 
 1. **Triangulation** — at least two *independent, heterogeneous* tracks converge on the same mechanism
    (e.g., runtime evidence + code, or a matching reproduction + code; not two code reads). Homogeneous
    corroboration (two reads of the same code) is one track, not two.
-2. **Runtime evidence** — the §4 gate is satisfied: a production trace or a matching reproduction,
-   and the production trace whenever an observability/log tool is wired. A matching reproduction
-   does not replace a trace you could have queried.
+2. **Runtime evidence** — the §4 gate is satisfied.
 3. **Disproof** — the §3 ledger holds ≥2 candidates and every competing hypothesis is REFUTED (or any
    NOT-DISTINGUISHED alternative is named with the query that would resolve it).
 4. **Multi-path** — §5 coverage is complete; per-path status is known.
@@ -223,8 +209,7 @@ fix scope — often it does not).
 The sub-pipeline feeds the issue body (issue-craft.md) as follows:
 
 - **Root Cause / Symptom / Fix direction** ← the Confirmed mechanism (§6), in the RCA Bug-Report shape.
-- **Reproduction** ← the reproducing run's steps and raw output, plus the reproduction matrix when two
-  or more environments or axis values were attempted (`references/reproduce.md` §6).
+- **Reproduction** ← the reproducing run and, when attempted, the matrix (`references/reproduce.md` §6).
 - **Evidence** ← the runtime trace (§4) quoted directly (log lines, timeline, the decisive asymmetry),
   plus the FILE:LINE code citations from the `explore` tracks.
 - **Pre-Context / per-path status** ← §5 coverage: which implementations carry the defect. Rendered as

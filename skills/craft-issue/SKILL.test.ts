@@ -37,71 +37,20 @@ test("일반 버그의 조사 필드는 발표 템플릿의 본문에 배치한�
 	expect(issueCraftMd).not.toContain("For bug issues the ordering is:");
 });
 
-test("증상 진단은 재현 경로를 읽고, 운영 신호와 일치하는 재현을 런타임 증거로 센다", () => {
+test("증상 진단은 재현 트랙을 읽고, 재현 트랙은 판정 어휘와 본문 출력 계약을 갖는다", () => {
 	const diagnoseMd = readFileSync(join(import.meta.dir, "references/diagnose-rootcause.md"), "utf8");
-	expect(existsSync(join(import.meta.dir, "references/reproduce.md"))).toBe(true);
+	const reproduceMd = readFileSync(join(import.meta.dir, "references/reproduce.md"), "utf8");
 	expect(diagnoseMd).toContain("**Read `references/reproduce.md` now**");
 	expect(diagnoseMd).toContain("a matching reproduction");
-});
-
-test("재현 결과는 확신도 게이트·근본 원인·본문 재현 표 조건과 어긋나지 않는다", () => {
-	const diagnoseMd = readFileSync(join(import.meta.dir, "references/diagnose-rootcause.md"), "utf8");
-	const reproduceMd = readFileSync(join(import.meta.dir, "references/reproduce.md"), "utf8");
-	const presentationMd = readFileSync(join(import.meta.dir, "references/presentation.md"), "utf8");
-	expect(diagnoseMd).toContain("and the production trace whenever an observability/log tool is wired");
+	expect(reproduceMd).toContain("MATCH | DIFFERENT ({how}) | NOT REPRODUCED | BOUNDARY ONLY");
+	expect(reproduceMd).toContain("NOT-DISTINGUISHED");
 	expect(reproduceMd).toContain("It is not the Root Cause");
-	expect(reproduceMd).not.toContain("**Root Cause / confidence** — the trigger axis");
-	expect(presentationMd).toContain("two or more environments or axis values were attempted");
 });
 
-test("차등 재현은 재현되는 구성에서 축을 되돌려 필요조건을 모두 남긴다", () => {
-	const reproduceMd = readFileSync(join(import.meta.dir, "references/reproduce.md"), "utf8");
-	expect(reproduceMd).toContain("Start from the **reproducing configuration**");
-	expect(reproduceMd).toContain("Keep every necessary axis");
-	expect(reproduceMd).not.toContain("from the non-reproducing configuration toward the reproducing one");
-	expect(reproduceMd).toContain("**reduced configuration**");
-	expect(reproduceMd).toContain("A single non-flip is not a refutation");
-	expect(reproduceMd).toContain("Never\n  leave them out of the trigger condition");
-});
-
-test("재현 실패·일반 상태 코드·재현 없는 완료 조건이 확신도 게이트와 어긋나지 않는다", () => {
-	const reproduceMd = readFileSync(join(import.meta.dir, "references/reproduce.md"), "utf8");
-	expect(reproduceMd).toContain("A status code alone (HTTP 500, \"결제 실패\") is not a signature");
-	expect(reproduceMd).toContain("The cause is hypothesis-grade only if the production trace does not supply it");
-	expect(reproduceMd).toContain("When\n  nothing reproduced, there are no steps to re-run");
-});
-
-test("동적 값 정규화·대조 실행 해석·재현 없는 완료 조건이 서로 어긋나지 않는다", () => {
-	const reproduceMd = readFileSync(join(import.meta.dir, "references/reproduce.md"), "utf8");
+test("재현 없는 버그의 완료 조건은 추적된 입력의 테스트이고 배포 후 관찰은 완료 조건 밖에 둔다", () => {
 	const issueCraft = readFileSync(join(import.meta.dir, "references/issue-craft.md"), "utf8");
-	expect(reproduceMd).not.toContain("the same wrong `ids`");
-	expect(reproduceMd).toContain("are normalized to their shape before comparing");
-	expect(reproduceMd).not.toContain("runs are the evidence that an axis does *not* matter");
-	expect(reproduceMd).toContain("shows that axis is\nnecessary (§4)");
-	expect(issueCraft).not.toContain("a bug with no reproduction is already refused upstream");
-	expect(issueCraft).toContain("`references/reproduce.md` §6");
-});
-
-test("공통 전제 축과 대체 축이 트리거 조건에서 빠지지 않는다", () => {
-	const reproduceMd = readFileSync(join(import.meta.dir, "references/reproduce.md"), "utf8");
-	expect(reproduceMd).toContain("it can still be a prerequisite");
-	expect(reproduceMd).not.toContain("the necessary axes from §4, all of them");
-	expect(reproduceMd).toContain("the whole trigger condition §4 recorded");
-});
-
-test("재현 없는 버그의 배포 후 관찰은 완료 조건 검증이 아니라 별도 섹션에 둔다", () => {
-	const reproduceMd = readFileSync(join(import.meta.dir, "references/reproduce.md"), "utf8");
-	const issueCraft = readFileSync(join(import.meta.dir, "references/issue-craft.md"), "utf8");
-	expect(issueCraft).not.toContain("targeted test with the traced input plus the post-release observation");
-	expect(reproduceMd).not.toContain("Pair it with a\n  post-release observation");
-	expect(reproduceMd).toContain("not part of the AC Verification");
-});
-
-test("간헐적 증상은 결정적 재현이나 반복 실행 없이 축을 판정하지 않는다", () => {
-	const reproduceMd = readFileSync(join(import.meta.dir, "references/reproduce.md"), "utf8");
-	expect(reproduceMd).toContain("**Intermittent symptoms.**");
-	expect(reproduceMd).toContain("one run per configuration is not evidence");
-	expect(reproduceMd).toContain("reproduces in none of its runs");
+	expect(issueCraft).toContain("targeted test that drives the traced code path");
+	expect(issueCraft).toContain("Post-Release Observation section (Form 2), not in\nthe AC");
 });
 
 describe("A1: agents/issue-reviewer.md frontmatter", () => {

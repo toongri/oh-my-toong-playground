@@ -103,9 +103,8 @@ When the open question is **"what is the cause?"** — a symptom report, bug, re
 Stage 3 is a full diagnosis sub-pipeline. **Read `references/diagnose-rootcause.md` now** (using the Read
 tool with path `references/diagnose-rootcause.md`) and run it in full. It enforces independent diagnosis
 (a prior issue's stated cause is a hypothesis, not an answer), an orchestration that delegates breadth
-to `explore`/`oracle`/`librarian` while you own the runtime-evidence and reproduction tracks (the
-reproduction track — environment matrix, attempts, differential reproduction, reproduction evidence —
-is `references/reproduce.md`), a competing-hypothesis
+to `explore`/`oracle`/`librarian` while you own the runtime-evidence and reproduction tracks
+(`references/reproduce.md`), a competing-hypothesis
 disproof ledger, runtime-evidence grounding, multi-path coverage, and a confidence gate that decides
 whether the Root Cause is written as established or as `TBD — needs validation via {method}`.
 
@@ -285,5 +284,5 @@ Human review is post-hoc: the issue is written first; the caller can review and 
 
 - `references/gather-crosslink.md`: complete gather bound, curation rules, effective-state reconstruction from an existing issue's comment thread, cross-link procedure, source-unreachable handling, impact & premises investigation delegation (§7), and cross-link annotation format. Read at Stage 2.
 - `references/diagnose-rootcause.md`: the symptom-report diagnosis sub-pipeline — independent-diagnosis mandate (prior issues are hypotheses), delegation orchestration (explore/oracle/librarian + your own runtime-evidence track), competing-hypothesis disproof ledger, runtime-evidence gate, multi-path coverage, and the confidence gate. Read at Stage 3 when the cause is unknown.
-- `references/reproduce.md`: the reproduction track of the diagnosis sub-pipeline — environment matrix (which environment differences can hide or trigger the symptom), attempt order with shared-environment safety, matching against the production signature with a control run, differential reproduction, attempt records with a fidelity statement, and the reproduction matrix in the issue. Read at Stage 3 when the cause is unknown.
+- `references/reproduce.md`: the reproduction track — environment matrix, attempt order with shared-environment safety, production-signature matching with control runs, differential reproduction, attempt records, and the reproduction matrix. Read at Stage 3 when the cause is unknown.
 - `references/issue-craft.md`: best-practice body shape, **Append Comment Shape** (변경 요약 / 근거 / 대체 대상 / 정정 후 상태), observable-AC rubric (weasel-word prohibition, Action/Expected/Verification), RCA Bug-Report shape, anti-fluff rules, Model A INVEST slice rubric with per-child stage-check and settled-child handoff, Render Contract, and symbol-gloss contract. Read at Stages 4 and 5, and consulted again at Stage 6's Plain-Language Gate.
