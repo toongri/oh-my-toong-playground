@@ -47,7 +47,7 @@ async function fixture(opts: { exitCode?: number; register?: boolean; markPass?:
 	if (saved.status !== "ok" || !("path" in saved)) throw new Error("case not saved");
 	const storyHash = createHash("sha256").update(JSON.stringify(readQaState(sid)!.stories![0]!.contract)).digest("hex");
 	const result = await runQaCase(record, { casePath: saved.path, caseRevision: saved.revision, projectRoot: root, storeLocation: configured.location, codeRef: "code", resetConfirmed: "reset", sessionId: sid, storyId: "story", actorId: "actor", actorBoundary: "terminal", scenarioId: "s1", cycle: 0, storyContractSha256: storyHash });
-	if (register) registerQaCaseRunReceipt(sid, result.receipt.artifact_paths.receipt, result.receipt.attempt_id, result.receiptSha256);
+	if (register) registerQaCaseRunReceipt(sid, result.receipt.artifact_paths.receipt, result.receipt.attempt_id, result.receiptSha256, 0);
 	const boundary = join(result.runDirectory, "boundary.txt");
 	if (markPass) recordScenario(sid, { story: "story", scenario: "s1", status: "pass", evidencePath: boundary, evidenceSurface: "bash" });
 	return { result, savedPath: saved.path, savedRevision: saved.revision, boundary, record };
@@ -103,6 +103,16 @@ test("시나리오를 수정하면 수정 전 재생 receipt로는 연결할 수
 	amendScenario(sid, { story: "story", id: "s1", title: "run the case", preconditions: "case exists", steps: ["run the runner with the corrected input"], expected: "result observed", whyNeeded: "covers the runner boundary", priority: "H", risks: [1], reason: "단계가 실제 동작과 달라 바로잡음" });
 	recordScenario(sid, { story: "story", scenario: "s1", status: "pass", evidencePath: fx.boundary, evidenceSurface: "bash" });
 	expect(() => link()).toThrow(/no trusted replay receipt/);
+});
+
+test("재생 도중 시나리오가 수정되면 그 재생의 receipt 등록을 거부한다", async () => {
+	const fx = await fixture({ register: false });
+	const { receipt } = fx.result.receipt.artifact_paths;
+	amendScenario(sid, { story: "story", id: "s1", title: "run the case", preconditions: "case exists", steps: ["run the runner with the corrected input"], expected: "result observed", whyNeeded: "covers the runner boundary", priority: "H", risks: [1], reason: "단계가 실제 동작과 달라 바로잡음" });
+	expect(() => registerQaCaseRunReceipt(sid, receipt, fx.result.receipt.attempt_id, fx.result.receiptSha256, 0)).toThrow(/amended while the replay ran/);
+	expect(readQaState(sid)?.trusted_receipts ?? []).toEqual([]);
+	registerQaCaseRunReceipt(sid, receipt, fx.result.receipt.attempt_id, fx.result.receiptSha256, 1);
+	expect(readQaState(sid)?.trusted_receipts?.map((entry) => entry.attempt_id)).toEqual([fx.result.receipt.attempt_id]);
 });
 
 test("종료 상태가 깨끗하지 않은 재생은 거부한다", async () => {

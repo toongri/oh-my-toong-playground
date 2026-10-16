@@ -6,7 +6,7 @@ import { getQaCase, getQaCaseStoreStatus, resolveQaCaseContext, type QaCaseRecor
 import { runQaCase } from "@lib/qa-case-run.ts";
 import { heldDevice, unreleasedResources } from "@lib/session-resources.ts";
 import { resolveSessionIdOrThrow } from "@lib/state-core";
-import { readQaState, registerQaCaseRunReceipt } from "./qa-state.ts";
+import { readQaState, registerQaCaseRunReceipt, scenarioAmendmentCount } from "./qa-state.ts";
 
 function parseArgs(args: string[]): Record<string, string | boolean> {
 	const result: Record<string, string | boolean> = {};
@@ -100,6 +100,7 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 	if (!record.feature_refs.some((id) => storyFeatures.includes(id))) fail(`case feature_refs [${record.feature_refs.join(", ")}] share no feature with story "${storyId}" provenance [${storyFeatures.join(", ")}]`);
 	const device = typeof parsed.device === "string" ? parsed.device : undefined;
 	if (device !== undefined && !heldDevice(unreleasedResources(sessionId), device)) fail(`--device "${device}" is not a device this session holds; use the serial acquire-device returned this session`);
+	const amendmentsAtReplayStart = scenarioAmendmentCount(state, storyId, scenarioId, state.cycle);
 	const result = await runQaCase(record, {
 		casePath: caseResult.path,
 		caseRevision: caseResult.revision,
@@ -119,7 +120,7 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 		allowProjectCwd: parsed["allow-project-cwd"] === true,
 		device,
 	});
-	registerQaCaseRunReceipt(sessionId, result.receipt.artifact_paths.receipt, result.receipt.attempt_id, result.receiptSha256);
+	registerQaCaseRunReceipt(sessionId, result.receipt.artifact_paths.receipt, result.receipt.attempt_id, result.receiptSha256, amendmentsAtReplayStart);
 	process.stdout.write(`${JSON.stringify(result.receipt)}\n`);
 	return result.receipt;
 }

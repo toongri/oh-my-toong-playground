@@ -517,8 +517,16 @@ function mergeWrite(sessionId: string, next: Partial<ChainState>): QaState {
 	return withStateLock(resolveStatePath(sessionId), () => mergeWriteUnlocked(sessionId, next));
 }
 
-/** Registers the exact receipt bytes produced by a case run under the QA state lock. */
-export function registerQaCaseRunReceipt(sessionId: string, receiptPath: string, attemptId: string, receiptSha256: string): QaTrustedReceipt {
+/** How many times a scenario was amended in a cycle; a replay compares it at start and at registration. */
+export function scenarioAmendmentCount(state: Partial<ChainState>, story: string, scenario: string, cycle: number): number {
+	return (state.scenario_amendments ?? []).filter((amendment) => amendment.story === story && amendment.id === scenario && amendment.cycle === cycle).length;
+}
+
+/**
+ * Registers the exact receipt bytes produced by a case run under the QA state lock.
+ * `amendmentsAtReplayStart` is the scenario's amendment count read before the run; a different count now means the run drove a superseded scenario.
+ */
+export function registerQaCaseRunReceipt(sessionId: string, receiptPath: string, attemptId: string, receiptSha256: string, amendmentsAtReplayStart: number): QaTrustedReceipt {
 	const stateFilePath = resolveStatePath(sessionId);
 	return withStateLock(stateFilePath, () => {
 		const canonicalPath = realpathSync(resolve(receiptPath));
@@ -527,6 +535,10 @@ export function registerQaCaseRunReceipt(sessionId: string, receiptPath: string,
 		if (snapshot.sha256 !== receiptSha256) throw new Error("qa-state: receipt digest does not match runner output snapshot");
 		const trusted: QaTrustedReceipt = { attempt_id: attemptId, receipt_path: canonicalPath, sha256: receiptSha256 };
 		const prior = readPrior(sessionId);
+		const { story_id: story, scenario_id: scenario, cycle } = snapshot.receipt;
+		// A receipt without a story and scenario cannot be bound to one, so no amendment can make it stale.
+		const amendmentsNow = story === undefined || scenario === undefined ? 0 : scenarioAmendmentCount(prior, story, scenario, cycle);
+		if (amendmentsNow !== amendmentsAtReplayStart) throw new Error(`qa-state: scenario ${story}/${scenario} was amended while the replay ran; replay it again`);
 		const existing = (prior.trusted_receipts ?? []).find((entry) => entry.attempt_id === trusted.attempt_id);
 		if (existing) {
 			if (existing.receipt_path !== trusted.receipt_path || existing.sha256 !== trusted.sha256) throw new Error("qa-state: receipt attempt is already registered with a different snapshot");

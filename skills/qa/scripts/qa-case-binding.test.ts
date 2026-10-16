@@ -39,7 +39,7 @@ test("실행 receipt를 현재 시나리오에 boundary evidence와 함께 바�
 	const bytes = readFileSync(casePath);
 	mkdirSync(join(root, "store"), { recursive: true });
 	const result = await runQaCase(record, { casePath, caseRevision: createHash("sha256").update(bytes).digest("hex"), projectRoot: root, storeLocation: join(root, "store"), codeRef: "code", resetConfirmed: "reset", sessionId: sid, storyId: "story", actorId: "actor", actorBoundary: "terminal", scenarioId: "s1", cycle: 0, storyContractSha256: storyHash });
-	registerQaCaseRunReceipt(sid, result.receipt.artifact_paths.receipt, result.receipt.attempt_id, result.receiptSha256);
+	registerQaCaseRunReceipt(sid, result.receipt.artifact_paths.receipt, result.receipt.attempt_id, result.receiptSha256, 0);
 	const boundary = join(result.runDirectory, "boundary.txt");
 	recordScenario(sid, { story: "story", scenario: "s1", status: "pass", evidencePath: boundary, evidenceSurface: "bash", caseRun: result.receipt.artifact_paths.receipt });
 	const persisted = readQaState(sid)?.scenarios?.find((scenario) => scenario.story === "story" && scenario.id === "s1");
@@ -79,7 +79,7 @@ test("등록 전에 receipt가 변조되면 runner 원본 digest와 달라 등�
 	const fixture = await bindingFixture(false);
 	const original = { attempt_id: fixture.result.receipt.attempt_id, receipt_path: fixture.receiptPath, digest: createHash("sha256").update(readFileSync(fixture.receiptPath)).digest("hex") };
 	writeFileSync(fixture.receiptPath, `${JSON.stringify({ ...fixture.result.receipt, exit_status: { code: 0, signal: null, timedout: false, max_buffer_exceeded: false } })}\n`);
-	expect(() => registerQaCaseRunReceipt(sid, original.receipt_path, original.attempt_id, fixture.result.receiptSha256)).toThrow(/digest|snapshot|runner/);
+	expect(() => registerQaCaseRunReceipt(sid, original.receipt_path, original.attempt_id, fixture.result.receiptSha256, 0)).toThrow(/digest|snapshot|runner/);
 	expect(readQaState(sid)?.trusted_receipts).toBeUndefined();
 });
 
@@ -109,7 +109,7 @@ async function bindingFixture(register = true, exitCode = 0) {
 	const store = join(root, "store"); mkdirSync(store, { recursive: true });
 	const result = await runQaCase(record, { casePath, caseRevision: createHash("sha256").update(bytes).digest("hex"), projectRoot: root, storeLocation: store, codeRef: "code", resetConfirmed: "reset", sessionId: sid, storyId: "story", actorId: "actor", actorBoundary: "terminal", scenarioId: "s1", cycle: 0, storyContractSha256: storyHash });
 	const receiptPath = result.receipt.artifact_paths.receipt;
-	if (register) registerQaCaseRunReceipt(sid, receiptPath, result.receipt.attempt_id, result.receiptSha256);
+	if (register) registerQaCaseRunReceipt(sid, receiptPath, result.receipt.attempt_id, result.receiptSha256, 0);
 	return { result, receiptPath, boundary: join(result.runDirectory, "boundary.txt"), casePath, nativePath };
 }
 
