@@ -97,7 +97,9 @@ You do not own a shared environment's processes, data, or uptime.
 
 A reproduction counts when its observed output **matches the production signature** — the error
 message, wrong value, or output line the reporter or the logs show. Compare them literally: the same
-error string, the same wrong `ids`. A different error that happens to share a symptom ("it's also a
+error string, the same wrong value. Values that differ between environments by construction (order
+IDs, timestamps, hostnames, file paths, generated tokens) are normalized to their shape before comparing;
+every other part must match character for character. A different error that happens to share a symptom ("it's also a
 500") is a different bug until shown otherwise.
 
 The signature must be specific enough to tell mechanisms apart: an error string, a stack frame, a
@@ -169,7 +171,9 @@ hypothesis that names an axis gets a run that changes that axis inside the repro
 ## 5. Record Every Attempt
 
 Keep one attempt record per run, including the runs that did not reproduce. The non-reproducing
-runs are the evidence that an axis does *not* matter.
+runs are evidence too: a control that stops reproducing when one axis is reverted shows that axis is
+necessary (§4). A run that still reproduces with an axis changed is what can show an axis does not
+matter, and §4 decides when that counts as a refutation.
 
 ```
 Attempt: {environment} — {axis values that matter: flags, TZ, runtime, data state, client}

@@ -71,6 +71,17 @@ test("재현 실패·일반 상태 코드·재현 없는 완료 조건이 확신
 	expect(reproduceMd).toContain("When\n  nothing reproduced, there are no steps to re-run");
 });
 
+test("동적 값 정규화·대조 실행 해석·재현 없는 완료 조건이 서로 어긋나지 않는다", () => {
+	const reproduceMd = readFileSync(join(import.meta.dir, "references/reproduce.md"), "utf8");
+	const issueCraft = readFileSync(join(import.meta.dir, "references/issue-craft.md"), "utf8");
+	expect(reproduceMd).not.toContain("the same wrong `ids`");
+	expect(reproduceMd).toContain("are normalized to their shape before comparing");
+	expect(reproduceMd).not.toContain("runs are the evidence that an axis does *not* matter");
+	expect(reproduceMd).toContain("shows that axis is\nnecessary (§4)");
+	expect(issueCraft).not.toContain("a bug with no reproduction is already refused upstream");
+	expect(issueCraft).toContain("`references/reproduce.md` §6");
+});
+
 describe("A1: agents/issue-reviewer.md frontmatter", () => {
 	test("declares name: issue-reviewer", () => {
 		expect(reviewerMd).toMatch(/^name: issue-reviewer$/m);
