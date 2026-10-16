@@ -82,6 +82,13 @@ test("동적 값 정규화·대조 실행 해석·재현 없는 완료 조건이
 	expect(issueCraft).toContain("`references/reproduce.md` §6");
 });
 
+test("공통 전제 축과 대체 축이 트리거 조건에서 빠지지 않는다", () => {
+	const reproduceMd = readFileSync(join(import.meta.dir, "references/reproduce.md"), "utf8");
+	expect(reproduceMd).toContain("it can still be a prerequisite");
+	expect(reproduceMd).not.toContain("the necessary axes from §4, all of them");
+	expect(reproduceMd).toContain("the whole trigger condition §4 recorded");
+});
+
 describe("A1: agents/issue-reviewer.md frontmatter", () => {
 	test("declares name: issue-reviewer", () => {
 		expect(reviewerMd).toMatch(/^name: issue-reviewer$/m);

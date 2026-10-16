@@ -32,7 +32,10 @@ deploy manifests, base images, feature-flag definitions, cron/worker schedules),
 
 Then compare the reproducing environment with the non-reproducing one. **The axes whose values
 differ are the candidate triggers.** An axis with the same value in both environments cannot explain
-why one reproduces and the other does not. Mark each environment with a forecast — `expected to
+why one reproduces and the other does not, but it can still be a prerequisite (the symptom needs A
+**and** B, and B is set everywhere you looked). Keep such an axis as a candidate when the code path
+under suspicion reads it, and revert it in §4 like the others, to a value neither environment has
+(the opposite flag value, the empty data state). Mark each environment with a forecast — `expected to
 reproduce`, `expected not to`, or `unknown` — and the axis that decides it.
 
 This matrix is a working artifact. It drives the attempt order (§2) and the differential runs (§4),
@@ -213,7 +216,8 @@ environment or person that could set it: that is the `{method}` in `TBD — need
   (for example: `경계까지만 — 결제사는 직접 만든 모의 서버, 서버가 보낸 금액 13591.5`), never
   `재현됨`. An environment you did not attempt gets no row. A forecast without an attempt goes in Pre-Context
   as `TBD — needs validation via {method}`, never as a matrix row.
-- **Trigger condition** — the necessary axes from §4, all of them, are the condition that exposes the defect (which
+- **Trigger condition** — the whole trigger condition §4 recorded (the necessary axes, the alternatives
+  joined with "or", any combination found, and any NOT-DISTINGUISHED axes) is the condition that exposes the defect (which
   environments hit it and why "재현 안 됨" happened elsewhere). Write it with the Reproduction and in
   Pre-Context's per-path status (경로별 상태). It is not the Root Cause: the Root Cause is the
   code-level mechanism the diagnosis established (`references/diagnose-rootcause.md` §6), such as
