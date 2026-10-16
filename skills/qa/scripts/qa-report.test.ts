@@ -11,6 +11,7 @@ import {
 	readerEnglishWords,
 	defaultEvidenceReader,
 	scenarioKey,
+	normalizeSvgWidth,
 	MAX_EMBED_BYTES,
 	MAX_TOTAL_EMBED_BYTES,
 	type EvidenceReader,
@@ -1793,5 +1794,34 @@ describe("qa-report CLI", () => {
 		const stdout = execSync(`bun ${reportScript} --session ${S} --out ${out}`, { encoding: "utf8", env: process.env });
 		expect(stdout).toContain("no roster");
 		expect(existsSync(out)).toBe(false);
+	});
+});
+
+describe("mermaid SVG 폭 정규화 (normalizeSvgWidth)", () => {
+	test("viewBox 원점이 0이 아니고 루트 width가 10이어도 viewBox 폭으로 고친다", () => {
+		const svg = '<svg width="10" viewBox="4 4 1155.625 379"></svg>';
+		expect(normalizeSvgWidth(svg)).toContain('width="1156"');
+	});
+
+	test("중첩 marker의 viewBox가 아니라 루트 SVG의 viewBox 폭을 사용한다", () => {
+		const svg =
+			'<svg width="100%" viewBox="-23.609375 0 1467.28125 244">' +
+			'<defs><marker viewBox="0 0 10 10" /></defs></svg>';
+		expect(normalizeSvgWidth(svg)).toContain('<svg width="1468"');
+	});
+
+	test("루트 width 속성이 없으면 삽입한다", () => {
+		expect(normalizeSvgWidth('<svg viewBox="0 0 300 100"></svg>')).toContain('width="300"');
+	});
+
+	test('원점 0 0의 width="100%"를 viewBox 폭으로 재작성한다', () => {
+		const out = normalizeSvgWidth('<svg width="100%" viewBox="0 0 2261.484375 94">x</svg>');
+		expect(out).toContain('width="2262"');
+		expect(out).not.toContain('width="100%"');
+	});
+
+	test("viewBox가 없으면 손대지 않는다", () => {
+		const noVb = '<svg width="100%" class="flowchart">x</svg>';
+		expect(normalizeSvgWidth(noVb)).toBe(noVb);
 	});
 });

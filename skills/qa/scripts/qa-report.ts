@@ -174,18 +174,38 @@ function currentCycle(view: QaView): number {
 }
 
 /**
- * Rewrites a mermaid SVG's `width="100%"` root attribute to its viewBox pixel
- * width so a wide diagram renders at natural size and its figure scrolls, rather
- * than shrinking to the column and collapsing its labels to a few illegible
- * pixels. Forked from explain-diff/scripts/render.ts — technique reused, no
- * runtime dependency on that skill.
+ * Rewrites a mermaid SVG's root width to its viewBox pixel width so a wide
+ * diagram renders at natural size and its figure scrolls, rather than shrinking
+ * to the column and collapsing its labels to a few illegible pixels. mmdc emits
+ * `width="100%"` for a `0 0 W H` viewBox, but with a non-zero origin
+ * (`viewBox="4 4 W H"`) Mermaid can emit `width="10"`; any existing root width
+ * is replaced, and one is inserted when absent. The viewBox is read from the
+ * root tag only, because nested marker elements carry their own viewBox. Forked
+ * from explain-diff/scripts/render.ts — technique reused, no runtime dependency
+ * on that skill.
  */
 export function normalizeSvgWidth(svg: string): string {
-	const viewBox = svg.match(/viewBox="0 0 ([\d.]+) [\d.]+"/);
-	if (!viewBox) return svg;
-	const width = Math.ceil(Number(viewBox[1]));
-	if (!Number.isFinite(width) || width <= 0) return svg;
-	return svg.replace(/(<svg\b[^>]*?)\swidth="100%"/, `$1 width="${width}"`);
+	const rootTag = svg.match(/^<svg\b[^>]*>/)?.[0];
+	if (!rootTag) return svg;
+	const viewBox = rootTag
+		.match(/\bviewBox=(['"])(.*?)\1/)?.[2]
+		?.trim()
+		.split(/[\s,]+/)
+		.map(Number);
+	const viewBoxWidth = viewBox?.[2];
+	if (
+		viewBox?.length !== 4 ||
+		viewBoxWidth === undefined ||
+		!Number.isFinite(viewBoxWidth) ||
+		viewBoxWidth <= 0
+	) {
+		return svg;
+	}
+	const width = Math.ceil(viewBoxWidth);
+	const normalizedRoot = /\swidth=(['"])[^"']*\1/.test(rootTag)
+		? rootTag.replace(/\swidth=(['"])[^"']*\1/, ` width="${width}"`)
+		: rootTag.replace(/^<svg\b/, `<svg width="${width}"`);
+	return svg.replace(/^<svg\b[^>]*>/, normalizedRoot);
 }
 
 /**
