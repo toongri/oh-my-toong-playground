@@ -191,7 +191,7 @@ Bug issues carry the following investigation information. This is required infor
 
 | Field | Content |
 |---|---|
-| **Reproduction** | Minimal numbered steps you actually ran, with the environment, the axis values that matter (flags, `TZ`, data state, client), and data setup; then the observed raw output next to the expected result. Add the reproduction matrix when two or more environments or axis values were attempted (`references/reproduce.md` §6). When nothing reproduced, state the attempts and the next step that could separate the cause (`references/reproduce.md` §5). |
+| **Reproduction** | Minimal numbered steps you actually ran, with the environment, the axis values that matter (flags, `TZ`, data state, client), and data setup; then the observed raw output next to the expected result. Add the reproduction matrix when two or more environments or axis values were attempted (`references/reproduce.md` §5). When nothing reproduced, state the attempts and the next step that could separate the cause. |
 | **Root Cause** | (promoted from standard, filled from Stage 3 code investigation output) |
 | **Evidence** | Logs, stack traces, error output, or metric anomalies that confirm the symptom. |
 
@@ -521,13 +521,10 @@ weasel-word violation). When the Root Cause is hypothesis-grade (`TBD — needs 
 {method}`), the provisionality stays on the Root Cause — **not** on the AC. The AC's Verification
 remains the Reproduction re-run: a defined, executable method that satisfies the `Un-observable AC`
 gate (SKILL.md). So a reproducible bug always carries an actionable AC even while its cause is
-unconfirmed. A bug that passed the `No consistent reproduction` gate on log evidence alone has no steps to
-re-run: its Reproduction records the attempts instead, and its AC Verification is a targeted test
-that drives the traced code path with the traced input (e.g., call the function with the amount and
-coupon rate from the failing log line). A bug that passed on a witness account alone has no trace
-either: get the concrete input from the witness (account, values, time, client) before writing the
-AC, and the targeted test uses that input. If the witness cannot supply it, the `Un-observable AC`
-gate applies. The check that the
+unconfirmed. A bug with no reproduction has no steps to re-run: its AC Verification is a targeted test that
+drives the failing code path with an input the evidence actually shows (a log line, the witness's
+own values) — never an invented one. When the evidence shows no concrete input, get it before
+writing the AC. The check that the
 production signature drops to zero goes in the Post-Release Observation section (Form 2), not in
 the AC.
 
