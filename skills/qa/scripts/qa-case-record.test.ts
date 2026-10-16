@@ -7,7 +7,7 @@ import { join } from "node:path";
 
 import { runQaCase } from "@lib/qa-case-run.ts";
 import { configureQaCaseStore, getQaCase, saveQaCase, type QaCaseRecord } from "@lib/qa-case-store.ts";
-import { addActor, addStory, authorScenario, completeQa, readQaState, recordCase, recordScenario, registerQaCaseRunReceipt, setAcceptance, setQaState } from "./qa-state.ts";
+import { addActor, addStory, amendScenario, authorScenario, completeQa, readQaState, recordCase, recordScenario, registerQaCaseRunReceipt, setAcceptance, setQaState } from "./qa-state.ts";
 
 let root: string;
 let home: string;
@@ -96,6 +96,13 @@ test("재생 뒤 case가 바뀌면 현재 revision의 receipt가 없어 거부�
 	if (current.status !== "ok" || !("record" in current)) throw new Error("case missing");
 	saveQaCase({ record: { ...current.record, title: "edited" }, expectedRevision: fx.savedRevision }, store());
 	expect(() => link()).toThrow(/no trusted replay receipt for case "case" at its current revision/);
+});
+
+test("시나리오를 수정하면 수정 전 재생 receipt로는 연결할 수 없다", async () => {
+	const fx = await fixture();
+	amendScenario(sid, { story: "story", id: "s1", title: "run the case", preconditions: "case exists", steps: ["run the runner with the corrected input"], expected: "result observed", whyNeeded: "covers the runner boundary", priority: "H", risks: [1], reason: "단계가 실제 동작과 달라 바로잡음" });
+	recordScenario(sid, { story: "story", scenario: "s1", status: "pass", evidencePath: fx.boundary, evidenceSurface: "bash" });
+	expect(() => link()).toThrow(/no trusted replay receipt/);
 });
 
 test("종료 상태가 깨끗하지 않은 재생은 거부한다", async () => {

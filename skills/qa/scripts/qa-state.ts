@@ -970,7 +970,9 @@ export interface AmendScenarioOpts extends AuthorScenarioOpts {
  * Corrects a scenario that already has a recorded result this cycle: replaces its
  * authored fields, drops the result (it must be re-run), and keeps the replaced
  * record in `scenario_amendments`. The verdict and a flaky-rerun that covered an H
- * scenario were decided on the old result, so they are cleared too.
+ * scenario were decided on the old result, so they are cleared too. Replay receipts
+ * registered for this scenario this cycle were made against the old steps, so they
+ * are dropped and the corrected scenario must be replayed again.
  */
 export function amendScenario(sessionId: string, opts: AmendScenarioOpts): void {
 	const reason = readerProse(opts.reason, "reason");
@@ -987,9 +989,13 @@ export function amendScenario(sessionId: string, opts: AmendScenarioOpts): void 
 		const amendments = [...(prior.scenario_amendments ?? []), { story: next.story, id: next.id, cycle, reason, previous }];
 		const flaky = prior.run_checks?.flaky_rerun;
 		const rerunStale = (previous.priority === "H" || next.priority === "H") && typeof flaky === "object" && flaky !== null && flaky.cycle === cycle;
+		const trustedReceipts = (prior.trusted_receipts ?? []).filter((trusted) => {
+			try { const { receipt } = readQaCaseRunReceiptSnapshot(trusted.receipt_path); return !(receipt.session_id === sessionId && receipt.story_id === next.story && receipt.scenario_id === next.id && receipt.cycle === cycle); } catch { return true; }
+		});
 		mergeWriteUnlocked(sessionId, {
 			scenarios,
 			scenario_amendments: amendments,
+			trusted_receipts: trustedReceipts,
 			// mergeWriteUnlocked skips `undefined`, so a cleared verdict is stored as null (as startQa does).
 			verdict: null,
 			...(rerunStale ? { run_checks: { ...prior.run_checks, flaky_rerun: null } } : {}),
