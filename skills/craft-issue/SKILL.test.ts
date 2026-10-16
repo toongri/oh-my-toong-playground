@@ -37,6 +37,13 @@ test("일반 버그의 조사 필드는 발표 템플릿의 본문에 배치한�
 	expect(issueCraftMd).not.toContain("For bug issues the ordering is:");
 });
 
+test("증상 진단은 재현 경로를 읽고, 운영 신호와 일치하는 재현을 런타임 증거로 센다", () => {
+	const diagnoseMd = readFileSync(join(import.meta.dir, "references/diagnose-rootcause.md"), "utf8");
+	expect(existsSync(join(import.meta.dir, "references/reproduce.md"))).toBe(true);
+	expect(diagnoseMd).toContain("**Read `references/reproduce.md` now**");
+	expect(diagnoseMd).toContain("a matching reproduction");
+});
+
 describe("A1: agents/issue-reviewer.md frontmatter", () => {
 	test("declares name: issue-reviewer", () => {
 		expect(reviewerMd).toMatch(/^name: issue-reviewer$/m);
