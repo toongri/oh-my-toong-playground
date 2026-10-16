@@ -2,8 +2,8 @@
  * Session ledger writer: prompt → model → deterministic validation → reject-and-retry → render.
  *
  * The model fills a JSON schema; this module checks every claim it can check
- * mechanically (identifiers exist in the log, user quotes exist in the cited
- * message, ids resolve) and feeds violations back for a corrected attempt.
+ * mechanically (identifiers exist in the log) and feeds violations back for a
+ * corrected attempt.
  * Prompt wording, budget, and attempt count were tuned by blind-judged replays.
  */
 
@@ -25,20 +25,11 @@ export interface LedgerJson {
 	analysis_checklist: string[];
 	primary_request_and_intent: string;
 	current_work: string;
-	next_steps: { step: string; authorized_by: string; authorization_quote: string; needs_user_confirmation: boolean }[];
+	next_steps: string[];
 	working_rules: { rule: string; source: string }[];
-	approved_proposals: {
-		proposal_id: string;
-		approved_by: string;
-		approval_quote: string;
-		approved_scope: string;
-		excluded_or_changed: string[];
-		done: string[];
-		remaining: string[];
-	}[];
-	decisions: { decision: string; rationale: string; decided_by: string; user_quote: string }[];
+	decisions: { decision: string; rationale: string }[];
 	rejected: { item: string; reason: string }[];
-	unverified_results: { source: string; recommendations: { recommendation: string; related_settled_items: string[] }[] }[];
+	unverified_results: { source: string; recommendations: string[] }[];
 	open_questions: string[];
 	key_technical_concepts: string[];
 	files_and_code: { path: string; role: string; state: string; snippet: string }[];
@@ -138,53 +129,25 @@ export function previousUsers(ledger: string | undefined): Message[] {
 
 // ─── Rendering ──────────────────────────────────────────────────────────────
 
-export function renderFields(d: LedgerJson, withAppendixNote = false): string {
+export function renderFields(d: LedgerJson): string {
 	const o: string[] = [
 		"# Session ledger\n",
 		`## 1. Primary request and intent\n${d.primary_request_and_intent}\n`,
 		`## 2. Current work\n${d.current_work}\n`,
 		"## 3. Next steps",
 	];
-	d.next_steps.forEach((s, i) => {
-		// The summarizer only claims that a quote covers the step; show the quote so the reader judges it.
-		const cited = s.authorized_by ? ` Approval cited: ${s.authorized_by} "${s.authorization_quote}".` : "";
-		const confirm = s.needs_user_confirmation ? " **Ask the user first.**" : "";
-		o.push(`${i + 1}. ${s.step}.${cited}${confirm}`);
-	});
+	d.next_steps.forEach((s, i) => o.push(`${i + 1}. ${s}`));
 	o.push("");
 	if (d.working_rules.length > 0) {
 		o.push("## Working rules (still in force)");
 		for (const x of d.working_rules) o.push(`- ${x.rule} (${x.source})`);
 		o.push("");
 	}
-	for (const p of d.approved_proposals) {
-		o.push(
-			`## Approved proposal (assistant message ${p.proposal_id}, APPROVED by ${p.approved_by}: "${p.approval_quote}")`,
-		);
-		o.push(`Approved scope: ${p.approved_scope}`);
-		if (p.excluded_or_changed.length > 0) {
-			o.push("NOT approved / changed:");
-			for (const x of p.excluded_or_changed) o.push(`- ${x}`);
-		}
-		if (p.done.length > 0) {
-			o.push("Done:");
-			for (const x of p.done) o.push(`- ${x}`);
-		}
-		if (p.remaining.length > 0) {
-			o.push("Remaining:");
-			for (const x of p.remaining) o.push(`- ${x}`);
-		}
-		o.push(withAppendixNote ? "The proposal's original text is in the appendix at the end of this ledger." : "");
-		o.push("");
-	}
 	if (d.unverified_results.length > 0) {
-		o.push("## UNVERIFIED results (verify the cited code, compare with the quoted items, ask before adopting)");
+		o.push("## Results the agent had not acted on yet");
 		for (const r of d.unverified_results) {
 			o.push(`- **${r.source}**`);
-			for (const rec of r.recommendations) {
-				o.push(`  - Recommendation: ${rec.recommendation}`);
-				for (const q of rec.related_settled_items) o.push(`    - Related: ${q}`);
-			}
+			for (const rec of r.recommendations) o.push(`  - ${rec}`);
 		}
 		o.push("");
 	}
@@ -194,12 +157,7 @@ export function renderFields(d: LedgerJson, withAppendixNote = false): string {
 		o.push("");
 	}
 	const sections: [string, string[]][] = [
-		[
-			"Decisions",
-			d.decisions.map(
-				(x) => `- ${x.decision} — ${x.rationale} (${x.decided_by}${x.user_quote.trim() ? `: "${x.user_quote}"` : ""})`,
-			),
-		],
+		["Decisions", d.decisions.map((x) => `- ${x.decision} — ${x.rationale}`)],
 		["Rejected", d.rejected.map((x) => `- Rejected: ${x.item} - because ${x.reason}`)],
 		["Key technical concepts", d.key_technical_concepts.map((x) => `- ${x}`)],
 		[
@@ -227,33 +185,19 @@ export function renderFields(d: LedgerJson, withAppendixNote = false): string {
 	return `${o.join("\n").trimEnd()}\n`;
 }
 
-/** The model never selects user messages: all of them are appended verbatim, then the approved proposals' text. */
-export function renderLedger(d: LedgerJson, users: Message[], assistants: Map<string, string>): string {
+/** The model never selects user messages: all of them are appended verbatim. */
+export function renderLedger(d: LedgerJson, users: Message[]): string {
 	const userLines = ["", USERS_HEADING, ...users.map((u) => `- [${u.id}] ${u.text}`)];
-	const appendix: string[] = [];
-	for (const p of d.approved_proposals) {
-		const text = assistants.get(p.proposal_id);
-		if (p.remaining.length === 0 || text === undefined) continue;
-		appendix.push(
-			"",
-			`### Assistant message ${p.proposal_id} (verbatim; section "Approved proposal" above says which parts are approved, excluded, or overturned)`,
-			...text.split("\n").map((line) => `> ${line}`),
-		);
-	}
-	const appendixBlock =
-		appendix.length > 0 ? `\n${["## Appendix: original text of approved proposals", ...appendix].join("\n")}` : "";
-	return `${renderFields(d, true)}${userLines.join("\n")}\n${appendixBlock}`.trimEnd() + "\n";
+	return `${renderFields(d)}${userLines.join("\n")}\n`.trimEnd() + "\n";
 }
 
 // ─── Validation ─────────────────────────────────────────────────────────────
 
 const CODE = /`([^`\n]+)`/g;
 const IDS = /[,\s]+/;
-const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 
 interface ValidationContext {
 	users: Map<string, string>;
-	assistants: Map<string, string>;
 	sourceText: string;
 	budget: number;
 }
@@ -389,7 +333,6 @@ export function repairForeignLetters(d: LedgerJson, sourceText: string): LedgerJ
 
 export function validateLedger(d: LedgerJson, ctx: ValidationContext): string[] {
 	const v: string[] = [];
-	const { users, assistants } = ctx;
 	if (!d.primary_request_and_intent.trim()) v.push("field `primary_request_and_intent` is empty");
 	if (!d.current_work.trim()) v.push("field `current_work` is empty");
 	if (d.next_steps.length === 0) v.push("next_steps is empty");
@@ -397,80 +340,6 @@ export function validateLedger(d: LedgerJson, ctx: ValidationContext): string[] 
 		v.push("analysis_checklist is empty; build it from the log before filling the fields");
 	}
 
-	const quoteOk = (ids: string, quote: string) => {
-		// A quote may drop trailing punctuation; it must otherwise be an exact substring.
-		const q = normalize(quote).replace(/[ .,!?…"']+$/, "");
-		return (
-			q.length >= 2 &&
-			ids
-				.split(IDS)
-				.filter((id) => users.has(id))
-				.some((id) => normalize(users.get(id) ?? "").includes(q))
-		);
-	};
-	const badQuotes: string[] = [];
-	for (const s of d.next_steps) {
-		if (s.authorized_by && !quoteOk(s.authorized_by, s.authorization_quote)) {
-			badQuotes.push(`${s.authorized_by}: "${s.authorization_quote}"`);
-		}
-	}
-	for (const x of d.decisions) {
-		if (x.decided_by && x.decided_by !== "agent" && !quoteOk(x.decided_by, x.user_quote)) {
-			badQuotes.push(`${x.decided_by}: "${x.user_quote}"`);
-		}
-	}
-	for (const p of d.approved_proposals) {
-		if (!quoteOk(p.approved_by, p.approval_quote)) badQuotes.push(`${p.approved_by}: "${p.approval_quote}"`);
-	}
-	if (badQuotes.length > 0) {
-		const cited = [...new Set(badQuotes.flatMap((x) => x.split(":")[0].split(IDS)))]
-			.filter((id) => users.has(id))
-			.sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
-		const shown = cited.map((id) => `${id} says: "${(users.get(id) ?? "").slice(0, 400)}"`).join("; ");
-		v.push(
-			`these quotes are not found in the cited user message(s): ${JSON.stringify(badQuotes.slice(0, 15))}. ` +
-				`The cited messages read exactly: ${shown}. Copy the user's exact words from that message, or, if no user ` +
-				`words authorize the item, set the U-id to "" ("agent" for decided_by) and needs_user_confirmation to true`,
-		);
-	}
-
-	// A step the reader may run without asking must at least cite user words.
-	const unauthorized = d.next_steps.filter((s) => !s.needs_user_confirmation && !s.authorized_by).map((s) => s.step.slice(0, 80));
-	if (unauthorized.length > 0) {
-		v.push(
-			`next_steps ${JSON.stringify(unauthorized)} set needs_user_confirmation to false without authorized_by; cite the U-id and quote whose words authorize each, or set needs_user_confirmation to true`,
-		);
-	}
-
-	const badProposals = d.approved_proposals.map((p) => p.proposal_id).filter((id) => !assistants.has(id));
-	if (badProposals.length > 0) {
-		v.push(
-			`approved_proposals cite unknown assistant ids ${JSON.stringify(badProposals)}; use the A-id of the assistant message that states the proposal`,
-		);
-	}
-
-	const refs: string[] = [
-		...d.next_steps.map((s) => s.authorized_by).filter(Boolean),
-		...d.decisions.map((x) => x.decided_by).filter((id) => id && id !== "agent"),
-		...d.approved_proposals.map((p) => p.approved_by),
-	];
-	const unknownIds = [...new Set(refs.flatMap((r) => r.split(IDS)).filter((id) => id && !users.has(id)))].sort();
-	if (unknownIds.length > 0) {
-		const known = [...users.keys()].sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
-		v.push(
-			`unknown user-message ids ${JSON.stringify(unknownIds)}; valid ids are ${JSON.stringify(known)} (or "agent" for decided_by). ` +
-				'`authorized_by` and `decided_by` hold ONLY ids separated by commas (e.g. "U8,U25"), never prose; put explanations in `rationale` or `step`.',
-		);
-	}
-
-	const unquoted = d.unverified_results
-		.filter((r) => r.recommendations.some((rec) => rec.related_settled_items.length === 0))
-		.map((r) => r.source);
-	if (unquoted.length > 0) {
-		v.push(
-			`unverified_results recommendations from ${JSON.stringify([...new Set(unquoted)].sort())} have no related_settled_items; quote the settled items on the same topic, or quote the user's goal statement if none exist`,
-		);
-	}
 	const shortened = d.pieces.map((p) => p.path).filter((p) => p.includes("...") || p.includes("…"));
 	if (shortened.length > 0) {
 		v.push(`pieces paths are shortened: ${JSON.stringify(shortened)}; write full absolute paths`);
@@ -490,7 +359,7 @@ export function validateLedger(d: LedgerJson, ctx: ValidationContext): string[] 
 		);
 		v.push(
 			`${OVER_BUDGET} ${size} bytes, budget is ${ctx.budget} (over by ${size - ctx.budget}). Per-field bytes: ${JSON.stringify(perField)}. ` +
-				"Cut history and finished work first; never cut current_work, next_steps, working_rules, approved_proposals, decisions, rejected, or unverified_results.",
+				"Cut history and finished work first; never cut current_work, next_steps, working_rules, decisions, rejected, or unverified_results.",
 		);
 	}
 	return v;
@@ -569,7 +438,6 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 	const allUsers = [...carried.filter((u) => !windowIds.has(u.id)), ...input.log.users];
 	const ctx: ValidationContext = {
 		users: new Map(allUsers.map((u) => [u.id, u.text])),
-		assistants: new Map(input.log.assistants.map((a) => [a.id, a.text])),
 		sourceText: `${input.previousLedger ?? ""}\n${input.log.lines.join("\n")}`,
 		budget,
 	};
@@ -593,11 +461,11 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 		const size = Buffer.byteLength(renderFields(d));
 		attempts.push({ n, secs, bytes: size, violations });
 		if (violations.length === 0) {
-			return { markdown: renderLedger(d, allUsers, ctx.assistants), status: "accepted", attempts };
+			return { markdown: renderLedger(d, allUsers), status: "accepted", attempts };
 		}
 		// Over budget is the only soft violation: a retry cuts only a few thousand bytes and costs minutes.
 		if (violations.every((x) => x.startsWith(OVER_BUDGET))) {
-			return { markdown: renderLedger(d, allUsers, ctx.assistants), status: "accepted-over-budget", attempts };
+			return { markdown: renderLedger(d, allUsers), status: "accepted-over-budget", attempts };
 		}
 		prompt =
 			`${basePrompt}\n=== YOUR PREVIOUS OUTPUT WAS REJECTED BY THE VALIDATOR ===\n${violations.map((x) => `- ${x}`).join("\n")}` +

@@ -40,11 +40,8 @@ function ledgerJson(overrides: Partial<LedgerJson> = {}): LedgerJson {
 		analysis_checklist: ["U1 asked to fix the login bug"],
 		primary_request_and_intent: "Fix the login bug.",
 		current_work: "Editing `src/login.ts`.",
-		next_steps: [
-			{ step: "Run the tests", authorized_by: "U1", authorization_quote: "로그인 버그 고쳐줘", needs_user_confirmation: false },
-		],
+		next_steps: ["Run the tests"],
 		working_rules: [],
-		approved_proposals: [],
 		decisions: [],
 		rejected: [],
 		unverified_results: [],
@@ -172,17 +169,16 @@ describe("검증기", () => {
 		expect(isLedgerJson({ ...ledgerJson(), extra: [] })).toBe(false);
 		expect(isLedgerJson({ ...ledgerJson(), next_steps: [{ step: "x" }] })).toBe(false);
 	});
-	test("정상 출력은 위반이 없고, 끝 문장부호가 빠진 인용도 통과한다", () => {
+	test("정상 출력은 위반이 없다", () => {
 		expect(validateLedger(ledgerJson(), ctx())).toEqual([]);
 	});
 
-	test("인용한 사용자 메시지에 없는 인용은 원문을 보여 주며 거부한다", () => {
-		const d = ledgerJson({
-			decisions: [{ decision: "d", rationale: "r", decided_by: "U1", user_quote: "승인한다" }],
-		});
-		const [violation] = validateLedger(d, ctx());
-		expect(violation).toContain("not found in the cited user message");
-		expect(violation).toContain('U1 says: "로그인 버그 고쳐줘."');
+	test("요약기 출력에는 승인·인용 필드가 없다", () => {
+		expect(isLedgerJson({ ...ledgerJson(), approved_proposals: [] })).toBe(false);
+		const step = { step: "Run the tests", authorized_by: "U1", authorization_quote: "고쳐줘", needs_user_confirmation: false };
+		expect(isLedgerJson({ ...ledgerJson(), next_steps: [step] })).toBe(false);
+		const decision = { decision: "d", rationale: "r", decided_by: "U1", user_quote: "고쳐줘" };
+		expect(isLedgerJson({ ...ledgerJson(), decisions: [decision] })).toBe(false);
 	});
 
 	test("로그에 없는 식별자는 거부하고, 로그의 디렉터리와 파일명을 합친 경로는 허용한다", () => {
@@ -208,18 +204,19 @@ describe("검증기", () => {
 		expect(text("다음으로 `/repo/기존-프로그램-문제/apps/slot-distribution.ts`를 수정한다.")).toEqual([]);
 	});
 
-	test("다음 단계는 승인을 단정하지 않고 인용한 사용자 문구를 보여준다", () => {
-		const markdown = renderLedger(ledgerJson(), [], new Map());
-		expect(markdown).toContain('1. Run the tests. Approval cited: U1 "로그인 버그 고쳐줘".');
-		expect(markdown).not.toContain("No further confirmation needed");
-	});
-
-	test("승인 근거 없이 확인 불필요로 표시한 다음 단계는 거부한다", () => {
-		const step = { step: "Run the deploy", authorized_by: "", authorization_quote: "", needs_user_confirmation: false };
-		const violations = validateLedger(ledgerJson({ next_steps: [step] }), ctx());
-		expect(violations.some((x) => x.includes("without authorized_by"))).toBe(true);
-		const asking = validateLedger(ledgerJson({ next_steps: [{ ...step, needs_user_confirmation: true }] }), ctx());
-		expect(asking.some((x) => x.includes("without authorized_by"))).toBe(false);
+	test("다음 단계는 확인 표시 없이 이어서 할 작업 순서로만 보여준다", () => {
+		const markdown = renderLedger(
+			ledgerJson({
+				next_steps: ["Run the tests", "Push the branch"],
+				decisions: [{ decision: "Keep the cache", rationale: "the user chose it" }],
+				unverified_results: [{ source: "code-reviewer", recommendations: ["Rename the flag"] }],
+			}),
+			[],
+		);
+		expect(markdown).toContain("## 3. Next steps\n1. Run the tests\n2. Push the branch\n");
+		expect(markdown).toContain("- Keep the cache — the user chose it\n");
+		expect(markdown).toContain("## Results the agent had not acted on yet\n- **code-reviewer**\n  - Rename the flag\n");
+		expect(markdown).not.toMatch(/approv|ask the user|confirm/i);
 	});
 
 	test("깨진 경로 구간은 로그의 가장 가까운 구간으로 복원한다", () => {
@@ -235,25 +232,6 @@ describe("검증기", () => {
 		// A translated segment is too far to respell, but its neighbors in the log's paths still place it.
 		const translated = repairForeignLetters(ledgerJson({ current_work: "Open `/repo/կ_existing-프로그램-문제/apps`." }), source);
 		expect(translated.current_work).toBe("Open `/repo/기존-프로그램-문제/apps`.");
-	});
-
-	test("존재하지 않는 U-id와 제안 id를 거부한다", () => {
-		const d = ledgerJson({
-			approved_proposals: [
-				{
-					proposal_id: "A9",
-					approved_by: "U7",
-					approval_quote: "좋아",
-					approved_scope: "all",
-					excluded_or_changed: [],
-					done: [],
-					remaining: ["x"],
-				},
-			],
-		});
-		const violations = validateLedger(d, ctx()).join("\n");
-		expect(violations).toContain('unknown assistant ids ["A9"]');
-		expect(violations).toContain('unknown user-message ids ["U7"]');
 	});
 });
 
@@ -372,21 +350,6 @@ describe("재시도와 대체 경로", () => {
 		expect(result.markdown).toContain("- [U1] 로그인 버그 고쳐줘.");
 	});
 
-	test("승인된 제안은 남은 작업이 있을 때만 원문을 부록으로 붙인다", () => {
-		const proposal = (remaining: string[]) => ({
-			proposal_id: "A1",
-			approved_by: "U1",
-			approval_quote: "고쳐줘",
-			approved_scope: "all",
-			excluded_or_changed: [],
-			done: [],
-			remaining,
-		});
-		const assistants = new Map([["A1", "1. 재시도 2. 캐시"]]);
-		expect(renderLedger(ledgerJson({ approved_proposals: [proposal(["2"])] }), [], assistants)).toContain("> 1. 재시도 2. 캐시");
-		expect(renderLedger(ledgerJson({ approved_proposals: [proposal([])] }), [], assistants)).not.toContain("Appendix");
-	});
-
 	test("이전 ledger의 여러 줄 사용자 메시지를 이어받는다", () => {
 		const previous = "## All user messages (verbatim)\n- [U1] 첫 줄\n둘째 줄\n- [U2] 좋아\n\n## Appendix: x\n";
 		expect(previousUsers(previous)).toEqual([
@@ -426,6 +389,7 @@ describe("훅 진입점", () => {
 		expect(sessionStartContext("claude", { source: "startup", session_id: "s-2" }, home)).toBeNull();
 		const context = sessionStartContext("codex", { source: "compact", session_id: "s-2" }, home) as string;
 		expect(context).toContain(`read the whole ledger file with a file-read command, to its last line: ${path}`);
+		expect(context).not.toMatch(/approv|confirm/i);
 		expect(Buffer.byteLength(context)).toBeLessThan(6000);
 	});
 
