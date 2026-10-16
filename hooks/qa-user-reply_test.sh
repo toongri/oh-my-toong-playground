@@ -38,6 +38,17 @@ test_waiting_reply_is_stored_verbatim() {
     return "$ok"
 }
 
+test_stored_reply_refreshes_the_heartbeat_gc_reads() {
+    setup
+    write_state '{"active":true,"awaiting_user":true,"last_touched_at":"2000-01-01T00:00:00+09:00"}'
+    send "진행해"
+    local ok=0
+    # shellcheck source=hooks/lib/state-liveness.sh
+    ( source "$SCRIPT_DIR/lib/state-liveness.sh" && is_state_live "$STATE" "$(date +%s)" ) || ok=1
+    teardown
+    return "$ok"
+}
+
 test_prompt_without_await_user_changes_nothing() {
     setup
     write_state '{"active":true,"awaiting_user":false}'
@@ -90,6 +101,7 @@ test_yaml_registers_prompt_event_on_both_platforms() {
 
 main() {
     run_test test_waiting_reply_is_stored_verbatim
+    run_test test_stored_reply_refreshes_the_heartbeat_gc_reads
     run_test test_prompt_without_await_user_changes_nothing
     run_test test_inactive_cycle_changes_nothing
     run_test test_held_lock_skips_the_write
