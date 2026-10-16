@@ -191,7 +191,7 @@ Bug issues carry the following investigation information. This is required infor
 
 | Field | Content |
 |---|---|
-| **Reproduction** | Minimal, numbered steps to trigger the bug. Include environment, preconditions, and the exact action sequence. |
+| **Reproduction** | Minimal numbered steps you actually ran, with the environment, the axis values that matter (flags, `TZ`, data state, client), and data setup; then the observed raw output next to the expected result. Add the reproduction matrix when two or more environments or axis values were attempted (`references/reproduce.md` §5). When nothing reproduced, state the attempts and the next step that could separate the cause. |
 | **Root Cause** | (promoted from standard, filled from Stage 3 code investigation output) |
 | **Evidence** | Logs, stack traces, error output, or metric anomalies that confirm the symptom. |
 
@@ -521,8 +521,12 @@ weasel-word violation). When the Root Cause is hypothesis-grade (`TBD — needs 
 {method}`), the provisionality stays on the Root Cause — **not** on the AC. The AC's Verification
 remains the Reproduction re-run: a defined, executable method that satisfies the `Un-observable AC`
 gate (SKILL.md). So a reproducible bug always carries an actionable AC even while its cause is
-unconfirmed — and a bug with no reproduction is already refused upstream by the `No consistent
-reproduction` gate, so the re-run is always available when an AC is written.
+unconfirmed. A bug with no reproduction has no steps to re-run: its AC Verification is a targeted test that
+drives the failing code path with an input the evidence actually shows (a log line, the witness's
+own values) — never an invented one. When the evidence shows no concrete input, get it before
+writing the AC. The check that the
+production signature drops to zero goes in the Post-Release Observation section (Form 2), not in
+the AC.
 
 ---
 

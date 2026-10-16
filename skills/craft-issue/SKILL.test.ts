@@ -37,6 +37,22 @@ test("일반 버그의 조사 필드는 발표 템플릿의 본문에 배치한�
 	expect(issueCraftMd).not.toContain("For bug issues the ordering is:");
 });
 
+test("증상 진단은 재현 트랙을 읽고, 재현 트랙은 판정 어휘와 본문 출력 계약을 갖는다", () => {
+	const diagnoseMd = readFileSync(join(import.meta.dir, "references/diagnose-rootcause.md"), "utf8");
+	const reproduceMd = readFileSync(join(import.meta.dir, "references/reproduce.md"), "utf8");
+	expect(diagnoseMd).toContain("**Read `references/reproduce.md` now**");
+	expect(diagnoseMd).toContain("a matching reproduction");
+	expect(reproduceMd).toContain("MATCH | DIFFERENT ({how}) | NOT REPRODUCED | BOUNDARY ONLY");
+	expect(reproduceMd).toContain("NOT-DISTINGUISHED");
+	expect(reproduceMd).toContain("It is not the Root Cause");
+});
+
+test("재현 없는 버그의 완료 조건은 추적된 입력의 테스트이고 배포 후 관찰은 완료 조건 밖에 둔다", () => {
+	const issueCraft = readFileSync(join(import.meta.dir, "references/issue-craft.md"), "utf8");
+	expect(issueCraft).toContain("never an invented one");
+	expect(issueCraft).toContain("Post-Release Observation section (Form 2), not in\nthe AC");
+});
+
 describe("A1: agents/issue-reviewer.md frontmatter", () => {
 	test("declares name: issue-reviewer", () => {
 		expect(reviewerMd).toMatch(/^name: issue-reviewer$/m);

@@ -103,7 +103,8 @@ When the open question is **"what is the cause?"** — a symptom report, bug, re
 Stage 3 is a full diagnosis sub-pipeline. **Read `references/diagnose-rootcause.md` now** (using the Read
 tool with path `references/diagnose-rootcause.md`) and run it in full. It enforces independent diagnosis
 (a prior issue's stated cause is a hypothesis, not an answer), an orchestration that delegates breadth
-to `explore`/`oracle`/`librarian` while you own the runtime-evidence track, a competing-hypothesis
+to `explore`/`oracle`/`librarian` while you own the runtime-evidence and reproduction tracks
+(`references/reproduce.md`), a competing-hypothesis
 disproof ledger, runtime-evidence grounding, multi-path coverage, and a confidence gate that decides
 whether the Root Cause is written as established or as `TBD — needs validation via {method}`.
 
@@ -199,7 +200,7 @@ These gates apply before the write tail. Failing any gate blocks the write.
 
 Refuse to file (or refuse to enrich an existing issue) if ANY of the following hold:
 
-- **No consistent reproduction**: a bug or behavior report with no reproducible scenario, no log evidence, and no witness account.
+- **No consistent reproduction**: a bug or behavior report with no reproducible scenario, no log evidence, and no witness account. "No reproducible scenario" holds only after the attempts `references/reproduce.md` calls for; an un-attempted reproduction is not evidence that none exists.
 - **Runtime-evidence-free root-cause claim**: a root cause assertion that cannot be grounded in code, logs, or a reproducible trace — pure speculation is not a root cause.
 - **Un-observable AC**: every acceptance criterion must be verifiable by a defined method (test, query, manual step). An AC that cannot be verified is not an AC.
 - **Unreadable target-issue history**: the intake is an existing issue and its comment thread cannot be retrieved in full. Under the Append-Only History Contract the thread carries that issue's current state, so an append written without it can re-assert body lines a comment already retired. This is the one gather failure that blocks — every other unreachable source stays fail-open (`references/gather-crosslink.md` §3).
@@ -283,4 +284,5 @@ Human review is post-hoc: the issue is written first; the caller can review and 
 
 - `references/gather-crosslink.md`: complete gather bound, curation rules, effective-state reconstruction from an existing issue's comment thread, cross-link procedure, source-unreachable handling, impact & premises investigation delegation (§7), and cross-link annotation format. Read at Stage 2.
 - `references/diagnose-rootcause.md`: the symptom-report diagnosis sub-pipeline — independent-diagnosis mandate (prior issues are hypotheses), delegation orchestration (explore/oracle/librarian + your own runtime-evidence track), competing-hypothesis disproof ledger, runtime-evidence gate, multi-path coverage, and the confidence gate. Read at Stage 3 when the cause is unknown.
+- `references/reproduce.md`: the reproduction track — its principles (reproduction as runtime evidence, "재현 안 됨" as an environment-difference question, working backward from the reproducing configuration), the prohibitions that protect production, shared environments, and evidence, signature matching, attempt records, and the issue output. Read at Stage 3 when the cause is unknown.
 - `references/issue-craft.md`: best-practice body shape, **Append Comment Shape** (변경 요약 / 근거 / 대체 대상 / 정정 후 상태), observable-AC rubric (weasel-word prohibition, Action/Expected/Verification), RCA Bug-Report shape, anti-fluff rules, Model A INVEST slice rubric with per-child stage-check and settled-child handoff, Render Contract, and symbol-gloss contract. Read at Stages 4 and 5, and consulted again at Stage 6's Plain-Language Gate.
