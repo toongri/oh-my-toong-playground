@@ -37,8 +37,9 @@ differential runs (§4), and its final form goes in the issue (§6).
    When the production runtime differs from your host, run the production image when a container
    runtime is available.
 2. **A shared environment (stg/dev)** — read-only probes at any time. A state change only for an
-   axis your own instance cannot set (the deployed build, deployed infra, an external sandbox), and
-   never once your instance has a matching reproduction with its control runs. Use designated QA
+   axis or implementation path (`references/diagnose-rootcause.md` §5) your own instance cannot set
+   (the deployed build, deployed infra, an external sandbox) that is still open — never to
+   re-confirm what your instance already reproduced. Use designated QA
    accounts and record what you left behind (§5).
 3. **Production is read-only.** Logs, metrics, and read-only queries through the sanctioned tools.
    Never write production data, call a mutating endpoint, or act as a real user.
