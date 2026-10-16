@@ -134,7 +134,8 @@ Runtime evidence comes in two forms, and either one satisfies this gate:
 - **a production trace** — logs, metrics, or records showing the mechanism fired for the affected
   entity; or
 - **a matching reproduction** — a run whose observed output matches the production signature
-  literally (same error string, same wrong value, same status), paired with control runs that each
+  literally (same error string, same wrong value — a status code alone is too generic to count),
+  paired with control runs that each
   revert one axis of the trigger condition and do not reproduce (`references/reproduce.md` §3). The
   matching output must come from the code under suspicion. An error returned by a mock or stub you
   wrote is not a matching reproduction (`references/reproduce.md` §3, `BOUNDARY ONLY`).

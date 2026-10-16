@@ -96,9 +96,15 @@ You do not own a shared environment's processes, data, or uptime.
 ## 3. Reproduce, Then Compare With the Production Signature
 
 A reproduction counts when its observed output **matches the production signature** — the error
-message, status code, wrong value, or output line the reporter or the logs show. Compare them
-literally: the same error string, the same wrong `ids`, the same status. A different error that
-happens to share a symptom ("it's also a 500") is a different bug until shown otherwise.
+message, wrong value, or output line the reporter or the logs show. Compare them literally: the same
+error string, the same wrong `ids`. A different error that happens to share a symptom ("it's also a
+500") is a different bug until shown otherwise.
+
+The signature must be specific enough to tell mechanisms apart: an error string, a stack frame, a
+wrong value. A status code alone (HTTP 500, "결제 실패") is not a signature, because any other bug
+produces it too. When the report gives only a generic status, get the specific line from the logs
+or the reporter first. Until you have one, a run that returns the same status is recorded as
+`DIFFERENT (signature too generic)` and does not count as a matching reproduction.
 
 **The signature must come from the code under suspicion.** When a third party cannot be reached and
 you stand in a mock or stub you wrote (or configured) to answer the way the spec or the logs say the
@@ -138,6 +144,11 @@ once.
   trigger. Record the trigger condition as the necessary axes plus the alternatives joined with
   "or" (for example: a refund still pending **and** (flag A **or** flag B)). When no axis was
   necessary on its own, this run is how you find the trigger at all.
+- Then check for a path that needs two or more of the remaining axes together (A **or** (B **and**
+  C)): run the reduced configuration with every remaining not-necessary axis added back at once,
+  but none of the alternatives you found. If that reproduces, add those axes back in pairs to find
+  the combination. If you cannot narrow it down, record those axes as **NOT-DISTINGUISHED**. Never
+  leave them out of the trigger condition.
 
 Do not build up from the non-reproducing configuration one axis at a time and read a non-flip as a
 refutation. When the symptom needs two axes together, setting the first one alone does not flip the
@@ -173,8 +184,10 @@ reproduction environment still differs from production (runtime version, missing
 data volume, deployed commit). A literal signature match bounds how much those differences can
 matter, and the issue states them so the reader can judge.
 
-**When nothing reproduces.** After the attempts the matrix calls for, the cause is hypothesis-grade.
-Record the attempts and the deepest point you reached. Name the axis you could not set and the
+**When nothing reproduces.** After the attempts the matrix calls for, reproduction supplies no
+runtime evidence. The cause is hypothesis-grade only if the production trace does not supply it
+either: a production trace that meets `references/diagnose-rootcause.md` §4, together with the other
+§6 gates, still makes the cause Confirmed. Either way, record the attempts and the deepest point you reached. Name the axis you could not set and the
 environment or person that could set it: that is the `{method}` in `TBD — needs validation via
 {method}`. A reproduction you did not attempt is not "not reproducible" — it is not yet attempted.
 
@@ -206,4 +219,8 @@ environment or person that could set it: that is the `{method}` in `TBD — need
 - **Notes (메모)** — any state left behind on a shared environment (an unprocessed refund on a QA
   account), so the next person is not misled by it.
 - **AC Verification** — re-run the reproducing steps on the same environment
-  (`references/issue-craft.md` §3: the primary AC is the negation of the Reproduction).
+  (`references/issue-craft.md` §3: the primary AC is the negation of the Reproduction). When
+  nothing reproduced, there are no steps to re-run. Verify instead with a targeted test that drives
+  the code path the production trace shows with the traced input (for example: call the function
+  with the amount and coupon rate from the failing log line and assert the result). Pair it with a
+  post-release observation that the production signature drops to zero.

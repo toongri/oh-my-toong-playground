@@ -61,6 +61,14 @@ test("차등 재현은 재현되는 구성에서 축을 되돌려 필요조건�
 	expect(reproduceMd).not.toContain("from the non-reproducing configuration toward the reproducing one");
 	expect(reproduceMd).toContain("**reduced configuration**");
 	expect(reproduceMd).toContain("A single non-flip is not a refutation");
+	expect(reproduceMd).toContain("Never\n  leave them out of the trigger condition");
+});
+
+test("재현 실패·일반 상태 코드·재현 없는 완료 조건이 확신도 게이트와 어긋나지 않는다", () => {
+	const reproduceMd = readFileSync(join(import.meta.dir, "references/reproduce.md"), "utf8");
+	expect(reproduceMd).toContain("A status code alone (HTTP 500, \"결제 실패\") is not a signature");
+	expect(reproduceMd).toContain("The cause is hypothesis-grade only if the production trace does not supply it");
+	expect(reproduceMd).toContain("When\n  nothing reproduced, there are no steps to re-run");
 });
 
 describe("A1: agents/issue-reviewer.md frontmatter", () => {
