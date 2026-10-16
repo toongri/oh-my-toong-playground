@@ -523,8 +523,9 @@ remains the Reproduction re-run: a defined, executable method that satisfies the
 gate (SKILL.md). So a reproducible bug always carries an actionable AC even while its cause is
 unconfirmed. A bug that passed the `No consistent reproduction` gate on log evidence or a witness
 account alone has no steps to re-run: its Reproduction records the attempts instead, and its AC
-Verification is the targeted test with the traced input plus the post-release observation in
-`references/reproduce.md` §6.
+Verification is the targeted test with the traced input in `references/reproduce.md` §6. The check
+that the production signature drops to zero goes in the Post-Release Observation section (Form 2),
+not in the AC.
 
 ---
 

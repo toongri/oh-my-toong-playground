@@ -89,6 +89,14 @@ test("공통 전제 축과 대체 축이 트리거 조건에서 빠지지 않는
 	expect(reproduceMd).toContain("the whole trigger condition §4 recorded");
 });
 
+test("재현 없는 버그의 배포 후 관찰은 완료 조건 검증이 아니라 별도 섹션에 둔다", () => {
+	const reproduceMd = readFileSync(join(import.meta.dir, "references/reproduce.md"), "utf8");
+	const issueCraft = readFileSync(join(import.meta.dir, "references/issue-craft.md"), "utf8");
+	expect(issueCraft).not.toContain("targeted test with the traced input plus the post-release observation");
+	expect(reproduceMd).not.toContain("Pair it with a\n  post-release observation");
+	expect(reproduceMd).toContain("not part of the AC Verification");
+});
+
 describe("A1: agents/issue-reviewer.md frontmatter", () => {
 	test("declares name: issue-reviewer", () => {
 		expect(reviewerMd).toMatch(/^name: issue-reviewer$/m);

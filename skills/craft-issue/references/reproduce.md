@@ -230,5 +230,6 @@ environment or person that could set it: that is the `{method}` in `TBD — need
   (`references/issue-craft.md` §3: the primary AC is the negation of the Reproduction). When
   nothing reproduced, there are no steps to re-run. Verify instead with a targeted test that drives
   the code path the production trace shows with the traced input (for example: call the function
-  with the amount and coupon rate from the failing log line and assert the result). Pair it with a
-  post-release observation that the production signature drops to zero.
+  with the amount and coupon rate from the failing log line and assert the result). The check that the production signature
+  drops to zero goes in the Post-Release Observation section (배포 후 관찰), not part of the AC Verification:
+  it happens after release and cannot gate acceptance.
