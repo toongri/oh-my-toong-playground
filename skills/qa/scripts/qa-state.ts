@@ -999,6 +999,7 @@ export function amendScenario(sessionId: string, opts: AmendScenarioOpts): void 
 		if (index < 0) throw new Error(`amend-scenario: no scenario "${next.story}:${next.id}" authored this cycle`);
 		const previous = scenarios[index];
 		if (!previous.status) throw new Error("amend-scenario: this scenario has no recorded result yet; rewrite it with author-scenario");
+		if (previous.source === "caller-provided") throw new Error("amend-scenario: a caller-provided scenario runs verbatim and cannot be amended; its failure is the change's failure (REQUEST_CHANGES)");
 		scenarios[index] = clearScenarioRecord(next);
 		const amendments = [...(prior.scenario_amendments ?? []), { story: next.story, id: next.id, cycle, reason, previous }];
 		const flaky = prior.run_checks?.flaky_rerun;

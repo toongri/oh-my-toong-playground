@@ -737,6 +737,16 @@ describe("qa state: amend-scenario", () => {
 		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
 	});
 
+	test("호출자가 넘겨준 시나리오는 실패해도 amend를 거부하고 파일을 바꾸지 않는다", () => {
+		seedStoryApi();
+		authorScenario(S, { ...scenarioOpts("s1", "H", [1]), source: "caller-provided" });
+		recordScenario(S, { story: "story-1", scenario: "s1", status: "fail" });
+		const before = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => amendScenario(S, amendOpts("s1", "H", [1]))).toThrow(/caller-provided/);
+		expect(() => amendScenario(S, { ...amendOpts("s1", "H", [1]), source: "self-authored" })).toThrow(/caller-provided/);
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+	});
+
 	test("코드 이름이나 빈 이유는 거부한다", () => {
 		seedRun();
 		const before = readFileSync(resolveStatePath(S), "utf8");
