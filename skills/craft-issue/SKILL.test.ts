@@ -97,6 +97,13 @@ test("재현 없는 버그의 배포 후 관찰은 완료 조건 검증이 아�
 	expect(reproduceMd).toContain("not part of the AC Verification");
 });
 
+test("간헐적 증상은 결정적 재현이나 반복 실행 없이 축을 판정하지 않는다", () => {
+	const reproduceMd = readFileSync(join(import.meta.dir, "references/reproduce.md"), "utf8");
+	expect(reproduceMd).toContain("**Intermittent symptoms.**");
+	expect(reproduceMd).toContain("one run per configuration is not evidence");
+	expect(reproduceMd).toContain("reproduces in none of its runs");
+});
+
 describe("A1: agents/issue-reviewer.md frontmatter", () => {
 	test("declares name: issue-reviewer", () => {
 		expect(reviewerMd).toMatch(/^name: issue-reviewer$/m);

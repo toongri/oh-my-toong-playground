@@ -127,6 +127,15 @@ reproduce. For alternative axes joined with "or", the control reverts the whole 
 each alternative also gets the run in §4 that shows it reproduces by itself. The pair — reproduces with the axis value, does not reproduce without it — is what shows
 the axis is part of the trigger.
 
+**Intermittent symptoms.** When the same configuration does not give the same result on every run
+(a race window, scheduling, an unseeded random value), one run per configuration is not evidence:
+chance alone can produce a reproduce / not-reproduce pair. First make the run deterministic: pin
+the interleaving at the race point (a delay, hook, or barrier), fix the clock, or seed the random
+source. If you cannot, run every configuration the same number of times (for example, 20) and
+record the rate. An axis counts as necessary only when the reproducing configuration reproduces in
+a clear share of its runs and the configuration with that axis reverted reproduces in none of its runs.
+Write the count and rate in the attempt record and the matrix (`20회 중 7회 재현`).
+
 ## 4. Differential Reproduction (cause from reproduction)
 
 Start from the **reproducing configuration** and revert one candidate axis at a time to its
