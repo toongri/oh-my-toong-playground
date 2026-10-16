@@ -19,6 +19,8 @@ import {
 	addActor,
 	addStory,
 	authorScenario,
+	amendScenario,
+	recordRunCheck,
 	declareInert,
 	declareRiskNotApplicable,
 	readQaView,
@@ -673,7 +675,7 @@ describe("qa state: scenario authoring and risk coverage", () => {
 		expect(rawState().scenarios[0].title).toBe("rewritten before any run");
 		recordScenario(S, { story: "story-1", scenario: "s1", status: "fail" });
 		const before = readFileSync(resolveStatePath(S), "utf8");
-		expect(() => authorScenario(S, { ...scenarioOpts("s1", "H", [1]), title: "rewritten after the run" })).toThrow(/already has a recorded result this cycle/);
+		expect(() => authorScenario(S, { ...scenarioOpts("s1", "H", [1]), title: "rewritten after the run" })).toThrow(/already has a recorded result this cycle.*amend-scenario --reason/);
 		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
 		incCycle(S);
 		authorScenario(S, { ...scenarioOpts("s1", "H", [1]), title: "next cycle rewrite" });
@@ -695,6 +697,112 @@ describe("qa state: scenario authoring and risk coverage", () => {
 		expect(chainOk()).toBe(true);
 		authorScenario(S, scenarioOpts("s1", "H", [1]));
 		expect(chainOk()).toBe(false);
+	});
+});
+
+describe("qa state: amend-scenario", () => {
+	const amendOpts = (id: string, priority: string, risks: number[]) => ({ ...scenarioOpts(id, priority, risks), title: "corrected scenario", expected: "corrected result shown", reason: "the screen name in the old steps was stale" });
+	const seedRun = (id = "s1", priority = "M", risks: number[] = [1]) => {
+		seedStoryApi();
+		authorScenario(S, scenarioOpts(id, priority, risks));
+		recordScenario(S, { story: "story-1", scenario: id, status: "fail" });
+	};
+
+	test("amend는 작성 필드를 교체하고 결과 필드를 모두 지운다", () => {
+		seedRun();
+		expect(rawState().scenarios[0].status).toBe("fail");
+		amendScenario(S, amendOpts("s1", "L", [2]));
+		const [scenario] = rawState().scenarios;
+		expect(rawState().scenarios).toHaveLength(1);
+		expect(scenario).toMatchObject({ story: "story-1", id: "s1", title: "corrected scenario", expected: "corrected result shown", priority: "L", risks: [2], cycle: 0 });
+		for (const key of ["status", "blocked", "evidence", "evidence_review", "case_run", "case"]) expect(scenario[key]).toBeUndefined();
+	});
+
+	test("amend는 이전 기록 전체와 이유를 scenario_amendments에 덧붙인다", () => {
+		seedRun();
+		const old = rawState().scenarios[0];
+		amendScenario(S, amendOpts("s1", "M", [1]));
+		expect(rawState().scenario_amendments).toEqual([{ story: "story-1", id: "s1", cycle: 0, reason: "the screen name in the old steps was stale", previous: old }]);
+		recordScenario(S, { story: "story-1", scenario: "s1", status: "fail" });
+		amendScenario(S, { ...amendOpts("s1", "M", [1]), reason: "second correction of the same path" });
+		expect(rawState().scenario_amendments.map((entry: any) => entry.reason)).toEqual(["the screen name in the old steps was stale", "second correction of the same path"]);
+	});
+
+	test("결과가 없는 시나리오와 없는 시나리오는 거부하고 파일을 바꾸지 않는다", () => {
+		seedStoryApi();
+		authorScenario(S, scenarioOpts("s1", "M", [1]));
+		const before = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => amendScenario(S, amendOpts("s1", "M", [1]))).toThrow(/no recorded result yet; rewrite it with author-scenario/);
+		expect(() => amendScenario(S, amendOpts("nope", "M", [1]))).toThrow(/no scenario "story-1:nope" authored this cycle/);
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+	});
+
+	test("호출자가 넘겨준 시나리오는 실패해도 amend를 거부하고 파일을 바꾸지 않는다", () => {
+		seedStoryApi();
+		authorScenario(S, { ...scenarioOpts("s1", "H", [1]), source: "caller-provided" });
+		recordScenario(S, { story: "story-1", scenario: "s1", status: "fail" });
+		const before = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => amendScenario(S, amendOpts("s1", "H", [1]))).toThrow(/caller-provided/);
+		expect(() => amendScenario(S, { ...amendOpts("s1", "H", [1]), source: "self-authored" })).toThrow(/caller-provided/);
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+	});
+
+	test("코드 이름이나 빈 이유는 거부한다", () => {
+		seedRun();
+		const before = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => amendScenario(S, { ...amendOpts("s1", "M", [1]), reason: "  " })).toThrow(/reason is required/);
+		expect(() => amendScenario(S, { ...amendOpts("s1", "M", [1]), reason: "displayName이 낡았다" })).toThrow(/reason names the code identifier "displayName"/);
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+	});
+
+	test("해당 없음으로 선언된 축을 다루는 amend는 거부한다", () => {
+		seedRun();
+		declareRiskNotApplicable(S, 3, "no free-text input");
+		const before = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => amendScenario(S, amendOpts("s1", "M", [3]))).toThrow(/amend-scenario: axis 3 was declared not applicable/);
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+	});
+
+	test("amend는 저장된 verdict를 지운다", () => {
+		seedRun();
+		// A verdict gate-passed on the old result is hard to reach here, so plant one directly.
+		writeFileSync(resolveStatePath(S), JSON.stringify({ ...rawState(), verdict: "COMMENT" }));
+		expect(rawState().verdict).toBe("COMMENT");
+		amendScenario(S, amendOpts("s1", "M", [1]));
+		expect(rawState().verdict).toBeNull();
+	});
+
+	test("H 시나리오를 amend하면 현재 cycle의 flaky-rerun을 지우고 M/L 사이 amend는 유지한다", () => {
+		seedRun("s1", "M", [1]);
+		recordRunCheck(S, { check: "flaky-rerun", result: "pass" });
+		amendScenario(S, amendOpts("s1", "L", [1]));
+		expect(rawState().run_checks.flaky_rerun.result).toBe("pass");
+		recordScenario(S, { story: "story-1", scenario: "s1", status: "fail" });
+		amendScenario(S, amendOpts("s1", "H", [1]));
+		expect(rawState().run_checks.flaky_rerun).toBeNull();
+		recordScenario(S, { story: "story-1", scenario: "s1", status: "fail" });
+		recordRunCheck(S, { check: "flaky-rerun", result: "pass" });
+		amendScenario(S, amendOpts("s1", "M", [1]));
+		expect(rawState().run_checks.flaky_rerun).toBeNull();
+	});
+
+	test("start는 scenario_amendments를 지우고 view는 현재 cycle 것만 노출한다", () => {
+		seedRun();
+		amendScenario(S, amendOpts("s1", "M", [1]));
+		expect(readQaView(S)!.scenario_amendments).toHaveLength(1);
+		incCycle(S);
+		expect(readQaView(S)!.scenario_amendments).toEqual([]);
+		expect(rawState().scenario_amendments).toHaveLength(1);
+		forceCompleteQa(S, "test cleanup");
+		startQa(S, "next target");
+		expect(rawState().scenario_amendments).toBeUndefined();
+	});
+
+	test("amend는 보고서 스냅샷을 바꿔 렌더된 보고서를 stale로 만든다", () => {
+		seedRun();
+		const before = readQaView(S)!.report_source_snapshot;
+		amendScenario(S, amendOpts("s1", "M", [1]));
+		expect(readQaView(S)!.report_source_snapshot).not.toBe(before);
 	});
 });
 
@@ -731,6 +839,17 @@ describe("qa-state CLI wiring", () => {
 	const scenarioOf = (id: string, cycle = 0) => rawState().scenarios.find((s: any) => s.story === "story-1" && s.id === id && s.cycle === cycle);
 	const PASS_EVIDENCE = "--evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash";
 	const recordPass = (id: string) => run(`record-scenario --story story-1 --scenario ${id} --status pass ${PASS_EVIDENCE}`);
+
+	test("amend-scenario CLI는 결과를 지우고 --reason을 필수로 요구한다", () => {
+		authorCompleteChain();
+		run("record-scenario --story story-1 --scenario s1 --status fail");
+		const amend = (reason: string) => run(`${scenarioCmd("s1", "H", [1, 2]).replace("author-scenario", "amend-scenario")} ${reason}`);
+		expect(() => amend("")).toThrow();
+		amend('--reason "the old steps used a stale screen"');
+		expect(scenarioOf("s1").status).toBeUndefined();
+		expect(rawState().scenario_amendments[0]).toMatchObject({ story: "story-1", id: "s1", reason: "the old steps used a stale screen" });
+		expect(JSON.parse(run("get")).scenario_amendments).toHaveLength(1);
+	});
 
 	test("set-acceptance는 따옴표가 든 문장을 파일로 받아 그대로 기록하고 기록한 목록을 출력한다", () => {
 		run("set --phase PLAN");
@@ -1461,6 +1580,7 @@ describe("help subcommand", () => {
 		const out = run("help");
 		const aiSection = out.slice(out.indexOf("AI-USABLE"), out.indexOf("USER-ONLY"));
 		for (const name of ["author-scenario", "record-scenario", "declare-risk-na"]) expect(aiSection).toContain(`${name} —`);
+		expect(aiSection.split("\n").find((line) => line.includes("amend-scenario —"))).toContain("--reason");
 	});
 
 	test("set and get are listed under AI-USABLE", () => {
