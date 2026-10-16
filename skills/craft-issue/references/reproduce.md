@@ -128,8 +128,10 @@ Attempt: {environment} — {axis values that matter: flags, TZ, runtime, data st
 **Fidelity statement.** For the attempt you rely on, name every matrix axis on which it still
 differs from production (runtime version, missing worker, data volume, deployed commit).
 
-**When nothing reproduces**, name the axis you could not set and who or what could set it: that is
-the `{method}` in `TBD — needs validation via {method}`. An attempt not made is "not yet attempted",
+**When nothing reproduces**, name the next step that could separate it: the axis you could not set
+and who could set it, or, when every identified axis was matched, the evidence still missing (a
+production-only condition to find in the trace, a question for the reporter). That step is the
+`{method}` in `TBD — needs validation via {method}`. An attempt not made is "not yet attempted",
 never "not reproducible".
 
 ## 6. Output → Issue
