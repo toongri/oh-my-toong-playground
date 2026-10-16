@@ -195,7 +195,9 @@ A Root Cause may be written as **Confirmed** (and the issue filed with it) only 
 1. **Triangulation** — at least two *independent, heterogeneous* tracks converge on the same mechanism
    (e.g., runtime evidence + code, or a matching reproduction + code; not two code reads). Homogeneous
    corroboration (two reads of the same code) is one track, not two.
-2. **Runtime evidence** — the §4 gate is satisfied by a production trace or a matching reproduction.
+2. **Runtime evidence** — the §4 gate is satisfied: a production trace or a matching reproduction,
+   and the production trace whenever an observability/log tool is wired. A matching reproduction
+   does not replace a trace you could have queried.
 3. **Disproof** — the §3 ledger holds ≥2 candidates and every competing hypothesis is REFUTED (or any
    NOT-DISTINGUISHED alternative is named with the query that would resolve it).
 4. **Multi-path** — §5 coverage is complete; per-path status is known.

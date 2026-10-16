@@ -7,7 +7,7 @@ The deliverable is the issue body as rendered in Linear, GitHub, or Jira. Its re
 | Observable input | Body order |
 |---|---|
 | Requirement or improvement | Problem → relevant confirmed context → acceptance criteria → non-goals → available references |
-| Reproducible bug, cause not established | Problem → reproduction (environment, steps, observed raw output next to the expected result, and a reproduction matrix when two or more environments were attempted — see reproduce.md §6) → confirmed context and next diagnostic check → acceptance criteria → non-goals → available references |
+| Reproducible bug, cause not established | Problem → reproduction (environment, steps, observed raw output next to the expected result, and a reproduction matrix when two or more environments or axis values were attempted, including two configurations of one environment — see reproduce.md §6) → confirmed context and next diagnostic check → acceptance criteria → non-goals → available references |
 | Established cause | Same bug body, with a causal explanation beside the reproduction; link or append the detailed investigation when it is needed to assess the conclusion |
 | User explicitly requests a full incident/RCA report | Full investigation shape in issue-craft.md §3 |
 

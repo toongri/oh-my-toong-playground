@@ -44,6 +44,16 @@ test("증상 진단은 재현 경로를 읽고, 운영 신호와 일치하는 �
 	expect(diagnoseMd).toContain("a matching reproduction");
 });
 
+test("재현 결과는 확신도 게이트·근본 원인·본문 재현 표 조건과 어긋나지 않는다", () => {
+	const diagnoseMd = readFileSync(join(import.meta.dir, "references/diagnose-rootcause.md"), "utf8");
+	const reproduceMd = readFileSync(join(import.meta.dir, "references/reproduce.md"), "utf8");
+	const presentationMd = readFileSync(join(import.meta.dir, "references/presentation.md"), "utf8");
+	expect(diagnoseMd).toContain("and the production trace whenever an observability/log tool is wired");
+	expect(reproduceMd).toContain("It is not the Root Cause");
+	expect(reproduceMd).not.toContain("**Root Cause / confidence** — the trigger axis");
+	expect(presentationMd).toContain("two or more environments or axis values were attempted");
+});
+
 describe("A1: agents/issue-reviewer.md frontmatter", () => {
 	test("declares name: issue-reviewer", () => {
 		expect(reviewerMd).toMatch(/^name: issue-reviewer$/m);

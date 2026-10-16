@@ -167,7 +167,13 @@ environment or person that could set it: that is the `{method}` in `TBD — need
   (for example: `경계까지만 — 결제사는 직접 만든 모의 서버, 서버가 보낸 금액 13591.5`), never
   `재현됨`. An environment you did not attempt gets no row. A forecast without an attempt goes in Pre-Context
   as `TBD — needs validation via {method}`, never as a matrix row.
-- **Root Cause / confidence** — the trigger axis from §4 and the fidelity statement from §5.
+- **Trigger condition** — the trigger axis from §4 is the condition that exposes the defect (which
+  environments hit it and why "재현 안 됨" happened elsewhere). Write it with the Reproduction and in
+  Pre-Context's per-path status (경로별 상태). It is not the Root Cause: the Root Cause is the
+  code-level mechanism the diagnosis established (`references/diagnose-rootcause.md` §6), such as
+  "the async path writes `refund_id` before the refund row exists and the list dereferences it",
+  not "`REFUND_ASYNC=on`".
+- **Confidence** — the fidelity statement from §5 goes into the confidence statement (확신도).
 - **Notes (메모)** — any state left behind on a shared environment (an unprocessed refund on a QA
   account), so the next person is not misled by it.
 - **AC Verification** — re-run the reproducing steps on the same environment
