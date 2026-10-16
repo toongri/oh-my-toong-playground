@@ -191,7 +191,7 @@ Bug issues carry the following investigation information. This is required infor
 
 | Field | Content |
 |---|---|
-| **Reproduction** | Minimal, numbered steps to trigger the bug. Include environment, preconditions, and the exact action sequence. |
+| **Reproduction** | The run that reproduced the bug, in this order: (1) the environment and the axis values that matter (flags, runtime/`TZ`, data state, client); (2) minimal numbered steps you actually ran, with data setup; (3) the observed raw output (status + body, log line) next to the expected result; (4) whether it matches the production signature literally. Add a reproduction matrix (환경 \| 조건 (차이 나는 축) \| 결과 \| 근거) when two or more environments or axis values were attempted, so the reader sees which difference flips the outcome. When nothing reproduced, state the attempts and the axis you could not set. Procedure and evidence rules: `references/reproduce.md`. |
 | **Root Cause** | (promoted from standard, filled from Stage 3 code investigation output) |
 | **Evidence** | Logs, stack traces, error output, or metric anomalies that confirm the symptom. |
 
