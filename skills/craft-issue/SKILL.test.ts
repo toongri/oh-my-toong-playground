@@ -49,7 +49,8 @@ test("증상 진단은 재현 트랙을 읽고, 재현 트랙은 판정 어휘�
 
 test("재현 없는 버그의 완료 조건은 추적된 입력의 테스트이고 배포 후 관찰은 완료 조건 밖에 둔다", () => {
 	const issueCraft = readFileSync(join(import.meta.dir, "references/issue-craft.md"), "utf8");
-	expect(issueCraft).toContain("targeted test that drives the traced code path");
+	expect(issueCraft).toContain("the traced code path with the traced input");
+	expect(issueCraft).toContain("get the concrete input from the witness");
 	expect(issueCraft).toContain("Post-Release Observation section (Form 2), not in\nthe AC");
 });
 

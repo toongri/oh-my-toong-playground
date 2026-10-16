@@ -521,10 +521,13 @@ weasel-word violation). When the Root Cause is hypothesis-grade (`TBD — needs 
 {method}`), the provisionality stays on the Root Cause — **not** on the AC. The AC's Verification
 remains the Reproduction re-run: a defined, executable method that satisfies the `Un-observable AC`
 gate (SKILL.md). So a reproducible bug always carries an actionable AC even while its cause is
-unconfirmed. A bug that passed the `No consistent reproduction` gate on log evidence or a witness
-account alone has no steps to re-run: its Reproduction records the attempts instead, and its AC
-Verification is a targeted test that drives the traced code path with the traced input (e.g., call
-the function with the amount and coupon rate from the failing log line). The check that the
+unconfirmed. A bug that passed the `No consistent reproduction` gate on log evidence alone has no steps to
+re-run: its Reproduction records the attempts instead, and its AC Verification is a targeted test
+that drives the traced code path with the traced input (e.g., call the function with the amount and
+coupon rate from the failing log line). A bug that passed on a witness account alone has no trace
+either: get the concrete input from the witness (account, values, time, client) before writing the
+AC, and the targeted test uses that input. If the witness cannot supply it, the `Un-observable AC`
+gate applies. The check that the
 production signature drops to zero goes in the Post-Release Observation section (Form 2), not in
 the AC.
 
