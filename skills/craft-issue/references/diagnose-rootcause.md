@@ -210,7 +210,7 @@ The sub-pipeline feeds the issue body (issue-craft.md) as follows:
 
 - **Root Cause / Symptom / Fix direction** ← the Confirmed mechanism (§6), in the RCA Bug-Report shape.
 - **Reproduction** ← the reproducing run and, when attempted, the matrix (`references/reproduce.md` §6).
-- **Evidence** ← the runtime trace (§4) quoted directly (log lines, timeline, the decisive asymmetry),
+- **Evidence** ← the runtime evidence (§4) quoted directly (log lines, timeline, the decisive asymmetry, or the matching run's raw output),
   plus the FILE:LINE code citations from the `explore` tracks.
 - **Pre-Context / per-path status** ← §5 coverage: which implementations carry the defect. Rendered as
   a sub-bullet within Pre-Context (사전 확인), localized as 경로별 상태 — never a standalone top-level
