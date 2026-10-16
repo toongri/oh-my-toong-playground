@@ -191,7 +191,7 @@ Bug issues carry the following investigation information. This is required infor
 
 | Field | Content |
 |---|---|
-| **Reproduction** | Minimal numbered steps you actually ran, with the environment, the axis values that matter (flags, `TZ`, data state, client), and data setup; then the observed raw output next to the expected result. Add the reproduction matrix when two or more environments or axis values were attempted (`references/reproduce.md` §6). When nothing reproduced, state the attempts and the axis you could not set. |
+| **Reproduction** | Minimal numbered steps you actually ran, with the environment, the axis values that matter (flags, `TZ`, data state, client), and data setup; then the observed raw output next to the expected result. Add the reproduction matrix when two or more environments or axis values were attempted (`references/reproduce.md` §6). When nothing reproduced, state the attempts and the next step that could separate the cause (`references/reproduce.md` §5). |
 | **Root Cause** | (promoted from standard, filled from Stage 3 code investigation output) |
 | **Evidence** | Logs, stack traces, error output, or metric anomalies that confirm the symptom. |
 
