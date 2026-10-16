@@ -72,6 +72,7 @@ Then fill every field from that checklist. The checklist is part of your output 
 - Be specific: names, paths, numbers, commands. No narrative of the session history and no praise or filler.
 - Finished work gets one line with its PR, commit, or file, unless the remaining work depends on its details.
 - Write in English. Keep identifiers, commands, and the user's quoted words in their original form and language.
+- Keep normal spacing between words and numbers (`use-case 4/4`, `HTTP 200`), also when cutting to fit the budget.
 - Your fields together must fit in {BUDGET} bytes of UTF-8 when rendered. The user's messages are appended separately and do not count, and neither does `analysis_checklist`. If you must cut, cut history and finished work first; never cut `current_work`, `next_steps`, `working_rules`, `decisions`, `rejected`, or `unverified_results`.
 - Rule and instruction files (`AGENTS.md`, `CLAUDE.md`, files under `rules/`, rule text a hook injected) come back in full after the reset. No field holds a copy or summary of their content.
 - The ledger records the work, not permissions: no field says what the user has or has not approved or authorized, and approval records in a previous ledger are not carried over. A question the agent asked and is still waiting on goes in `open_questions`.

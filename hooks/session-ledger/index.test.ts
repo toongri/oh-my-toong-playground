@@ -195,6 +195,13 @@ describe("검증기", () => {
 		expect(prose("A partial-rerun/child-process check, then a script-decided step.")).toEqual([]);
 	});
 
+	test("로그의 단어와 숫자를 공백 없이 붙인 표현은 오타로 보지 않고, 번호가 바뀐 식별자는 거부한다", () => {
+		const source = "use-case 4/4, 100% coverage; Mobile HTTP 200 offsets 0/100; adb -s emulator-5556 shell";
+		const prose = (text: string) => unknownIdentifiers(ledgerJson({ current_work: text }), source);
+		expect(prose("use-case4/4 with100% coverage; HTTP200 offsets0/100.")).toEqual([]);
+		expect(prose("Drive emulator-5557 next.")).toEqual(["emulator-5557"]);
+	});
+
 	test("로그에 없는 문자 체계가 섞여 깨진 경로는 거부하고, 한글 설명은 허용한다", () => {
 		const source = "cd /repo/기존-프로그램-문제/apps && cat slot-distribution.ts";
 		const text = (current_work: string) => unknownIdentifiers(ledgerJson({ current_work }), source);

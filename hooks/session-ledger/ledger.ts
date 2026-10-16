@@ -247,6 +247,8 @@ export function unknownIdentifiers(d: LedgerJson, sourceText: string): string[] 
 	// "child-process" for `child_process` is prose, not a typo, so hyphen and underscore compare equal.
 	const lowerSource = sourceText.toLowerCase().replaceAll("_", "-");
 	const unhyphenated = lowerSource.replaceAll("-", "");
+	// "use-case4/4" for `use-case 4/4` drops a space to save bytes; it is not a misspelling.
+	const unspaced = lowerSource.replace(/\s+/g, "");
 	let sourceTokens: Set<string> | undefined;
 	for (const raw of rendered.replace(CODE, " ").split(/\s+/)) {
 		const token = raw
@@ -258,6 +260,7 @@ export function unknownIdentifiers(d: LedgerJson, sourceText: string): string[] 
 		for (const part of token.split(/[/:]/).map((x) => x.toLowerCase().replaceAll("_", "-"))) {
 			if (part.length < 6 || !/[a-z]/.test(part) || !/[-_.\d]/.test(part) || part.startsWith("-")) continue;
 			if (lowerSource.includes(part.replace(/e?s$/, "")) || unhyphenated.includes(part.replaceAll("-", ""))) continue;
+			if (unspaced.includes(part)) continue;
 			sourceTokens ??= new Set(lowerSource.split(/[^\w.-]+/).filter((t) => t.length >= 5));
 			for (const t of sourceTokens) {
 				if (Math.abs(t.length - part.length) <= 1 && editDistance(t, part) === 1) {
