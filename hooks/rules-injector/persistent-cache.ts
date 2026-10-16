@@ -43,6 +43,7 @@ interface SerializedSessionState {
 	version?: number;
 	staticDedup: string[];
 	dynamicDedup: Record<string, string[]>;
+	latestDynamicInjectionKeys?: string[];
 	postCompactPending?: PostCompactPendingState;
 	postCompactRecovering?: PostCompactPendingState;
 	recoveryLease?: RecoveryLeaseRecord;
@@ -60,6 +61,7 @@ export function hydrateEngineState(engine: Engine, cachePath: string): void {
 	for (const [scope, keys] of Object.entries(state.dynamicDedup)) {
 		engine.state.dynamicDedup.set(scope, new Set(keys));
 	}
+	engine.state.latestDynamicInjectionKeys = [...(state.latestDynamicInjectionKeys ?? [])];
 }
 
 export function persistEngineState(
@@ -81,9 +83,11 @@ export function persistEngineState(
 		const postCompactPending = nextPostCompactPending(currentState, completedPostCompactKind);
 		const postCompactRecovering = nextPostCompactRecovering(currentState, completedPostCompactKind);
 		const recoveryLease = nextRecoveryLease(currentState, completedPostCompactKind);
+		const latestDynamicInjectionKeys = engine.state.latestDynamicInjectionKeys;
 		return {
 			staticDedup: [...engine.state.staticDedup],
 			dynamicDedup,
+			...(latestDynamicInjectionKeys.length === 0 ? {} : { latestDynamicInjectionKeys }),
 			...(postCompactPending === undefined ? {} : { postCompactPending }),
 			...(postCompactRecovering === undefined ? {} : { postCompactRecovering }),
 			...(recoveryLease === undefined ? {} : { recoveryLease }),
@@ -101,14 +105,24 @@ export function clearSessionState(cachePath: string): void {
 export function markSessionCompacted(cachePath: string): void {
 	// #7: same locked read-modify-write as persistEngineState — preserves a concurrent
 	// PostToolUse's dynamicDedup writes instead of clobbering them.
-	updateSessionState(cachePath, (state) => ({
+	updateSessionState(cachePath, (state) => {
 		// Compaction drops injected static rule bodies, so pre-compaction static
 		// dedup marks must not suppress the post-compact recovery directive.
-		// Dynamic dedup survives: those rules are recovered as read-directive paths.
-		staticDedup: [],
-		dynamicDedup: state.dynamicDedup,
-		postCompactPending: { static: true, dynamic: true },
-	}));
+		// Dynamic dedup keeps only the most recent lazy unit, which recovery lists as
+		// read-directive paths; every older lazy rule leaves dedup so it is injected
+		// again the next time a matching file is touched.
+		const latest = new Set(state.latestDynamicInjectionKeys ?? []);
+		const dynamicDedup: Record<string, string[]> = {};
+		for (const [scope, keys] of Object.entries(state.dynamicDedup)) {
+			dynamicDedup[scope] = keys.filter((key) => latest.has(key));
+		}
+		return {
+			staticDedup: [],
+			dynamicDedup,
+			...(latest.size === 0 ? {} : { latestDynamicInjectionKeys: [...latest] }),
+			postCompactPending: { static: true, dynamic: true },
+		};
+	});
 }
 
 // Locked read-modify-write over the shared session-state file. On the rare event of
@@ -410,6 +424,9 @@ function stateWithPostCompactKinds(
 	return {
 		staticDedup: state.staticDedup,
 		dynamicDedup: state.dynamicDedup,
+		...(state.latestDynamicInjectionKeys === undefined
+			? {}
+			: { latestDynamicInjectionKeys: state.latestDynamicInjectionKeys }),
 		...(postCompactPending === undefined ? {} : { postCompactPending }),
 		...(postCompactRecovering === undefined ? {} : { postCompactRecovering }),
 		...(recoveryLease === undefined ? {} : { recoveryLease }),
@@ -430,6 +447,7 @@ function isSerializedSessionState(value: unknown): value is SerializedSessionSta
 	}
 	const staticDedup = value["staticDedup"];
 	const dynamicDedup = value["dynamicDedup"];
+	const latestDynamicInjectionKeys = value["latestDynamicInjectionKeys"];
 	const postCompactPending = value["postCompactPending"];
 	const postCompactRecovering = value["postCompactRecovering"];
 	const recoveryLease = value["recoveryLease"];
@@ -439,6 +457,9 @@ function isSerializedSessionState(value: unknown): value is SerializedSessionSta
 		Object.values(dynamicDedup).every(
 			(item) => Array.isArray(item) && item.every((nestedItem) => typeof nestedItem === "string"),
 		) &&
+		(latestDynamicInjectionKeys === undefined ||
+			(Array.isArray(latestDynamicInjectionKeys) &&
+				latestDynamicInjectionKeys.every((item) => typeof item === "string"))) &&
 		(postCompactPending === undefined || isPostCompactPendingState(postCompactPending)) &&
 		(postCompactRecovering === undefined || isPostCompactPendingState(postCompactRecovering)) &&
 		(recoveryLease === undefined || isRecoveryLeaseRecord(recoveryLease)) &&

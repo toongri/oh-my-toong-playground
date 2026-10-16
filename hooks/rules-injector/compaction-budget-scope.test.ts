@@ -2,7 +2,7 @@ import { test, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { DEFAULT_AUTO_DISABLED_SOURCES } from "./rules/index.js";
@@ -1227,6 +1227,7 @@ test("AC11-C7: dynamic recovery re-injects a rule whose path is in transcript bu
 			dynamicDedup: {
 				"__pi-rules-session__": [`${dynamicRulePath}::deadbeef`],
 			},
+			latestDynamicInjectionKeys: [`${dynamicRulePath}::deadbeef`],
 			postCompactPending: { static: true, dynamic: true },
 		}) + "\n",
 	);
@@ -1385,6 +1386,7 @@ test("A4: dynamic recovery does NOT re-inject a rule whose frontmatter-stripped 
 			version: 1,
 			staticDedup: [],
 			dynamicDedup: { "__pi-rules-session__": [`${dynamicRulePath}::deadbeef`] },
+			latestDynamicInjectionKeys: [`${dynamicRulePath}::deadbeef`],
 			postCompactPending: { static: true, dynamic: true },
 		}) + "\n",
 	);
@@ -1539,4 +1541,61 @@ test("A13: name-based parity — edited rule IS suppressed if its name tag is in
 	// Name-based parity: `<rules name="parity2">` is in the old block → new rule suppressed.
 	// (Accepted trade-off: no version granularity with name-based format.)
 	expect(pending).toHaveLength(0);
+});
+
+// ===========================================================================
+// Post-compact recovery keeps every rule the session started with, but only the
+// most recent lazy (PostToolUse) injection unit. Older lazy rules leave dedup at
+// compaction, so they come back lazily the next time a matching file is touched.
+// ===========================================================================
+
+function postToolUsePayload(sessionId: string, cwd: string, command: string): Record<string, unknown> {
+	return {
+		hook_event_name: "PostToolUse",
+		session_id: sessionId,
+		turn_id: "turn-tool",
+		transcript_path: null,
+		cwd,
+		model: "gpt-5.5",
+		permission_mode: "default",
+		tool_name: "Bash",
+		tool_use_id: `use-${command}`,
+		tool_input: { command },
+		tool_response: {},
+	};
+}
+
+test("압축 뒤 복구는 시작 규칙 전부와 가장 최근 lazy 주입 단위만 다시 가져온다", () => {
+	const sessionId = "latest-lazy-unit-session";
+	const env = { PI_RULES_DISABLE_BUNDLED: "1" };
+	const { projectRoot, rulePath: staticPath } = makeProjectWithStaticRule(
+		"start-rule.md",
+		"START RULE BODY: loaded when the session starts.",
+	);
+	const rulesDir = join(projectRoot, ".codex", "rules");
+	const olderLazyPath = join(rulesDir, "ts-lazy.md");
+	const latestLazyPath = join(rulesDir, "md-lazy.md");
+	writeFileSync(olderLazyPath, '---\nglobs: ["**/*.ts"]\n---\nOLDER LAZY TS RULE BODY\n');
+	writeFileSync(latestLazyPath, '---\nglobs: ["**/*.md"]\n---\nLATEST LAZY MD RULE BODY\n');
+	mkdirSync(join(projectRoot, "src"), { recursive: true });
+	mkdirSync(join(projectRoot, "docs"), { recursive: true });
+	writeFileSync(join(projectRoot, "src", "a.ts"), "export const a = 1;\n");
+	writeFileSync(join(projectRoot, "docs", "b.md"), "# b\n");
+
+	runHook("session-start", sessionStartPayload(sessionId, projectRoot), env);
+	const olderUnit = runHook("post-tool-use", postToolUsePayload(sessionId, projectRoot, "cat src/a.ts"), env);
+	expect(additionalContext(olderUnit.stdout)).toContain("OLDER LAZY TS RULE BODY");
+	const latestUnit = runHook("post-tool-use", postToolUsePayload(sessionId, projectRoot, "cat docs/b.md"), env);
+	expect(additionalContext(latestUnit.stdout)).toContain("LATEST LAZY MD RULE BODY");
+
+	runHook("post-compact", postCompactPayload(sessionId, projectRoot), env);
+	const recovery = runHook("session-start", sessionStartPayload(sessionId, projectRoot, { source: "compact" }), env);
+	const recovered = additionalContext(recovery.stdout);
+	expect(recovered.includes(staticPath) || recovered.includes("START RULE BODY")).toBe(true);
+	// Dynamic paths are listed by real path (/private/var/... on macOS), so match the file name.
+	expect(recovered).toContain(`/${basename(latestLazyPath)}`);
+	expect(recovered).not.toContain(`/${basename(olderLazyPath)}`);
+
+	const touchedAgain = runHook("post-tool-use", postToolUsePayload(sessionId, projectRoot, "cat src/a.ts"), env);
+	expect(additionalContext(touchedAgain.stdout)).toContain("OLDER LAZY TS RULE BODY");
 });

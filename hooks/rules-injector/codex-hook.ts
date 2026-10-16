@@ -26,7 +26,7 @@ import {
 import { withPostCompactBudget } from "./post-compact-budget.js";
 import { claimedPostCompactKind, shouldSkipPostCompactClaim } from "./post-compact-claim.js";
 import type { DynamicLoadedRule } from "./rules/engine-dynamic-loader.js";
-import { formatDynamicBlock, ruleMarkerLine } from "./rules/index.js";
+import { dynamicDedupKey, formatDynamicBlock, ruleMarkerLine } from "./rules/index.js";
 import type { LoadedRule } from "./rules/index.js";
 import { createRulesEngine } from "./rules-engine-factory.js";
 import { combineStaticContext, runStaticInjection } from "./static-injection.js";
@@ -366,10 +366,16 @@ export async function runPostToolUseHook(
 	const limitedCombined = limitAdditionalContextText(
 		combined.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim(),
 	);
+	const injectedKeys: string[] = [];
 	for (const rule of emittedRules) {
 		if (limitedCombined.includes(ruleMarkerLine(rule.path))) {
 			engine.markDynamicInjected(rule);
+			injectedKeys.push(dynamicDedupKey(rule.realPath, rule.contentHash));
 		}
+	}
+	// This call becomes the most recent lazy unit — the one post-compact recovery restores.
+	if (injectedKeys.length > 0) {
+		engine.state.latestDynamicInjectionKeys = injectedKeys;
 	}
 	persistEngineState(engine, cachePath, completedPostCompactKind);
 	debugTimer.lap("persist", { reason: "emit" });

@@ -222,24 +222,24 @@ function recoverDynamicRulePaths(
 ): string[] {
 	const staticRulePaths = new Set(staticRules.map((rule) => rule.realPath));
 	const recoveredPaths = new Set<string>();
-	for (const dedupKeys of engine.state.dynamicDedup.values()) {
-		for (const dedupKey of dedupKeys) {
-			const separatorIndex = dedupKey.lastIndexOf("::");
-			if (separatorIndex <= 0) {
-				continue;
-			}
-			const rulePath = dedupKey.slice(0, separatorIndex);
-			if (staticRulePaths.has(rulePath)) {
-				continue;
-			}
-			if (!existsSync(rulePath)) {
-				continue;
-			}
-			if (transcriptText !== null && isDynamicRuleBodyInTranscript(rulePath, transcriptText)) {
-				continue;
-			}
-			recoveredPaths.add(rulePath);
+	// Only the most recent lazy unit is restored; older lazy rules come back lazily
+	// when a matching file is touched again (markSessionCompacted drops their dedup).
+	for (const dedupKey of engine.state.latestDynamicInjectionKeys) {
+		const separatorIndex = dedupKey.lastIndexOf("::");
+		if (separatorIndex <= 0) {
+			continue;
 		}
+		const rulePath = dedupKey.slice(0, separatorIndex);
+		if (staticRulePaths.has(rulePath)) {
+			continue;
+		}
+		if (!existsSync(rulePath)) {
+			continue;
+		}
+		if (transcriptText !== null && isDynamicRuleBodyInTranscript(rulePath, transcriptText)) {
+			continue;
+		}
+		recoveredPaths.add(rulePath);
 	}
 	return [...recoveredPaths].sort();
 }
