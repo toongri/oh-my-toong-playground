@@ -112,7 +112,8 @@ established by the production trace, not by the reproduction.
 
 Always pair the reproducing run with **control runs**: for each axis of the trigger condition (§4),
 one run that is the reproducing configuration with only that axis reverted, and that does not
-reproduce. The pair — reproduces with the axis value, does not reproduce without it — is what shows
+reproduce. For alternative axes joined with "or", the control reverts the whole group at once, and
+each alternative also gets the run in §4 that shows it reproduces by itself. The pair — reproduces with the axis value, does not reproduce without it — is what shows
 the axis is part of the trigger.
 
 ## 4. Differential Reproduction (cause from reproduction)
@@ -123,7 +124,20 @@ non-reproducing value, keeping every other axis as in the reproducing run. Re-ru
 - An axis whose reversion stops the reproduction is **necessary**. Keep every necessary axis: the
   trigger condition is all of them together (for example: `REFUND_ASYNC=on` **and** a refund still
   pending — either one alone does not reproduce). Never record only one of them as the trigger.
-- An axis whose change leaves the reproduction in place is **not necessary**.
+- An axis whose change leaves the reproduction in place is **not necessary on its own**. That does
+  not yet mean it does not matter: two axes can each be enough by themselves (flag A **or** flag B
+  turns on the faulty path). With both set, reverting either one alone leaves the symptom.
+
+Then run the **reduced configuration**: the necessary axes kept, every not-necessary axis reverted at
+once.
+
+- It still reproduces → the not-necessary axes do not matter. The trigger condition is the
+  necessary axes.
+- It stops reproducing → some of those axes are alternatives to each other. Add them back to the
+  reduced configuration one at a time. Each one that restores the reproduction is an alternative
+  trigger. Record the trigger condition as the necessary axes plus the alternatives joined with
+  "or" (for example: a refund still pending **and** (flag A **or** flag B)). When no axis was
+  necessary on its own, this run is how you find the trigger at all.
 
 Do not build up from the non-reproducing configuration one axis at a time and read a non-flip as a
 refutation. When the symptom needs two axes together, setting the first one alone does not flip the
@@ -132,9 +146,12 @@ outcome, and that run says nothing about whether the first axis matters.
 Use this to settle the hypothesis ledger (`references/diagnose-rootcause.md` §3): every competing
 hypothesis that names an axis gets a run that changes that axis inside the reproducing configuration.
 
-- A hypothesis whose axis changes inside the reproducing configuration without stopping the
-  reproduction is **REFUTED by reproduction** (for example: same 500 with app version 5.1.3 and
-  5.2.0 while the refund is pending → the app version is not the trigger).
+- A hypothesis whose axis is neither necessary nor an alternative trigger is **REFUTED by
+  reproduction**: changing it inside the reproducing configuration leaves the reproduction in place,
+  and the reduced configuration reproduces without it (for example: same 500 with app version 5.1.3
+  and 5.2.0 while the refund is pending, and the reduced run with the default app version still
+  reproduces → the app version is not the trigger). A single non-flip is not a refutation while an
+  alternative axis that is still set could explain it.
 - A hypothesis whose axis cannot be set on any reachable environment stays **NOT-DISTINGUISHED**,
   with the environment that could set it named as the separating test.
 

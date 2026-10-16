@@ -59,6 +59,8 @@ test("차등 재현은 재현되는 구성에서 축을 되돌려 필요조건�
 	expect(reproduceMd).toContain("Start from the **reproducing configuration**");
 	expect(reproduceMd).toContain("Keep every necessary axis");
 	expect(reproduceMd).not.toContain("from the non-reproducing configuration toward the reproducing one");
+	expect(reproduceMd).toContain("**reduced configuration**");
+	expect(reproduceMd).toContain("A single non-flip is not a refutation");
 });
 
 describe("A1: agents/issue-reviewer.md frontmatter", () => {
