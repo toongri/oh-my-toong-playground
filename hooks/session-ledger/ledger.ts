@@ -576,7 +576,6 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 	const skills = loadedSkills(input.log.lines, input.previousLedger);
 	const basePrompt = buildPrompt(input.log, input.previousLedger, budget);
 	const attempts: AttemptRecord[] = [];
-	const overBudget: { size: number; d: LedgerJson }[] = [];
 	let prompt = basePrompt;
 
 	for (let n = 1; n <= maxAttempts; n++) {
@@ -596,21 +595,15 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 		if (violations.length === 0) {
 			return { markdown: renderLedger(d, allUsers, ctx.assistants), status: "accepted", attempts };
 		}
-		// Over budget is the only soft violation: such an attempt is usable if none fully passes.
-		if (violations.every((x) => x.startsWith(OVER_BUDGET))) overBudget.push({ size, d });
+		// Over budget is the only soft violation: a retry cuts only a few thousand bytes and costs minutes.
+		if (violations.every((x) => x.startsWith(OVER_BUDGET))) {
+			return { markdown: renderLedger(d, allUsers, ctx.assistants), status: "accepted-over-budget", attempts };
+		}
 		prompt =
 			`${basePrompt}\n=== YOUR PREVIOUS OUTPUT WAS REJECTED BY THE VALIDATOR ===\n${violations.map((x) => `- ${x}`).join("\n")}` +
 			`\nPrevious output:\n${JSON.stringify(d)}\nReturn a corrected handoff JSON.\n`;
 	}
 
-	if (overBudget.length > 0) {
-		const smallest = overBudget.reduce((a, b) => (b.size < a.size ? b : a));
-		return {
-			markdown: renderLedger(smallest.d, allUsers, ctx.assistants),
-			status: "accepted-over-budget",
-			attempts,
-		};
-	}
 	const last = attempts.at(-1);
 	const reason = last?.error ?? (last ? "every attempt failed validation" : "deadline reached before the first attempt");
 	return { markdown: fallbackLedger(input.log, allUsers, reason), status: "fallback", attempts };

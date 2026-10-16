@@ -332,7 +332,7 @@ describe("재시도와 대체 경로", () => {
 		);
 	});
 
-	test("모든 시도가 예산만 넘으면 가장 작은 시도를 채택한다", async () => {
+	test("예산만 넘은 시도는 재시도 없이 바로 채택한다", async () => {
 		const sizes = [3000, 2000, 2500];
 		const result = await writeLedger({
 			log,
@@ -341,7 +341,23 @@ describe("재시도와 대체 경로", () => {
 			deadline: Date.now() + 60_000,
 		});
 		expect(result.status).toBe("accepted-over-budget");
-		expect(result.markdown).toContain(`- ${"x".repeat(2000)}\n`);
+		expect(result.attempts).toHaveLength(1);
+		expect(result.markdown).toContain(`- ${"x".repeat(3000)}\n`);
+	});
+
+	test("다른 위반으로 재시도한 뒤 예산만 넘은 시도는 그대로 채택한다", async () => {
+		const outputs: ModelResult[] = [
+			{ output: ledgerJson({ current_work: "Editing `src/logn.ts`." }) },
+			{ output: ledgerJson({ pending: ["x".repeat(3000)] }) },
+		];
+		const result = await writeLedger({
+			log,
+			budget: 100,
+			runModel: async () => outputs.shift() as ModelResult,
+			deadline: Date.now() + 60_000,
+		});
+		expect(result.status).toBe("accepted-over-budget");
+		expect(result.attempts).toHaveLength(2);
 	});
 
 	test("요약기를 실행할 수 없으면 결정론적 최소 ledger를 쓴다", async () => {
