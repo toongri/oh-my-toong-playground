@@ -11,8 +11,10 @@ that can vary one condition and watch the outcome change.
 List every environment the symptom could plausibly appear in: the one the reporter saw it in, the
 one where someone said "재현 안 됨", and every environment you can reach (your own local instance,
 shared stg/dev, a device or browser profile). For each, record its value on every axis below that the
-code under suspicion reads. Take the values from the repo (per-environment config, deploy manifests,
-base images, flag definitions, cron/worker schedules), not from memory.
+code under suspicion reads. Take each value from its source of truth, not from memory: static config (per-environment
+config, deploy manifests, base images, flag definitions, cron/worker schedules) from the repo, and
+runtime state (flag-service overrides, the deployed build, the entity's current data) from the
+sanctioned read-only live source.
 
 | Axis | What to read | Example values |
 |---|---|---|
