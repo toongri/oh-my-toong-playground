@@ -7,7 +7,7 @@ import { join } from "node:path";
 
 import { runQaCase } from "@lib/qa-case-run.ts";
 import { configureQaCaseStore, getQaCase, saveQaCase, type QaCaseRecord } from "@lib/qa-case-store.ts";
-import { addActor, addStory, amendScenario, authorScenario, completeQa, readQaState, recordCase, recordScenario, registerQaCaseRunReceipt, setAcceptance, setQaState } from "./qa-state.ts";
+import { addActor, addStory, amendScenario, authoredScenarioSha256, authorScenario, completeQa, readQaState, recordCase, recordScenario, registerQaCaseRunReceipt, setAcceptance, setQaState } from "./qa-state.ts";
 
 let root: string;
 let home: string;
@@ -31,6 +31,7 @@ afterEach(() => {
 
 const store = () => ({ cwd: root, home });
 const scenarioOf = () => readQaState(sid)?.scenarios?.find((scenario) => scenario.story === "story" && scenario.id === "s1");
+const scenarioSha = () => authoredScenarioSha256(scenarioOf()!);
 
 /** Authors one H scenario, saves a case in the store, replays it, and records the scenario as pass. */
 async function fixture(opts: { exitCode?: number; register?: boolean; markPass?: boolean } = {}) {
@@ -46,11 +47,17 @@ async function fixture(opts: { exitCode?: number; register?: boolean; markPass?:
 	const saved = saveQaCase({ record, expectedRevision: null }, store());
 	if (saved.status !== "ok" || !("path" in saved)) throw new Error("case not saved");
 	const storyHash = createHash("sha256").update(JSON.stringify(readQaState(sid)!.stories![0]!.contract)).digest("hex");
-	const result = await runQaCase(record, { casePath: saved.path, caseRevision: saved.revision, projectRoot: root, storeLocation: configured.location, codeRef: "code", resetConfirmed: "reset", sessionId: sid, storyId: "story", actorId: "actor", actorBoundary: "terminal", scenarioId: "s1", cycle: 0, storyContractSha256: storyHash });
-	if (register) registerQaCaseRunReceipt(sid, result.receipt.artifact_paths.receipt, result.receipt.attempt_id, result.receiptSha256, 0);
+	/** Runs the saved case as qa-replay.ts does and, when asked, registers its receipt. */
+	const replay = async (registerReceipt: boolean) => {
+		const scenarioAtStart = scenarioSha();
+		const run = await runQaCase(record, { casePath: saved.path, caseRevision: saved.revision, projectRoot: root, storeLocation: configured.location, codeRef: "code", resetConfirmed: "reset", sessionId: sid, storyId: "story", actorId: "actor", actorBoundary: "terminal", scenarioId: "s1", cycle: 0, storyContractSha256: storyHash });
+		if (registerReceipt) registerQaCaseRunReceipt(sid, run.receipt.artifact_paths.receipt, run.receipt.attempt_id, run.receiptSha256, scenarioAtStart);
+		return run;
+	};
+	const result = await replay(register);
 	const boundary = join(result.runDirectory, "boundary.txt");
 	if (markPass) recordScenario(sid, { story: "story", scenario: "s1", status: "pass", evidencePath: boundary, evidenceSurface: "bash" });
-	return { result, savedPath: saved.path, savedRevision: saved.revision, boundary, record };
+	return { result, savedPath: saved.path, savedRevision: saved.revision, boundary, record, replay };
 }
 const link = (extra: Record<string, unknown> = {}) => recordCase(sid, { story: "story", scenario: "s1", caseId: "case", store: store(), ...extra });
 
@@ -108,11 +115,28 @@ test("시나리오를 수정하면 수정 전 재생 receipt로는 연결할 수
 test("재생 도중 시나리오가 수정되면 그 재생의 receipt 등록을 거부한다", async () => {
 	const fx = await fixture({ register: false });
 	const { receipt } = fx.result.receipt.artifact_paths;
+	const atStart = scenarioSha();
 	amendScenario(sid, { story: "story", id: "s1", title: "run the case", preconditions: "case exists", steps: ["run the runner with the corrected input"], expected: "result observed", whyNeeded: "covers the runner boundary", priority: "H", risks: [1], reason: "단계가 실제 동작과 달라 바로잡음" });
-	expect(() => registerQaCaseRunReceipt(sid, receipt, fx.result.receipt.attempt_id, fx.result.receiptSha256, 0)).toThrow(/amended while the replay ran/);
+	expect(() => registerQaCaseRunReceipt(sid, receipt, fx.result.receipt.attempt_id, fx.result.receiptSha256, atStart)).toThrow(/rewritten while the replay ran/);
 	expect(readQaState(sid)?.trusted_receipts ?? []).toEqual([]);
-	registerQaCaseRunReceipt(sid, receipt, fx.result.receipt.attempt_id, fx.result.receiptSha256, 1);
+	registerQaCaseRunReceipt(sid, receipt, fx.result.receipt.attempt_id, fx.result.receiptSha256, scenarioSha());
 	expect(readQaState(sid)?.trusted_receipts?.map((entry) => entry.attempt_id)).toEqual([fx.result.receipt.attempt_id]);
+});
+
+test("결과 없는 시나리오를 재생 뒤 author-scenario로 덮어쓰면 그 재생으로는 연결할 수 없다", async () => {
+	const fx = await fixture({ markPass: false });
+	authorScenario(sid, { story: "story", id: "s1", title: "run the case", preconditions: "case exists", steps: ["run the runner with a different input"], expected: "result observed", whyNeeded: "covers the runner boundary", priority: "H", risks: [1] });
+	recordScenario(sid, { story: "story", scenario: "s1", status: "pass", evidencePath: fx.boundary, evidenceSurface: "bash" });
+	expect(() => link()).toThrow(/authored scenario changed/);
+});
+
+test("수정 뒤 재생한 시나리오를 author-scenario로 다시 덮어쓰면 그 재생으로는 연결할 수 없다", async () => {
+	const first = await fixture();
+	amendScenario(sid, { story: "story", id: "s1", title: "run the case", preconditions: "case exists", steps: ["run the runner with the corrected input"], expected: "result observed", whyNeeded: "covers the runner boundary", priority: "H", risks: [1], reason: "단계가 실제 동작과 달라 바로잡음" });
+	const fx = await first.replay(true);
+	authorScenario(sid, { story: "story", id: "s1", title: "run the case", preconditions: "case exists", steps: ["run the runner with yet another input"], expected: "result observed", whyNeeded: "covers the runner boundary", priority: "H", risks: [1] });
+	recordScenario(sid, { story: "story", scenario: "s1", status: "pass", evidencePath: join(fx.runDirectory, "boundary.txt"), evidenceSurface: "bash" });
+	expect(() => link()).toThrow(/authored scenario changed/);
 });
 
 test("종료 상태가 깨끗하지 않은 재생은 거부한다", async () => {

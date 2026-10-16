@@ -118,6 +118,8 @@ export interface QaTrustedReceipt {
 	attempt_id: string;
 	receipt_path: string;
 	sha256: string;
+	/** `authoredScenarioSha256` of the scenario the replay drove; absent on entries registered before this field existed, which never bind. */
+	scenario_sha256?: string;
 }
 
 type ChainState = QaState & QaChainState;
@@ -517,31 +519,31 @@ function mergeWrite(sessionId: string, next: Partial<ChainState>): QaState {
 	return withStateLock(resolveStatePath(sessionId), () => mergeWriteUnlocked(sessionId, next));
 }
 
-/** How many times a scenario was amended in a cycle; a replay compares it at start and at registration. */
-export function scenarioAmendmentCount(state: Partial<ChainState>, story: string, scenario: string, cycle: number): number {
-	return (state.scenario_amendments ?? []).filter((amendment) => amendment.story === story && amendment.id === scenario && amendment.cycle === cycle).length;
+/** Hash of a scenario's authored fields (result fields excluded); any rewrite of the scenario changes it, recording a result does not. */
+export function authoredScenarioSha256(scenario: QaScenario): string {
+	return createHash("sha256").update(JSON.stringify(clearScenarioRecord(scenario))).digest("hex");
 }
 
 /**
  * Registers the exact receipt bytes produced by a case run under the QA state lock.
- * `amendmentsAtReplayStart` is the scenario's amendment count read before the run; a different count now means the run drove a superseded scenario.
+ * `scenarioSha256AtReplayStart` is `authoredScenarioSha256` of the scenario read before the run; a different hash now means the run drove a superseded scenario.
  */
-export function registerQaCaseRunReceipt(sessionId: string, receiptPath: string, attemptId: string, receiptSha256: string, amendmentsAtReplayStart: number): QaTrustedReceipt {
+export function registerQaCaseRunReceipt(sessionId: string, receiptPath: string, attemptId: string, receiptSha256: string, scenarioSha256AtReplayStart: string): QaTrustedReceipt {
 	const stateFilePath = resolveStatePath(sessionId);
 	return withStateLock(stateFilePath, () => {
 		const canonicalPath = realpathSync(resolve(receiptPath));
 		const snapshot = readQaCaseRunReceiptSnapshot(canonicalPath);
 		if (snapshot.receipt.attempt_id !== attemptId) throw new Error("qa-state: receipt attempt does not match runner output");
 		if (snapshot.sha256 !== receiptSha256) throw new Error("qa-state: receipt digest does not match runner output snapshot");
-		const trusted: QaTrustedReceipt = { attempt_id: attemptId, receipt_path: canonicalPath, sha256: receiptSha256 };
 		const prior = readPrior(sessionId);
-		const { story_id: story, scenario_id: scenario, cycle } = snapshot.receipt;
-		// A receipt without a story and scenario cannot be bound to one, so no amendment can make it stale.
-		const amendmentsNow = story === undefined || scenario === undefined ? 0 : scenarioAmendmentCount(prior, story, scenario, cycle);
-		if (amendmentsNow !== amendmentsAtReplayStart) throw new Error(`qa-state: scenario ${story}/${scenario} was amended while the replay ran; replay it again`);
+		const { story_id: story, scenario_id: scenarioId, cycle } = snapshot.receipt;
+		const scenario = (prior.scenarios ?? []).find((candidate) => candidate.cycle === cycle && candidate.story === story && candidate.id === scenarioId);
+		if (!scenario) throw new Error(`qa-state: receipt scenario ${story}/${scenarioId} is not authored in cycle ${cycle}`);
+		if (authoredScenarioSha256(scenario) !== scenarioSha256AtReplayStart) throw new Error(`qa-state: scenario ${story}/${scenarioId} was rewritten while the replay ran; replay it again`);
+		const trusted: QaTrustedReceipt = { attempt_id: attemptId, receipt_path: canonicalPath, sha256: receiptSha256, scenario_sha256: scenarioSha256AtReplayStart };
 		const existing = (prior.trusted_receipts ?? []).find((entry) => entry.attempt_id === trusted.attempt_id);
 		if (existing) {
-			if (existing.receipt_path !== trusted.receipt_path || existing.sha256 !== trusted.sha256) throw new Error("qa-state: receipt attempt is already registered with a different snapshot");
+			if (existing.receipt_path !== trusted.receipt_path || existing.sha256 !== trusted.sha256 || existing.scenario_sha256 !== trusted.scenario_sha256) throw new Error("qa-state: receipt attempt is already registered with a different snapshot");
 			return existing;
 		}
 		mergeWriteUnlocked(sessionId, { trusted_receipts: [...(prior.trusted_receipts ?? []), trusted] });
@@ -1148,6 +1150,8 @@ function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector:
 	if (!trusted) throw new Error("case-run receipt has no trusted registration");
 	if (trusted.receipt_path !== canonicalReceipt || trusted.attempt_id !== receipt.attempt_id) throw new Error("case-run receipt trusted registration does not match canonical path or attempt");
 	if (trusted.sha256 !== snapshot.sha256) throw new Error("case-run receipt digest does not match trusted registration");
+	const scenario = (prior.scenarios ?? []).find((candidate) => candidate.cycle === currentCycle(prior) && sameScenario(candidate, selector));
+	if (!scenario || trusted.scenario_sha256 !== authoredScenarioSha256(scenario)) throw new Error("case-run receipt: the authored scenario changed since this replay; replay it again");
 	if (status === "pass" && !receiptExitClean(receipt)) throw new Error("pass case-run requires a zero, non-timeout runner result");
 	const files: Record<string, string> = {};
 	const addFile = (filePath: string, expectedHash?: string) => {
@@ -1272,6 +1276,7 @@ export function recordCase(sessionId: string, opts: RecordCaseOpts): void {
 			const latest = current.at(-1);
 			if (!latest) throw new Error(`record-case: no trusted replay receipt for case "${caseId}"${matching.length ? " at its current revision" : ""} on ${selector.story}/${selector.id} in this cycle; replay it with qa-replay.ts first`);
 			if (latest.snapshot.sha256 !== latest.trusted.sha256) throw new Error("record-case: receipt bytes changed since registration; replay the case again");
+			if (latest.trusted.scenario_sha256 !== authoredScenarioSha256(scenario)) throw new Error(`record-case: the authored scenario changed since the latest replay of case "${caseId}"; replay it again`);
 			if (!receiptExitClean(latest.snapshot.receipt)) throw new Error(`record-case: the latest replay of case "${caseId}" did not exit cleanly (code 0, no signal, no timeout, no start error)`);
 			link = { kind: "saved", id: caseId, revision: saved.revision, receipt_path: latest.trusted.receipt_path, attempt_id: latest.trusted.attempt_id };
 		}

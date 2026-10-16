@@ -8,7 +8,7 @@ import type { QaCaseRunReceipt } from "@lib/qa-case-run.ts";
 import { configureQaCaseStore, disableQaCaseStore, saveQaCase, type QaCaseRecord } from "@lib/qa-case-store.ts";
 import { recordResource } from "@lib/session-resources.ts";
 import { replayFromCli } from "./qa-replay.ts";
-import { resolveStatePath, addActor, addStory, authorScenario, readQaState, recordScenario, setAcceptance, setQaState } from "./qa-state.ts";
+import { resolveStatePath, addActor, addStory, authoredScenarioSha256, authorScenario, readQaState, recordScenario, setAcceptance, setQaState } from "./qa-state.ts";
 
 const roots: string[] = [];
 const manifestDirs: string[] = [];
@@ -230,7 +230,8 @@ describe("qa replay CLI", () => {
 		const receipt = await replayFromCli(["--case", record.id, "--story", "story", "--scenario", "s1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home }) as QaCaseRunReceipt;
 		const state = readQaState(session)!;
 		const trusted = state.trusted_receipts?.find((entry) => entry.attempt_id === receipt.attempt_id);
-		expect(trusted).toEqual({ attempt_id: receipt.attempt_id, receipt_path: receipt.artifact_paths.receipt, sha256: expect.any(String) });
+		const replayed = state.scenarios!.find((scenario) => scenario.story === "story" && scenario.id === "s1")!;
+		expect(trusted).toEqual({ attempt_id: receipt.attempt_id, receipt_path: receipt.artifact_paths.receipt, sha256: expect.any(String), scenario_sha256: authoredScenarioSha256(replayed) });
 		expect(trusted?.sha256).toBe(createHash("sha256").update(readFileSync(receipt.artifact_paths.receipt)).digest("hex"));
 		expect(receipt.qa_result).toBe("not-recorded");
 		expect(receipt.exit_status.code).toBe(19);

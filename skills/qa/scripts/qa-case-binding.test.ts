@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { runQaCase } from "@lib/qa-case-run.ts";
 import { caseRunBindingComplete } from "@lib/qa-chain-core.ts";
 import type { QaCaseRecord } from "@lib/qa-case-store.ts";
-import { addActor, addStory, authorScenario, readQaState, recordScenario, registerQaCaseRunReceipt, setAcceptance, setQaState } from "./qa-state.ts";
+import { addActor, addStory, authoredScenarioSha256, authorScenario, readQaState, recordScenario, registerQaCaseRunReceipt, setAcceptance, setQaState } from "./qa-state.ts";
 
 let root: string;
 const oldOmt = process.env.OMT_DIR;
@@ -25,6 +25,8 @@ afterEach(() => {
 	if (oldSid === undefined) delete process.env.OMT_SESSION_ID; else process.env.OMT_SESSION_ID = oldSid;
 });
 
+const currentScenarioSha = () => authoredScenarioSha256(readQaState(sid)!.scenarios!.find((scenario) => scenario.story === "story" && scenario.id === "s1")!);
+
 test("실행 receipt를 현재 시나리오에 boundary evidence와 함께 바인딩한다", async () => {
 	setQaState(sid, { phase: "PLAN" });
 	setAcceptance(sid, ["runner result observed"]);
@@ -39,7 +41,7 @@ test("실행 receipt를 현재 시나리오에 boundary evidence와 함께 바�
 	const bytes = readFileSync(casePath);
 	mkdirSync(join(root, "store"), { recursive: true });
 	const result = await runQaCase(record, { casePath, caseRevision: createHash("sha256").update(bytes).digest("hex"), projectRoot: root, storeLocation: join(root, "store"), codeRef: "code", resetConfirmed: "reset", sessionId: sid, storyId: "story", actorId: "actor", actorBoundary: "terminal", scenarioId: "s1", cycle: 0, storyContractSha256: storyHash });
-	registerQaCaseRunReceipt(sid, result.receipt.artifact_paths.receipt, result.receipt.attempt_id, result.receiptSha256, 0);
+	registerQaCaseRunReceipt(sid, result.receipt.artifact_paths.receipt, result.receipt.attempt_id, result.receiptSha256, currentScenarioSha());
 	const boundary = join(result.runDirectory, "boundary.txt");
 	recordScenario(sid, { story: "story", scenario: "s1", status: "pass", evidencePath: boundary, evidenceSurface: "bash", caseRun: result.receipt.artifact_paths.receipt });
 	const persisted = readQaState(sid)?.scenarios?.find((scenario) => scenario.story === "story" && scenario.id === "s1");
@@ -79,7 +81,7 @@ test("등록 전에 receipt가 변조되면 runner 원본 digest와 달라 등�
 	const fixture = await bindingFixture(false);
 	const original = { attempt_id: fixture.result.receipt.attempt_id, receipt_path: fixture.receiptPath, digest: createHash("sha256").update(readFileSync(fixture.receiptPath)).digest("hex") };
 	writeFileSync(fixture.receiptPath, `${JSON.stringify({ ...fixture.result.receipt, exit_status: { code: 0, signal: null, timedout: false, max_buffer_exceeded: false } })}\n`);
-	expect(() => registerQaCaseRunReceipt(sid, original.receipt_path, original.attempt_id, fixture.result.receiptSha256, 0)).toThrow(/digest|snapshot|runner/);
+	expect(() => registerQaCaseRunReceipt(sid, original.receipt_path, original.attempt_id, fixture.result.receiptSha256, currentScenarioSha())).toThrow(/digest|snapshot|runner/);
 	expect(readQaState(sid)?.trusted_receipts).toBeUndefined();
 });
 
@@ -109,7 +111,7 @@ async function bindingFixture(register = true, exitCode = 0) {
 	const store = join(root, "store"); mkdirSync(store, { recursive: true });
 	const result = await runQaCase(record, { casePath, caseRevision: createHash("sha256").update(bytes).digest("hex"), projectRoot: root, storeLocation: store, codeRef: "code", resetConfirmed: "reset", sessionId: sid, storyId: "story", actorId: "actor", actorBoundary: "terminal", scenarioId: "s1", cycle: 0, storyContractSha256: storyHash });
 	const receiptPath = result.receipt.artifact_paths.receipt;
-	if (register) registerQaCaseRunReceipt(sid, receiptPath, result.receipt.attempt_id, result.receiptSha256, 0);
+	if (register) registerQaCaseRunReceipt(sid, receiptPath, result.receipt.attempt_id, result.receiptSha256, currentScenarioSha());
 	return { result, receiptPath, boundary: join(result.runDirectory, "boundary.txt"), casePath, nativePath };
 }
 
@@ -147,6 +149,12 @@ test("pass binding rejects a start_error receipt", async () => {
 	receipt.start_error = { message: "runner failed to start" };
 	writeFileSync(fixture.receiptPath, JSON.stringify(receipt));
 	expect(() => recordScenario(sid, { story: "story", scenario: "s1", status: "pass", evidencePath: fixture.boundary, evidenceSurface: "bash", caseRun: fixture.receiptPath })).toThrow(/digest|zero, non-timeout/);
+});
+
+test("재생 뒤 author-scenario로 덮어쓴 시나리오에는 그 receipt를 바인딩하지 않는다", async () => {
+	const fixture = await bindingFixture();
+	authorScenario(sid, { story: "story", id: "s1", title: "run the case", preconditions: "case exists", steps: ["run the runner with a different input"], expected: "result observed", whyNeeded: "covers the runner boundary", priority: "H", risks: [1] });
+	expect(() => recordScenario(sid, { story: "story", scenario: "s1", status: "pass", evidencePath: fixture.boundary, evidenceSurface: "bash", caseRun: fixture.receiptPath })).toThrow(/authored scenario changed/);
 });
 
 test("old same-driver receipt cannot bind after story actor changes", async () => {
