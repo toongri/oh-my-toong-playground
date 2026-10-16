@@ -286,6 +286,52 @@ describe("재시도와 대체 경로", () => {
 		expect(result.markdown).toContain("## All user messages (verbatim)\n- [U1] 로그인 버그 고쳐줘.");
 	});
 
+	test("지켜야 할 규칙에는 사용자 발언과 불러온 스킬에서 온 항목만 남고, 규칙 파일 요약은 빠진다", async () => {
+		const result = await writeLedger({
+			log: { ...log, lines: [...log.lines, "[skill qa] QA never edits product code"] },
+			previousLedger: "## Working rules (still in force)\n- Commits go through the commit subagent (sisyphus)\n- Old rule summary (AGENTS.md)\n",
+			runModel: async () => ({
+				output: ledgerJson({
+					working_rules: [
+						{ rule: "Reply in Korean", source: "U1" },
+						{ rule: "QA never edits product code", source: "qa" },
+						{ rule: "Commits go through the commit subagent", source: "sisyphus" },
+						{ rule: "Write the failing test first", source: "tdd.md" },
+						{ rule: "Never coin opaque labels", source: ".claude/rules/communication-style.md" },
+						{ rule: "Old rule summary", source: "AGENTS.md" },
+						{ rule: "Cites a message that does not exist", source: "U9" },
+					],
+				}),
+			}),
+			deadline: Date.now() + 60_000,
+		});
+		expect(result.status).toBe("accepted");
+		expect(result.markdown).toContain(
+			"## Working rules (still in force)\n- Reply in Korean (U1)\n- QA never edits product code (qa)\n- Commits go through the commit subagent (sisyphus)\n\n",
+		);
+	});
+
+	test("이전 ledger가 스킬을 파일 경로로 적었어도 그 스킬의 규칙은 남는다", async () => {
+		const result = await writeLedger({
+			log,
+			previousLedger:
+				"## Working rules (still in force)\n- QA owns dynamic verification (/Users/me/.agents/skills/qa/SKILL.md)\n- Red then green (/Users/me/.codex/rules/tdd.md)\n",
+			runModel: async () => ({
+				output: ledgerJson({
+					working_rules: [
+						{ rule: "QA owns dynamic verification", source: "qa" },
+						{ rule: "Saved case needs a clean replay", source: "/Users/me/.agents/skills/qa/reusable-cases.md" },
+						{ rule: "Red then green", source: "/Users/me/.codex/rules/tdd.md" },
+					],
+				}),
+			}),
+			deadline: Date.now() + 60_000,
+		});
+		expect(result.markdown).toContain(
+			"## Working rules (still in force)\n- QA owns dynamic verification (qa)\n- Saved case needs a clean replay (/Users/me/.agents/skills/qa/reusable-cases.md)\n\n",
+		);
+	});
+
 	test("모든 시도가 예산만 넘으면 가장 작은 시도를 채택한다", async () => {
 		const sizes = [3000, 2000, 2500];
 		const result = await writeLedger({

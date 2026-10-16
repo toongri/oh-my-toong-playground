@@ -530,6 +530,37 @@ export function fallbackLedger(log: WorkLog, users: Message[], reason: string): 
 	].join("\n");
 }
 
+/** A file inside a skill directory (`…/skills/<name>/SKILL.md`); its text is the skill's. */
+const SKILL_FILE = /(?:^|\/)skills\/([^/\s]+)\//;
+
+/**
+ * Skill names a working rule may cite: skills loaded in this window, and skill sources the previous
+ * ledger carried, written either as a name (no dot or slash) or as a file inside the skill directory.
+ * A long session's window starts after the last compaction, so its skills are often known only from there.
+ */
+function loadedSkills(lines: string[], previousLedger: string | undefined): Set<string> {
+	const names = new Set(lines.flatMap((line) => line.match(/^\[skill ([^\]\s]+)\]/)?.[1] ?? []));
+	const carried = previousLedger?.split("## Working rules (still in force)\n")[1]?.split("\n\n")[0] ?? "";
+	for (const [, source] of carried.matchAll(/ \(([^()]+)\)$/gm)) {
+		const name = /^[\w:-]+$/.test(source) ? source : source.match(SKILL_FILE)?.[1];
+		if (name) names.add(name);
+	}
+	return names;
+}
+
+/**
+ * A working rule survives only when the user stated it or a loaded skill set it. Rule and instruction
+ * files come back in full after the reset, so a rule taken from one is dropped, not sent back for another
+ * attempt.
+ */
+function keepUserAndSkillRules(d: LedgerJson, users: Map<string, string>, skills: Set<string>): LedgerJson {
+	const fromUser = (source: string) => {
+		const ids = source.split(IDS).filter(Boolean);
+		return ids.length > 0 && ids.every((id) => users.has(id));
+	};
+	return { ...d, working_rules: d.working_rules.filter((r) => fromUser(r.source) || skills.has(r.source.trim()) || SKILL_FILE.test(r.source)) };
+}
+
 export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 	const budget = input.budget ?? DEFAULT_BUDGET;
 	const maxAttempts = input.maxAttempts ?? DEFAULT_ATTEMPTS;
@@ -542,6 +573,7 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 		sourceText: `${input.previousLedger ?? ""}\n${input.log.lines.join("\n")}`,
 		budget,
 	};
+	const skills = loadedSkills(input.log.lines, input.previousLedger);
 	const basePrompt = buildPrompt(input.log, input.previousLedger, budget);
 	const attempts: AttemptRecord[] = [];
 	const overBudget: { size: number; d: LedgerJson }[] = [];
@@ -557,7 +589,7 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 			attempts.push({ n, secs, error: result.error ?? "no output" });
 			break;
 		}
-		const d = repairForeignLetters(result.output, ctx.sourceText);
+		const d = keepUserAndSkillRules(repairForeignLetters(result.output, ctx.sourceText), ctx.users, skills);
 		const violations = validateLedger(d, ctx);
 		const size = Buffer.byteLength(renderFields(d));
 		attempts.push({ n, secs, bytes: size, violations });
