@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { extractClaude, extractCodex, outputExcerpt } from "./extract.ts";
 import { headOf, ledgerPath, preCompact, selectLog, sessionStartContext } from "./index.ts";
 import {
+	fallbackLedger,
 	isLedgerJson,
 	type LedgerJson,
 	type ModelResult,
@@ -274,6 +275,22 @@ describe("검증기", () => {
 		const translated = repairForeignLetters(ledgerJson({ current_work: "Open `/repo/կ_existing-프로그램-문제/apps`." }), source);
 		expect(translated.current_work).toBe("Open `/repo/기존-프로그램-문제/apps`.");
 	});
+
+	test("경로나 한글이 없는 산문의 외국 문자는 위반이나 복원 대상이 아니다", () => {
+		const source = "latency measured with the naming guide";
+		for (const text of ["latency 120 μs measured", "Use λ-calculus naming"]) {
+			expect(unknownIdentifiers(ledgerJson({ current_work: text }), source)).toEqual([]);
+			expect(repairForeignLetters(ledgerJson({ current_work: text }), source).current_work).toBe(text);
+		}
+	});
+
+	test("한글이 섞인 토큰의 깨진 구간은 슬래시가 없어도 위반으로 잡는다", () => {
+		const source = "cd algocare-home/기존-프로그램-문제/apps";
+		expect(unknownIdentifiers(ledgerJson({ current_work: "Open algocare-home/기존-프로그램-խնդիր/apps now." }), source)).toEqual([
+			"algocare-home/기존-프로그램-խնդիր/apps",
+		]);
+		expect(unknownIdentifiers(ledgerJson({ current_work: "Open 기존-프로그램-խնդիր now." }), source)).toEqual(["기존-프로그램-խնդիր"]);
+	});
 });
 
 describe("재시도와 대체 경로", () => {
@@ -415,6 +432,50 @@ describe("재시도와 대체 경로", () => {
 		expect(result.markdown).toContain("## All user messages (verbatim)\n- [U1] 로그인 버그 고쳐줘.");
 	});
 
+	test("같은 수의 문제를 가진 시도 중 예산을 넘은 것이 섞이면 크기가 작은 시도를 채택한다", async () => {
+		const attempt = (size: number) => ledgerJson({ current_work: "Editing `src/logn.ts`.", pending: ["x".repeat(size)] });
+		const outputs: ModelResult[] = [{ output: attempt(3000) }, { output: attempt(1000) }, { output: attempt(6000) }];
+		const result = await writeLedger({
+			log,
+			budget: 100,
+			runModel: async () => outputs.shift() as ModelResult,
+			deadline: Date.now() + 60_000,
+			retryDelayMs: 0,
+		});
+		expect(result.status).toBe("accepted-with-warnings");
+		expect(result.markdown).toContain("x".repeat(1000));
+		expect(result.markdown).not.toContain("x".repeat(1001));
+		expect(result.markdown).not.toContain("over budget");
+	});
+
+	test("이전 ledger의 확인 못 한 점이 결정 문장을 인용해도 그 결정 안의 식별자는 확인된 것으로 본다", async () => {
+		const previousLedger =
+			'# Session ledger\n\n## Decisions\n- Use `src/retry_queue.ts` for the retry queue — durable (user\'s decision: U1)\n\n## Unverified points\nThe validator could not verify these against the transcript; check them before relying on them:\n- these decisions are credited to the user (made_by user or agreed) but cite no user message: ["Use `src/retry_queue.ts` for the retry queue"]; cite the U-id\n\n## All user messages (verbatim)\n- [U1] 로그인 버그 고쳐줘.\n';
+		const decision = { decision: "Use `src/retry_queue.ts` for the retry queue", rationale: "durable", made_by: "user" as const, source: "U1" };
+		const result = await writeLedger({
+			log,
+			previousLedger,
+			runModel: async () => ({ output: ledgerJson({ decisions: [decision] }) }),
+			deadline: Date.now() + 60_000,
+		});
+		expect(result.status).toBe("accepted");
+		expect(result.attempts[0].violations).toEqual([]);
+	});
+
+	test("같은 확인 못 한 점 목록에 식별자와 결정 문장이 함께 있으면 식별자만 계속 위반으로 잡는다", async () => {
+		const previousLedger =
+			'# Session ledger\n\n## Decisions\n- Use `src/retry_queue.ts` for the retry queue — durable (user\'s decision: U1)\n\n## Unverified points\nThe validator could not verify these against the transcript; check them before relying on them:\n- these decisions are credited to the user but cite no user message: ["Use `src/retry_queue.ts` for the retry queue"]\n- these code-formatted identifiers do not appear in the work log, so they are misspelled or invented: ["src/logn.ts"]\n\n## All user messages (verbatim)\n- [U1] 로그인 버그 고쳐줘.\n';
+		const decision = { decision: "Use `src/retry_queue.ts` for the retry queue", rationale: "durable", made_by: "user" as const, source: "U1" };
+		const outputs: ModelResult[] = [
+			{ output: ledgerJson({ current_work: "Editing `src/logn.ts`.", decisions: [decision] }) },
+			{ output: ledgerJson({ decisions: [decision] }) },
+		];
+		const result = await writeLedger({ log, previousLedger, runModel: async () => outputs.shift() as ModelResult, deadline: Date.now() + 60_000 });
+		expect(result.attempts[0].violations).toEqual([expect.stringContaining("src/logn.ts")]);
+		expect(result.attempts[0].violations?.join("\n")).not.toContain("retry_queue");
+		expect(result.status).toBe("accepted");
+	});
+
 	test("출력 없이 끝난 호출은 같은 모델로 한 번 다시 부르고, 그래도 없으면 대체 모델로 넘어가 그 뒤 시도도 대체 모델로 한다", async () => {
 		const calls: string[] = [];
 		const codex = async (): Promise<ModelResult> => (calls.push("codex"), { error: "codex exited 1", model: "codex" });
@@ -464,10 +525,184 @@ describe("재시도와 대체 경로", () => {
 		expect(previousUsers(result.markdown).map((u) => u.id)).toEqual(["U1", "U2", "U3"]);
 	});
 
+	test("전체 로그 모드에서도 디스크의 이전 ledger 결정을 fallback이 이어받는다", async () => {
+		const home = tempDir();
+		const transcript = join(home, "t.jsonl");
+		writeFileSync(transcript, `${JSON.stringify(user("로그인 버그 고쳐줘."))}\n`);
+		const path = ledgerPath("s-fb", home);
+		mkdirSync(join(path, ".."), { recursive: true });
+		writeFileSync(path, "# Session ledger\n\n## Decisions\n- Keep the cache — faster (user's decision: U1)\n\n## All user messages (verbatim)\n- [U1] 캐시는 유지해\n");
+		await preCompact(
+			"claude",
+			{ hook_event_name: "PreCompact", session_id: "s-fb", transcript_path: transcript },
+			{ home, runModel: async () => ({ error: "codex not runnable", permanent: true }) },
+		);
+		const written = readFileSync(path, "utf8");
+		expect(written).toStartWith("# Session ledger (fallback)");
+		expect(written).toContain("- Keep the cache — faster");
+	});
+
+	test("fallback을 반복해도 크기가 늘지 않고 처음 실제 ledger의 결정을 유지한다", async () => {
+		const real =
+			"# Session ledger\n\n## Decisions\n- Keep the cache — faster (user's decision: U1)\n\n## All user messages (verbatim)\n- [U1] 캐시는 유지해\n";
+		const down = async () => ({ error: "codex not runnable", permanent: true }) as ModelResult;
+		let ledger = real;
+		const sizes: number[] = [];
+		for (let i = 0; i < 5; i++) {
+			const result = await writeLedger({
+				log: { ...log, assistants: [{ id: `A${i}`, text: `마지막 답변 ${i}` }], editedFiles: [`src/file${i}.ts`] },
+				fallbackPreviousLedger: ledger,
+				runModel: down,
+				deadline: Date.now() + 60_000,
+			});
+			ledger = result.markdown;
+			sizes.push(Buffer.byteLength(ledger));
+		}
+		expect(ledger).toContain("- Keep the cache — faster");
+		expect(ledger.match(/# Session ledger/g)).toHaveLength(1);
+		expect(ledger.match(/## Last assistant message/g)).toHaveLength(1);
+		for (let i = 0; i < 5; i++) expect(ledger).toContain(`- \`src/file${i}.ts\``);
+		// Each round adds one file line plus one short earlier-message entry (capped at 3 entries); no whole-fallback layer is added.
+		expect(sizes[4] - sizes[3]).toBeLessThan(160);
+	});
+
+	test("fallback이 연속되어도 앞선 fallback의 마지막 assistant 메시지와 실제 ledger의 결정을 유지한다", async () => {
+		const real =
+			"# Session ledger\n\n## Decisions\n- Keep the cache — faster (user's decision: U1)\n\n## All user messages (verbatim)\n- [U1] 캐시는 유지해\n";
+		const down = async () => ({ error: "codex not runnable", permanent: true }) as ModelResult;
+		let ledger = real;
+		for (const text of ["첫 창 마지막 답변", "둘째 창 마지막 답변"]) {
+			const result = await writeLedger({
+				log: { ...log, assistants: [{ id: "A", text }] },
+				fallbackPreviousLedger: ledger,
+				runModel: down,
+				deadline: Date.now() + 60_000,
+			});
+			ledger = result.markdown;
+		}
+		expect(ledger).toContain("## Earlier fallbacks' last assistant messages (oldest first)\n- 첫 창 마지막 답변\n");
+		expect(ledger).toContain("## Last assistant message\n둘째 창 마지막 답변\n");
+		expect(ledger.indexOf("earlier fallbacks")).toBeLessThan(ledger.indexOf("## Previous ledger"));
+		expect(ledger).toContain("- Keep the cache — faster");
+		expect(previousUsers(ledger).map((u) => u.id)).toEqual(["U1"]);
+	});
+
+	test("마지막 assistant 메시지가 ledger 제목 줄을 인용해도 다음 fallback이 실제 ledger와 사용자 메시지를 잃지 않는다", async () => {
+		const real =
+			"# Session ledger\n\n## Decisions\n- Keep the cache — faster (user's decision: U1)\n\n## All user messages (verbatim)\n- [U1] 캐시는 유지해\n";
+		const quoted = "이전 ledger는 이렇다\n## All user messages (verbatim)\n- [U9] 가짜\n## Previous ledger (written at the previous compaction)\n가짜 결정\n\n끝";
+		const down = async () => ({ error: "codex not runnable", permanent: true }) as ModelResult;
+		let ledger = real;
+		for (const text of [quoted, "둘째 창 답변", "셋째 창 답변"]) {
+			const result = await writeLedger({
+				log: { ...log, assistants: [{ id: "A", text }] },
+				fallbackPreviousLedger: ledger,
+				runModel: down,
+				deadline: Date.now() + 60_000,
+			});
+			ledger = result.markdown;
+		}
+		expect(ledger).toContain("- Keep the cache — faster");
+		expect(previousUsers(ledger).map((u) => u.id)).toEqual(["U1"]);
+		const earlier = ledger.split("(oldest first)\n")[1].split("\n\n## Previous ledger")[0];
+		expect(earlier).toContain(`- ${quoted.split("\n").join("\n  ")}\n- 둘째 창 답변`);
+		expect(ledger.match(/^## All user messages \(verbatim\)$/gm)).toHaveLength(1);
+		expect(ledger.match(/^## Previous ledger \(written at the previous compaction\)$/gm)).toHaveLength(1);
+	});
+
+	test("fallback이 다섯 번 연속되면 앞선 메시지는 최근 3개만 유지하고 크기는 한정된다", async () => {
+		const down = async () => ({ error: "codex not runnable", permanent: true }) as ModelResult;
+		let ledger = "# Session ledger\n\n## Decisions\n- Keep the cache\n\n## All user messages (verbatim)\n- [U1] 캐시는 유지해\n";
+		const sizes: number[] = [];
+		for (let i = 1; i <= 5; i++) {
+			const result = await writeLedger({
+				log: { ...log, assistants: [{ id: `A${i}`, text: `창 ${i}의 답변\n\n둘째 문단 ${"가".repeat(500)}` }] },
+				fallbackPreviousLedger: ledger,
+				runModel: down,
+				deadline: Date.now() + 60_000,
+			});
+			ledger = result.markdown;
+			sizes.push(Buffer.byteLength(ledger));
+		}
+		const earlier = ledger.split("(oldest first)\n")[1].split("\n\n## Previous ledger")[0];
+		expect(earlier).not.toContain("창 1의");
+		expect(earlier.match(/^- 창 \d의 답변/gm)).toEqual(["- 창 2의 답변", "- 창 3의 답변", "- 창 4의 답변"]);
+		expect(earlier).toContain("  둘째 문단");
+		// Four earlier entries would add ~1.5KB more; the fifth round stays near the fourth.
+		expect(sizes[4] - sizes[3]).toBeLessThan(200);
+	});
+
+	test("fallback의 마지막 assistant 메시지는 약 3000바이트로 자른다", async () => {
+		const result = await writeLedger({
+			log: { ...log, assistants: [{ id: "A1", text: "가".repeat(5000) }] },
+			runModel: async () => ({ error: "codex not runnable", permanent: true }),
+			deadline: Date.now() + 60_000,
+		});
+		const section = result.markdown.split("## Last assistant message\n")[1].split("\n\n## Files edited")[0];
+		expect(Buffer.byteLength(section)).toBeLessThan(3200);
+		expect(section).toContain("bytes cut");
+		expect(section).not.toContain("\uFFFD");
+	});
+
 	test("이전 ledger의 여러 줄 사용자 메시지를 이어받는다", () => {
-		const previous = "## All user messages (verbatim)\n- [U1] 첫 줄\n둘째 줄\n- [U2] 좋아\n\n## Appendix: x\n";
+		const previous = "## All user messages (verbatim)\n- [U1] 첫 줄\n둘째 줄\n- [U2] 좋아\n\n## Appendix: original text of approved proposals\n- [U9] 부록\n";
 		expect(previousUsers(previous)).toEqual([
 			{ id: "U1", text: "첫 줄\n둘째 줄" },
+			{ id: "U2", text: "좋아" },
+		]);
+	});
+
+	test("사용자 메시지 안의 마크다운 제목에서 파싱을 멈추지 않는다", () => {
+		const previous = "## All user messages (verbatim)\n- [U1] 첫 요청\n- [U2] 이 문서 봐\n## Plan\nstep one\n- [U3] never push --force\n";
+		expect(previousUsers(previous)).toEqual([
+			{ id: "U1", text: "첫 요청" },
+			{ id: "U2", text: "이 문서 봐\n## Plan\nstep one" },
+			{ id: "U3", text: "never push --force" },
+		]);
+	});
+
+	test("본문에 제목 문자열이 있어도 마지막 실제 사용자 섹션을 읽는다", () => {
+		const previous =
+			'# Session ledger\n\n## Files\n```ts\nconst USERS_HEADING = "## All user messages (verbatim)";\n```\nnote: ## All user messages (verbatim)\n\n## All user messages (verbatim)\n- [U1] 진짜 하나\n- [U2] 진짜 둘\n';
+		expect(previousUsers(previous)).toEqual([
+			{ id: "U1", text: "진짜 하나" },
+			{ id: "U2", text: "진짜 둘" },
+		]);
+	});
+
+	test("파일 맨 앞의 사용자 섹션 제목도 읽는다", () => {
+		expect(previousUsers("## All user messages (verbatim)\n- [U1] 하나\n")).toEqual([{ id: "U1", text: "하나" }]);
+	});
+
+	test("번호가 커지지 않는 인용 줄은 새 사용자 메시지로 세지 않는다", () => {
+		const previous = "## All user messages (verbatim)\n- [U1] 첫째\n- [U2] 이렇게 적혀 있었어:\n- [U1] 인용된 줄\n- [U2] 또 인용\n- [U3] 셋째\n";
+		expect(previousUsers(previous)).toEqual([
+			{ id: "U1", text: "첫째" },
+			{ id: "U2", text: "이렇게 적혀 있었어:\n- [U1] 인용된 줄\n- [U2] 또 인용" },
+			{ id: "U3", text: "셋째" },
+		]);
+	});
+
+	test("이전 ledger 전체를 붙여넣은 사용자 메시지가 있어도 실제 메시지를 모두 되살린다", () => {
+		const pasted = "# Session ledger\n\n## All user messages (verbatim)\n- [U6] 붙여넣은 여섯째\n- [U7] 붙여넣은 일곱째\n둘째 줄";
+		const users = [
+			{ id: "U1", text: "하나" },
+			{ id: "U2", text: `이전 ledger야:\n${pasted}` },
+			{ id: "U3", text: "셋" },
+		];
+		expect(previousUsers(renderLedger(ledgerJson(), users))).toEqual(users);
+		expect(previousUsers(fallbackLedger(log, users, "test"))).toEqual(users);
+	});
+
+	test("제목 줄과 앞 공백 줄이 있는 메시지가 왕복 후에도 바이트 단위로 같다", () => {
+		const users = [{ id: "U1", text: "## 제목\n  들여쓴 줄\n    더 들여쓴 줄\n\n- [U1] 인용\n마지막" }];
+		expect(previousUsers(renderLedger(ledgerJson(), users))).toEqual(users);
+	});
+
+	test("이어지는 줄을 들여쓰지 않은 옛 형식 ledger도 그대로 읽는다", () => {
+		const previous = "# Session ledger\n\n## All user messages (verbatim)\n- [U1] 첫 줄\n둘째 줄\n\n넷째 줄\n- [U2] 좋아\n";
+		expect(previousUsers(previous)).toEqual([
+			{ id: "U1", text: "첫 줄\n둘째 줄\n\n넷째 줄" },
 			{ id: "U2", text: "좋아" },
 		]);
 	});

@@ -1396,7 +1396,15 @@ test("A4: dynamic recovery does NOT re-inject a rule whose frontmatter-stripped 
 	// and open tag match → rule present → NOT re-injected. Under the bug (raw needle
 	// with frontmatter) the body include() misses → rule re-injected.
 	const transcriptPath = join(projectRoot, "transcript-a4.txt");
-	writeFileSync(transcriptPath, `<rules name="dynamic">\n${dynamicRuleBody}\n</rules>\n`);
+	// Dynamic presence is judged only after a compaction record, so the block follows one.
+	const compactedRecord = JSON.stringify({
+		type: "compacted",
+		payload: { replacement_history: [{ text: "summary" }] },
+	});
+	writeFileSync(
+		transcriptPath,
+		`${compactedRecord}\n<rules name="dynamic">\n${dynamicRuleBody}\n</rules>\n`,
+	);
 
 	const recovery = runHook(
 		"session-start",
@@ -1598,4 +1606,142 @@ test("압축 뒤 복구는 시작 규칙 전부와 가장 최근 lazy 주입 단
 
 	const touchedAgain = runHook("post-tool-use", postToolUsePayload(sessionId, projectRoot, "cat src/a.ts"), env);
 	expect(additionalContext(touchedAgain.stdout)).toContain("OLDER LAZY TS RULE BODY");
+});
+
+test("압축 뒤 무관한 도구 호출이 한 번 지나가도 예전 lazy 규칙은 다시 만지면 재주입된다", () => {
+	const sessionId = "older-lazy-after-unrelated-tool-session";
+	const env = { PI_RULES_DISABLE_BUNDLED: "1" };
+	const { projectRoot } = makeProjectWithStaticRule(
+		"start-rule.md",
+		"START RULE BODY: loaded when the session starts.",
+	);
+	const rulesDir = join(projectRoot, ".codex", "rules");
+	writeFileSync(join(rulesDir, "ts-lazy.md"), '---\nglobs: ["**/*.ts"]\n---\nOLDER LAZY TS RULE BODY\n');
+	writeFileSync(join(rulesDir, "md-lazy.md"), '---\nglobs: ["**/*.md"]\n---\nLATEST LAZY MD RULE BODY\n');
+	mkdirSync(join(projectRoot, "src"), { recursive: true });
+	mkdirSync(join(projectRoot, "docs"), { recursive: true });
+	writeFileSync(join(projectRoot, "src", "a.ts"), "export const a = 1;\n");
+	writeFileSync(join(projectRoot, "docs", "b.md"), "# b\n");
+	writeFileSync(join(projectRoot, "c.txt"), "c\n");
+
+	// A real transcript: the model's context holds every injected block until a compaction replaces it.
+	const transcriptPath = join(projectRoot, "transcript.jsonl");
+	writeFileSync(transcriptPath, "");
+	const record = (entry: unknown): void => {
+		writeFileSync(transcriptPath, `${JSON.stringify(entry)}\n`, { flag: "a" });
+	};
+	const withTranscript = (payload: Record<string, unknown>): Record<string, unknown> => ({
+		...payload,
+		transcript_path: transcriptPath,
+	});
+
+	const start = runHook("session-start", withTranscript(sessionStartPayload(sessionId, projectRoot)), env);
+	record({ type: "response_item", payload: { text: additionalContext(start.stdout) } });
+	const olderUnit = runHook(
+		"post-tool-use",
+		withTranscript(postToolUsePayload(sessionId, projectRoot, "cat src/a.ts")),
+		env,
+	);
+	expect(additionalContext(olderUnit.stdout)).toContain("OLDER LAZY TS RULE BODY");
+	record({ type: "response_item", payload: { text: additionalContext(olderUnit.stdout) } });
+	const latestUnit = runHook(
+		"post-tool-use",
+		withTranscript(postToolUsePayload(sessionId, projectRoot, "cat docs/b.md")),
+		env,
+	);
+	expect(additionalContext(latestUnit.stdout)).toContain("LATEST LAZY MD RULE BODY");
+	record({ type: "response_item", payload: { text: additionalContext(latestUnit.stdout) } });
+
+	// Compaction replaces the history with a summary that carries no rule block.
+	record({ type: "compacted", payload: { replacement_history: [{ text: "summary only, no rules" }] } });
+	runHook("post-compact", withTranscript(postCompactPayload(sessionId, projectRoot)), env);
+	runHook("session-start", withTranscript(sessionStartPayload(sessionId, projectRoot, { source: "compact" })), env);
+
+	// One tool call that matches no rule must not mark the pre-compaction block as still present.
+	const unrelated = runHook(
+		"post-tool-use",
+		withTranscript(postToolUsePayload(sessionId, projectRoot, "cat c.txt")),
+		env,
+	);
+	expect(additionalContext(unrelated.stdout)).not.toContain("OLDER LAZY TS RULE BODY");
+
+	const touchedAgain = runHook(
+		"post-tool-use",
+		withTranscript(postToolUsePayload(sessionId, projectRoot, "cat src/a.ts")),
+		env,
+	);
+	expect(additionalContext(touchedAgain.stdout)).toContain("OLDER LAZY TS RULE BODY");
+});
+
+// ===========================================================================
+// 압축 복구 지시: 최근 lazy 묶음 우선순위와 존재 판정 범위
+// ===========================================================================
+
+/** 최근 lazy 묶음이 가리키는 규칙 하나와 static 규칙들이 있는 프로젝트를 만들고 복구 상태를 심는다. */
+function seedDynamicRecoveryProject(
+	sessionId: string,
+	staticRuleNames: string[],
+): { projectRoot: string; dynamicRulePath: string; staticRulePaths: string[]; dynamicRuleBody: string } {
+	const hermDataRoot = join(tempHome, ".omt", "rules-injector");
+	const projectRoot = makeScratchDir("recovery-order-");
+	writeFileSync(join(projectRoot, "package.json"), "{}\n");
+	const rulesDir = join(projectRoot, ".codex", "rules");
+	mkdirSync(rulesDir, { recursive: true });
+	const staticRulePaths = staticRuleNames.map((name) => {
+		const path = join(rulesDir, name);
+		writeFileSync(path, `---\nalwaysApply: true\n---\nSTATIC BODY ${name}\n`);
+		return path;
+	});
+	const dynamicRulePath = join(rulesDir, "zz-dynamic.md");
+	const dynamicRuleBody = "LATEST-LAZY-BODY: instructions for markdown files.";
+	writeFileSync(dynamicRulePath, `---\nglobs: "**/*.md"\n---\n${dynamicRuleBody}\n`);
+	mkdirSync(hermDataRoot, { recursive: true });
+	writeFileSync(
+		join(hermDataRoot, `${sessionId}.json`),
+		JSON.stringify({
+			version: 1,
+			staticDedup: [],
+			dynamicDedup: { "__pi-rules-session__": [`${dynamicRulePath}::deadbeef`] },
+			latestDynamicInjectionKeys: [`${dynamicRulePath}::deadbeef`],
+			postCompactPending: { static: true, dynamic: true },
+		}) + "\n",
+	);
+	return { projectRoot, dynamicRulePath, staticRulePaths, dynamicRuleBody };
+}
+
+test("복구 지시 예산이 모자라면 static 경로가 먼저 빠지고 최근 lazy 규칙 경로는 남는다", () => {
+	const sessionId = "recovery-order-budget-session";
+	const { projectRoot, dynamicRulePath, staticRulePaths } = seedDynamicRecoveryProject(sessionId, [
+		"a-static.md",
+		"b-static.md",
+		"c-static.md",
+	]);
+
+	const recovery = runHook("session-start", sessionStartPayload(sessionId, projectRoot), {
+		PLUGIN_DATA: join(tempHome, ".omt", "rules-injector"),
+		CODEX_RULES_POST_COMPACT_MAX_RESULT_CHARS: "450",
+	});
+	expect(recovery.status).toBe(0);
+	const recovered = additionalContext(recovery.stdout);
+	expect(recovered).toContain(dynamicRulePath);
+	// 예산이 모든 경로를 담지 못했다는 전제: static 경로 중 하나 이상이 빠졌다.
+	expect(staticRulePaths.some((path) => !recovered.includes(path))).toBe(true);
+});
+
+test("압축 기록이 없는 transcript에 규칙 블록이 있어도 최근 lazy 규칙 경로를 복구 지시에 넣는다", () => {
+	const sessionId = "recovery-no-compaction-record-session";
+	const { projectRoot, dynamicRulePath, dynamicRuleBody } = seedDynamicRecoveryProject(sessionId, [
+		"a-static.md",
+	]);
+	// 압축 전 규칙 블록(마커+본문)만 있고 compacted 기록은 없다.
+	const transcriptPath = join(projectRoot, "transcript-no-compaction.txt");
+	writeFileSync(transcriptPath, `<rules name="zz-dynamic">\n${dynamicRuleBody}\n</rules>\n`);
+
+	const recovery = runHook(
+		"session-start",
+		sessionStartPayload(sessionId, projectRoot, { transcript_path: transcriptPath }),
+		{ PLUGIN_DATA: join(tempHome, ".omt", "rules-injector") },
+	);
+	expect(recovery.status).toBe(0);
+	expect(additionalContext(recovery.stdout)).toContain(dynamicRulePath);
 });

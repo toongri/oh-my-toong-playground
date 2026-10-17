@@ -12,7 +12,7 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { spawn, execSync } from "child_process";
+import { spawn, spawnSync, execSync } from "child_process";
 
 import {
 	exitWithError,
@@ -277,10 +277,17 @@ export function extractDenySubagents(settings: Record<string, unknown>): boolean
 // `mcpBlock`); buildAugmentedCommand translates them per CLI:
 //   claude: reset -> --strict-mcp-config, add -> --mcp-config '<json>'
 //   codex:  no single "disable all" flag exists, so reset -> `--disable plugins`
-//           (plugin-provided servers) + `-c mcp_servers.<name>.enabled=false`
-//           for every [mcp_servers.<name>] header read from <CODEX_HOME>/config.toml
-//           (`mcpBlock`, computed at job start; the file is never written).
-//           add -> `-c mcp_servers.<name>.command=...` / `.args=[...]`.
+//           (plugin-provided servers) + `--disable apps` (`codex_apps` ChatGPT connectors, absent from the listing) + `-c mcp_servers.<name>.enabled=false`
+//           for every server `codex --disable plugins mcp list --json` reports
+//           (`mcpBlock`, computed at job start): user config plus the trusted
+//           project layer of the worker's cwd; names that are not bare TOML keys
+//           cannot be addressed by `-c`, so they are skipped with a warning. That listing does not start any server.
+//           add -> `-c mcp_servers.<name>.command=...` / `.args=[...]` / `.enabled=true`.
+//           An add name (with or without reset) that the listing reports as a non-stdio server fails job start,
+//           because `-c` merges into that entry and codex then refuses to boot. A stdio entry of that name that sets env, env_vars, cwd or a
+//           timeout also fails job start (`-c` cannot clear them). `disabled_tools=[]` is emitted for every add server; an inherited
+//           `enabled_tools` allowlist is invisible in the listing and cannot be cleared through `-c`.
+//           A codex member command that itself sets `-c mcp_servers…` fails job start while `settings.mcp` is set: the listing never sees it, so reset could not turn it off; define it under `add`.
 // ---------------------------------------------------------------------------
 
 export type McpAddServers = Record<string, { command: string; args: string[] }>;
@@ -361,48 +368,110 @@ export function extractMcp(settings: Record<string, unknown>): {
 	return { isSet: true, reset: mcp.reset === true, add };
 }
 
+export type McpListEntry = {
+	name: string;
+	enabled?: boolean;
+	transport?: {
+		type?: string;
+		env?: Record<string, unknown>;
+		env_vars?: unknown[];
+		cwd?: string;
+	};
+	startup_timeout_sec?: number;
+	tool_timeout_sec?: number;
+};
+
+const MCP_LIST_TIMEOUT_MS = 30_000;
+
 /**
- * Enumerate MCP server names declared in `<codexHome>/config.toml` via
- * `[mcp_servers.<name>]` headers, sorted and de-duplicated. READ ONLY.
- *
- * Deliberately reads config.toml directly rather than shelling out to
- * `codex mcp list --json` — calling that CLI would itself spawn every
- * configured server's process.
+ * List every MCP server codex would load for `codexHome` + `cwd`, by running
+ * `<codex> --disable plugins mcp list --json` (user config plus trusted project
+ * layer, plugins excluded; no server is started). `command` is the member's
+ * command: its codex executable, with any package-runner prefix, is reused so a
+ * pinned path keeps working. `memberEnv` overlays the conductor env, as in the
+ * worker. Any failure stops job start, since the member could not boot codex
+ * either.
  */
-export function enumerateConfiguredMcpServers(codexHome: string): string[] {
-	let content: string;
+export function listConfiguredMcpServers(
+	command: string,
+	memberEnv: Record<string, string>,
+	codexHome: string,
+	cwd: string,
+): McpListEntry[] {
+	const tokens = splitCommand(command) ?? [];
+	const cliIndex = Math.max(
+		0,
+		tokens.findIndex((token) => path.basename(token) === "codex"),
+	);
+	const [program, ...prefix] = tokens.slice(0, cliIndex + 1);
+	const args = [...prefix, "--disable", "plugins", "mcp", "list", "--json"];
+	const shown = [program, ...args].join(" ");
+	const result = spawnSync(program ?? "codex", args, {
+		cwd,
+		env: { ...process.env, ...memberEnv, CODEX_HOME: codexHome },
+		encoding: "utf8",
+		timeout: MCP_LIST_TIMEOUT_MS,
+	});
+	const fail = (reason: string): never =>
+		exitWithError(
+			`Cannot list MCP servers for settings.mcp: \`${shown}\` ${reason} (CODEX_HOME=${codexHome}, cwd=${cwd})`,
+		);
+	if (result.error) fail(`could not run: ${result.error.message}`);
+	if (result.status !== 0) {
+		fail(`exited with ${result.status ?? `signal ${result.signal}`}: ${String(result.stderr).trim()}`);
+	}
+	let parsed: unknown;
 	try {
-		content = fs.readFileSync(path.join(codexHome, "config.toml"), "utf8");
+		parsed = JSON.parse(String(result.stdout));
 	} catch {
-		// No config.toml (or unreadable) means no configured server to disable.
-		return [];
+		return fail(`printed output that is not JSON: ${String(result.stdout).slice(0, 200)}`);
 	}
-	// Single segment only: matches [mcp_servers.<name>] where <name> contains
-	// no further dot. A config may contain both
-	// [mcp_servers.nutrition-tools] and [mcp_servers.nutrition-tools.env] — the
-	// latter is a nested table (env vars for the nutrition-tools server), not a
-	// second server named "nutrition-tools.env".
-	//
-	// Quoted headers ([mcp_servers."weird name"]) are deliberately NOT
-	// matched: such a name cannot be carried safely through a
-	// `-c mcp_servers.<name>.enabled=false` CLI argument, so it is left
-	// unenumerated and stays on. Disabling a name that config.toml does not
-	// declare makes codex fail to boot ("invalid transport"), so only names
-	// read from this file are ever disabled.
-	const headerRe = /^\s*\[mcp_servers\.([A-Za-z0-9_-]+)\]\s*$/;
-	const names = new Set<string>();
-	for (const line of content.split("\n")) {
-		const match = headerRe.exec(line);
-		if (match) names.add(match[1]);
+	if (!Array.isArray(parsed)) return fail("printed JSON that is not an array");
+	return parsed.map((item): McpListEntry => {
+		if (!isRecord(item) || typeof item.name !== "string") {
+			return fail("printed an entry without a string 'name'");
+		}
+		return {
+			name: item.name,
+			enabled: typeof item.enabled === "boolean" ? item.enabled : undefined,
+			transport:
+				isRecord(item.transport) && typeof item.transport.type === "string"
+					? {
+							type: item.transport.type,
+							env: isRecord(item.transport.env) ? item.transport.env : undefined,
+							env_vars: Array.isArray(item.transport.env_vars) ? item.transport.env_vars : undefined,
+							cwd: typeof item.transport.cwd === "string" ? item.transport.cwd : undefined,
+						}
+					: undefined,
+			startup_timeout_sec: typeof item.startup_timeout_sec === "number" ? item.startup_timeout_sec : undefined,
+			tool_timeout_sec: typeof item.tool_timeout_sec === "number" ? item.tool_timeout_sec : undefined,
+		};
+	});
+}
+
+/**
+ * The first `-c`/`--config` override in a codex member command whose key is
+ * `mcp_servers…` (as `-c kv`, `-c=kv`, `-ckv`, `--config kv`, `--config=kv`),
+ * or undefined. Other overrides such as `service_tier=fast` are not MCP-related.
+ */
+function findMcpServersConfigOverride(command: string): string | undefined {
+	const tokens = splitCommand(command) ?? [];
+	for (let i = 0; i < tokens.length; i++) {
+		const token = tokens[i];
+		let kv: string | undefined;
+		if (token === "-c" || token === "--config") kv = tokens[i + 1];
+		else if (token.startsWith("--config=")) kv = token.slice("--config=".length);
+		else if (token.startsWith("-c") && !token.startsWith("--")) kv = token.slice(2).replace(/^=/, "");
+		if (kv?.trim().startsWith("mcp_servers")) return kv;
 	}
-	return [...names].sort();
+	return undefined;
 }
 
 /**
  * Attach the explicit MCP fields (`mcpReset`, `mcpAdd`, `mcpBlock`) to job
- * entities without mutating the source list. `mcpBlock` (codex config.toml
+ * entities without mutating the source list. `mcpBlock` (codex-listed
  * server names to disable) is computed only when `reset` is true, minus the
- * names `add` defines. With `settings.mcp` set, a member whose CLI is neither
+ * names `add` defines; an `add` name listed as a non-stdio server fails job start. With `settings.mcp` set, a member whose CLI is neither
  * codex nor claude fails job start: there is no lever to apply it.
  */
 export function prepareMcpEntities(
@@ -416,7 +485,8 @@ export function prepareMcpEntities(
 	const mcp = extractMcp(settings);
 	const fallbackHome =
 		conductorCodexHome ?? (process.env.CODEX_HOME || path.join(os.homedir(), ".codex"));
-	const configuredByHome = new Map<string, string[]>();
+	const workerCwd = process.cwd(); // workers are spawned without a cwd option, so they inherit this
+	const listedByProbe = new Map<string, McpListEntry[]>();
 	return entities.map((entity) => {
 		const cliType = detectCliType(entity.command);
 		if (mcp.isSet && cliType !== "codex" && cliType !== "claude") {
@@ -424,16 +494,57 @@ export function prepareMcpEntities(
 				`Invalid config in ${configPath}: '${config.configTopLevelKey}.settings.mcp' is set but member ${JSON.stringify(String(entity.name))} runs CLI '${cliType}'; MCP control is supported only for codex and claude members`,
 			);
 		}
-		let mcpBlock: string[] = [];
-		if (mcp.reset && cliType === "codex") {
-			const env = isRecord(entity.env) ? entity.env : {};
-			const codexHome = env.CODEX_HOME ? String(env.CODEX_HOME) : fallbackHome;
-			let configured = configuredByHome.get(codexHome);
-			if (configured === undefined) {
-				configured = enumerateConfiguredMcpServers(codexHome);
-				configuredByHome.set(codexHome, configured);
+		if (cliType === "codex" && mcp.isSet) {
+			const override = findMcpServersConfigOverride(String(entity.command));
+			if (override !== undefined) {
+				exitWithError(
+					`Invalid config in ${configPath}: member ${JSON.stringify(String(entity.name))} command sets '-c ${override}' while '${config.configTopLevelKey}.settings.mcp' is set; the MCP server listing does not see command-line overrides, so reset could not turn it off. Define the server under '${config.configTopLevelKey}.settings.mcp.add' instead.`,
+				);
 			}
-			mcpBlock = configured.filter((name) => !(name in mcp.add));
+		}
+		let mcpBlock: string[] = [];
+		if (cliType === "codex" && (mcp.reset || Object.keys(mcp.add).length > 0)) {
+			const env = isRecord(entity.env) ? entity.env : {};
+			const memberEnv = Object.fromEntries(Object.entries(env).map(([k, v]) => [k, String(v)]));
+			const codexHome = env.CODEX_HOME ? String(env.CODEX_HOME) : fallbackHome;
+			const key = JSON.stringify([String(entity.command), memberEnv, codexHome, workerCwd]);
+			let listed = listedByProbe.get(key);
+			if (listed === undefined) {
+				listed = listConfiguredMcpServers(String(entity.command), memberEnv, codexHome, workerCwd);
+				listedByProbe.set(key, listed);
+				if (mcp.reset) {
+					for (const { name } of listed) {
+						if (MCP_SERVER_NAME_RE.test(name)) continue;
+						process.stderr.write(
+							`warn: MCP server ${JSON.stringify(name)} (CODEX_HOME=${codexHome}) cannot be disabled through -c, so settings.mcp.reset leaves it on for this job\n`,
+						);
+					}
+				}
+			}
+			for (const server of listed) {
+				if (server.name in mcp.add && server.transport?.type !== "stdio") {
+					exitWithError(
+						`Invalid config in ${configPath}: '${config.configTopLevelKey}.settings.mcp.add.${server.name}' collides with a server the user config defines as a non-stdio server (${server.transport?.type ?? "unknown transport"}); codex cannot start it as stdio. Rename the add key or remove the user entry.`,
+					);
+				}
+				if (server.name in mcp.add) {
+					const inherited = [
+						Object.keys(server.transport?.env ?? {}).length > 0 ? "env" : "",
+						(server.transport?.env_vars ?? []).length > 0 ? "env_vars" : "",
+						server.transport?.cwd !== undefined ? "cwd" : "",
+						server.startup_timeout_sec !== undefined ? "startup_timeout_sec" : "",
+						server.tool_timeout_sec !== undefined ? "tool_timeout_sec" : "",
+					].filter(Boolean);
+					if (inherited.length > 0) {
+						exitWithError(
+							`Invalid config in ${configPath}: '${config.configTopLevelKey}.settings.mcp.add.${server.name}' collides with a stdio server the user config defines with ${inherited.join(", ")}; codex -c cannot remove them, so the job's server would run with them. Rename the add key or remove those fields from the user entry.`,
+						);
+					}
+				}
+			}
+			if (mcp.reset) mcpBlock = listed
+					.map((server) => server.name)
+					.filter((name) => MCP_SERVER_NAME_RE.test(name) && !(name in mcp.add));
 		}
 		return { ...entity, mcpReset: mcp.reset, mcpAdd: mcp.add, mcpBlock };
 	});
@@ -577,8 +688,9 @@ export function buildAugmentedCommand(
 	const mcpAdd = isRecord(entity.mcpAdd) ? Object.entries(entity.mcpAdd) : [];
 	const mcpBlock = Array.isArray(entity.mcpBlock) ? entity.mcpBlock.map((name) => String(name)) : [];
 	if (cliType === "codex") {
-		// Plugin-provided servers are not in config.toml; `--disable apps` alone does not drop them.
-		if (mcpReset) parts.push("--disable", "plugins");
+		// `plugins` drops plugin-provided servers; `apps` drops the built-in `codex_apps` ChatGPT connectors,
+		// which `codex mcp list` does not show, so mcpBlock can never name them. Each flag leaves the other's servers on.
+		if (mcpReset) parts.push("--disable", "plugins", "--disable", "apps");
 		for (const name of mcpBlock) {
 			parts.push("-c", `mcp_servers.${name}.enabled=false`);
 		}
@@ -590,6 +702,12 @@ export function buildAugmentedCommand(
 				escapeForSplitCommand(`mcp_servers.${name}.command=${JSON.stringify(String(server.command))}`),
 				"-c",
 				escapeForSplitCommand(`mcp_servers.${name}.args=[${args.join(",")}]`),
+				// `-c` merges into an inherited [mcp_servers.<name>] entry, so its `enabled = false` would survive.
+				"-c",
+				`mcp_servers.${name}.enabled=true`,
+				// An inherited `disabled_tools` would hide tools of the job's server; `[]` replaces it (tables merge, arrays replace).
+				"-c",
+				`mcp_servers.${name}.disabled_tools=[]`,
 			);
 		}
 	} else if (cliType === "claude") {

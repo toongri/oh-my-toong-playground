@@ -278,11 +278,11 @@ test("압축 모드를 바꿔도 처음부터 다시 읽지 않음", () => {
 	pinMtime(transcript);
 	const a = { body: "a body", marker: '<rules name="a">' };
 	const b = { body: "b body", marker: '<rules name="b">' };
-	expect(queryTranscriptRuleCache(transcript, [a])).toEqual([true]);
+	expect(queryTranscriptRuleCache(transcript, [a, b])).toEqual([false, true]);
 	blankWithoutTrace(transcript, head.length, before.length + after.length - 1);
 	expect(queryTranscriptRuleCache(transcript, [b], LATEST)).toEqual([true]);
 	expect(queryTranscriptRuleCache(transcript, [a], LATEST)).toEqual([false]);
-	expect(queryTranscriptRuleCache(transcript, [a])).toEqual([true]);
+	expect(queryTranscriptRuleCache(transcript, [a])).toEqual([false]);
 });
 
 test("잘리거나 교체된 파일은 색인을 다시 만듦", () => {

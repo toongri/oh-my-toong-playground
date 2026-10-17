@@ -130,6 +130,7 @@ picomatch는 OMT sync 툴체인이 npm 의존성 배포 경로를 갖지 않으�
 | 최근 lazy 묶음 필드 (엔진 측) — `SessionState`에 `latestDynamicInjectionKeys`(가장 최근에 규칙을 주입한 PostToolUse 한 번이 주입한 `dynamicDedup` 키) 추가, `createSessionState`·`clearSession`이 초기화, `dynamicDedupKey`를 `rules/index.ts`에서 export | `rules/types.ts`, `rules/cache.ts`, `rules/index.ts` | **엔진** | 추가 |
 | 압축 뒤 lazy 규칙은 최근 묶음만 복구 (어댑터 측) — PostToolUse가 규칙을 1개 이상 주입하면 그 키 목록으로 `latestDynamicInjectionKeys`를 덮어쓰고 세션 캐시에 저장한다. `markSessionCompacted`는 `dynamicDedup`을 그 묶음만 남기고 비워, 예전 lazy 규칙이 일치하는 파일을 다시 만질 때 lazy로 다시 주입되게 한다. `recoverDynamicRulePaths`는 그 묶음만 읽기 지시에 넣는다. 시작 시 들어온 규칙(static)의 복구는 바뀌지 않는다 | `codex-hook.ts`, `persistent-cache.ts`, `static-injection.ts` | 어댑터 | 추가 |
 | dedup 병합 저장 (어댑터 측) — `persistEngineState`는 hydrate 뒤 이번 실행이 추가한 dedup 표시만 잠금 안의 현재 파일에 합친다. `latestDynamicInjectionKeys`는 이번 실행이 새 묶음을 주입했을 때만 덮어쓴다. 압축 전에 상태를 읽은 PostToolUse가 압축 뒤에 저장해도 `markSessionCompacted`가 지운 표시가 되살아나지 않고, 동시에 돈 두 실행이 서로의 표시를 지우지 않는다 | `persistent-cache.ts` | 어댑터 | 수정 |
+| 압축 뒤 transcript 존재 확인은 항상 최신 구간 기준 (어댑터 측) — `queryTranscriptRuleCache`는 transcript에 압축이 한 번이라도 보이면 `latestCompactedReplacementOnly` 값과 무관하게 최근 압축 대체 이력과 그 뒤 줄에서만 규칙 블록을 찾는다. 이전에는 압축 직후 복구 PostToolUse 한 번만 최신 구간을 봤고, 그 뒤 PostToolUse는 압축 전 규칙 블록(마커+본문)까지 보고 예전 lazy 규칙을 이미 있는 것으로 판정해 재주입이 영구히 막혔다. 압축이 보이지 않을 때의 의미는 그대로다: 옵션이 `true`면 아무것도 존재하지 않는 것으로 본다 | `transcript-rule-cache.ts` | 어댑터 | 수정 |
 
 **로컬 per-file exclude 설정 — 재적용 참고:**
 
@@ -158,3 +159,4 @@ picomatch는 OMT sync 툴체인이 npm 의존성 배포 경로를 갖지 않으�
 > **보류 항목 (의도적 non-change, upstream re-vendor로 이연):**
 > - concurrency 클러스터 — `persistent-cache.ts`의 RMW(read-modify-write) 경쟁 구간. `session-state-lock`은 존재하며 `claimPostCompactPending`, `completePostCompactRecovery` 경로만 가드하지만, `persistEngineState`, `markSessionCompacted`의 RMW 구간은 미가드로 남아 있습니다. 단일 훅 인스턴스 운용 환경에서는 실질 문제가 없으나, 병렬 실행 시나리오에서 잠재적 충돌 가능성이 있습니다.
 > - `parser-yaml.ts` unquoted brace-glob comma-split — `{a,b}` 형태 glob을 YAML 비따옴표 값으로 쓸 때 brace 내부 콤마가 리스트 구분자로 오파싱될 수 있습니다. `fidelity-and-lanes.test.ts`의 `test.skip` 마커로 가시화된 상태이며, 수정하지 않았습니다.
+| 압축 복구 지시의 lazy 규칙 우선 배치와 최신 구간 존재 판정 (어댑터 측) — 읽기 지시가 최근 lazy 묶음 경로를 static 경로보다 앞에 둔다. 예산 때문에 빠진 static 규칙은 pending으로 남아 다시 제안되지만 lazy 경로는 dedup 키가 남아 다시 제안되지 않으므로, 예산은 static 경로부터 버려야 한다. 또 lazy 규칙의 존재 판정은 최근 압축 대체 이력과 그 뒤 줄만 보며, 압축 기록이 없으면 존재하지 않는 것으로 보아 경로를 다시 제안한다. 전체 transcript 폴백에는 압축이 이미 내보낸 압축 전 규칙 블록이 있어 lazy 규칙이 있는 것으로 오판되기 때문이다. static 규칙 판정은 기존 폴백을 그대로 쓴다 | `static-injection.ts` | 어댑터 | 수정 |

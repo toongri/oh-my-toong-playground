@@ -299,7 +299,7 @@ describe("diagnose job lifecycle", () => {
 		}
 	});
 
-	// codex stub가 받은 실제 argv를 파일로 남긴다. config.toml은 지어낸 서버 이름만 가진 fixture다.
+	// codex stub가 받은 실제 argv를 파일로 남긴다. `mcp list`에는 지어낸 서버 이름만 가진 fixture JSON으로 답한다.
 	async function startWithCodexStub(configPath: string) {
 		const jobsDir = path.join(tmpDir, "jobs");
 		const codexHome = path.join(tmpDir, "codex-home");
@@ -307,12 +307,14 @@ describe("diagnose job lifecycle", () => {
 		fs.mkdirSync(binDir, { recursive: true });
 		fs.mkdirSync(codexHome, { recursive: true });
 		fs.writeFileSync(
-			path.join(codexHome, "config.toml"),
-			'[mcp_servers.codegraph]\ncommand = "stub"\n\n[mcp_servers.srv-blocked]\ncommand = "stub"\n',
+			path.join(codexHome, "mcp-list.json"),
+			JSON.stringify(
+				["codegraph", "srv-blocked"].map((name) => ({ name, enabled: true, transport: { type: "stdio" } })),
+			),
 		);
 		const argvPath = path.join(tmpDir, "codex-argv.txt");
 		const stubPath = path.join(binDir, "codex");
-		fs.writeFileSync(stubPath, '#!/bin/sh\nprintf "%s\\n" "$@" > "$STUB_CODEX_ARGV.tmp" && mv "$STUB_CODEX_ARGV.tmp" "$STUB_CODEX_ARGV"\n', "utf8");
+		fs.writeFileSync(stubPath, '#!/bin/sh\ncase " $* " in *" mcp list "*) cat "$CODEX_HOME/mcp-list.json"; exit 0;; esac\nprintf "%s\\n" "$@" > "$STUB_CODEX_ARGV.tmp" && mv "$STUB_CODEX_ARGV.tmp" "$STUB_CODEX_ARGV"\n', "utf8");
 		fs.chmodSync(stubPath, 0o755);
 		const env = {
 			...process.env,
@@ -362,8 +364,8 @@ describe("diagnose job lifecycle", () => {
 		expect(member.mcpReset).toBe(true);
 		expect(member.mcpAdd).toEqual({ codegraph: { command: "codegraph", args: ["serve", "--mcp"] } });
 		expect(member.mcpBlock).toEqual(["srv-blocked"]);
-		const disableAt = argv.indexOf("--disable");
-		expect(argv[disableAt + 1]).toBe("plugins");
+		const disabled = argv.flatMap((arg, i) => (arg === "--disable" ? [argv[i + 1]] : []));
+		expect(disabled).toEqual(["plugins", "apps"]);
 		expect(argv).toContain("mcp_servers.srv-blocked.enabled=false");
 		expect(argv).not.toContain("mcp_servers.codegraph.enabled=false");
 		expect(argv).toContain('mcp_servers.codegraph.command="codegraph"');
@@ -517,7 +519,7 @@ describe("settings fallback 병합", () => {
 		const argvPath = path.join(tmpDir, "codex-argv.txt");
 		fs.mkdirSync(binDir, { recursive: true });
 		const stubPath = path.join(binDir, "codex");
-		fs.writeFileSync(stubPath, '#!/bin/sh\nprintf "%s\\n" "$@" > "$STUB_CODEX_ARGV.tmp" && mv "$STUB_CODEX_ARGV.tmp" "$STUB_CODEX_ARGV"\n', "utf8");
+		fs.writeFileSync(stubPath, '#!/bin/sh\ncase " $* " in *" mcp list "*) cat "$CODEX_HOME/mcp-list.json"; exit 0;; esac\nprintf "%s\\n" "$@" > "$STUB_CODEX_ARGV.tmp" && mv "$STUB_CODEX_ARGV.tmp" "$STUB_CODEX_ARGV"\n', "utf8");
 		fs.chmodSync(stubPath, 0o755);
 		const env = {
 			...process.env,

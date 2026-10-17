@@ -109,6 +109,7 @@ export async function preCompact(
 	const result = await writeLedger({
 		log,
 		previousLedger,
+		fallbackPreviousLedger: previous,
 		runModel: options.runModel ?? codexRunner(),
 		// An injected model (tests, replays) gets no real fallback unless one is injected too.
 		fallbackModel: options.runModel ? options.fallbackModel : claudeRunner(),
@@ -151,7 +152,7 @@ export function sessionStartContext(platform: Platform, input: HookInput, home?:
 		: `The complete ledger is below (also saved at ${path}).`;
 	return [
 		"[SESSION LEDGER]",
-		"Your context was just compacted. This ledger was written from the full transcript before compaction, with its identifiers checked against it (any it could not verify are listed under Unverified points). Where the compaction summary and this ledger disagree, trust the ledger. Continue the work from its next steps.",
+		"Your context was just compacted. This ledger was written from the session transcript (and the previous ledger) before compaction, with its identifiers checked against it (any it could not verify are listed under Unverified points). Where the compaction summary and this ledger disagree, trust the ledger. Continue the work from its next steps.",
 		order,
 		"",
 		head,

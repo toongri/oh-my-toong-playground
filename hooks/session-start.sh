@@ -72,6 +72,9 @@ MESSAGES=""
 
 # GC: reap dead state files for the managed prefixes.
 # Liveness defined by hooks/lib/state-liveness.sh (ACTIVE_IDLE_TTL=6h, TERMINAL_TTL=30m).
+# Deletion is stricter than liveness: an active state file, and that session's
+# artifacts, are kept until ACTIVE_STATE_RETENTION_TTL (7d); ACTIVE_IDLE_TTL
+# only decides whether a session still counts as live.
 # The current session's state is always kept regardless of age.
 source "$SCRIPT_DIR_SS/lib/state-liveness.sh"
 GC_NOW=$(date +%s)

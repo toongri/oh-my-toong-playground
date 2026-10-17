@@ -12,7 +12,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { Message, WorkLog } from "./extract.ts";
+import { type Message, utf8Head, type WorkLog } from "./extract.ts";
 
 export const SCHEMA_PATH = join(import.meta.dir, "schema.json");
 const PROMPT_PATH = join(import.meta.dir, "prompt.md");
@@ -94,6 +94,12 @@ export interface LedgerInput {
 	log: WorkLog;
 	/** Ledger written at the previous compaction, when the log covers only the part after it. */
 	previousLedger?: string;
+	/**
+	 * The ledger currently on disk, used only when writing the mechanical fallback and never sent to the
+	 * model. In full mode `previousLedger` is absent (the model reads the whole transcript), so without
+	 * this field a fallback would drop the on-disk ledger's decisions.
+	 */
+	fallbackPreviousLedger?: string;
 	runModel: ModelRunner;
 	/** Used when `runModel` still returns no output after its retry, for that attempt and every later one. */
 	fallbackModel?: ModelRunner;
@@ -122,25 +128,74 @@ export interface LedgerResult {
 // ─── Previous ledger carry-over ──────────────────────────────────────────────
 
 const USERS_HEADING = "## All user messages (verbatim)";
+const FALLBACK_TITLE = "# Session ledger (fallback)";
+const FILES_HEADING = "## Files edited in this part of the session";
+const PREVIOUS_HEADING = "## Previous ledger (written at the previous compaction)";
+/** Largest "Last assistant message" a fallback keeps, in UTF-8 bytes. */
+const LAST_ASSISTANT_LIMIT = 3000;
+const EARLIER_ASSISTANTS_HEADING = "## Earlier fallbacks' last assistant messages (oldest first)";
+/** lazy: keeps the 3 newest earlier messages (<= 3 x 3000 bytes); raise if one outage hides more work. */
+const EARLIER_ASSISTANTS_KEEP = 3;
 const UNVERIFIED_HEADING = "## Unverified points";
 
-/** User messages recorded in an earlier ledger, so a windowed log keeps every U-id resolvable. */
+/** Ledgers written before the latest release put this section after the user messages. */
+const OLD_APPENDIX_HEADING = "## Appendix: original text of approved proposals";
+
+/**
+ * User messages recorded in an earlier ledger, so a windowed log keeps every U-id resolvable.
+ * The section runs to the next known heading or the end of the file: a message may itself contain
+ * `## ` lines or a quoted `- [U<n>] ` line. U-ids only increase, so a line is a new entry only when
+ * its number exceeds the previous entry's.
+ *
+ * Current ledgers escape the payload (see `userEntry`): every continuation line is indented two spaces,
+ * so no message line can equal a heading (a pasted earlier ledger would otherwise move `lastIndexOf` to
+ * the pasted heading) or start an entry. A line starting with two spaces continues the current entry and
+ * loses exactly those two spaces. Older ledgers did not indent; their continuation lines are read as before.
+ */
 export function previousUsers(ledger: string | undefined): Message[] {
 	if (!ledger) return [];
-	const start = ledger.indexOf(USERS_HEADING);
-	if (start < 0) return [];
+	const marker = `\n${USERS_HEADING}\n`;
+	let start = ledger.lastIndexOf(marker);
+	if (start >= 0) start += marker.length;
+	else if (ledger.startsWith(`${USERS_HEADING}\n`)) start = USERS_HEADING.length + 1;
+	else return [];
 	const users: Message[] = [];
-	for (const line of ledger.slice(start + USERS_HEADING.length).split("\n")) {
-		if (line.startsWith("## ")) break;
-		const match = line.match(/^- \[(U\d+)\] ([\s\S]*)$/);
-		if (match) users.push({ id: match[1], text: match[2] });
-		else if (users.length > 0) users[users.length - 1].text += `\n${line}`;
+	let lastNumber = 0;
+	for (const line of ledger.slice(start).split("\n")) {
+		if (line === UNVERIFIED_HEADING || line === OLD_APPENDIX_HEADING) break;
+		const match = line.match(/^- \[U(\d+)\] ([\s\S]*)$/);
+		if (line.startsWith("  ") && users.length > 0) users[users.length - 1].text += `\n${line.slice(2)}`;
+		else if (match && Number(match[1]) > lastNumber) {
+			lastNumber = Number(match[1]);
+			users.push({ id: `U${match[1]}`, text: match[2] });
+		} else if (users.length > 0) users[users.length - 1].text += `\n${line}`;
 	}
 	for (const user of users) user.text = user.text.replace(/\n+$/, "");
 	return users;
 }
 
 // ─── Rendering ──────────────────────────────────────────────────────────────
+
+/**
+ * One user message as ledger lines: `- [U<n>] <first line>`, then every later line indented two spaces.
+ * The indent keeps the message from forming a heading line or an entry line of its own, so the parser
+ * (`previousUsers`) finds the real section even when the message contains a pasted ledger.
+ */
+function userEntry(u: Message): string {
+	return `- [${u.id}] ${indentContinuation(u.text)}`;
+}
+
+/** Every line after the first gets two spaces, so no payload line can equal a heading or start an entry. */
+function indentContinuation(text: string): string {
+	return text.split("\n").join("\n  ");
+}
+
+function outdentContinuation(text: string): string {
+	return text
+		.split("\n")
+		.map((line) => (line.startsWith("  ") ? line.slice(2) : line))
+		.join("\n");
+}
 
 const MADE_BY: Record<LedgerJson["decisions"][number]["made_by"], string> = {
 	user: "user's decision",
@@ -213,7 +268,7 @@ export function renderLedger(d: LedgerJson, users: Message[], warnings: string[]
 		warnings.length > 0
 			? ["", UNVERIFIED_HEADING, "The validator could not verify these against the transcript; check them before relying on them:", ...warnings.map((w) => `- ${w}`)]
 			: [];
-	const userLines = ["", USERS_HEADING, ...users.map((u) => `- [${u.id}] ${u.text}`)];
+	const userLines = ["", USERS_HEADING, ...users.map(userEntry)];
 	return `${renderFields(d).trimEnd()}\n${[...warningLines, ...userLines].join("\n")}`.trimEnd() + "\n";
 }
 
@@ -299,7 +354,7 @@ export function unknownIdentifiers(d: LedgerJson, sourceText: string): string[] 
 		}
 	}
 	for (const raw of rendered.split(/\s+/)) {
-		if (hasForeignLetter(raw, sourceText)) bad.add(raw.replace(/^[`'"(]+|[`'",;:.)]+$/g, ""));
+		if (isGarbledPathToken(raw, sourceText)) bad.add(raw.replace(/^[`'"(]+|[`'",;:.)]+$/g, ""));
 	}
 	return [...bad].sort();
 }
@@ -313,6 +368,14 @@ function hasForeignLetter(text: string, sourceText: string): boolean {
 	return [...text].some(
 		(c) => /\p{L}/u.test(c) && !/[\p{Script=Latin}\p{Script=Hangul}\p{Script=Han}]/u.test(c) && !sourceText.includes(c),
 	);
+}
+
+/**
+ * Only a path (has `/`) or a token with Korean letters can be a garbled Korean path; a foreign letter in
+ * plain prose ("120 μs", "λ-calculus") is ordinary writing, neither a violation nor something to respell.
+ */
+function isGarbledPathToken(token: string, sourceText: string): boolean {
+	return /[/\p{Script=Hangul}\p{Script=Han}]/u.test(token) && hasForeignLetter(token, sourceText);
 }
 
 const TOKEN_DELIMITERS = /([\s`'"(),;:]+)/;
@@ -345,6 +408,7 @@ export function repairForeignLetters(d: LedgerJson, sourceText: string): LedgerJ
 		return best && best.distance <= Math.ceil(part.length / 2) ? best.segment : undefined;
 	};
 	const repairToken = (token: string) => {
+		if (!isGarbledPathToken(token, sourceText)) return token;
 		const segments = token.split("/");
 		return segments
 			.map((segment, i) => {
@@ -367,7 +431,8 @@ function verifiedText(ledger: string | undefined): string {
 	if (!ledger) return "";
 	const section = ledger.split(`\n${UNVERIFIED_HEADING}\n`)[1]?.split("\n## ")[0] ?? "";
 	let text = ledger;
-	for (const [, id] of section.matchAll(/"([^"\n]{6,})"/g)) text = text.replaceAll(id, "");
+	// Only identifier-shaped strings (no whitespace): warning lines also quote whole decision sentences, which must stay.
+	for (const [, id] of section.matchAll(/"([^"\s]{6,})"/g)) text = text.replaceAll(id, "");
 	return text;
 }
 
@@ -435,26 +500,58 @@ export function buildPrompt(log: WorkLog, previousLedger: string | undefined, bu
  * compaction still carries all of them forward.
  */
 export function fallbackLedger(log: WorkLog, users: Message[], reason: string, previousLedger?: string): string {
-	const lastAssistant = log.assistants.at(-1)?.text ?? "(none)";
+	const assistant = log.assistants.at(-1)?.text;
+	const lastAssistant =
+		assistant === undefined
+			? "(none)"
+			: Buffer.byteLength(assistant) > LAST_ASSISTANT_LIMIT
+				? `${utf8Head(assistant, LAST_ASSISTANT_LIMIT)} …[${Buffer.byteLength(assistant) - LAST_ASSISTANT_LIMIT} bytes cut]`
+				: assistant;
 	// Its user messages are re-listed below; its title would be a second top-level heading.
-	const previousFields = previousLedger
+	let previousFields = previousLedger
 		?.split(`\n${USERS_HEADING}`)[0]
 		.replace(/^# Session ledger.*\n/, "")
 		.trim();
+	let editedFiles = log.editedFiles;
+	let earlier: string[] = [];
+	if (previousLedger?.startsWith(FALLBACK_TITLE) && previousFields !== undefined) {
+		// A fallback built on a fallback keeps only the real ledger it carried, so layers do not stack.
+		// Split on a whole line: an indented payload line may contain the heading text mid-line.
+		const [top, ...nested] = `\n${previousFields}`.split(`\n${PREVIOUS_HEADING}\n`);
+		previousFields = nested.join(`\n${PREVIOUS_HEADING}\n`).trim();
+		// Entries are `- ` + first line, later lines indented two spaces (as `userEntry`), so they cannot form a heading.
+		const earlierAt = top.lastIndexOf(`\n${EARLIER_ASSISTANTS_HEADING}\n`);
+		const head = earlierAt >= 0 ? top.slice(0, earlierAt) : top;
+		const carriedEntries: string[] = [];
+		if (earlierAt >= 0) {
+			for (const line of top.slice(earlierAt + EARLIER_ASSISTANTS_HEADING.length + 2).split("\n")) {
+				if (line.startsWith("- ")) carriedEntries.push(line.slice(2));
+				else if (line.startsWith("  ") && carriedEntries.length > 0) carriedEntries[carriedEntries.length - 1] += `\n${line.slice(2)}`;
+			}
+		}
+		const lastHeading = "## Last assistant message\n";
+		const filesAt = head.lastIndexOf(`\n\n${FILES_HEADING}\n`);
+		const lastAt = head.indexOf(`\n${lastHeading}`);
+		const prevLast = lastAt >= 0 && filesAt >= 0 ? outdentContinuation(head.slice(lastAt + lastHeading.length + 1, filesAt)) : "";
+		earlier = [...carriedEntries.map((e) => e.replace(/\n+$/, "")), ...(prevLast && prevLast !== "(none)" ? [prevLast] : [])].slice(-EARLIER_ASSISTANTS_KEEP);
+		const carriedFiles = [...(head.split(`\n${FILES_HEADING}\n`)[1] ?? "").matchAll(/^- `(.+)`$/gm)].map((m) => m[1]);
+		editedFiles = [...new Set([...carriedFiles, ...log.editedFiles])];
+	}
 	return [
-		"# Session ledger (fallback)",
+		FALLBACK_TITLE,
 		"",
 		`The summarizer produced no ledger this time (${reason}). This fallback holds mechanically extracted facts and the previous ledger, which stays true unless a later user message below changes it.`,
 		"",
 		"## Last assistant message",
-		lastAssistant,
+		indentContinuation(lastAssistant),
 		"",
-		"## Files edited in this part of the session",
-		...(log.editedFiles.length > 0 ? log.editedFiles.map((f) => `- \`${f}\``) : ["- (none)"]),
+		FILES_HEADING,
+		...(editedFiles.length > 0 ? editedFiles.map((f) => `- \`${f}\``) : ["- (none)"]),
 		"",
-		...(previousFields ? ["## Previous ledger (written at the previous compaction)", previousFields, ""] : []),
+		...(earlier.length > 0 ? [EARLIER_ASSISTANTS_HEADING, ...earlier.map((e) => `- ${indentContinuation(e)}`), ""] : []),
+		...(previousFields ? [PREVIOUS_HEADING, previousFields, ""] : []),
 		USERS_HEADING,
-		...users.map((u) => `- [${u.id}] ${u.text}`),
+		...users.map(userEntry),
 		"",
 	].join("\n");
 }
@@ -506,7 +603,7 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 	const basePrompt = buildPrompt(input.log, input.previousLedger, budget);
 	const attempts: AttemptRecord[] = [];
 	// The attempt with the fewest problems, accepted with its problems listed when no attempt passes.
-	let best: { d: LedgerJson; warnings: string[]; problems: number } | undefined;
+	let best: { d: LedgerJson; warnings: string[]; problems: number; size: number } | undefined;
 	let prompt = basePrompt;
 
 	const retryDelayMs = input.retryDelayMs ?? RETRY_DELAY_MS;
@@ -548,8 +645,10 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 			return { markdown: renderLedger(d, allUsers), status: "accepted-over-budget", attempts };
 		}
 		const warnings = violations.filter((x) => !x.startsWith(OVER_BUDGET));
-		const problems = warnings.length + unknownIdentifiers(d, ctx.sourceText).length;
-		if (!best || problems <= best.problems) best = { d, warnings, problems };
+		// Over budget counts as one problem; on a tie the smaller ledger wins, then the later attempt.
+		const overBudget = violations.length - warnings.length;
+		const problems = warnings.length + overBudget + unknownIdentifiers(d, ctx.sourceText).length;
+		if (!best || problems < best.problems || (problems === best.problems && size <= best.size)) best = { d, warnings, problems, size };
 		prompt =
 			`${basePrompt}\n=== YOUR PREVIOUS OUTPUT WAS REJECTED BY THE VALIDATOR ===\n${violations.map((x) => `- ${x}`).join("\n")}` +
 			`\nPrevious output:\n${JSON.stringify(d)}\nReturn a corrected handoff JSON.\n`;
@@ -558,7 +657,7 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 	// A summary with a few unverified identifiers keeps every decision; the fallback keeps none of this window's.
 	if (best) return { markdown: renderLedger(best.d, allUsers, best.warnings), status: "accepted-with-warnings", attempts };
 	const reason = attempts.at(-1)?.error ?? "deadline reached before the first attempt";
-	return { markdown: fallbackLedger(input.log, allUsers, reason, input.previousLedger), status: "fallback", attempts };
+	return { markdown: fallbackLedger(input.log, allUsers, reason, input.fallbackPreviousLedger ?? input.previousLedger), status: "fallback", attempts };
 }
 
 // ─── Model runner: headless Codex ───────────────────────────────────────────

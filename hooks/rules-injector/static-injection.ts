@@ -131,7 +131,15 @@ function runPostCompactRecovery(input: PostCompactRecoveryInput): string {
 	const missingRules = filterRulesNotInTranscriptText(loaded.rules, transcriptText, (rule) => {
 		engine.markStaticInjected(rule);
 	});
-	const dynamicRulePaths = recoverDynamicRulePaths(engine, transcriptText, loaded.rules);
+	// Dynamic paths must not trust the whole-transcript fallback in readRecoveryTranscriptText:
+	// with no compaction record it contains pre-compaction rule blocks that compaction already
+	// evicted, so a latest-lazy rule would look present and never be re-offered. Judge them only
+	// from the latest compacted section; null (no compaction record) means "not present".
+	const dynamicTranscriptText =
+		input.transcriptPath === null
+			? null
+			: readTranscriptSearchText(input.transcriptPath, { latestCompactedReplacementOnly: true });
+	const dynamicRulePaths = recoverDynamicRulePaths(engine, dynamicTranscriptText, loaded.rules);
 
 	if (missingRules.length === 0 && dynamicRulePaths.length === 0) {
 		persistEngineState(engine, input.cachePath, input.channel);
@@ -151,7 +159,9 @@ function runPostCompactRecovery(input: PostCompactRecoveryInput): string {
 				});
 	const remainingForDirective = Math.max(0, effectiveConfig.maxResultChars - bodyBlock.length);
 	const { text: directive, emittedPaths }: PostCompactReadDirective = buildPostCompactReadDirective(
-		[...listedRules.map((rule) => rule.path), ...dynamicRulePaths],
+		// Dynamic paths go first: the latest lazy unit is a few paths with no re-offer path
+		// (its dedup keys stay set), while budget-dropped static paths stay pending and are re-offered.
+		[...dynamicRulePaths, ...listedRules.map((rule) => rule.path)],
 		remainingForDirective,
 	);
 	// Mark only rules actually delivered this turn. A listed rule whose path was dropped by
