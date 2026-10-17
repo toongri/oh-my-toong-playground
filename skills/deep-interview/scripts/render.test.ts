@@ -1,6 +1,7 @@
 import { execFileSync } from "child_process";
 import { describe, expect, test } from "bun:test";
 import { mmdcRenderSvg, normalizeSvgWidth, renderToHtml, slugify, zoomableFigure } from "./render";
+import { extractTitle, stripControlChars } from "./render";
 
 const MMDC_TEST_TIMEOUT_MS = 60_000;
 
@@ -500,5 +501,210 @@ describe("HTML 블록 바로 아래에 쓴 마크다운", () => {
 		const html = renderToHtml("# T\n\n<div>\n\tx\n<span>s</span>\n**b**\n</div>\n", "t");
 		expect(html).toContain("<strong>b</strong>");
 		expect(html).not.toContain("<pre>");
+	});
+});
+
+describe("잔여 결함 수정 — 목차·제목·변환 경계", () => {
+	const bodyOf = (md: string) => renderToHtml(md, "t");
+	const tocOf = (html: string) => html.match(/<nav class="toc"[\s\S]*?<\/nav>/)?.[0] ?? "";
+
+	test("제목의 링크는 본문에선 유지되고 목차 항목에선 안쪽 글자만 남는다 — <a> 안에 <a> 없음", () => {
+		const html = bodyOf("# T\n\n## See [docs](https://x.y) now\n");
+		expect(html).toContain('<h2 id="see-docs-https-x-y-now">See <a href="https://x.y">docs</a> now</h2>');
+		expect(tocOf(html)).toContain('<a href="#see-docs-https-x-y-now">See docs now</a>');
+		expect(tocOf(html)).not.toMatch(/<a [^>]*>[^<]*<a /);
+	});
+
+	test("강조 안에 든 링크도 목차에서 풀린다", () => {
+		expect(tocOf(bodyOf("# T\n\n## **[a](u)** b\n"))).toContain('<a href="#a-u-b"><strong>a</strong> b</a>');
+	});
+
+	test("제목의 인라인 HTML 은 글자로 보인다 — 본문과 목차 모두", () => {
+		const html = bodyOf("# T\n\n## Promise<void> 반환\n\n### `abc` — fix: <details> 접힘\n");
+		expect(html).toContain("Promise&lt;void&gt; 반환</h2>");
+		expect(tocOf(html)).toContain("Promise&lt;void&gt; 반환</a>");
+		expect(html).toContain("<code>abc</code> — fix: &lt;details&gt; 접힘</h3>");
+		expect(html).not.toContain("<details>");
+	});
+
+	test("제목의 코드·굵게·물결표 규칙은 그대로 동작한다", () => {
+		const html = bodyOf("# T\n\n## `x` **b** 1~3 와 4~6\n");
+		expect(html).toContain("<code>x</code> <strong>b</strong> 1~3 와 4~6</h2>");
+	});
+
+	test("제목 id 는 문서 전체에서 유일하다 — A, A, A-2 → a, a-2, a-2-2", () => {
+		const html = bodyOf("# T\n\n## A\n\n## A\n\n## A-2\n");
+		expect([...html.matchAll(/<h2 id="([^"]+)"/g)].map((m) => m[1])).toEqual(["a", "a-2", "a-2-2"]);
+	});
+
+	test("A-2 가 먼저 와도 뒤의 A, A 가 충돌하지 않는다", () => {
+		const html = bodyOf("# T\n\n## A-2\n\n## A\n\n## A\n");
+		const ids = [...html.matchAll(/<h2 id="([^"]+)"/g)].map((m) => m[1]);
+		expect(ids).toEqual(["a-2", "a", "a-3"]);
+	});
+
+	test("다이어그램 id(dz-N, mmd-N)는 예약되어 제목이 가져가지 않는다", () => {
+		const html = bodyOf("# T\n\n## dz-0\n\n## mmd-12\n");
+		expect([...html.matchAll(/<h2 id="([^"]+)"/g)].map((m) => m[1])).toEqual(["dz-0-2", "mmd-12-2"]);
+	});
+
+	test("h2/h3 가 없으면 목차 상자를 내지 않는다", () => {
+		const html = bodyOf("# T\n\n본문만 있다.\n");
+		expect(html).not.toContain('class="toc"');
+		expect(html).not.toContain("<ul></ul>");
+	});
+
+	test("frontmatter 는 맨 앞에서만 걷어낸다 — <hr>·setext h2·목차 항목이 생기지 않는다", () => {
+		const html = bodyOf("---\ntitle: x\ntags: [a]\n---\n# T\n\n## S\n");
+		expect(html).not.toContain("<hr");
+		expect(html).not.toContain("title: x");
+		expect([...html.matchAll(/<h2 id="([^"]+)"/g)].map((m) => m[1])).toEqual(["s"]);
+	});
+
+	test("문서 중간의 --- 와 닫히지 않은 맨 앞 --- 는 건드리지 않는다", () => {
+		expect(bodyOf("# T\n\n---\n\n## S\n")).toContain("<hr>");
+		expect(bodyOf("---\n# T\n\n## S\n")).toContain("<hr>");
+	});
+
+	test("빈 frontmatter 도 걷어낸다", () => {
+		expect(bodyOf("---\n---\n# T\n\n## S\n")).not.toContain("<hr");
+	});
+});
+
+describe("summary 처리 경계", () => {
+	test("raw 블록(script) 안의 <summary> 문자열은 바꾸지 않는다", () => {
+		const html = renderToHtml('<script>const e = "<summary>**b**</summary>";</script>\n', "t");
+		expect(html).toContain('"<summary>**b**</summary>"');
+	});
+
+	test("raw 블록(pre) 안의 <summary> 예시도 바꾸지 않는다", () => {
+		const html = renderToHtml("<pre>\n<summary>**b**</summary>\n</pre>\n", "t");
+		expect(html).toContain("<summary>**b**</summary>");
+	});
+
+	test("일반 <details><summary> 는 계속 인라인 마크다운으로 렌더한다", () => {
+		expect(renderToHtml("<details><summary>**b**</summary>\n</details>\n", "t")).toContain("<summary><strong>b</strong></summary>");
+	});
+
+	test("summary 안의 백슬래시로 끝나는 코드 스팬도 경고 대상이다", () => {
+		const md = "<details><summary>`sql\\`x\\` 처리</summary>\n</details>\n";
+		expect(findBackslashEndedCodeSpans(md).length).toBeGreaterThan(0);
+	});
+
+	test("summary 의 정상 코드 스팬과 raw 블록 안의 summary 는 경고하지 않는다", () => {
+		expect(findBackslashEndedCodeSpans("<details><summary>`ok` 처리</summary>\n</details>\n")).toEqual([]);
+		expect(findBackslashEndedCodeSpans("<script>x = '<summary>`a\\`</summary>';</script>\n")).toEqual([]);
+	});
+
+	test("경고에 찍는 원문에서 제어 문자를 지운다", () => {
+		expect(stripControlChars("`a\u001b[2J\u0007\r\\`")).toBe("`a[2J\\`");
+		expect(stripControlChars("줄\t바꿈\n유지")).toBe("줄\t바꿈\n유지");
+	});
+});
+
+describe("제목 추출 (extractTitle)", () => {
+	test("첫 h1 의 마크다운 문법을 벗긴 평문이다", () => {
+		expect(extractTitle("# `Foo` **bar** [x](u)\n", "fb")).toBe("Foo bar x");
+		expect(extractTitle("# Title #\n", "fb")).toBe("Title");
+	});
+
+	test("코드 펜스 안의 # 줄은 제목이 아니다", () => {
+		expect(extractTitle("```sh\n# 주석\n```\n\n# 진짜\n", "fb")).toBe("진짜");
+	});
+
+	test("h1 이 없으면 폴백(파일 이름)을 쓴다", () => {
+		expect(extractTitle("## 절만 있다\n", "my-doc")).toBe("my-doc");
+	});
+
+	test("frontmatter 안의 # 주석은 제목이 아니다", () => {
+		expect(extractTitle("---\n# note\n---\n# 실제\n", "fb")).toBe("실제");
+	});
+});
+
+describe("normalizeSvgWidth — 치환 문자열 해석 금지", () => {
+	test("루트 태그의 $& 와 $1 이 그대로 남는다", () => {
+		const svg = '<svg viewBox="0 0 100 50" data-x="$&$1" width="5"><g/></svg>';
+		expect(normalizeSvgWidth(svg)).toBe('<svg viewBox="0 0 100 50" data-x="$&$1" width="100"><g/></svg>');
+	});
+});
+
+describe("CSS — 긴 토큰과 다크 모드 배지", () => {
+	const html = renderToHtml("# T\n", "t");
+
+	test("제목·summary·표 셀은 긴 토큰을 어디서든 줄바꿈한다", () => {
+		expect(html).toMatch(/h1, h2, h3, h4, summary, th, td \{ overflow-wrap: anywhere; \}/);
+	});
+
+	test("다크 모드 변경 배지는 어두운 글자색을 쓰고 라이트 모드는 흰 글자 그대로다", () => {
+		expect(html).toMatch(/\.cf\[data-change\]::before \{[^}]*color: #fff;/);
+		expect(html).toMatch(/@media \(prefers-color-scheme: dark\) \{\s*\.cf\[data-change\]::before, \.arch-entity\[data-change\]::before \{ color: #16181c; \}/);
+	});
+});
+
+describe("preRenderMermaid — 줄 단위 펜스 스캔", () => {
+	const fake = (src: string, i: number) => `<svg data-i="${i}">${src.trim().replace(/\n/g, "|")}</svg>`;
+	const run = (md: string) => preRenderMermaid(md, fake);
+
+	test("틸드 펜스, info 문자열, 공백, 대소문자 변형을 모두 인식한다", () => {
+		for (const open of ["~~~mermaid", '```mermaid title="x"', "``` mermaid", "```Mermaid", "````mermaid"]) {
+			const close = open.startsWith("~") ? "~~~" : open.startsWith("````") ? "````" : "```";
+			const out = run(`앞\n${open}\ngraph TD\nA-->B\n${close}\n뒤\n`);
+			expect(out).toContain('data-i="0"');
+			expect(out).toContain("graph TD|A-->B");
+			expect(out).not.toContain("mermaid");
+		}
+	});
+
+	test("같은 문자이고 같거나 긴 펜스로만 닫힌다 — 짧은 펜스 줄은 소스에 남는다", () => {
+		const out = run("````mermaid\ngraph TD\n```\nA-->B\n````\n");
+		expect(out).toContain("graph TD|```|A-->B");
+	});
+
+	test("CRLF 와 CR 줄바꿈도 인식하고 LF 로 정규화한다", () => {
+		const out = run("```mermaid\r\ngraph TD\r\n```\r\n끝\r");
+		expect(out).toContain('data-i="0"');
+		expect(out).not.toContain("\r");
+	});
+
+	test("다른 펜스 코드 블록 안에 중첩된 mermaid 펜스는 코드로 남는다", () => {
+		const md = "````md\n```mermaid\ngraph TD\n```\n````\n";
+		expect(run(md)).toBe(md);
+	});
+
+	test("닫히지 않은 펜스 안의 mermaid 는 코드로 남는다", () => {
+		const md = "```js\n```mermaid\ngraph TD\n";
+		expect(run(md)).toBe(md);
+		const md2 = "```mermaid\ngraph TD\n";
+		expect(run(md2)).toBe(md2);
+	});
+
+	test("인용문 줄의 mermaid 펜스는 건드리지 않는다 — '> ' 가 소스로 새지 않는다", () => {
+		const md = "> ```mermaid\n> graph TD\n> ```\n";
+		expect(run(md)).toBe(md);
+	});
+
+	test("목록 안 펜스는 들여쓰기만큼 소스를 내어쓰고 그림 앞에 같은 들여쓰기를 남긴다", () => {
+		const seen: string[] = [];
+		const out = preRenderMermaid("- 항목\n\n  ```mermaid\n  graph TD\n    A-->B\n  ```\n", (s, i) => {
+			seen.push(s);
+			return fake(s, i);
+		});
+		expect(seen).toEqual(["graph TD\n  A-->B\n"]);
+		expect(out).toContain('\n  <figure class="diagram">');
+		expect(renderToHtml(out, "t")).toMatch(/<li>[\s\S]*<figure class="diagram">[\s\S]*<\/li>/);
+	});
+
+	test("그림 번호는 실제로 치환한 다이어그램만 센다", () => {
+		const out = run("````md\n```mermaid\nx\n```\n````\n\n```mermaid\ngraph TD\n```\n");
+		expect(out).toContain('data-i="0"');
+		expect(out).not.toContain('data-i="1"');
+	});
+
+	test("렌더 실패 메시지 형식은 그대로다", () => {
+		expect(() =>
+			preRenderMermaid("```mermaid\nbad\n```\n", () => {
+				throw new Error("boom");
+			}),
+		).toThrow(/^1번째 mermaid 블록 렌더 실패: Error: boom\n--- 블록 원문 ---\nbad\n$/);
 	});
 });
