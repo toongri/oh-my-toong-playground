@@ -1396,7 +1396,15 @@ test("A4: dynamic recovery does NOT re-inject a rule whose frontmatter-stripped 
 	// and open tag match → rule present → NOT re-injected. Under the bug (raw needle
 	// with frontmatter) the body include() misses → rule re-injected.
 	const transcriptPath = join(projectRoot, "transcript-a4.txt");
-	writeFileSync(transcriptPath, `<rules name="dynamic">\n${dynamicRuleBody}\n</rules>\n`);
+	// Dynamic presence is judged only after a compaction record, so the block follows one.
+	const compactedRecord = JSON.stringify({
+		type: "compacted",
+		payload: { replacement_history: [{ text: "summary" }] },
+	});
+	writeFileSync(
+		transcriptPath,
+		`${compactedRecord}\n<rules name="dynamic">\n${dynamicRuleBody}\n</rules>\n`,
+	);
 
 	const recovery = runHook(
 		"session-start",
@@ -1663,4 +1671,77 @@ test("압축 뒤 무관한 도구 호출이 한 번 지나가도 예전 lazy 규
 		env,
 	);
 	expect(additionalContext(touchedAgain.stdout)).toContain("OLDER LAZY TS RULE BODY");
+});
+
+// ===========================================================================
+// 압축 복구 지시: 최근 lazy 묶음 우선순위와 존재 판정 범위
+// ===========================================================================
+
+/** 최근 lazy 묶음이 가리키는 규칙 하나와 static 규칙들이 있는 프로젝트를 만들고 복구 상태를 심는다. */
+function seedDynamicRecoveryProject(
+	sessionId: string,
+	staticRuleNames: string[],
+): { projectRoot: string; dynamicRulePath: string; staticRulePaths: string[]; dynamicRuleBody: string } {
+	const hermDataRoot = join(tempHome, ".omt", "rules-injector");
+	const projectRoot = makeScratchDir("recovery-order-");
+	writeFileSync(join(projectRoot, "package.json"), "{}\n");
+	const rulesDir = join(projectRoot, ".codex", "rules");
+	mkdirSync(rulesDir, { recursive: true });
+	const staticRulePaths = staticRuleNames.map((name) => {
+		const path = join(rulesDir, name);
+		writeFileSync(path, `---\nalwaysApply: true\n---\nSTATIC BODY ${name}\n`);
+		return path;
+	});
+	const dynamicRulePath = join(rulesDir, "zz-dynamic.md");
+	const dynamicRuleBody = "LATEST-LAZY-BODY: instructions for markdown files.";
+	writeFileSync(dynamicRulePath, `---\nglobs: "**/*.md"\n---\n${dynamicRuleBody}\n`);
+	mkdirSync(hermDataRoot, { recursive: true });
+	writeFileSync(
+		join(hermDataRoot, `${sessionId}.json`),
+		JSON.stringify({
+			version: 1,
+			staticDedup: [],
+			dynamicDedup: { "__pi-rules-session__": [`${dynamicRulePath}::deadbeef`] },
+			latestDynamicInjectionKeys: [`${dynamicRulePath}::deadbeef`],
+			postCompactPending: { static: true, dynamic: true },
+		}) + "\n",
+	);
+	return { projectRoot, dynamicRulePath, staticRulePaths, dynamicRuleBody };
+}
+
+test("복구 지시 예산이 모자라면 static 경로가 먼저 빠지고 최근 lazy 규칙 경로는 남는다", () => {
+	const sessionId = "recovery-order-budget-session";
+	const { projectRoot, dynamicRulePath, staticRulePaths } = seedDynamicRecoveryProject(sessionId, [
+		"a-static.md",
+		"b-static.md",
+		"c-static.md",
+	]);
+
+	const recovery = runHook("session-start", sessionStartPayload(sessionId, projectRoot), {
+		PLUGIN_DATA: join(tempHome, ".omt", "rules-injector"),
+		CODEX_RULES_POST_COMPACT_MAX_RESULT_CHARS: "450",
+	});
+	expect(recovery.status).toBe(0);
+	const recovered = additionalContext(recovery.stdout);
+	expect(recovered).toContain(dynamicRulePath);
+	// 예산이 모든 경로를 담지 못했다는 전제: static 경로 중 하나 이상이 빠졌다.
+	expect(staticRulePaths.some((path) => !recovered.includes(path))).toBe(true);
+});
+
+test("압축 기록이 없는 transcript에 규칙 블록이 있어도 최근 lazy 규칙 경로를 복구 지시에 넣는다", () => {
+	const sessionId = "recovery-no-compaction-record-session";
+	const { projectRoot, dynamicRulePath, dynamicRuleBody } = seedDynamicRecoveryProject(sessionId, [
+		"a-static.md",
+	]);
+	// 압축 전 규칙 블록(마커+본문)만 있고 compacted 기록은 없다.
+	const transcriptPath = join(projectRoot, "transcript-no-compaction.txt");
+	writeFileSync(transcriptPath, `<rules name="zz-dynamic">\n${dynamicRuleBody}\n</rules>\n`);
+
+	const recovery = runHook(
+		"session-start",
+		sessionStartPayload(sessionId, projectRoot, { transcript_path: transcriptPath }),
+		{ PLUGIN_DATA: join(tempHome, ".omt", "rules-injector") },
+	);
+	expect(recovery.status).toBe(0);
+	expect(additionalContext(recovery.stdout)).toContain(dynamicRulePath);
 });
