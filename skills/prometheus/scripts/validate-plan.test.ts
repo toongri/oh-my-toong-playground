@@ -641,6 +641,8 @@ describe("Boundary Map 트리거", () => {
 			"The D-items say Must NOT own is required",
 			"Each item declares what it Must NOT own.",
 			"Must NOT owner list is below",
+			"Must NOT own is discussed here",
+			"- Must NOT own lists are optional",
 		]) {
 			expect(validateBoundaryMap(`## ADR\n\n${line}\n`)).toEqual([]);
 		}

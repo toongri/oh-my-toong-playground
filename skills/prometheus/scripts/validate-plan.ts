@@ -441,7 +441,7 @@ export function validatePlanGraph(content: string): string[] {
  * (c) a bold `**Must NOT own.**` / `**Must NOT own:**` anywhere in a line.
  */
 const MUST_NOT_OWN_LABEL: RegExp[] = [
-	/^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?(?:\*\*)?Must NOT own(?:[:.*\s]|$)/im,
+	/^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?(?:\*\*)?Must NOT own(?:[:.*]|[ \t]*$)/im,
 	/Must NOT own(?:\*\*)?[ \t]*:/i,
 	/\*\*Must NOT own[.:]\*\*/i,
 ];
