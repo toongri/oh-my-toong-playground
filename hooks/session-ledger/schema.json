@@ -7,7 +7,6 @@
   "current_work",
   "next_steps",
   "working_rules",
-  "approved_proposals",
   "decisions",
   "rejected",
   "unverified_results",
@@ -37,28 +36,7 @@
   "next_steps": {
    "type": "array",
    "items": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": [
-     "step",
-     "authorized_by",
-     "authorization_quote",
-     "needs_user_confirmation"
-    ],
-    "properties": {
-     "step": {
-      "type": "string"
-     },
-     "authorized_by": {
-      "type": "string"
-     },
-     "authorization_quote": {
-      "type": "string"
-     },
-     "needs_user_confirmation": {
-      "type": "boolean"
-     }
-    }
+    "type": "string"
    }
   },
   "working_rules": {
@@ -80,54 +58,6 @@
     }
    }
   },
-  "approved_proposals": {
-   "type": "array",
-   "items": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": [
-     "proposal_id",
-     "approved_by",
-     "approval_quote",
-     "approved_scope",
-     "excluded_or_changed",
-     "done",
-     "remaining"
-    ],
-    "properties": {
-     "proposal_id": {
-      "type": "string"
-     },
-     "approved_by": {
-      "type": "string"
-     },
-     "approval_quote": {
-      "type": "string"
-     },
-     "approved_scope": {
-      "type": "string"
-     },
-     "excluded_or_changed": {
-      "type": "array",
-      "items": {
-       "type": "string"
-      }
-     },
-     "done": {
-      "type": "array",
-      "items": {
-       "type": "string"
-      }
-     },
-     "remaining": {
-      "type": "array",
-      "items": {
-       "type": "string"
-      }
-     }
-    }
-   }
-  },
   "decisions": {
    "type": "array",
    "items": {
@@ -136,8 +66,8 @@
     "required": [
      "decision",
      "rationale",
-     "decided_by",
-     "user_quote"
+     "made_by",
+     "source"
     ],
     "properties": {
      "decision": {
@@ -146,10 +76,15 @@
      "rationale": {
       "type": "string"
      },
-     "decided_by": {
-      "type": "string"
+     "made_by": {
+      "type": "string",
+      "enum": [
+       "user",
+       "agent",
+       "agreed"
+      ]
      },
-     "user_quote": {
+     "source": {
       "type": "string"
      }
     }
@@ -190,23 +125,7 @@
      "recommendations": {
       "type": "array",
       "items": {
-       "type": "object",
-       "additionalProperties": false,
-       "required": [
-        "recommendation",
-        "related_settled_items"
-       ],
-       "properties": {
-        "recommendation": {
-         "type": "string"
-        },
-        "related_settled_items": {
-         "type": "array",
-         "items": {
-          "type": "string"
-         }
-        }
-       }
+       "type": "string"
       }
      }
     }

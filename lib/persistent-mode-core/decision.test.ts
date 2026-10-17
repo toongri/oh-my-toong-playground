@@ -2117,7 +2117,7 @@ describe("makeDecision", () => {
 			const currentSid = "heartbeat-fresh-caller";
 			const walkedAwayPath = join(omtDir, `goal-state-${walkedAwaySid}.json`);
 			const controlPath = join(omtDir, `goal-state-${controlSid}.json`);
-			const old = isoAgo(7 * 3600);
+			const old = isoAgo(8 * 24 * 3600);
 			const pursuingState = {
 				active: true,
 				phase: "pursuing",
@@ -2128,7 +2128,7 @@ describe("makeDecision", () => {
 				last_touched_at: old,
 			};
 			await writeFile(walkedAwayPath, JSON.stringify(pursuingState));
-			ageFile(walkedAwayPath, 7 * 3600);
+			ageFile(walkedAwayPath, 8 * 24 * 3600);
 			// Control: an identical legacy state is inert to its own Stop call, without
 			// touching (or aging) the walked-away fixture the GC step below depends on.
 			await writeFile(controlPath, JSON.stringify(pursuingState));
@@ -2160,10 +2160,10 @@ describe("makeDecision", () => {
 			expect(afterGc).toEqual({ continue: true });
 		});
 
-		it("does not revive a 7-hour-old pristine state — the heartbeat skips it, and it is still collected afterward", async () => {
+		it("does not revive a pristine state idle past retention — the heartbeat skips it, and it is still collected afterward", async () => {
 			const sid = "heartbeat-pristine-seed";
 			const statePath = join(omtDir, `ultragoal-state-${sid}.json`);
-			const old = isoAgo(7 * 3600);
+			const old = isoAgo(8 * 24 * 3600);
 			await writeFile(
 				statePath,
 				JSON.stringify({
@@ -2176,7 +2176,7 @@ describe("makeDecision", () => {
 					last_touched_at: old,
 				}),
 			);
-			ageFile(statePath, 7 * 3600);
+			ageFile(statePath, 8 * 24 * 3600);
 
 			makeDecision(
 				createContext({

@@ -43,11 +43,22 @@ interface SerializedSessionState {
 	version?: number;
 	staticDedup: string[];
 	dynamicDedup: Record<string, string[]>;
+	latestDynamicInjectionKeys?: string[];
 	postCompactPending?: PostCompactPendingState;
 	postCompactRecovering?: PostCompactPendingState;
 	recoveryLease?: RecoveryLeaseRecord;
 	compacted?: boolean;
 }
+
+// What an engine read from the session file, so persistEngineState can write back only what
+// the run added. A hook run only adds dedup marks; writing its whole snapshot back would undo a
+// compaction's pruning or drop another run's marks made between this run's read and write.
+interface HydratedState {
+	staticDedup: ReadonlySet<string>;
+	dynamicDedup: ReadonlyMap<string, ReadonlySet<string>>;
+	latestDynamicInjectionKeys: readonly string[];
+}
+const hydratedStates = new WeakMap<Engine, HydratedState>();
 
 export function hydrateEngineState(engine: Engine, cachePath: string): void {
 	const state = readSessionState(cachePath);
@@ -60,6 +71,21 @@ export function hydrateEngineState(engine: Engine, cachePath: string): void {
 	for (const [scope, keys] of Object.entries(state.dynamicDedup)) {
 		engine.state.dynamicDedup.set(scope, new Set(keys));
 	}
+	engine.state.latestDynamicInjectionKeys = [...(state.latestDynamicInjectionKeys ?? [])];
+	hydratedStates.set(engine, {
+		staticDedup: new Set(state.staticDedup),
+		dynamicDedup: new Map(Object.entries(state.dynamicDedup).map(([scope, keys]) => [scope, new Set(keys)])),
+		// Same array the engine holds: the run replaces it only when it injects a new lazy unit.
+		latestDynamicInjectionKeys: engine.state.latestDynamicInjectionKeys,
+	});
+}
+
+function addedSince(current: readonly string[], keys: Iterable<string>, hydrated?: ReadonlySet<string>): string[] {
+	const merged = new Set(current);
+	for (const key of keys) {
+		if (!hydrated?.has(key)) merged.add(key);
+	}
+	return [...merged];
 }
 
 export function persistEngineState(
@@ -72,18 +98,25 @@ export function persistEngineState(
 	// read-then-write here loses cross-event updates in BOTH directions (a dropped
 	// postCompactPending recovery marker AND a dropped dynamic dedup key). Atomic
 	// temp-rename would only prevent torn writes, not lost updates — only the lock does.
+	// The merge below keeps the marks the file gained after this engine hydrated.
+	const hydrated = hydratedStates.get(engine);
 	updateSessionState(cachePath, (currentState) => {
-		const dynamicDedup: Record<string, string[]> = {};
+		const dynamicDedup: Record<string, string[]> = { ...currentState.dynamicDedup };
 		for (const [scope, keys] of engine.state.dynamicDedup.entries()) {
-			dynamicDedup[scope] = [...keys];
+			dynamicDedup[scope] = addedSince(currentState.dynamicDedup[scope] ?? [], keys, hydrated?.dynamicDedup.get(scope));
 		}
 
 		const postCompactPending = nextPostCompactPending(currentState, completedPostCompactKind);
 		const postCompactRecovering = nextPostCompactRecovering(currentState, completedPostCompactKind);
 		const recoveryLease = nextRecoveryLease(currentState, completedPostCompactKind);
+		const latestDynamicInjectionKeys =
+			engine.state.latestDynamicInjectionKeys === hydrated?.latestDynamicInjectionKeys
+				? (currentState.latestDynamicInjectionKeys ?? [])
+				: engine.state.latestDynamicInjectionKeys;
 		return {
-			staticDedup: [...engine.state.staticDedup],
+			staticDedup: addedSince(currentState.staticDedup, engine.state.staticDedup, hydrated?.staticDedup),
 			dynamicDedup,
+			...(latestDynamicInjectionKeys.length === 0 ? {} : { latestDynamicInjectionKeys }),
 			...(postCompactPending === undefined ? {} : { postCompactPending }),
 			...(postCompactRecovering === undefined ? {} : { postCompactRecovering }),
 			...(recoveryLease === undefined ? {} : { recoveryLease }),
@@ -101,14 +134,24 @@ export function clearSessionState(cachePath: string): void {
 export function markSessionCompacted(cachePath: string): void {
 	// #7: same locked read-modify-write as persistEngineState — preserves a concurrent
 	// PostToolUse's dynamicDedup writes instead of clobbering them.
-	updateSessionState(cachePath, (state) => ({
+	updateSessionState(cachePath, (state) => {
 		// Compaction drops injected static rule bodies, so pre-compaction static
 		// dedup marks must not suppress the post-compact recovery directive.
-		// Dynamic dedup survives: those rules are recovered as read-directive paths.
-		staticDedup: [],
-		dynamicDedup: state.dynamicDedup,
-		postCompactPending: { static: true, dynamic: true },
-	}));
+		// Dynamic dedup keeps only the most recent lazy unit, which recovery lists as
+		// read-directive paths; every older lazy rule leaves dedup so it is injected
+		// again the next time a matching file is touched.
+		const latest = new Set(state.latestDynamicInjectionKeys ?? []);
+		const dynamicDedup: Record<string, string[]> = {};
+		for (const [scope, keys] of Object.entries(state.dynamicDedup)) {
+			dynamicDedup[scope] = keys.filter((key) => latest.has(key));
+		}
+		return {
+			staticDedup: [],
+			dynamicDedup,
+			...(latest.size === 0 ? {} : { latestDynamicInjectionKeys: [...latest] }),
+			postCompactPending: { static: true, dynamic: true },
+		};
+	});
 }
 
 // Locked read-modify-write over the shared session-state file. On the rare event of
@@ -410,6 +453,9 @@ function stateWithPostCompactKinds(
 	return {
 		staticDedup: state.staticDedup,
 		dynamicDedup: state.dynamicDedup,
+		...(state.latestDynamicInjectionKeys === undefined
+			? {}
+			: { latestDynamicInjectionKeys: state.latestDynamicInjectionKeys }),
 		...(postCompactPending === undefined ? {} : { postCompactPending }),
 		...(postCompactRecovering === undefined ? {} : { postCompactRecovering }),
 		...(recoveryLease === undefined ? {} : { recoveryLease }),
@@ -430,6 +476,7 @@ function isSerializedSessionState(value: unknown): value is SerializedSessionSta
 	}
 	const staticDedup = value["staticDedup"];
 	const dynamicDedup = value["dynamicDedup"];
+	const latestDynamicInjectionKeys = value["latestDynamicInjectionKeys"];
 	const postCompactPending = value["postCompactPending"];
 	const postCompactRecovering = value["postCompactRecovering"];
 	const recoveryLease = value["recoveryLease"];
@@ -439,6 +486,9 @@ function isSerializedSessionState(value: unknown): value is SerializedSessionSta
 		Object.values(dynamicDedup).every(
 			(item) => Array.isArray(item) && item.every((nestedItem) => typeof nestedItem === "string"),
 		) &&
+		(latestDynamicInjectionKeys === undefined ||
+			(Array.isArray(latestDynamicInjectionKeys) &&
+				latestDynamicInjectionKeys.every((item) => typeof item === "string"))) &&
 		(postCompactPending === undefined || isPostCompactPendingState(postCompactPending)) &&
 		(postCompactRecovering === undefined || isPostCompactPendingState(postCompactRecovering)) &&
 		(recoveryLease === undefined || isRecoveryLeaseRecord(recoveryLease)) &&

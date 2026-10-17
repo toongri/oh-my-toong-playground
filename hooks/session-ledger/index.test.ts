@@ -40,11 +40,8 @@ function ledgerJson(overrides: Partial<LedgerJson> = {}): LedgerJson {
 		analysis_checklist: ["U1 asked to fix the login bug"],
 		primary_request_and_intent: "Fix the login bug.",
 		current_work: "Editing `src/login.ts`.",
-		next_steps: [
-			{ step: "Run the tests", authorized_by: "U1", authorization_quote: "로그인 버그 고쳐줘", needs_user_confirmation: false },
-		],
+		next_steps: ["Run the tests"],
 		working_rules: [],
-		approved_proposals: [],
 		decisions: [],
 		rejected: [],
 		unverified_results: [],
@@ -72,6 +69,18 @@ describe("Claude 대화 기록 추출", () => {
 		const log = extractClaude(records, 3);
 		expect(log.users).toEqual([{ id: "U2", text: "두 번째 요청" }]);
 		expect(log.lines).toEqual(["[U2 user] 두 번째 요청"]);
+	});
+
+	test("창 밖의 질문 답변도 세어, 창만 읽은 추출과 전체 추출의 사용자 id가 같다", () => {
+		const records = [
+			user("첫 요청"),
+			assistant({ type: "tool_use", id: "ask1", name: "AskUserQuestion", input: { questions: [{ question: "A?" }] } }),
+			{ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "ask1", content: "A로 하자" }] } },
+			{ type: "system", subtype: "compact_boundary" },
+			user("다음 요청"),
+		];
+		expect(extractClaude(records, 4).users).toEqual([{ id: "U3", text: "다음 요청" }]);
+		expect(extractClaude(records).users.at(-1)).toEqual({ id: "U3", text: "다음 요청" });
 	});
 
 	test("스킬 본문은 meta 레코드로 와도 로그에 남고, 다른 meta 레코드는 버린다", () => {
@@ -172,17 +181,34 @@ describe("검증기", () => {
 		expect(isLedgerJson({ ...ledgerJson(), extra: [] })).toBe(false);
 		expect(isLedgerJson({ ...ledgerJson(), next_steps: [{ step: "x" }] })).toBe(false);
 	});
-	test("정상 출력은 위반이 없고, 끝 문장부호가 빠진 인용도 통과한다", () => {
+	test("정상 출력은 위반이 없다", () => {
 		expect(validateLedger(ledgerJson(), ctx())).toEqual([]);
 	});
 
-	test("인용한 사용자 메시지에 없는 인용은 원문을 보여 주며 거부한다", () => {
-		const d = ledgerJson({
-			decisions: [{ decision: "d", rationale: "r", decided_by: "U1", user_quote: "승인한다" }],
-		});
-		const [violation] = validateLedger(d, ctx());
-		expect(violation).toContain("not found in the cited user message");
-		expect(violation).toContain('U1 says: "로그인 버그 고쳐줘."');
+	test("결정은 누가 정했는지를 정해진 값으로 적고, 출처는 실제 사용자 메시지만 가리킨다", () => {
+		const decision = (made_by: string, source: string) => ({ decision: "Keep the cache", rationale: "faster", made_by, source });
+		expect(isLedgerJson(ledgerJson({ decisions: [decision("agreed", "A1, U1")] as LedgerJson["decisions"] }))).toBe(true);
+		expect(isLedgerJson({ ...ledgerJson(), decisions: [decision("someone", "U1")] })).toBe(false);
+		const stray = validateLedger(ledgerJson({ decisions: [decision("user", "U1, U7")] as LedgerJson["decisions"] }), ctx());
+		expect(stray).toEqual([expect.stringContaining('["U7"]')]);
+	});
+
+	test("사용자 몫으로 적은 결정은 그 결정을 내리거나 받아들인 사용자 메시지를 출처로 든다", () => {
+		const decision = (made_by: string, source: string) => ({ decision: "Keep the cache", rationale: "faster", made_by, source });
+		const check = (made_by: string, source: string) =>
+			validateLedger(ledgerJson({ decisions: [decision(made_by, source)] as LedgerJson["decisions"] }), ctx());
+		expect(check("user", "A3")).toEqual([expect.stringContaining('"Keep the cache"')]);
+		expect(check("agreed", "A1")).toEqual([expect.stringContaining('"Keep the cache"')]);
+		expect(check("agreed", "A1, U1")).toEqual([]);
+		expect(check("agent", "")).toEqual([]);
+	});
+
+	test("요약기 출력에는 승인·인용 필드가 없다", () => {
+		expect(isLedgerJson({ ...ledgerJson(), approved_proposals: [] })).toBe(false);
+		const step = { step: "Run the tests", authorized_by: "U1", authorization_quote: "고쳐줘", needs_user_confirmation: false };
+		expect(isLedgerJson({ ...ledgerJson(), next_steps: [step] })).toBe(false);
+		const decision = { decision: "d", rationale: "r", decided_by: "U1", user_quote: "고쳐줘" };
+		expect(isLedgerJson({ ...ledgerJson(), decisions: [decision] })).toBe(false);
 	});
 
 	test("로그에 없는 식별자는 거부하고, 로그의 디렉터리와 파일명을 합친 경로는 허용한다", () => {
@@ -199,6 +225,14 @@ describe("검증기", () => {
 		expect(prose("A partial-rerun/child-process check, then a script-decided step.")).toEqual([]);
 	});
 
+	test("로그의 단어와 숫자를 공백 없이 붙인 표현은 오타로 보지 않고, 번호가 바뀐 식별자는 거부한다", () => {
+		const source = "use-case 4/4, 100% coverage; Mobile HTTP 200 offsets 0/100; adb -s emulator-5556 shell";
+		const prose = (text: string) => unknownIdentifiers(ledgerJson({ current_work: text }), source);
+		expect(prose("use-case4/4 with100% coverage; HTTP200 offsets0/100.")).toEqual([]);
+		expect(unknownIdentifiers(ledgerJson({ current_work: "Set width0 and totalcount6." }), "style width: 0; totalCount: 6")).toEqual([]);
+		expect(prose("Drive emulator-5557 next.")).toEqual(["emulator-5557"]);
+	});
+
 	test("로그에 없는 문자 체계가 섞여 깨진 경로는 거부하고, 한글 설명은 허용한다", () => {
 		const source = "cd /repo/기존-프로그램-문제/apps && cat slot-distribution.ts";
 		const text = (current_work: string) => unknownIdentifiers(ledgerJson({ current_work }), source);
@@ -208,18 +242,22 @@ describe("검증기", () => {
 		expect(text("다음으로 `/repo/기존-프로그램-문제/apps/slot-distribution.ts`를 수정한다.")).toEqual([]);
 	});
 
-	test("다음 단계는 승인을 단정하지 않고 인용한 사용자 문구를 보여준다", () => {
-		const markdown = renderLedger(ledgerJson(), [], new Map());
-		expect(markdown).toContain('1. Run the tests. Approval cited: U1 "로그인 버그 고쳐줘".');
-		expect(markdown).not.toContain("No further confirmation needed");
-	});
-
-	test("승인 근거 없이 확인 불필요로 표시한 다음 단계는 거부한다", () => {
-		const step = { step: "Run the deploy", authorized_by: "", authorization_quote: "", needs_user_confirmation: false };
-		const violations = validateLedger(ledgerJson({ next_steps: [step] }), ctx());
-		expect(violations.some((x) => x.includes("without authorized_by"))).toBe(true);
-		const asking = validateLedger(ledgerJson({ next_steps: [{ ...step, needs_user_confirmation: true }] }), ctx());
-		expect(asking.some((x) => x.includes("without authorized_by"))).toBe(false);
+	test("다음 단계는 확인 표시 없이 이어서 할 작업 순서로만 보여준다", () => {
+		const markdown = renderLedger(
+			ledgerJson({
+				next_steps: ["Run the tests", "Push the branch"],
+				decisions: [
+					{ decision: "Keep the cache", rationale: "a cold start costs 4 s", made_by: "user", source: "U3" },
+					{ decision: "Retry twice", rationale: "the API drops one call in 50", made_by: "agent", source: "" },
+				],
+				unverified_results: [{ source: "code-reviewer", recommendations: ["Rename the flag"] }],
+			}),
+			[],
+		);
+		expect(markdown).toContain("## 3. Next steps\n1. Run the tests\n2. Push the branch\n");
+		expect(markdown).toContain("- Keep the cache — a cold start costs 4 s (user's decision: U3)\n- Retry twice — the API drops one call in 50 (agent's decision)\n");
+		expect(markdown).toContain("## Results the agent had not acted on yet\n- **code-reviewer**\n  - Rename the flag\n");
+		expect(markdown).not.toMatch(/approv|ask the user|confirm/i);
 	});
 
 	test("깨진 경로 구간은 로그의 가장 가까운 구간으로 복원한다", () => {
@@ -235,25 +273,6 @@ describe("검증기", () => {
 		// A translated segment is too far to respell, but its neighbors in the log's paths still place it.
 		const translated = repairForeignLetters(ledgerJson({ current_work: "Open `/repo/կ_existing-프로그램-문제/apps`." }), source);
 		expect(translated.current_work).toBe("Open `/repo/기존-프로그램-문제/apps`.");
-	});
-
-	test("존재하지 않는 U-id와 제안 id를 거부한다", () => {
-		const d = ledgerJson({
-			approved_proposals: [
-				{
-					proposal_id: "A9",
-					approved_by: "U7",
-					approval_quote: "좋아",
-					approved_scope: "all",
-					excluded_or_changed: [],
-					done: [],
-					remaining: ["x"],
-				},
-			],
-		});
-		const violations = validateLedger(d, ctx()).join("\n");
-		expect(violations).toContain('unknown assistant ids ["A9"]');
-		expect(violations).toContain('unknown user-message ids ["U7"]');
 	});
 });
 
@@ -286,7 +305,71 @@ describe("재시도와 대체 경로", () => {
 		expect(result.markdown).toContain("## All user messages (verbatim)\n- [U1] 로그인 버그 고쳐줘.");
 	});
 
-	test("모든 시도가 예산만 넘으면 가장 작은 시도를 채택한다", async () => {
+	test("지켜야 할 규칙에는 사용자 발언과 불러온 스킬에서 온 항목만 남고, 규칙 파일 요약은 빠진다", async () => {
+		const result = await writeLedger({
+			log: { ...log, lines: [...log.lines, "[skill qa] QA never edits product code"] },
+			previousLedger: "## Working rules (still in force)\n- Commits go through the commit subagent (sisyphus)\n- Old rule summary (AGENTS.md)\n",
+			runModel: async () => ({
+				output: ledgerJson({
+					working_rules: [
+						{ rule: "Reply in Korean", source: "U1" },
+						{ rule: "QA never edits product code", source: "qa" },
+						{ rule: "Commits go through the commit subagent", source: "sisyphus" },
+						{ rule: "Write the failing test first", source: "tdd.md" },
+						{ rule: "Never coin opaque labels", source: ".claude/rules/communication-style.md" },
+						{ rule: "Old rule summary", source: "AGENTS.md" },
+						{ rule: "Cites a message that does not exist", source: "U9" },
+					],
+				}),
+			}),
+			deadline: Date.now() + 60_000,
+		});
+		expect(result.status).toBe("accepted");
+		expect(result.markdown).toContain(
+			"## Working rules (still in force)\n- Reply in Korean (U1)\n- QA never edits product code (qa)\n- Commits go through the commit subagent (sisyphus)\n\n",
+		);
+	});
+
+	test("이전 ledger가 스킬을 파일 경로로 적었어도 그 스킬의 규칙은 남는다", async () => {
+		const result = await writeLedger({
+			log,
+			previousLedger:
+				"## Working rules (still in force)\n- QA owns dynamic verification (/Users/me/.agents/skills/qa/SKILL.md)\n- Red then green (/Users/me/.codex/rules/tdd.md)\n",
+			runModel: async () => ({
+				output: ledgerJson({
+					working_rules: [
+						{ rule: "QA owns dynamic verification", source: "qa" },
+						{ rule: "Saved case needs a clean replay", source: "/Users/me/.agents/skills/qa/reusable-cases.md" },
+						{ rule: "Red then green", source: "/Users/me/.codex/rules/tdd.md" },
+					],
+				}),
+			}),
+			deadline: Date.now() + 60_000,
+		});
+		expect(result.markdown).toContain(
+			"## Working rules (still in force)\n- QA owns dynamic verification (qa)\n- Saved case needs a clean replay (/Users/me/.agents/skills/qa/reusable-cases.md)\n\n",
+		);
+	});
+
+	test("스킬 디렉터리 경로를 출처로 든 규칙은 그 스킬을 불러왔을 때만 남는다", async () => {
+		const result = await writeLedger({
+			log: { ...log, lines: [...log.lines, "[skill qa] QA never edits product code"] },
+			runModel: async () => ({
+				output: ledgerJson({
+					working_rules: [
+						{ rule: "Saved case needs a clean replay", source: "/Users/me/.agents/skills/qa/reusable-cases.md" },
+						{ rule: "A rule from a skill never loaded", source: "/tmp/skills/unloaded/note.md" },
+					],
+				}),
+			}),
+			deadline: Date.now() + 60_000,
+		});
+		expect(result.markdown).toContain(
+			"## Working rules (still in force)\n- Saved case needs a clean replay (/Users/me/.agents/skills/qa/reusable-cases.md)\n\n",
+		);
+	});
+
+	test("예산만 넘은 시도는 재시도 없이 바로 채택한다", async () => {
 		const sizes = [3000, 2000, 2500];
 		const result = await writeLedger({
 			log,
@@ -295,34 +378,90 @@ describe("재시도와 대체 경로", () => {
 			deadline: Date.now() + 60_000,
 		});
 		expect(result.status).toBe("accepted-over-budget");
-		expect(result.markdown).toContain(`- ${"x".repeat(2000)}\n`);
+		expect(result.attempts).toHaveLength(1);
+		expect(result.markdown).toContain(`- ${"x".repeat(3000)}\n`);
 	});
 
-	test("요약기를 실행할 수 없으면 결정론적 최소 ledger를 쓴다", async () => {
+	test("다른 위반으로 재시도한 뒤 예산만 넘은 시도는 그대로 채택한다", async () => {
+		const outputs: ModelResult[] = [
+			{ output: ledgerJson({ current_work: "Editing `src/logn.ts`." }) },
+			{ output: ledgerJson({ pending: ["x".repeat(3000)] }) },
+		];
 		const result = await writeLedger({
 			log,
-			runModel: async () => ({ error: "codex not runnable" }),
+			budget: 100,
+			runModel: async () => outputs.shift() as ModelResult,
+			deadline: Date.now() + 60_000,
+		});
+		expect(result.status).toBe("accepted-over-budget");
+		expect(result.attempts).toHaveLength(2);
+	});
+
+	test("어떤 시도도 검증을 통과하지 못하면 문제가 가장 적은 시도를 채택하고 확인 못 한 점을 적는다", async () => {
+		const outputs: ModelResult[] = [
+			{ output: ledgerJson({ current_work: "Editing `src/logn.ts` and `src/lgin.ts`." }) },
+			{ output: ledgerJson({ current_work: "Editing `src/logn.ts`.", decisions: [{ decision: "Keep the cache", rationale: "faster", made_by: "user", source: "U1" }] }) },
+		];
+		const result = await writeLedger({
+			log,
+			runModel: async () => outputs.shift() ?? { error: "codex exited 1" },
+			deadline: Date.now() + 60_000,
+			retryDelayMs: 0,
+		});
+		expect(result.status).toBe("accepted-with-warnings");
+		expect(result.markdown).toContain("- Keep the cache — faster (user's decision: U1)");
+		expect(result.markdown).toContain("## Unverified points\n");
+		expect(result.markdown).toContain("src/logn.ts");
+		expect(result.markdown).toContain("## All user messages (verbatim)\n- [U1] 로그인 버그 고쳐줘.");
+	});
+
+	test("출력 없이 끝난 호출은 같은 모델로 한 번 다시 부르고, 그래도 없으면 대체 모델로 넘어가 그 뒤 시도도 대체 모델로 한다", async () => {
+		const calls: string[] = [];
+		const codex = async (): Promise<ModelResult> => (calls.push("codex"), { error: "codex exited 1", model: "codex" });
+		const claudeOutputs: ModelResult[] = [
+			{ error: "claude exited 1", model: "claude" },
+			{ output: ledgerJson({ current_work: "Editing `src/logn.ts`." }), model: "claude" },
+			{ output: ledgerJson(), model: "claude" },
+		];
+		const claude = async (): Promise<ModelResult> => (calls.push("claude"), claudeOutputs.shift() as ModelResult);
+		const result = await writeLedger({ log, runModel: codex, fallbackModel: claude, deadline: Date.now() + 60_000, retryDelayMs: 0 });
+		expect(result.status).toBe("accepted");
+		expect(calls).toEqual(["codex", "codex", "claude", "claude", "claude"]);
+		expect(result.attempts.at(-1)?.model).toBe("claude");
+	});
+
+	test("대체 모델까지 다시 불러도 출력이 없으면 최소 ledger를 쓴다", async () => {
+		let calls = 0;
+		const down = async (): Promise<ModelResult> => (++calls, { error: "exited 1" });
+		const result = await writeLedger({ log, runModel: down, fallbackModel: down, deadline: Date.now() + 60_000, retryDelayMs: 0 });
+		expect(result.status).toBe("fallback");
+		expect(calls).toBe(4);
+	});
+
+	test("이전 ledger가 확인 못 한 식별자는 그 ledger에 적혀 있어도 확인된 것으로 보지 않는다", async () => {
+		const previousLedger =
+			'# Session ledger\n\n## 2. Current work\nEditing `src/logn.ts`.\n\n## Unverified points\nThe validator could not verify these against the transcript; check them before relying on them:\n- these code-formatted identifiers do not appear in the work log, so they are misspelled or invented: ["src/logn.ts"]. Copy identifiers exactly from the log or remove them\n\n## All user messages (verbatim)\n- [U1] 로그인 버그 고쳐줘.\n';
+		const outputs: ModelResult[] = [{ output: ledgerJson({ current_work: "Editing `src/logn.ts`." }) }, { output: ledgerJson() }];
+		const result = await writeLedger({ log, previousLedger, runModel: async () => outputs.shift() as ModelResult, deadline: Date.now() + 60_000 });
+		expect(result.status).toBe("accepted");
+		expect(result.attempts[0].violations).toEqual([expect.stringContaining("src/logn.ts")]);
+	});
+
+	test("요약기가 아무 출력도 못 내면 이전 ledger와 모든 사용자 메시지를 이어받는 최소 ledger를 쓴다", async () => {
+		const previousLedger =
+			"# Session ledger\n\n## Decisions\n- Keep the cache — faster (user's decision: U1)\n\n## All user messages (verbatim)\n- [U1] 로그인 버그 고쳐줘.\n- [U2] 캐시는 유지해\n";
+		const result = await writeLedger({
+			log: { ...log, users: [{ id: "U3", text: "이제 배포해" }] },
+			previousLedger,
+			runModel: async () => ({ error: "codex not runnable", permanent: true }),
 			deadline: Date.now() + 60_000,
 		});
 		expect(result.status).toBe("fallback");
+		expect(result.attempts).toHaveLength(1);
 		expect(result.markdown).toContain("codex not runnable");
 		expect(result.markdown).toContain("- `src/login.ts`");
-		expect(result.markdown).toContain("- [U1] 로그인 버그 고쳐줘.");
-	});
-
-	test("승인된 제안은 남은 작업이 있을 때만 원문을 부록으로 붙인다", () => {
-		const proposal = (remaining: string[]) => ({
-			proposal_id: "A1",
-			approved_by: "U1",
-			approval_quote: "고쳐줘",
-			approved_scope: "all",
-			excluded_or_changed: [],
-			done: [],
-			remaining,
-		});
-		const assistants = new Map([["A1", "1. 재시도 2. 캐시"]]);
-		expect(renderLedger(ledgerJson({ approved_proposals: [proposal(["2"])] }), [], assistants)).toContain("> 1. 재시도 2. 캐시");
-		expect(renderLedger(ledgerJson({ approved_proposals: [proposal([])] }), [], assistants)).not.toContain("Appendix");
+		expect(result.markdown).toContain("## Previous ledger (written at the previous compaction)\n## Decisions\n- Keep the cache");
+		expect(previousUsers(result.markdown).map((u) => u.id)).toEqual(["U1", "U2", "U3"]);
 	});
 
 	test("이전 ledger의 여러 줄 사용자 메시지를 이어받는다", () => {
@@ -364,6 +503,7 @@ describe("훅 진입점", () => {
 		expect(sessionStartContext("claude", { source: "startup", session_id: "s-2" }, home)).toBeNull();
 		const context = sessionStartContext("codex", { source: "compact", session_id: "s-2" }, home) as string;
 		expect(context).toContain(`read the whole ledger file with a file-read command, to its last line: ${path}`);
+		expect(context).not.toMatch(/approv|confirm/i);
 		expect(Buffer.byteLength(context)).toBeLessThan(6000);
 	});
 

@@ -316,10 +316,11 @@ test_ac9_started_at_parseable_by_stale_cleanup() {
 
     assert_file_exists "$state_file" "State file should exist after seed" || return 1
 
-    # Backdate started_at to 7 hours ago (well past ACTIVE_IDLE_TTL=6h) by rewriting the file.
+    # Backdate started_at to 8 days ago (past ACTIVE_STATE_RETENTION_TTL=7d, the delete-path
+    # threshold for an active file) by rewriting the file.
     # Remove last_touched_at so the GC falls back to started_at for age computation.
     local old_timestamp
-    old_timestamp=$(date -v-7H -Iseconds 2>/dev/null || date -d "7 hours ago" +"%Y-%m-%dT%H:%M:%S" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S" -d "-7 hours")
+    old_timestamp=$(date -v-8d -Iseconds 2>/dev/null || date -d "8 days ago" +"%Y-%m-%dT%H:%M:%S" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S" -d "-8 days")
     local tmp_file
     tmp_file=$(mktemp)
     jq --arg ts "$old_timestamp" '.started_at = $ts | del(.last_touched_at)' "$state_file" > "$tmp_file" && mv "$tmp_file" "$state_file"
@@ -331,7 +332,7 @@ test_ac9_started_at_parseable_by_stale_cleanup() {
     printf '{}' | bash "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1
 
     assert_file_not_exists "$state_file" \
-        "Stale-cleanup should delete state file with started_at >6h old (ACTIVE_IDLE_TTL)" || return 1
+        "Stale-cleanup should delete state file with started_at >7d old (ACTIVE_STATE_RETENTION_TTL)" || return 1
 }
 
 # =============================================================================

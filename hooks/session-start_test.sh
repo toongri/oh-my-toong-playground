@@ -512,9 +512,9 @@ EOF
 }
 
 test_session_start_stale_goal_state_purged() {
-    # Create a goal-state file with last_touched_at older than ACTIVE_IDLE_TTL (6h) — use 7h
+    # Create a goal-state file with last_touched_at older than ACTIVE_STATE_RETENTION_TTL (7d) — use 8 days
     local stale_ts
-    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    stale_ts=$(date -j -v-8d "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "8 days ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
 
     local stale_file="$TEST_OMT_DIR/goal-state-stale-session.json"
     cat > "$stale_file" << EOF
@@ -530,9 +530,9 @@ EOF
     # Run the hook (GC runs regardless of sessionId; stale-session != fresh-session)
     echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "fresh-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
 
-    # Stale goal-state file should be removed (age 7h > ACTIVE_IDLE_TTL 6h)
+    # Stale goal-state file should be removed (age 8 days > ACTIVE_STATE_RETENTION_TTL 7d)
     if [ -f "$stale_file" ]; then
-        echo "ASSERTION FAILED: stale goal-state file (7h heartbeat) should have been purged but still exists"
+        echo "ASSERTION FAILED: stale goal-state file (8-day heartbeat) should have been purged but still exists"
         return 1
     fi
     return 0
@@ -543,9 +543,9 @@ EOF
 # =============================================================================
 
 test_session_start_stale_deep_interview_with_started_at_purged() {
-    # AC: deep-interview with last_touched_at older than ACTIVE_IDLE_TTL (6h) is removed — use 7h
+    # AC: deep-interview with last_touched_at older than ACTIVE_STATE_RETENTION_TTL (7d) is removed — use 8 days
     local stale_ts
-    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    stale_ts=$(date -j -v-8d "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "8 days ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
 
     local stale_file="$TEST_OMT_DIR/deep-interview-active-state-stale-di.json"
     cat > "$stale_file" << EOF
@@ -559,26 +559,26 @@ EOF
     echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "fresh-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
 
     if [ -f "$stale_file" ]; then
-        echo "ASSERTION FAILED: stale deep-interview marker (7h heartbeat) should have been purged but still exists"
+        echo "ASSERTION FAILED: stale deep-interview marker (8-day heartbeat) should have been purged but still exists"
         return 1
     fi
     return 0
 }
 
 test_session_start_stale_deep_interview_no_started_at_purged_via_mtime() {
-    # AC: timestamp-less deep-interview marker with mtime older than ACTIVE_IDLE_TTL (6h) is removed — use 7h
+    # AC: timestamp-less deep-interview marker with mtime older than ACTIVE_STATE_RETENTION_TTL (7d) is removed — use 8 days
     local stale_file="$TEST_OMT_DIR/deep-interview-active-state-mtime-di.json"
     printf '{"active":true,"sessionId":"mtime-di"}' > "$stale_file"
 
-    # Set mtime to 7 hours ago (BSD: touch -t YYYYmmddHHMM; GNU: touch -d)
+    # Set mtime to 8 days ago (BSD: touch -t YYYYmmddHHMM; GNU: touch -d)
     local old_mtime
-    old_mtime=$(date -j -v-7H "+%Y%m%d%H%M" 2>/dev/null || date -d "7 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
-    touch -t "$old_mtime" "$stale_file" 2>/dev/null || touch -d "7 hours ago" "$stale_file" 2>/dev/null || true
+    old_mtime=$(date -j -v-8d "+%Y%m%d%H%M" 2>/dev/null || date -d "8 days ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
+    touch -t "$old_mtime" "$stale_file" 2>/dev/null || touch -d "8 days ago" "$stale_file" 2>/dev/null || true
 
     echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "fresh-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
 
     if [ -f "$stale_file" ]; then
-        echo "ASSERTION FAILED: timestamp-less deep-interview marker with 7h mtime should have been purged but still exists"
+        echo "ASSERTION FAILED: timestamp-less deep-interview marker with 8-day mtime should have been purged but still exists"
         return 1
     fi
     return 0
@@ -651,8 +651,9 @@ EOF
     return 0
 }
 
-# C3a: other-session active with 7h-old heartbeat is REAPED
-test_gc_other_session_active_7h_idle_reaped() {
+# C3a: other-session active with 7h-old heartbeat SURVIVES — past ACTIVE_IDLE_TTL but
+# within ACTIVE_STATE_RETENTION_TTL (a session waiting overnight on the user is alive).
+test_gc_other_session_active_7h_idle_survives() {
     local stale_ts
     stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
     local state_file="$TEST_OMT_DIR/goal-state-other-session-stale.json"
@@ -666,8 +667,8 @@ test_gc_other_session_active_7h_idle_reaped() {
 }
 EOF
     echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "session-B"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
-    if [ -f "$state_file" ]; then
-        echo "ASSERTION FAILED: other-session active state with 7h heartbeat should be reaped"
+    if [ ! -f "$state_file" ]; then
+        echo "ASSERTION FAILED: other-session active state with 7h heartbeat should survive (within ACTIVE_STATE_RETENTION_TTL)"
         return 1
     fi
     return 0
@@ -741,10 +742,10 @@ EOF
     return 0
 }
 
-# C3a-ultragoal: other-session ultragoal-state with 7h-old heartbeat is REAPED.
-test_gc_other_session_ultragoal_7h_idle_reaped() {
+# C3a-ultragoal: other-session ultragoal-state idle past ACTIVE_STATE_RETENTION_TTL is REAPED.
+test_gc_other_session_ultragoal_past_retention_reaped() {
     local stale_ts
-    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    stale_ts=$(date -j -v-8d "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "8 days ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
     local state_file="$TEST_OMT_DIR/ultragoal-state-other-session-stale.json"
     cat > "$state_file" << EOF
 {
@@ -757,7 +758,7 @@ test_gc_other_session_ultragoal_7h_idle_reaped() {
 EOF
     echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "session-B"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
     if [ -f "$state_file" ]; then
-        echo "ASSERTION FAILED: other-session ultragoal-state with 7h heartbeat should be reaped"
+        echo "ASSERTION FAILED: other-session ultragoal-state idle 8 days should be reaped"
         return 1
     fi
     return 0
@@ -1205,7 +1206,7 @@ _write_stale_state_fixture() {
     local other_sid="$2"
 
     local stale_ts
-    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S%z" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S%z" 2>/dev/null || echo "2000-01-01T00:00:00+0000")
+    stale_ts=$(date -j -v-8d "+%Y-%m-%dT%H:%M:%S%z" 2>/dev/null || date -d "8 days ago" "+%Y-%m-%dT%H:%M:%S%z" 2>/dev/null || echo "2000-01-01T00:00:00+0000")
     stale_ts=$(printf '%s' "$stale_ts" | sed -E 's/([+-][0-9]{2})([0-9]{2})$/\1:\2/')
 
     cat > "$omt_dir/goal-state-${other_sid}.json" << EOF
@@ -1921,11 +1922,11 @@ main() {
     # GC liveness unification (TODO 7)
     run_test test_gc_current_session_active_7h_idle_survives
     run_test test_gc_other_session_active_fresh_heartbeat_survives
-    run_test test_gc_other_session_active_7h_idle_reaped
+    run_test test_gc_other_session_active_7h_idle_survives
     run_test test_gc_terminal_state_1h_old_reaped
     run_test test_gc_terminal_state_10m_old_kept
     run_test test_gc_terminal_goal_fresh_heartbeat_survives_no_carveout
-    run_test test_gc_other_session_ultragoal_7h_idle_reaped
+    run_test test_gc_other_session_ultragoal_past_retention_reaped
     run_test test_gc_current_session_ultragoal_active_7h_idle_survives
     run_test test_gc_old_threshold_constants_removed
 

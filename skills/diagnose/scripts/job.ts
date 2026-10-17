@@ -162,7 +162,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 	const denySkills = extractDenySkills(settings);
 	const denySubagents = extractDenySubagents(settings);
 	assertDenyEnforceable(members, denySkills, DIAGNOSE_CONFIG, configPath, denySubagents);
-	// Resolve the Codex MCP allowlist before creating any job artifacts. The
+	// Resolve the per-member MCP fields (settings.mcp) before creating any job artifacts. The
 	// prepared entities carry the same per-member mcpBlock into both metadata
 	// and worker dispatch, while preserving each member's env/deny settings.
 	const preparedMembers = prepareMcpEntities(settings, members, DIAGNOSE_CONFIG, configPath);
@@ -192,6 +192,8 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 			effort_level: m.effort_level || null,
 			output_format: m.output_format || null,
 			env: m.env ?? {},
+			mcpReset: m.mcpReset ?? false,
+			mcpAdd: m.mcpAdd ?? {},
 			mcpBlock: m.mcpBlock ?? [],
 		})),
 	};

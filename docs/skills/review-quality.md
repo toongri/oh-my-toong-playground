@@ -52,7 +52,7 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 
 **정적 검토 지침**: 위 정적 검토 원칙은 code-review 파인더와 in-session fallback이 따르는 프롬프트 정책입니다.
 
-**프로세스 정리**: 각 파인더는 별도 워커 프로세스로 실행되며, 워커 자신의 종료 경로·job 정리(`clean`)·새 세션 시작 시 회수라는 세 가지 경로로 그 프로세스를 거둡니다. 다만 뒤의 두 경로는 그 프로세스 그룹이 이 job의 것임을 확인할 수 있을 때만 신호를 보내므로, 컨덕터가 정리 단계에 도달하지 못해도 나머지 경로가 항상 뒤를 받쳐주는 것은 아닙니다. 워커가 기동할 수 있는 MCP 서버도 설정 파일의 화이트리스트(`mcps.allow`)로 제한되며, 화이트리스트를 지정하지 않으면 이 엔진이 열거하는 서버가 모두 차단됩니다(opt-in, fail-closed). 같은 `settings:` 블록의 형제 설정인 `deny.skills`(리뷰 워커가 호출할 수 없는 스킬을 지정하는 설정)는 기본값 방향이 정반대여서, 지정하지 않으면 아무것도 차단하지 않습니다(no-op). 워커가 서브에이전트를 스폰하는 능력은 같은 블록의 `deny.subagents: true`가 끕니다 — job을 dispatch하는 스킬 4종(code-review·design-review·diagnose·agent-council)이 모두 켜 두었으며, 멤버 CLI별로 번역됩니다(codex는 `agents.enabled=false`, claude는 스폰 툴 permission deny, opencode는 `permission.task: deny`). 두 축 중 하나라도 선언한 채 집행 레버가 없는 CLI(gemini·미인식)를 멤버로 두면 `start`가 job 디렉터리를 만들기 전에 exit 1로 막습니다.
+**프로세스 정리**: 각 파인더는 별도 워커 프로세스로 실행되며, 워커 자신의 종료 경로·job 정리(`clean`)·새 세션 시작 시 회수라는 세 가지 경로로 그 프로세스를 거둡니다. 다만 뒤의 두 경로는 그 프로세스 그룹이 이 job의 것임을 확인할 수 있을 때만 신호를 보내므로, 컨덕터가 정리 단계에 도달하지 못해도 나머지 경로가 항상 뒤를 받쳐주는 것은 아닙니다. 워커가 기동하는 MCP 서버는 job 설정의 `settings.mcp`로 정합니다. `reset: true`는 사용자 CLI 설정과 플러그인에서 상속되는 MCP 서버를 하나도 기동하지 않게 하고, `add`는 이 설정에 직접 정의한 서버(`command`와 `args`)를 기동합니다. 현재 `code-review.config.yaml`은 `reset: true`에 `codegraph`만 `add`합니다. `settings.mcp`를 지정하지 않으면 MCP 관련 플래그를 붙이지 않아 워커가 모든 서버를 상속합니다. 멤버 CLI별 번역은 claude가 `--strict-mcp-config`와 `--mcp-config`, codex가 `--disable plugins`와 `<CODEX_HOME>/config.toml`의 서버별 `-c mcp_servers.<name>.enabled=false`(파일은 읽기만 함)입니다. `settings.mcp`를 선언한 채 codex·claude가 아닌 CLI를 멤버로 두면 `start`가 job 디렉터리를 만들기 전에 exit 1로 막습니다. 같은 `settings:` 블록의 형제 설정인 `deny.skills`(리뷰 워커가 호출할 수 없는 스킬을 지정하는 설정)는 지정하지 않으면 아무것도 차단하지 않습니다(no-op). 워커가 서브에이전트를 스폰하는 능력은 같은 블록의 `deny.subagents: true`가 끕니다 — job을 dispatch하는 스킬 4종(code-review·design-review·diagnose·agent-council)이 모두 켜 두었으며, 멤버 CLI별로 번역됩니다(codex는 `agents.enabled=false`, claude는 스폰 툴 permission deny, opencode는 `permission.task: deny`). 두 축 중 하나라도 선언한 채 집행 레버가 없는 CLI(gemini·미인식)를 멤버로 두면 `start`가 job 디렉터리를 만들기 전에 exit 1로 막습니다.
 
 **호출 방법**:
 ```
@@ -79,7 +79,7 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 - 아키텍처적 고려사항 — 경계, 의존성, 확장성
 - 반론을 최대한 강하게 세운 뒤 그에 대한 카운터도 제시
 
-**워크플로우**: 기본적으로 Codex `gpt-6-astra`(`high` reasoning) 멤버에게 job을 dispatch하여 분석을 받습니다. `generic-job`은 멤버 실행 시 `settings.deny`와 `settings.mcps.allow`를 함께 집행합니다. MCP allowlist는 opt-in·fail-closed이며, 현재 `design-review.config.yaml`은 `codegraph`만 허용합니다. 멤버를 사용할 수 없는 경우(`missing_cli`, 타임아웃, 설정 없음) in-session fallback으로 직접 분석합니다.
+**워크플로우**: 기본적으로 Codex `gpt-6-astra`(`high` reasoning) 멤버에게 job을 dispatch하여 분석을 받습니다. `generic-job`은 멤버 실행 시 `settings.deny`를 집행합니다. `design-review.config.yaml`은 `settings.mcp`를 선언하지 않으므로 멤버는 상속 가능한 MCP 서버를 모두 그대로 받습니다. 멤버를 사용할 수 없는 경우(`missing_cli`, 타임아웃, 설정 없음) in-session fallback으로 직접 분석합니다.
 
 **언제 사용하나**: 아키텍처 결정, 구현 계획 검토, 트레이드오프 분석이 필요할 때. 트리거 키워드: "design review", "plan review", "설계 검토", "플랜 리뷰", "아키텍처 건전성", "트레이드오프 분석".
 
