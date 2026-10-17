@@ -7,6 +7,7 @@ import {
 	validatePlan,
 	validatePlanGraph,
 	validateBoundaryMap,
+	validateFences,
 } from "./validate-plan.ts";
 
 // ---------------------------------------------------------------------------
@@ -687,6 +688,43 @@ describe("Boundary Map 트리거", () => {
 // ---------------------------------------------------------------------------
 // CLI 종료 코드와 fixture 정합성
 // ---------------------------------------------------------------------------
+
+describe("코드 펜스", () => {
+	const F = "```";
+
+	test("닫히지 않은 펜스는 연 줄을 알리고, 그 뒤는 코드로 보아 섹션을 세지 않는다", () => {
+		const plan = `# P\n\n${F}md\n\n${buildPlan()}`;
+		const out = validateFences(plan);
+		expect(out.length).toBe(1);
+		expect(out[0]).toContain("line 3");
+		expect(validatePlan(plan)).toEqual(REQUIRED_HEADINGS);
+	});
+
+	test("닫힌 펜스만 있으면 펜스 위반이 없다", () => {
+		expect(validateFences(`${buildPlan()}\n${F}ts\nx\n${F}\n~~~\ny\n~~~\n`)).toEqual([]);
+	});
+
+	test("최상위에서 4칸 들여쓴 펜스 줄은 들여쓴 코드라 펜스를 열지 않는다", () => {
+		const plan = buildPlan({ Context: `예시:\n\n    ${F}\n` });
+		expect(validateFences(plan)).toEqual([]);
+		expect(validatePlan(plan)).toEqual([]);
+	});
+
+	test("목록 항목 내용 열 기준으로 들여쓴 펜스 안의 예시 TODO는 세지 않는다", () => {
+		const real = [
+			"- [ ] 1. Real task",
+			"  10. 예시",
+			"",
+			"      " + F,
+			"      - [ ] 9. Example task",
+			"      Blocked By: 77",
+			"      " + F,
+			"  - Wave: 1",
+		].join("\n");
+		const plan = buildGraphPlan([real, todoBlock("F1", { blockedBy: "1", wave: "FINAL" })]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+});
 
 describe("CLI", () => {
 	const script = join(import.meta.dir, "validate-plan.ts");

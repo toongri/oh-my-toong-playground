@@ -26,12 +26,17 @@
  * predecessor counts). F1-F4 targets are exempt from that path check. The reverse
  * is not required: `Blocks:` may omit dependents, and the field may be absent.
  *
+ * Code fences follow `lib/markdown-fence.ts`. Every pass ignores fenced text, and
+ * a fence that never closes is reported, since everything after it renders as code.
+ *
  * Usage: bun skills/prometheus/scripts/validate-plan.ts <plan_path>
  * Exit 0 = all sections present and non-empty, and no graph violations.
  * Exit 1 = violations found (offending literals/messages printed to stdout).
  * Exit 2 = usage or I/O error (missing argument, or the plan file cannot be
  *          read; a one-line message goes to stderr, nothing to stdout).
  */
+
+import { findFenceBlocks } from "@lib/markdown-fence";
 
 export const REQUIRED_HEADINGS: string[] = [
 	"TL;DR",
@@ -44,37 +49,40 @@ export const REQUIRED_HEADINGS: string[] = [
 ];
 
 /**
- * Replace each fenced code block (``` or ~~~, opening fence at any indent, as
- * list-nested fences are) with `placeholder`, closing on a fence line of the
- * same character at least as long. Line endings are normalized to LF first, so
- * every check built on this sees LF. An unclosed fence is left untouched.
+ * Replace each fenced code block with `placeholder`. Fences follow the shared
+ * rules in `lib/markdown-fence.ts`: list-relative indentation, a closer of the
+ * same character at least as long, and an unclosed fence running to the end (so
+ * nothing after it counts as plan structure; `validateFences` reports it). Line
+ * endings are normalized to LF first, so every check built on this sees LF.
  * HTML comments (`<!-- ... -->`, single- or multi-line) outside fences are then
  * removed; an unclosed `<!--` is left untouched. Other text is never changed.
  */
 function stripFences(content: string, placeholder = ""): string {
 	const lines = content.replace(/\r\n?/g, "\n").split("\n");
 	const out: string[] = [];
-	for (let i = 0; i < lines.length; i++) {
-		const open = /^\s*(`{3,}|~{3,})/.exec(lines[i]);
-		if (open !== null) {
-			const marker = open[1];
-			const close = new RegExp(`^\\s*${marker[0]}{${marker.length},}\\s*$`);
-			let end = -1;
-			for (let j = i + 1; j < lines.length; j++) {
-				if (close.test(lines[j])) {
-					end = j;
-					break;
-				}
-			}
-			if (end !== -1) {
-				out.push(placeholder);
-				i = end;
-				continue;
-			}
-		}
-		out.push(lines[i]);
+	let next = 0;
+	for (const block of findFenceBlocks(lines)) {
+		out.push(...lines.slice(next, block.open), placeholder);
+		next = block.close === -1 ? lines.length : block.close + 1;
 	}
+	out.push(...lines.slice(next));
 	return out.join("\n").replace(/<!--[\s\S]*?-->/g, "");
+}
+
+/**
+ * Report a code fence that never closes. Markdown renders everything after it as
+ * code, so the sections and TODOs written there are not part of the plan.
+ *
+ * @returns One violation message per unclosed fence (at most one), or empty.
+ */
+export function validateFences(content: string): string[] {
+	const lines = content.replace(/\r\n?/g, "\n").split("\n");
+	return findFenceBlocks(lines)
+		.filter((block) => block.close === -1)
+		.map(
+			(block) =>
+				`Code fence: the fence opened on line ${block.open + 1} (\`${lines[block.open].trim()}\`) never closes, so everything after it renders as code. Close it or remove it.`,
+		);
 }
 
 /**
@@ -532,6 +540,7 @@ if (import.meta.main) {
 		process.exit(2);
 	}
 	const problems = [
+		...validateFences(content),
 		...validatePlan(content),
 		...validatePlanGraph(content),
 		...validateBoundaryMap(content),
