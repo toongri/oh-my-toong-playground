@@ -263,79 +263,132 @@ export function extractDenySubagents(settings: Record<string, unknown>): boolean
 }
 
 // ---------------------------------------------------------------------------
-// MCP whitelist engine — settings.mcps.allow validation, config.toml server
-// enumeration, and block-list computation. A review worker's codex process
-// inherits every MCP server declared in ~/.codex/config.toml regardless of
-// whether the review workflow uses it (measured: 13 servers configured on
-// this host, 1 — codegraph — actually used by review workers), and each is a
-// process the worker spawns. This engine computes the complement so
-// buildAugmentedCommand can pass `-c mcp_servers.<name>.enabled=false` for
-// every non-allow-listed configured server, shrinking the process count a
-// worker creates in the first place (orthogonal to the reaping layers
-// elsewhere in this file — this reduces what gets created, not what gets
-// cleaned up after).
+// settings.mcp — job-level MCP server control for review workers.
+//
+//   settings:
+//     mcp:
+//       reset: true        # start no MCP server inherited from the user's CLI config/plugins
+//       add:               # then start only these, defined here
+//         codegraph: { command: codegraph, args: [serve, --mcp] }
+//
+// `settings.mcp` absent = no MCP flag is added and the worker inherits every
+// server. `add` without `reset` adds on top of the inherited servers. Each
+// field is carried to the spawn under its own name (`mcpReset`, `mcpAdd`,
+// `mcpBlock`); buildAugmentedCommand translates them per CLI:
+//   claude: reset -> --strict-mcp-config, add -> --mcp-config '<json>'
+//   codex:  no single "disable all" flag exists, so reset -> `--disable plugins`
+//           (plugin-provided servers) + `-c mcp_servers.<name>.enabled=false`
+//           for every [mcp_servers.<name>] header read from <CODEX_HOME>/config.toml
+//           (`mcpBlock`, computed at job start; the file is never written).
+//           add -> `-c mcp_servers.<name>.command=...` / `.args=[...]`.
 // ---------------------------------------------------------------------------
 
-export function assertMcpAllowShape(
+export type McpAddServers = Record<string, { command: string; args: string[] }>;
+
+const MCP_SERVER_NAME_RE = /^[a-zA-Z0-9_-]+$/;
+
+export function assertMcpShape(
 	settings: Record<string, unknown>,
 	config: JobConfig,
 	configPath: string,
 ): void {
-	const keyPrefix = config.configTopLevelKey;
-	const mcps = settings.mcps;
-	if (mcps === null || mcps === undefined) return;
-	if (!isPlainObject(mcps)) {
-		exitWithError(
-			`Invalid config in ${configPath}: '${keyPrefix}.settings.mcps' must be a mapping/object`,
-		);
+	const where = `Invalid config in ${configPath}: '${config.configTopLevelKey}.settings.mcp`;
+	const mcp = settings.mcp;
+	if (mcp === null || mcp === undefined) return;
+	if (!isPlainObject(mcp)) {
+		exitWithError(`${where}' must be a mapping/object`);
 	}
-	const allow = mcps.allow;
-	if (allow === null || allow === undefined) return;
-	if (!Array.isArray(allow)) {
-		exitWithError(
-			`Invalid config in ${configPath}: '${keyPrefix}.settings.mcps.allow' must be a list/array of non-empty strings`,
-		);
+	for (const key of Object.keys(mcp)) {
+		if (key !== "reset" && key !== "add") {
+			exitWithError(`${where}' has unknown key ${JSON.stringify(key)} (allowed: reset, add)`);
+		}
 	}
-	for (const name of allow) {
-		if (typeof name !== "string" || !/^[a-zA-Z0-9_-]+$/.test(name)) {
+	if (mcp.reset !== null && mcp.reset !== undefined && typeof mcp.reset !== "boolean") {
+		exitWithError(`${where}.reset' must be a boolean, got: ${JSON.stringify(mcp.reset)}`);
+	}
+	const add = mcp.add;
+	if (add === null || add === undefined) return;
+	if (!isPlainObject(add)) {
+		exitWithError(`${where}.add' must be a mapping/object of server name to {command, args}`);
+	}
+	for (const [name, server] of Object.entries(add)) {
+		if (!MCP_SERVER_NAME_RE.test(name)) {
 			exitWithError(
-				`Invalid config in ${configPath}: '${keyPrefix}.settings.mcps.allow' must contain only [a-zA-Z0-9_-] MCP server names, got: ${JSON.stringify(name)}`,
+				`${where}.add' server names must match [a-zA-Z0-9_-]+, got: ${JSON.stringify(name)}`,
 			);
+		}
+		if (!isPlainObject(server)) {
+			exitWithError(`${where}.add.${name}' must be a mapping/object with 'command' and optional 'args'`);
+		}
+		for (const key of Object.keys(server)) {
+			if (key !== "command" && key !== "args") {
+				exitWithError(
+					`${where}.add.${name}' has unknown key ${JSON.stringify(key)} (allowed: command, args)`,
+				);
+			}
+		}
+		if (typeof server.command !== "string" || server.command.length === 0) {
+			exitWithError(`${where}.add.${name}.command' must be a non-empty string`);
+		}
+		const args = server.args;
+		if (args !== null && args !== undefined) {
+			if (!Array.isArray(args) || args.some((arg) => typeof arg !== "string")) {
+				exitWithError(`${where}.add.${name}.args' must be a list/array of strings`);
+			}
 		}
 	}
 }
 
+/** Read settings.mcp, already format-validated by assertMcpShape. Absent = no reset, nothing added. */
+export function extractMcp(settings: Record<string, unknown>): {
+	isSet: boolean;
+	reset: boolean;
+	add: McpAddServers;
+} {
+	const mcp = settings.mcp;
+	// Null-prototype map: a server named "__proto__" must stay an own property.
+	const add: McpAddServers = Object.create(null);
+	if (!isPlainObject(mcp)) return { isSet: false, reset: false, add };
+	if (isPlainObject(mcp.add)) {
+		for (const [name, server] of Object.entries(mcp.add)) {
+			if (!isPlainObject(server)) continue;
+			add[name] = {
+				command: String(server.command),
+				args: Array.isArray(server.args) ? server.args.map((arg) => String(arg)) : [],
+			};
+		}
+	}
+	return { isSet: true, reset: mcp.reset === true, add };
+}
+
 /**
  * Enumerate MCP server names declared in `<codexHome>/config.toml` via
- * `[mcp_servers.<name>]` headers, sorted and de-duplicated.
+ * `[mcp_servers.<name>]` headers, sorted and de-duplicated. READ ONLY.
  *
  * Deliberately reads config.toml directly rather than shelling out to
- * `codex mcp list --json` — calling that CLI would itself spawn a process,
- * defeating the point of this engine (fewer processes per job).
+ * `codex mcp list --json` — calling that CLI would itself spawn every
+ * configured server's process.
  */
 export function enumerateConfiguredMcpServers(codexHome: string): string[] {
 	let content: string;
 	try {
 		content = fs.readFileSync(path.join(codexHome, "config.toml"), "utf8");
 	} catch {
-		// Fail-open: no config.toml (or unreadable) means nothing to enumerate,
-		// and therefore nothing to block against — an empty allowlist target,
-		// not an error.
+		// No config.toml (or unreadable) means no configured server to disable.
 		return [];
 	}
 	// Single segment only: matches [mcp_servers.<name>] where <name> contains
 	// no further dot. A config may contain both
 	// [mcp_servers.nutrition-tools] and [mcp_servers.nutrition-tools.env] — the
 	// latter is a nested table (env vars for the nutrition-tools server), not a
-	// second server named "nutrition-tools.env". A looser
-	// `^\[mcp_servers\.(.+)\]$` would wrongly capture "nutrition-tools.env"
-	// as its own server name.
+	// second server named "nutrition-tools.env".
 	//
 	// Quoted headers ([mcp_servers."weird name"]) are deliberately NOT
 	// matched: such a name cannot be carried safely through a
 	// `-c mcp_servers.<name>.enabled=false` CLI argument, so it is left
-	// unenumerated and stays on (under-recall over over-recall — an
-	// unenumerated server is simply not blocked, never wrongly blocked).
+	// unenumerated and stays on. Disabling a name that config.toml does not
+	// declare makes codex fail to boot ("invalid transport"), so only names
+	// read from this file are ever disabled.
 	const headerRe = /^\s*\[mcp_servers\.([A-Za-z0-9_-]+)\]\s*$/;
 	const names = new Set<string>();
 	for (const line of content.split("\n")) {
@@ -346,36 +399,11 @@ export function enumerateConfiguredMcpServers(codexHome: string): string[] {
 }
 
 /**
- * Compute the MCP servers to disable: every `configuredNames` entry not
- * present in `settings.mcps.allow`.
- *
- * Fail-closed by design — the OPPOSITE default direction from
- * `settings.deny.skills` (unspecified deny = nothing blocked, a no-op).
- * `mcps.allow` is opt-in: an unspecified `mcps` or `mcps.allow` blocks EVERY
- * configured server, so a job config that never declares an allowlist does
- * not silently inherit the ambient config.toml's full MCP surface.
- */
-export function computeMcpBlockList(
-	settings: Record<string, unknown>,
-	configuredNames: string[],
-): string[] {
-	const mcps = settings.mcps;
-	if (!isPlainObject(mcps) || !Array.isArray(mcps.allow)) {
-		return [...configuredNames].sort();
-	}
-	const allow = new Set(mcps.allow.map((name) => String(name)));
-	// Filter configuredNames — never build the result by iterating `allow` —
-	// so the block list is always a SUBSET of configuredNames. An allow entry
-	// with no matching configured server (e.g. "ghost") must never leak into
-	// the block list: `-c mcp_servers.ghost.enabled=false` for a server codex
-	// never declared makes codex fail to boot ("Error loading config.toml:
-	// invalid transport").
-	return configuredNames.filter((name) => !allow.has(name)).sort();
-}
-
-/**
- * Attach the MCP block list to job entities without mutating the source list.
- * MCP enforcement is Codex-only; other CLIs receive an explicit empty list.
+ * Attach the explicit MCP fields (`mcpReset`, `mcpAdd`, `mcpBlock`) to job
+ * entities without mutating the source list. `mcpBlock` (codex config.toml
+ * server names to disable) is computed only when `reset` is true, minus the
+ * names `add` defines. With `settings.mcp` set, a member whose CLI is neither
+ * codex nor claude fails job start: there is no lever to apply it.
  */
 export function prepareMcpEntities(
 	settings: Record<string, unknown>,
@@ -384,22 +412,40 @@ export function prepareMcpEntities(
 	configPath: string,
 	conductorCodexHome?: string,
 ): Record<string, unknown>[] {
-	assertMcpAllowShape(settings, config, configPath);
+	assertMcpShape(settings, config, configPath);
+	const mcp = extractMcp(settings);
 	const fallbackHome =
 		conductorCodexHome ?? (process.env.CODEX_HOME || path.join(os.homedir(), ".codex"));
 	const configuredByHome = new Map<string, string[]>();
 	return entities.map((entity) => {
 		const cliType = detectCliType(entity.command);
-		if (cliType !== "codex") return { ...entity, mcpBlock: [] };
-		const env = isRecord(entity.env) ? entity.env : {};
-		const codexHome = env.CODEX_HOME ? String(env.CODEX_HOME) : fallbackHome;
-		let configured = configuredByHome.get(codexHome);
-		if (configured === undefined) {
-			configured = enumerateConfiguredMcpServers(codexHome);
-			configuredByHome.set(codexHome, configured);
+		if (mcp.isSet && cliType !== "codex" && cliType !== "claude") {
+			exitWithError(
+				`Invalid config in ${configPath}: '${config.configTopLevelKey}.settings.mcp' is set but member ${JSON.stringify(String(entity.name))} runs CLI '${cliType}'; MCP control is supported only for codex and claude members`,
+			);
 		}
-		return { ...entity, mcpBlock: computeMcpBlockList(settings, configured) };
+		let mcpBlock: string[] = [];
+		if (mcp.reset && cliType === "codex") {
+			const env = isRecord(entity.env) ? entity.env : {};
+			const codexHome = env.CODEX_HOME ? String(env.CODEX_HOME) : fallbackHome;
+			let configured = configuredByHome.get(codexHome);
+			if (configured === undefined) {
+				configured = enumerateConfiguredMcpServers(codexHome);
+				configuredByHome.set(codexHome, configured);
+			}
+			mcpBlock = configured.filter((name) => !(name in mcp.add));
+		}
+		return { ...entity, mcpReset: mcp.reset, mcpAdd: mcp.add, mcpBlock };
 	});
+}
+
+/**
+ * Make one value survive splitCommand's re-tokenization as a single token:
+ * backslash-escape every backslash, quote and whitespace char. (splitCommand
+ * drops an unescaped '"' and splits on unescaped whitespace.)
+ */
+function escapeForSplitCommand(value: string): string {
+	return value.replace(/[\\"'\s]/g, "\\$&");
 }
 
 export function buildAugmentedCommand(
@@ -411,6 +457,8 @@ export function buildAugmentedCommand(
 		env?: Record<string, string>;
 		deny?: unknown;
 		denySubagents?: unknown;
+		mcpReset?: unknown;
+		mcpAdd?: unknown;
 		mcpBlock?: unknown;
 	},
 	cliType: string,
@@ -523,14 +571,34 @@ export function buildAugmentedCommand(
 		// gemini/unknown: no enforceable lever here — enforceability is a job-start gate's job, not this translator's.
 	}
 
-	// mcpBlock — MCP server whitelist enforcement (see computeMcpBlockList), codex only.
-	// No quote escaping needed here, unlike deny's skills.config value above: names are
-	// pre-validated to [a-zA-Z0-9_-] by assertMcpAllowShape, so the value can never contain
-	// a space or quote for splitCommand's re-tokenization to mangle.
+	// MCP control (see settings.mcp above): mcpReset / mcpAdd / mcpBlock, claude and codex only.
+	// Every value goes through escapeForSplitCommand so it survives the re-tokenization.
+	const mcpReset = entity.mcpReset === true;
+	const mcpAdd = isRecord(entity.mcpAdd) ? Object.entries(entity.mcpAdd) : [];
 	const mcpBlock = Array.isArray(entity.mcpBlock) ? entity.mcpBlock.map((name) => String(name)) : [];
-	if (mcpBlock.length > 0 && cliType === "codex") {
+	if (cliType === "codex") {
+		// Plugin-provided servers are not in config.toml; `--disable apps` alone does not drop them.
+		if (mcpReset) parts.push("--disable", "plugins");
 		for (const name of mcpBlock) {
 			parts.push("-c", `mcp_servers.${name}.enabled=false`);
+		}
+		for (const [name, server] of mcpAdd) {
+			if (!isRecord(server)) continue;
+			const args = Array.isArray(server.args) ? server.args.map((arg) => JSON.stringify(String(arg))) : [];
+			parts.push(
+				"-c",
+				escapeForSplitCommand(`mcp_servers.${name}.command=${JSON.stringify(String(server.command))}`),
+				"-c",
+				escapeForSplitCommand(`mcp_servers.${name}.args=[${args.join(",")}]`),
+			);
+		}
+	} else if (cliType === "claude") {
+		if (mcpReset) parts.push("--strict-mcp-config");
+		if (mcpAdd.length > 0) {
+			// Null-prototype map for the same "__proto__" reason as skillOverrides above.
+			const mcpServers: Record<string, unknown> = Object.create(null);
+			for (const [name, server] of mcpAdd) mcpServers[name] = server;
+			parts.push("--mcp-config", escapeForSplitCommand(JSON.stringify({ mcpServers })));
 		}
 	}
 

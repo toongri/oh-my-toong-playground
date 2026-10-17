@@ -413,10 +413,14 @@ describe("parseChunkReviewConfig", () => {
 		}
 	});
 
-	test('real config declares settings.mcps.allow as exactly ["codegraph"]', async () => {
+	test("real config declares settings.mcp as reset plus the codegraph server", async () => {
 		const realPath = path.join(import.meta.dirname, "..", "code-review.config.yaml");
 		const result = parseChunkReviewConfig(realPath);
-		expect(result["chunk-review"].settings.mcps).toEqual({ allow: ["codegraph"] });
+		expect(result["chunk-review"].settings.mcp).toEqual({
+			reset: true,
+			add: { codegraph: { command: "codegraph", args: ["serve", "--mcp"] } },
+		});
+		expect(result["chunk-review"].settings.mcps).toBeUndefined();
 	});
 });
 
@@ -4463,10 +4467,10 @@ describe("start: settings.deny.skills recorded in job.json settings.denySkills",
 });
 
 // ---------------------------------------------------------------------------
-// parseChunkReviewConfig settings.mcps.allow — shape guard (assertMcpAllowShape)
+// parseChunkReviewConfig settings.mcp — shape guard (assertMcpShape)
 // ---------------------------------------------------------------------------
 
-describe("parseChunkReviewConfig settings.mcps.allow", () => {
+describe("parseChunkReviewConfig settings.mcp", () => {
 	let tmpDir: string;
 
 	beforeEach(() => {
@@ -4494,40 +4498,74 @@ describe("parseChunkReviewConfig settings.mcps.allow", () => {
 		}
 	}
 
-	test("exits 1 when mcps.allow is not an array (a string)", () => {
+	function writeConfig(mcpLines: string[]): string {
 		const configPath = path.join(tmpDir, "config.yaml");
-		fs.writeFileSync(
-			configPath,
-			["chunk-review:", "  settings:", "    mcps:", '      allow: "codegraph"'].join("\n"),
+		fs.writeFileSync(configPath, ["chunk-review:", "  settings:", "    mcp:", ...mcpLines].join("\n"));
+		return configPath;
+	}
+
+	test("exits 1 when mcp is not a mapping (a string)", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(configPath, ["chunk-review:", "  settings:", '    mcp: "codegraph"'].join("\n"));
+		expectParseExitsWithError(configPath, "chunk-review.settings.mcp' must be a mapping/object");
+	});
+
+	test("exits 1 when mcp.reset is not a boolean", () => {
+		expectParseExitsWithError(
+			writeConfig(['      reset: "true"']),
+			"chunk-review.settings.mcp.reset' must be a boolean",
 		);
-		expectParseExitsWithError(configPath, `Invalid config in ${configPath}`);
+	});
+
+	test("exits 1 on an unknown mcp key (the removed allow list is not silently accepted)", () => {
+		expectParseExitsWithError(writeConfig(["      allow:", "        - codegraph"]), 'unknown key "allow"');
+	});
+
+	test("exits 1 on a server name outside [a-zA-Z0-9_-]", () => {
+		expectParseExitsWithError(
+			writeConfig(["      add:", "        bad.name:", "          command: x"]),
+			"[a-zA-Z0-9_-]+",
+		);
+	});
+
+	test("exits 1 when an added server has no command", () => {
+		expectParseExitsWithError(
+			writeConfig(["      add:", "        srv:", "          args: [serve]"]),
+			"add.srv.command' must be a non-empty string",
+		);
 	});
 });
-
-// ---------------------------------------------------------------------------
-// start: settings.mcps.allow → job.json members[].mcpBlock (computeMcpBlockList
-// wiring). Uses cmdStart directly (not via subprocess) so CODEX_HOME can be
-// pointed at a hermetic config.toml fixture instead of the real host's.
-//
-// The block list is recorded per member because a member's own `env.CODEX_HOME`
-// changes which config.toml its worker actually reads — see cmdStart's
-// mcpBlockByMember.
-// ---------------------------------------------------------------------------
 
 describe("job.ts MCP preparation architecture", () => {
 	test("delegates per-member MCP preparation to prepareMcpEntities", () => {
 		const source = fs.readFileSync(path.join(import.meta.dirname, "job.ts"), "utf8");
 		expect(source).toContain("prepareMcpEntities");
 		expect(source).not.toContain("enumerateConfiguredMcpServers");
-		expect(source).not.toContain("computeMcpBlockList");
 	});
 });
 
-describe("start: settings.mcps.allow recorded in job.json members[].mcpBlock", () => {
+// ---------------------------------------------------------------------------
+// start: settings.mcp → job.json members[].{mcpReset,mcpAdd,mcpBlock}. Uses
+// cmdStart directly (not via subprocess) so CODEX_HOME can be pointed at a
+// hermetic config.toml fixture (invented server names) instead of the real
+// host's. The block list is recorded per member because a member's own
+// `env.CODEX_HOME` changes which config.toml its worker actually reads.
+// ---------------------------------------------------------------------------
+
+describe("start: settings.mcp recorded in job.json members", () => {
 	let tmpDir: string;
 	let jobsDir: string;
 	let codexHomeDir: string;
 	let prevCodexHome: string | undefined;
+
+	const mcpYaml = [
+		"    mcp:",
+		"      reset: true",
+		"      add:",
+		"        codegraph:",
+		"          command: codegraph",
+		"          args: [serve, --mcp]",
+	];
 
 	beforeEach(() => {
 		tmpDir = makeTmpDir();
@@ -4540,10 +4578,10 @@ describe("start: settings.mcps.allow recorded in job.json members[].mcpBlock", (
 				"[mcp_servers.codegraph]",
 				'command = "stub"',
 				"",
-				"[mcp_servers.figma]",
+				"[mcp_servers.srv-a]",
 				'command = "stub"',
 				"",
-				"[mcp_servers.notion]",
+				"[mcp_servers.srv-b]",
 				'command = "stub"',
 			].join("\n"),
 		);
@@ -4558,7 +4596,14 @@ describe("start: settings.mcps.allow recorded in job.json members[].mcpBlock", (
 		fs.rmSync(codexHomeDir, { recursive: true, force: true });
 	});
 
-	test("job.json members[].mcpBlock is the complement of settings.mcps.allow against configured servers", async () => {
+	function readMembers(): Array<Record<string, any>> {
+		const entry = fs.readdirSync(jobsDir).find((e) => e.startsWith("chunk-review-"));
+		expect(entry).toBeDefined();
+		return JSON.parse(fs.readFileSync(path.join(jobsDir, entry as string, "job.json"), "utf8"))
+			.members;
+	}
+
+	test("reset + add: job.json records mcpReset, mcpAdd and the config.toml servers to disable (minus the added name)", async () => {
 		const configPath = path.join(tmpDir, "config.yaml");
 		fs.writeFileSync(
 			configPath,
@@ -4569,12 +4614,12 @@ describe("start: settings.mcps.allow recorded in job.json members[].mcpBlock", (
 				"  members:",
 				"    - name: bob",
 				"      command: codex",
+				"    - name: dave",
+				"      command: claude -p",
 				"  settings:",
 				"    exclude_chairman_from_members: false",
 				"    timeout: 10",
-				"    mcps:",
-				"      allow:",
-				"        - codegraph",
+				...mcpYaml,
 			].join("\n"),
 		);
 
@@ -4583,33 +4628,27 @@ describe("start: settings.mcps.allow recorded in job.json members[].mcpBlock", (
 			"test prompt",
 		);
 
-		const entry = fs.readdirSync(jobsDir).find((e) => e.startsWith("chunk-review-"));
-		expect(entry).toBeDefined();
-		const jobMeta = JSON.parse(
-			fs.readFileSync(path.join(jobsDir, entry as string, "job.json"), "utf8"),
-		);
-		expect(jobMeta.members.map((m: { mcpBlock: string[] }) => m.mcpBlock)).toEqual([
-			["figma", "notion"],
-		]);
+		const byName = Object.fromEntries(readMembers().map((m) => [m.name, m]));
+		const mcpAdd = { codegraph: { command: "codegraph", args: ["serve", "--mcp"] } };
+		expect(byName.bob.mcpReset).toBe(true);
+		expect(byName.bob.mcpAdd).toEqual(mcpAdd);
+		expect(byName.bob.mcpBlock).toEqual(["srv-a", "srv-b"]);
+		expect(byName.dave.mcpReset).toBe(true);
+		expect(byName.dave.mcpAdd).toEqual(mcpAdd);
+		expect(byName.dave.mcpBlock).toEqual([]);
 	});
 
 	test("a member's own env.CODEX_HOME decides which config.toml its block list is computed against", async () => {
 		// The member home declares a DISJOINT server set from the conductor home
-		// (see beforeEach: codegraph/figma/notion). Both failure directions the
-		// per-member computation exists to prevent are visible in one assertion:
-		// "linear" (member-only) must be blocked, and "figma"/"notion"
-		// (conductor-only) must NOT appear — passing a name the member's own
-		// config.toml never declares makes codex fail to boot.
+		// (see beforeEach: codegraph/srv-a/srv-b). "srv-c" (member-only) must be
+		// blocked, and "srv-a"/"srv-b" (conductor-only) must NOT appear — passing a
+		// name the member's own config.toml never declares makes codex fail to boot.
 		const memberCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-member-"));
 		fs.writeFileSync(
 			path.join(memberCodexHome, "config.toml"),
-			[
-				"[mcp_servers.codegraph]",
-				'command = "stub"',
-				"",
-				"[mcp_servers.linear]",
-				'command = "stub"',
-			].join("\n"),
+			["[mcp_servers.codegraph]", 'command = "stub"', "", "[mcp_servers.srv-c]", 'command = "stub"'].join(
+				"\n",
+			),
 		);
 
 		const configPath = path.join(tmpDir, "config.yaml");
@@ -4629,9 +4668,7 @@ describe("start: settings.mcps.allow recorded in job.json members[].mcpBlock", (
 				"  settings:",
 				"    exclude_chairman_from_members: false",
 				"    timeout: 10",
-				"    mcps:",
-				"      allow:",
-				"        - codegraph",
+				...mcpYaml,
 			].join("\n"),
 		);
 
@@ -4641,19 +4678,91 @@ describe("start: settings.mcps.allow recorded in job.json members[].mcpBlock", (
 				"test prompt",
 			);
 
-			const entry = fs.readdirSync(jobsDir).find((e) => e.startsWith("chunk-review-"));
-			expect(entry).toBeDefined();
-			const jobMeta = JSON.parse(
-				fs.readFileSync(path.join(jobsDir, entry as string, "job.json"), "utf8"),
-			);
-			const byName = Object.fromEntries(
-				jobMeta.members.map((m: { name: string; mcpBlock: string[] }) => [m.name, m.mcpBlock]),
-			);
-			expect(byName.bob).toEqual(["figma", "notion"]);
-			expect(byName.carol).toEqual(["linear"]);
+			const byName = Object.fromEntries(readMembers().map((m) => [m.name, m.mcpBlock]));
+			expect(byName.bob).toEqual(["srv-a", "srv-b"]);
+			expect(byName.carol).toEqual(["srv-c"]);
 		} finally {
 			fs.rmSync(memberCodexHome, { recursive: true, force: true });
 		}
+	});
+
+	test("settings.mcp absent: every member records reset=false, add={}, block=[] (inherits every server)", async () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: bob",
+				"      command: codex",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+			].join("\n"),
+		);
+
+		await cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		const [bob] = readMembers();
+		expect(bob.mcpReset).toBe(false);
+		expect(bob.mcpAdd).toEqual({});
+		expect(bob.mcpBlock).toEqual([]);
+	});
+
+	test("settings.mcp set + a gemini member → exit 1 and no job.json", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: alice",
+				"      command: claude -p",
+				"    - name: bob",
+				"      command: gemini",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+				...mcpYaml,
+			].join("\n"),
+		);
+
+		let err: any;
+		try {
+			execFileSync(
+				process.execPath,
+				[
+					path.join(import.meta.dirname, "job.ts"),
+					"start",
+					"--config",
+					configPath,
+					"--jobs-dir",
+					jobsDir,
+					"--chairman",
+					"none",
+					"test prompt",
+				],
+				{ stdio: "pipe" },
+			);
+		} catch (e) {
+			err = e;
+		}
+
+		expect(err).toBeDefined();
+		expect(err.status).toBe(1);
+		const stderr = err.stderr.toString();
+		expect(stderr).toContain("chunk-review.settings.mcp");
+		expect(stderr).toContain('"bob"');
+		expect(stderr).toContain("codex and claude");
+		const jobDirs = fs.readdirSync(jobsDir);
+		expect(jobDirs.some((d) => fs.existsSync(path.join(jobsDir, d, "job.json")))).toBe(false);
 	});
 });
 
@@ -5090,14 +5199,13 @@ describe("start: deny reaches spawnWorkers entities (AC6 wiring)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// start → spawnWorkers wiring: the computed mcpBlock reaches each dispatched
-// entity (closes the untested seam between computeMcpBlockList's calculation
-// and buildAugmentedCommand's translation — the transmission point itself was
-// unasserted: job.ts:593 could drop or misspell mcpBlock in the entities map
-// and every existing test would still pass green).
+// start → spawnWorkers wiring: the explicit MCP fields (mcpReset, mcpAdd,
+// mcpBlock) reach each dispatched entity. The transmission point itself is
+// otherwise unasserted: job.ts could drop or misspell a field in the entities
+// map and every translation test would still pass green.
 // ---------------------------------------------------------------------------
 
-describe("start: mcpBlock reaches spawnWorkers entities", () => {
+describe("start: MCP fields reach spawnWorkers entities", () => {
 	let tmpDir: string;
 	let jobsDir: string;
 	let codexHomeDir: string;
@@ -5114,10 +5222,10 @@ describe("start: mcpBlock reaches spawnWorkers entities", () => {
 				"[mcp_servers.codegraph]",
 				'command = "stub"',
 				"",
-				"[mcp_servers.figma]",
+				"[mcp_servers.srv-a]",
 				'command = "stub"',
 				"",
-				"[mcp_servers.notion]",
+				"[mcp_servers.srv-b]",
 				'command = "stub"',
 			].join("\n"),
 		);
@@ -5133,7 +5241,7 @@ describe("start: mcpBlock reaches spawnWorkers entities", () => {
 		mock.restore();
 	});
 
-	test("every dispatched entity carries the computed mcpBlock", async () => {
+	test("every dispatched entity carries mcpReset, mcpAdd and the computed mcpBlock", async () => {
 		const configPath = path.join(tmpDir, "config.yaml");
 		fs.writeFileSync(
 			configPath,
@@ -5149,9 +5257,12 @@ describe("start: mcpBlock reaches spawnWorkers entities", () => {
 				"  settings:",
 				"    exclude_chairman_from_members: false",
 				"    timeout: 10",
-				"    mcps:",
-				"      allow:",
-				"        - codegraph",
+				"    mcp:",
+				"      reset: true",
+				"      add:",
+				"        codegraph:",
+				"          command: codegraph",
+				"          args: [serve, --mcp]",
 			].join("\n"),
 		);
 
@@ -5173,7 +5284,11 @@ describe("start: mcpBlock reaches spawnWorkers entities", () => {
 		expect(capturedEntities).toBeDefined();
 		expect(capturedEntities?.length).toBe(2);
 		for (const entity of capturedEntities ?? []) {
-			expect(entity.mcpBlock).toEqual(["figma", "notion"]);
+			expect(entity.mcpReset).toBe(true);
+			expect(entity.mcpAdd).toEqual({
+				codegraph: { command: "codegraph", args: ["serve", "--mcp"] },
+			});
+			expect(entity.mcpBlock).toEqual(["srv-a", "srv-b"]);
 		}
 	});
 });

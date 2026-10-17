@@ -299,23 +299,8 @@ describe("diagnose job lifecycle", () => {
 		}
 	});
 
-	test("start applies settings.mcps.allow to job metadata and the real codex argv", async () => {
-		const configPath = path.join(tmpDir, "diagnose.config.yaml");
-		fs.writeFileSync(
-			configPath,
-			[
-				"review:",
-				"  members:",
-				"    - name: tester",
-				"      command: codex exec",
-				"  settings:",
-				"    timeout: 10",
-				"    mcps:",
-				"      allow:",
-				"        - codegraph",
-			].join("\n"),
-			"utf8",
-		);
+	// codex stub가 받은 실제 argv를 파일로 남긴다. config.toml은 지어낸 서버 이름만 가진 fixture다.
+	async function startWithCodexStub(configPath: string) {
 		const jobsDir = path.join(tmpDir, "jobs");
 		const codexHome = path.join(tmpDir, "codex-home");
 		const binDir = path.join(tmpDir, "bin");
@@ -323,7 +308,7 @@ describe("diagnose job lifecycle", () => {
 		fs.mkdirSync(codexHome, { recursive: true });
 		fs.writeFileSync(
 			path.join(codexHome, "config.toml"),
-			'[mcp_servers.codegraph]\ncommand = "stub"\n\n[mcp_servers.blocked]\ncommand = "stub"\n',
+			'[mcp_servers.codegraph]\ncommand = "stub"\n\n[mcp_servers.srv-blocked]\ncommand = "stub"\n',
 		);
 		const argvPath = path.join(tmpDir, "codex-argv.txt");
 		const stubPath = path.join(binDir, "codex");
@@ -340,9 +325,7 @@ describe("diagnose job lifecycle", () => {
 			[SCRIPT, "start", "--config", configPath, "--jobs-dir", jobsDir, "--json", "mcp test"],
 			{ stdio: "pipe", env },
 		);
-		const output = JSON.parse(result.toString());
-		const member = output.members[0];
-		expect(member.mcpBlock).toEqual(["blocked"]);
+		const member = JSON.parse(result.toString()).members[0];
 		// 상한은 실패 선언 시점만 정한다 — 파일이 끝내 안 생기면 그대로 실패한다.
 		// 여기서 기다리는 대상은 별도로 스폰된 워커 프로세스이고, 전체 스위트
 		// 부하에서 프로세스 기동만 5.8초까지 늘어난 것이 실측됐다. 30회 x 20ms
@@ -352,8 +335,123 @@ describe("diagnose job lifecycle", () => {
 			await new Promise((resolve) => setTimeout(resolve, 20));
 		expect(fs.existsSync(argvPath)).toBe(true);
 		const argv = fs.readFileSync(argvPath, "utf8").split("\n").filter(Boolean);
-		expect(argv).toContain("mcp_servers.blocked.enabled=false");
+		return { member, argv };
+	}
+
+	test("reset + add를 job metadata와 실제 codex argv에 적용한다", async () => {
+		const configPath = path.join(tmpDir, "diagnose.config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"review:",
+				"  members:",
+				"    - name: tester",
+				"      command: codex exec",
+				"  settings:",
+				"    timeout: 10",
+				"    mcp:",
+				"      reset: true",
+				"      add:",
+				"        codegraph:",
+				"          command: codegraph",
+				"          args: [serve, --mcp]",
+			].join("\n"),
+			"utf8",
+		);
+		const { member, argv } = await startWithCodexStub(configPath);
+		expect(member.mcpReset).toBe(true);
+		expect(member.mcpAdd).toEqual({ codegraph: { command: "codegraph", args: ["serve", "--mcp"] } });
+		expect(member.mcpBlock).toEqual(["srv-blocked"]);
+		const disableAt = argv.indexOf("--disable");
+		expect(argv[disableAt + 1]).toBe("plugins");
+		expect(argv).toContain("mcp_servers.srv-blocked.enabled=false");
 		expect(argv).not.toContain("mcp_servers.codegraph.enabled=false");
+		expect(argv).toContain('mcp_servers.codegraph.command="codegraph"');
+		expect(argv).toContain('mcp_servers.codegraph.args=["serve","--mcp"]');
+	});
+
+	test("settings.mcp가 없으면 MCP 관련 플래그를 하나도 붙이지 않는다", async () => {
+		const configPath = path.join(tmpDir, "diagnose.config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"review:",
+				"  members:",
+				"    - name: tester",
+				"      command: codex exec",
+				"  settings:",
+				"    timeout: 10",
+			].join("\n"),
+			"utf8",
+		);
+		const { member, argv } = await startWithCodexStub(configPath);
+		expect(member.mcpReset).toBe(false);
+		expect(member.mcpAdd).toEqual({});
+		expect(member.mcpBlock).toEqual([]);
+		expect(argv).not.toContain("--disable");
+		expect(argv.filter((arg) => arg.startsWith("mcp_servers."))).toEqual([]);
+	});
+
+	test("malformed settings.mcp는 worker와 job 생성 전에 거부한다", () => {
+		const configPath = path.join(tmpDir, "diagnose.config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"review:",
+				"  members:",
+				"    - name: tester",
+				"      command: codex exec",
+				"  settings:",
+				"    mcp:",
+				"      add:",
+				"        bad.name:",
+				"          command: x",
+			].join("\n"),
+			"utf8",
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		let error: any;
+		try {
+			execFileSync(process.execPath, [SCRIPT, "start", "--config", configPath, "--jobs-dir", jobsDir, "bad mcp"], {
+				stdio: "pipe",
+			});
+		} catch (caught) {
+			error = caught;
+		}
+		expect(error?.status).toBe(1);
+		expect(`${error?.stderr?.toString() || ""}`).toContain("review.settings.mcp.add");
+		expect(fs.readdirSync(jobsDir)).toEqual([]);
+	});
+
+	test("settings.mcp가 있는데 codex/claude가 아닌 멤버가 있으면 job 생성 전에 거부한다", () => {
+		const configPath = path.join(tmpDir, "diagnose.config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"review:",
+				"  members:",
+				"    - name: tester",
+				"      command: gemini",
+				"  settings:",
+				"    mcp:",
+				"      reset: true",
+			].join("\n"),
+			"utf8",
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		let error: any;
+		try {
+			execFileSync(process.execPath, [SCRIPT, "start", "--config", configPath, "--jobs-dir", jobsDir, "gemini mcp"], {
+				stdio: "pipe",
+			});
+		} catch (caught) {
+			error = caught;
+		}
+		expect(error?.status).toBe(1);
+		expect(`${error?.stderr?.toString() || ""}`).toContain("codex and claude");
+		expect(fs.readdirSync(jobsDir)).toEqual([]);
 	});
 });
 
@@ -660,6 +758,12 @@ describe("배포 config의 외부 디스패치 계약", () => {
 		return members[0] as Record<string, unknown>;
 	}
 
+	test("deployed config는 settings.mcp를 선언하지 않는다 (모든 MCP 서버를 그대로 상속)", () => {
+		const parsed = Bun.YAML.parse(fs.readFileSync(CONFIG_PATH, "utf8")) as Record<string, any>;
+		expect(parsed.review.settings.mcp).toBeUndefined();
+		expect(parsed.review.settings.mcps).toBeUndefined();
+	});
+
 	test("멤버는 codex exec를 gpt-6-astra/high로 실행한다", () => {
 		const member = readMember();
 		expect(member.command).toBe("codex exec");
@@ -671,11 +775,6 @@ describe("배포 config의 외부 디스패치 계약", () => {
 		const raw = fs.readFileSync(CONFIG_PATH, "utf8");
 		expect(raw).not.toContain("opencode");
 		expect(raw.toLowerCase()).not.toContain("hephaestus");
-	});
-
-	test("codegraph만 MCP 허용 목록에 있다", () => {
-		const parsed = Bun.YAML.parse(fs.readFileSync(CONFIG_PATH, "utf8")) as Record<string, any>;
-		expect(parsed?.review?.settings?.mcps?.allow).toEqual(["codegraph"]);
 	});
 
 	test("해석된 커맨드라인이 모델·추론강도·subagent 차단을 함께 싣는다", () => {
