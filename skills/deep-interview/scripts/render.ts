@@ -141,6 +141,41 @@ export function softWrapLabels(source: string): string {
 	});
 }
 
+/** Width of leading whitespace, a tab advancing to the next multiple of 4 (CommonMark). */
+function indentWidth(ws: string): number {
+	let w = 0;
+	for (const ch of ws) w = ch === "\t" ? w + 4 - (w % 4) : w + 1;
+	return w;
+}
+
+const LIST_ITEM_LINE = /^([ \t]*)([-*+]|\d{1,9}[.)])([ \t]+)\S/;
+
+/**
+ * Content column of the list item holding `lines[i]` (indented `indent` columns),
+ * or 0 at top level. Walks back over earlier lines: the first list item whose
+ * content column is at or left of the bound holds the line; any other non-blank
+ * line narrows the bound to its own indent, and one at column 0 means top level.
+ */
+function containerColumn(lines: string[], i: number, indent: number): number {
+	let bound = indent;
+	for (let j = i - 1; j >= 0; j--) {
+		const line = lines[j];
+		if (line.trim() === "") continue;
+		const item = LIST_ITEM_LINE.exec(line);
+		if (item !== null) {
+			const markerEnd = indentWidth(item[1]) + item[2].length;
+			const gap = indentWidth(item[1] + item[2] + item[3]) - indentWidth(item[1] + item[2]);
+			// CommonMark: 5+ spaces after the marker means content starts one column past it.
+			const content = markerEnd + (gap > 4 ? 1 : gap);
+			if (content <= bound) return content;
+		}
+		const lead = indentWidth(line.slice(0, line.length - line.trimStart().length));
+		if (lead === 0) return 0;
+		bound = Math.min(bound, lead);
+	}
+	return 0;
+}
+
 /**
  * Replaces every ```mermaid fence with an inline SVG before markdown parsing.
  *
@@ -169,6 +204,13 @@ export function preRenderMermaid(
 			continue;
 		}
 		const [, indent, fence, info] = open;
+		// 4+ columns past its container's content column, the line is indented code, not a fence.
+		const width = indentWidth(indent);
+		if (width - containerColumn(lines, i, width) >= 4) {
+			out.push(lines[i]);
+			i += 1;
+			continue;
+		}
 		const closer = new RegExp(`^[ \\t]*${fenceChar}{${fence.length},}[ \\t]*$`);
 		let close = -1;
 		for (let j = i + 1; j < lines.length; j++) {

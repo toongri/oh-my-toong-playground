@@ -694,6 +694,28 @@ describe("preRenderMermaid — 줄 단위 펜스 스캔", () => {
 		expect(renderToHtml(out, "t")).toMatch(/<li>[\s\S]*<figure class="diagram">[\s\S]*<\/li>/);
 	});
 
+	test("최상위에서 4칸 이상 들여쓴 펜스는 들여쓴 코드 블록이라 그대로 둔다", () => {
+		const md = "예시:\n\n    ```mermaid\n    graph TD\n    ```\n";
+		expect(run(md)).toBe(md);
+		const tab = "예시:\n\n\t```mermaid\n\tgraph TD\n\t```\n";
+		expect(run(tab)).toBe(tab);
+	});
+
+	test("목록 항목 내용 열에서 4칸 미만 들여쓴 펜스는 그림으로 바꾼다", () => {
+		expect(run("- 항목\n\n    ```mermaid\n    graph TD\n    ```\n")).toContain('data-i="0"');
+		expect(run("1. 항목\n   - 하위\n\n     ```mermaid\n     graph TD\n     ```\n")).toContain('data-i="0"');
+		expect(run("- 항목\n\n  문단\n\n  ```mermaid\n  graph TD\n  ```\n")).toContain('data-i="0"');
+	});
+
+	test("목록 항목 내용 열보다 4칸 이상 들여쓴 펜스는 코드로 둔다", () => {
+		const md = "- 항목\n\n      ```mermaid\n      graph TD\n      ```\n";
+		expect(run(md)).toBe(md);
+	});
+
+	test("들여쓴 코드 안의 닫히지 않은 펜스 줄이 뒤의 그림을 삼키지 않는다", () => {
+		expect(run("예시:\n\n    ```\n\n```mermaid\ngraph TD\n```\n")).toContain('data-i="0"');
+	});
+
 	test("그림 번호는 실제로 치환한 다이어그램만 센다", () => {
 		const out = run("````md\n```mermaid\nx\n```\n````\n\n```mermaid\ngraph TD\n```\n");
 		expect(out).toContain('data-i="0"');
