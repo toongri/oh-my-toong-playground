@@ -341,6 +341,24 @@ describe("재시도와 대체 경로", () => {
 		);
 	});
 
+	test("스킬 디렉터리 경로를 출처로 든 규칙은 그 스킬을 불러왔을 때만 남는다", async () => {
+		const result = await writeLedger({
+			log: { ...log, lines: [...log.lines, "[skill qa] QA never edits product code"] },
+			runModel: async () => ({
+				output: ledgerJson({
+					working_rules: [
+						{ rule: "Saved case needs a clean replay", source: "/Users/me/.agents/skills/qa/reusable-cases.md" },
+						{ rule: "A rule from a skill never loaded", source: "/tmp/skills/unloaded/note.md" },
+					],
+				}),
+			}),
+			deadline: Date.now() + 60_000,
+		});
+		expect(result.markdown).toContain(
+			"## Working rules (still in force)\n- Saved case needs a clean replay (/Users/me/.agents/skills/qa/reusable-cases.md)\n\n",
+		);
+	});
+
 	test("예산만 넘은 시도는 재시도 없이 바로 채택한다", async () => {
 		const sizes = [3000, 2000, 2500];
 		const result = await writeLedger({

@@ -480,7 +480,8 @@ function keepUserAndSkillRules(d: LedgerJson, users: Map<string, string>, skills
 		const ids = source.split(IDS).filter(Boolean);
 		return ids.length > 0 && ids.every((id) => users.has(id));
 	};
-	return { ...d, working_rules: d.working_rules.filter((r) => fromUser(r.source) || skills.has(r.source.trim()) || SKILL_FILE.test(r.source)) };
+	const fromSkill = (source: string) => skills.has(source.trim()) || skills.has(source.match(SKILL_FILE)?.[1] ?? "");
+	return { ...d, working_rules: d.working_rules.filter((r) => fromUser(r.source) || fromSkill(r.source)) };
 }
 
 export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
