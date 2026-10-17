@@ -277,7 +277,7 @@ export function extractDenySubagents(settings: Record<string, unknown>): boolean
 // `mcpBlock`); buildAugmentedCommand translates them per CLI:
 //   claude: reset -> --strict-mcp-config, add -> --mcp-config '<json>'
 //   codex:  no single "disable all" flag exists, so reset -> `--disable plugins`
-//           (plugin-provided servers) + `-c mcp_servers.<name>.enabled=false`
+//           (plugin-provided servers) + `--disable apps` (`codex_apps` ChatGPT connectors, absent from the listing) + `-c mcp_servers.<name>.enabled=false`
 //           for every server `codex --disable plugins mcp list --json` reports
 //           (`mcpBlock`, computed at job start): user config plus the trusted
 //           project layer of the worker's cwd; names that are not bare TOML keys
@@ -624,8 +624,9 @@ export function buildAugmentedCommand(
 	const mcpAdd = isRecord(entity.mcpAdd) ? Object.entries(entity.mcpAdd) : [];
 	const mcpBlock = Array.isArray(entity.mcpBlock) ? entity.mcpBlock.map((name) => String(name)) : [];
 	if (cliType === "codex") {
-		// Plugin-provided servers are not in config.toml; `--disable apps` alone does not drop them.
-		if (mcpReset) parts.push("--disable", "plugins");
+		// `plugins` drops plugin-provided servers; `apps` drops the built-in `codex_apps` ChatGPT connectors,
+		// which `codex mcp list` does not show, so mcpBlock can never name them. Each flag leaves the other's servers on.
+		if (mcpReset) parts.push("--disable", "plugins", "--disable", "apps");
 		for (const name of mcpBlock) {
 			parts.push("-c", `mcp_servers.${name}.enabled=false`);
 		}

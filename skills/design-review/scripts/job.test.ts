@@ -579,8 +579,8 @@ describe("settings.mcp 배관", () => {
 		expect(member.mcpReset).toBe(true);
 		expect(member.mcpAdd).toEqual({ codegraph: { command: "codegraph", args: ["serve", "--mcp"] } });
 		expect(member.mcpBlock).toEqual(["srv-blocked"]);
-		const disableAt = argv.indexOf("--disable");
-		expect(argv[disableAt + 1]).toBe("plugins");
+		const disabled = argv.flatMap((arg, i) => (arg === "--disable" ? [argv[i + 1]] : []));
+		expect(disabled).toEqual(["plugins", "apps"]);
 		expect(argv).toContain("mcp_servers.srv-blocked.enabled=false");
 		expect(argv).not.toContain("mcp_servers.codegraph.enabled=false");
 		expect(argv).toContain('mcp_servers.codegraph.command="codegraph"');

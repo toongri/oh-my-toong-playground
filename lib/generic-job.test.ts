@@ -673,7 +673,7 @@ describe("buildAugmentedCommand", () => {
 			).toBe("codex exec");
 		});
 
-		test("codex: reset + add + block translates to --disable plugins, enabled=false and command/args overrides", () => {
+		test("codex: reset + add + block translates to --disable plugins, --disable apps, enabled=false and command/args overrides", () => {
 			const result = buildAugmentedCommand(
 				{ command: "codex exec", mcpReset: true, mcpAdd: codegraphAdd, mcpBlock: ["alpha", "beta"] },
 				"codex",
@@ -683,6 +683,8 @@ describe("buildAugmentedCommand", () => {
 				"exec",
 				"--disable",
 				"plugins",
+				"--disable",
+				"apps",
 				"-c",
 				"mcp_servers.alpha.enabled=false",
 				"-c",
