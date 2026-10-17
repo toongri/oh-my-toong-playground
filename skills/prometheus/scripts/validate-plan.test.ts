@@ -402,3 +402,83 @@ Dependency direction: use-case → domains
 		expect(out.length).toBeGreaterThan(0);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Parsing robustness — CRLF, indented fences, fence-only sections
+// ---------------------------------------------------------------------------
+
+describe("파싱 견고성", () => {
+	const passingTodos = [
+		todoBlock("1", { wave: "1" }),
+		todoBlock("2", { blockedBy: "1", wave: "2" }),
+		todoBlock("F1", { blockedBy: "2", wave: "FINAL" }),
+	];
+
+	test("CRLF 줄바꿈 계획도 LF 계획과 같은 결과로 통과한다", () => {
+		const lf = buildGraphPlan(passingTodos);
+		expect(validatePlanGraph(lf)).toEqual([]);
+		for (const crlf of [lf.replace(/\n/g, "\r\n"), lf.replace(/\n/g, "\r")]) {
+			expect(validatePlanGraph(crlf)).toEqual(validatePlanGraph(lf));
+			expect(validatePlan(crlf)).toEqual(validatePlan(lf));
+			expect(validateBoundaryMap(crlf)).toEqual(validateBoundaryMap(lf));
+		}
+	});
+
+	test("들여쓴 펜스 안의 예시 TODO는 유령 TODO를 만들지 않는다", () => {
+		const real = [
+			"- [ ] 1. Real task",
+			"  - Run:",
+			"    ```bash",
+			"    - [ ] 9. Example task",
+			"    Blocked By: 77",
+			"    Wave: 5",
+			"    ```",
+			"  - Wave: 1",
+		].join("\n");
+		const plan = buildGraphPlan([real, todoBlock("F1", { blockedBy: "1", wave: "FINAL" })]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("들여쓴 ~~~ 펜스도 제거한다", () => {
+		const real = [
+			"- [ ] 1. Real task",
+			"  ~~~",
+			"  Blocked By: 77",
+			"  ~~~",
+			"  - Wave: 1",
+		].join("\n");
+		const plan = buildGraphPlan([real, todoBlock("F1", { blockedBy: "1", wave: "FINAL" })]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("~~~ 펜스 안의 ## Success Criteria는 제목으로 세지 않는다", () => {
+		const plan = buildPlan({ "Success Criteria": "" }).replace(
+			"## Success Criteria\n\n\n",
+			"~~~\n## Success Criteria\nInside a fence.\n~~~\n",
+		);
+		expect(validatePlan(plan)).toContain("Success Criteria");
+	});
+
+	test("펜스 밖 텍스트는 제거하지 않는다", () => {
+		const plan = buildPlan({
+			Context: "before\n```\ncode\n```\nafter ~~~ not a fence",
+		});
+		expect(validatePlan(plan)).toEqual([]);
+	});
+
+	test("펜스 블록만 있는 섹션은 비어 있지 않다", () => {
+		const plan = buildPlan({
+			"Execution Strategy": "```\nWave 1: 1\nWave 2: 2\n```",
+			"Verification Strategy": "  ```bash\n  bun test\n  ```",
+		});
+		expect(validatePlan(plan)).toEqual([]);
+	});
+
+	test("펜스 안의 제목은 섹션 경계가 되지 않는다", () => {
+		const plan = buildPlan({
+			"Execution Strategy": "```\n## Verification Strategy\n```",
+			"Verification Strategy": "",
+		});
+		expect(validatePlan(plan)).toContain("Verification Strategy");
+	});
+});

@@ -27,18 +27,44 @@ export const REQUIRED_HEADINGS: string[] = [
 ];
 
 /**
- * Strip fenced code blocks (``` ... ```) from markdown content.
- * This prevents headings inside fences from being counted.
+ * Replace each fenced code block (``` or ~~~, opening fence at any indent, as
+ * list-nested fences are) with `placeholder`, closing on a fence line of the
+ * same character at least as long. Line endings are normalized to LF first, so
+ * every check built on this sees LF. An unclosed fence is left untouched.
+ * Text outside fences is never changed.
  */
-function stripFences(content: string): string {
-	return content.replace(/^```[\s\S]*?^```/gm, "");
+function stripFences(content: string, placeholder = ""): string {
+	const lines = content.replace(/\r\n?/g, "\n").split("\n");
+	const out: string[] = [];
+	for (let i = 0; i < lines.length; i++) {
+		const open = /^\s*(`{3,}|~{3,})/.exec(lines[i]);
+		if (open !== null) {
+			const marker = open[1];
+			const close = new RegExp(`^\\s*${marker[0]}{${marker.length},}\\s*$`);
+			let end = -1;
+			for (let j = i + 1; j < lines.length; j++) {
+				if (close.test(lines[j])) {
+					end = j;
+					break;
+				}
+			}
+			if (end !== -1) {
+				out.push(placeholder);
+				i = end;
+				continue;
+			}
+		}
+		out.push(lines[i]);
+	}
+	return out.join("\n");
 }
 
 /**
  * Validate a plan's text for section presence and non-emptiness.
  *
  * Rules:
- * (a) Fenced code blocks are stripped before scanning.
+ * (a) Fenced code blocks are stripped before scanning, but a fenced block
+ *     counts as section content (headings inside it still do not count).
  * (b) A heading matches exactly `## <literal>` (level-2, case-sensitive, no extra text).
  * (c) Duplicate headings: first occurrence wins.
  * (d) Non-empty = body between this heading and the next ## heading has trimmed length > 0.
@@ -46,7 +72,7 @@ function stripFences(content: string): string {
  * @returns Array of heading literals that are missing or empty.
  */
 export function validatePlan(content: string): string[] {
-	const stripped = stripFences(content);
+	const stripped = stripFences(content, "[fenced block]");
 
 	// Parse the heading line regex: exactly ## <literal> (optional trailing whitespace)
 	const headingRegex = /^##[ \t]+(.+?)[ \t]*$/gm;
