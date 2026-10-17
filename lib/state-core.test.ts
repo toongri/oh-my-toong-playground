@@ -2052,6 +2052,12 @@ describe("planFileHasTodos", () => {
 		expect(planFileHasTodos(planWith("```md\n## TODOs\n```\n- [ ] 1. 예시\n"))).toBe(false);
 	});
 
+	test("여는 펜스와 문자·길이가 맞지 않는 펜스 줄은 블록을 닫지 않음", () => {
+		expect(planFileHasTodos(planWith("## TODOs\n\n````md\n```\n- [ ] 1. 예시\n````\n"))).toBe(false);
+		expect(planFileHasTodos(planWith("## TODOs\n\n~~~md\n```\n- [ ] 1. 예시\n~~~\n"))).toBe(false);
+		expect(planFileHasTodos(planWith("## TODOs\n\n````md\n```\n````\n- [ ] 1. 실제 작업\n"))).toBe(true);
+	});
+
 	test("TODO 번호 없는 체크박스 줄은 세지 않음", () => {
 		expect(planFileHasTodos(planWith("## TODOs\n- [ ] 설명만 있는 줄\n"))).toBe(false);
 	});

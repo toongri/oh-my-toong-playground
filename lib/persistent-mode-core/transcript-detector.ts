@@ -1,4 +1,5 @@
 import { logDebug } from "@lib/logging";
+import { linesOutsideFences } from "@lib/markdown-fence";
 
 // Pattern matchers
 const DEEP_INTERVIEW_DONE_PATTERN = /<deep-interview-done\s*\/>/i;
@@ -6,18 +7,9 @@ const DEEP_INTERVIEW_DONE_PATTERN = /<deep-interview-done\s*\/>/i;
 // (whitespace only around it) outside fenced code. A message that merely mentions it
 // mid-sentence, in inline code, or in a code example is not a completion signal.
 const PROMETHEUS_DONE_LINE_PATTERN = /^\s*<prometheus-done\s*\/>\s*$/i;
-const MARKDOWN_FENCE_PATTERN = /^\s{0,3}(```|~~~)/;
 
 function hasPrometheusDoneLineOutsideFence(message: string): boolean {
-	let inFence = false;
-	for (const line of message.split(/\r?\n/)) {
-		if (MARKDOWN_FENCE_PATTERN.test(line)) {
-			inFence = !inFence;
-			continue;
-		}
-		if (!inFence && PROMETHEUS_DONE_LINE_PATTERN.test(line)) return true;
-	}
-	return false;
+	return linesOutsideFences(message).some((line) => PROMETHEUS_DONE_LINE_PATTERN.test(line));
 }
 
 export function detectDeepInterviewDone(lastAssistantMessage: string | null): boolean {

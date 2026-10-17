@@ -53,6 +53,7 @@ import { createHash } from "crypto";
 // (the sync alias-rewriter skips lib/** files). Relative imports let `make sync`'s dep collector
 // follow the path and deploy omt-dir alongside this module.
 import { getOmtDir, resolveOmtDir } from "./omt-dir";
+import { linesOutsideFences } from "./markdown-fence";
 import { withStateLock } from "./persistent-mode-core/state-lock";
 import { chainComplete, commentOk, approveOk, driverGateArmed, recordComplete } from "./qa-chain-core";
 import type { QaChainState } from "./qa-chain-core";
@@ -1175,7 +1176,6 @@ export function stageAPresentationPath(planPath: string): string {
 const PLAN_TODOS_HEADING = /^##\s+TODOs\s*$/;
 const PLAN_NEXT_H2_HEADING = /^##(?!#)\s/;
 const PLAN_TODO_LINE = /^\s*- \[[ xX]\] (F?\d+)\.\s/;
-const MARKDOWN_FENCE = /^\s{0,3}(```|~~~)/;
 
 /**
  * True iff the plan file at `planPath` has a `## TODOs` heading followed, before the
@@ -1192,14 +1192,8 @@ export function planFileHasTodos(planPath: string): boolean {
 	} catch {
 		return false;
 	}
-	let inFence = false;
 	let inTodos = false;
-	for (const line of content.split(/\r?\n/)) {
-		if (MARKDOWN_FENCE.test(line)) {
-			inFence = !inFence;
-			continue;
-		}
-		if (inFence) continue;
+	for (const line of linesOutsideFences(content)) {
 		if (PLAN_TODOS_HEADING.test(line)) {
 			inTodos = true;
 		} else if (PLAN_NEXT_H2_HEADING.test(line)) {

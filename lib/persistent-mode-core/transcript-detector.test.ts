@@ -59,6 +59,20 @@ describe("transcript-detector", () => {
 			expect(detectPrometheusDone("예시:\n~~~text\n<prometheus-done/>\n~~~")).toBe(false);
 		});
 
+		it("여는 펜스와 문자·길이가 맞지 않거나 정보 문자열이 붙은 줄은 펜스를 닫지 않음", () => {
+			expect(detectPrometheusDone("````md\n```\n<prometheus-done/>\n````")).toBe(false);
+			expect(detectPrometheusDone("~~~\n```\n<prometheus-done/>\n~~~")).toBe(false);
+			expect(detectPrometheusDone("```\n```ts\n<prometheus-done/>\n```")).toBe(false);
+		});
+
+		it("닫히지 않은 펜스 뒤의 토큰은 감지하지 않음", () => {
+			expect(detectPrometheusDone("```\ncode\n<prometheus-done/>")).toBe(false);
+		});
+
+		it("더 긴 닫는 펜스 뒤의 토큰은 감지함", () => {
+			expect(detectPrometheusDone("```\ncode\n`````\n<prometheus-done/>")).toBe(true);
+		});
+
 		it("코드 펜스 밖의 단독 줄 토큰은 펜스 뒤에서도 감지함", () => {
 			expect(detectPrometheusDone("```\ncode\n```\n<prometheus-done/>")).toBe(true);
 		});
