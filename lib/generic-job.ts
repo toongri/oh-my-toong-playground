@@ -284,7 +284,9 @@ export function extractDenySubagents(settings: Record<string, unknown>): boolean
 //           cannot be addressed by `-c`, so they are skipped with a warning. That listing does not start any server.
 //           add -> `-c mcp_servers.<name>.command=...` / `.args=[...]` / `.enabled=true`.
 //           An add name (with or without reset) that the listing reports as a non-stdio server fails job start,
-//           because `-c` merges into that entry and codex then refuses to boot.
+//           because `-c` merges into that entry and codex then refuses to boot. A stdio entry of that name that sets env, env_vars, cwd or a
+//           timeout also fails job start (`-c` cannot clear them). `disabled_tools=[]` is emitted for every add server; an inherited
+//           `enabled_tools` allowlist is invisible in the listing and cannot be cleared through `-c`.
 // ---------------------------------------------------------------------------
 
 export type McpAddServers = Record<string, { command: string; args: string[] }>;
@@ -365,7 +367,18 @@ export function extractMcp(settings: Record<string, unknown>): {
 	return { isSet: true, reset: mcp.reset === true, add };
 }
 
-export type McpListEntry = { name: string; enabled?: boolean; transport?: { type?: string } };
+export type McpListEntry = {
+	name: string;
+	enabled?: boolean;
+	transport?: {
+		type?: string;
+		env?: Record<string, unknown>;
+		env_vars?: unknown[];
+		cwd?: string;
+	};
+	startup_timeout_sec?: number;
+	tool_timeout_sec?: number;
+};
 
 const MCP_LIST_TIMEOUT_MS = 30_000;
 
@@ -420,8 +433,15 @@ export function listConfiguredMcpServers(
 			enabled: typeof item.enabled === "boolean" ? item.enabled : undefined,
 			transport:
 				isRecord(item.transport) && typeof item.transport.type === "string"
-					? { type: item.transport.type }
+					? {
+							type: item.transport.type,
+							env: isRecord(item.transport.env) ? item.transport.env : undefined,
+							env_vars: Array.isArray(item.transport.env_vars) ? item.transport.env_vars : undefined,
+							cwd: typeof item.transport.cwd === "string" ? item.transport.cwd : undefined,
+						}
 					: undefined,
+			startup_timeout_sec: typeof item.startup_timeout_sec === "number" ? item.startup_timeout_sec : undefined,
+			tool_timeout_sec: typeof item.tool_timeout_sec === "number" ? item.tool_timeout_sec : undefined,
 		};
 	});
 }
@@ -476,6 +496,20 @@ export function prepareMcpEntities(
 					exitWithError(
 						`Invalid config in ${configPath}: '${config.configTopLevelKey}.settings.mcp.add.${server.name}' collides with a server the user config defines as a non-stdio server (${server.transport?.type ?? "unknown transport"}); codex cannot start it as stdio. Rename the add key or remove the user entry.`,
 					);
+				}
+				if (server.name in mcp.add) {
+					const inherited = [
+						Object.keys(server.transport?.env ?? {}).length > 0 ? "env" : "",
+						(server.transport?.env_vars ?? []).length > 0 ? "env_vars" : "",
+						server.transport?.cwd !== undefined ? "cwd" : "",
+						server.startup_timeout_sec !== undefined ? "startup_timeout_sec" : "",
+						server.tool_timeout_sec !== undefined ? "tool_timeout_sec" : "",
+					].filter(Boolean);
+					if (inherited.length > 0) {
+						exitWithError(
+							`Invalid config in ${configPath}: '${config.configTopLevelKey}.settings.mcp.add.${server.name}' collides with a stdio server the user config defines with ${inherited.join(", ")}; codex -c cannot remove them, so the job's server would run with them. Rename the add key or remove those fields from the user entry.`,
+						);
+					}
 				}
 			}
 			if (mcp.reset) mcpBlock = listed
@@ -641,6 +675,9 @@ export function buildAugmentedCommand(
 				// `-c` merges into an inherited [mcp_servers.<name>] entry, so its `enabled = false` would survive.
 				"-c",
 				`mcp_servers.${name}.enabled=true`,
+				// An inherited `disabled_tools` would hide tools of the job's server; `[]` replaces it (tables merge, arrays replace).
+				"-c",
+				`mcp_servers.${name}.disabled_tools=[]`,
 			);
 		}
 	} else if (cliType === "claude") {

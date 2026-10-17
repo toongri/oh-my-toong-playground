@@ -695,6 +695,8 @@ describe("buildAugmentedCommand", () => {
 				'mcp_servers.codegraph.args=["serve","--mcp"]',
 				"-c",
 				"mcp_servers.codegraph.enabled=true",
+				"-c",
+				"mcp_servers.codegraph.disabled_tools=[]",
 			]);
 		});
 
@@ -710,6 +712,8 @@ describe("buildAugmentedCommand", () => {
 				'mcp_servers.codegraph.args=["serve","--mcp"]',
 				"-c",
 				"mcp_servers.codegraph.enabled=true",
+				"-c",
+				"mcp_servers.codegraph.disabled_tools=[]",
 			]);
 			expect(result.command).not.toContain("--disable");
 			expect(result.command).not.toContain("enabled=false");
@@ -764,6 +768,8 @@ describe("buildAugmentedCommand", () => {
 				`mcp_servers.odd.args=${JSON.stringify(args)}`,
 				"-c",
 				"mcp_servers.odd.enabled=true",
+				"-c",
+				"mcp_servers.odd.disabled_tools=[]",
 			]);
 
 			const claude = splitCommand(
@@ -870,7 +876,18 @@ describe("assertMcpShape", () => {
 // the test puts first on PATH (no dependency on the host's codex or config).
 // ---------------------------------------------------------------------------
 
-type FakeMcpEntry = { name: string; enabled?: boolean; transport?: { type: string } };
+type FakeMcpEntry = {
+	name: string;
+	enabled?: boolean;
+	transport?: {
+		type: string;
+		env?: Record<string, string>;
+		env_vars?: string[];
+		cwd?: string;
+	};
+	startup_timeout_sec?: number;
+	tool_timeout_sec?: number;
+};
 
 /** Write a fake `codex` into `binDir`. It logs one line per call (CODEX_HOME, cwd, argv) to `logPath`. */
 function installFakeCodex(
@@ -1113,6 +1130,51 @@ describe("prepareMcpEntities", () => {
 			tmpDir,
 		);
 		expect(result[0].mcpBlock).toEqual([]);
+	});
+
+	test.each([
+		["cwd", { transport: { type: "stdio", cwd: "/work" } }],
+		["env", { transport: { type: "stdio", env: { TOKEN: "x" } } }],
+		["env_vars", { transport: { type: "stdio", env_vars: ["TOKEN"] } }],
+		["startup_timeout_sec", { transport: { type: "stdio" }, startup_timeout_sec: 60 }],
+		["tool_timeout_sec", { transport: { type: "stdio" }, tool_timeout_sec: 30 }],
+	] as const)("an add name colliding with a stdio server that sets %s stops job start", (field, extra) => {
+		installFakeCodex(binDir, logPath, { entries: [{ name: "alpha", enabled: true, ...extra } as FakeMcpEntry] });
+		expect(() =>
+			prepareMcpEntities(
+				{ mcp: { add: addAlpha } },
+				[{ name: "a", command: "codex exec" }],
+				councilConfig,
+				"/tmp/config.yaml",
+				tmpDir,
+			),
+		).toThrow("process.exit(1)");
+		expect(stderrOutput).toContain("alpha");
+		expect(stderrOutput).toContain(field);
+		expect(stderrOutput).toContain("-c");
+		expect(stderrOutput).toContain("Rename the add key");
+	});
+
+	test("a same-name stdio entry with empty env, env_vars and null cwd/timeouts is allowed", () => {
+		installFakeCodex(binDir, logPath, {
+			entries: [
+				{
+					name: "alpha",
+					enabled: true,
+					transport: { type: "stdio", env: null, env_vars: [], cwd: null },
+					startup_timeout_sec: null,
+					tool_timeout_sec: null,
+				},
+			] as unknown as FakeMcpEntry[], // the real listing prints null for unset fields
+		});
+		const result = prepareMcpEntities(
+			{ mcp: { add: addAlpha } },
+			[{ name: "a", command: "codex exec" }],
+			councilConfig,
+			"/tmp/config.yaml",
+			tmpDir,
+		);
+		expect(result[0].mcpAdd).toEqual({ alpha: { command: "alpha-bin", args: ["serve"] } });
 	});
 
 	test("a failing list command stops job start with the command and its stderr", () => {
