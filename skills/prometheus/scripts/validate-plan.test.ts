@@ -7,7 +7,7 @@ import {
 	validatePlan,
 	validatePlanGraph,
 	validateBoundaryMap,
-	validateFences,
+	validateUnclosedBlocks,
 } from "./validate-plan.ts";
 
 // ---------------------------------------------------------------------------
@@ -551,8 +551,8 @@ describe("HTML 주석", () => {
 		expect(validateBoundaryMap("## ADR\n\n<!-- Must NOT own: x -->\n")).toEqual([]);
 	});
 
-	test("닫히지 않은 주석과 주석 밖 텍스트는 그대로 둔다", () => {
-		const plan = buildPlan({ Context: "before <!-- note --> after\n<!-- never closed" });
+	test("줄 중간의 닫히지 않은 주석과 주석 밖 텍스트는 그대로 둔다", () => {
+		const plan = buildPlan({ Context: "before <!-- note --> after\ntext <!-- never closed" });
 		expect(validatePlan(plan)).toEqual([]);
 	});
 });
@@ -694,19 +694,39 @@ describe("코드 펜스", () => {
 
 	test("닫히지 않은 펜스는 연 줄을 알리고, 그 뒤는 코드로 보아 섹션을 세지 않는다", () => {
 		const plan = `# P\n\n${F}md\n\n${buildPlan()}`;
-		const out = validateFences(plan);
+		const out = validateUnclosedBlocks(plan);
 		expect(out.length).toBe(1);
 		expect(out[0]).toContain("line 3");
 		expect(validatePlan(plan)).toEqual(REQUIRED_HEADINGS);
 	});
 
+	test("닫히지 않은 HTML 주석은 연 줄을 알리고, 그 뒤는 주석으로 보아 섹션을 세지 않는다", () => {
+		const plan = `# P\n\n<!--\n\n${buildPlan()}`;
+		const out = validateUnclosedBlocks(plan);
+		expect(out.length).toBe(1);
+		expect(out[0]).toContain("line 3");
+		expect(out[0]).toContain("HTML comment");
+		expect(validatePlan(plan)).toEqual(REQUIRED_HEADINGS);
+	});
+
+	test("줄 중간의 닫히지 않은 <!--는 글자 그대로라 보고하지 않는다", () => {
+		const plan = buildPlan({ Context: "화살표 <!-- 표기는 그대로 둔다." });
+		expect(validateUnclosedBlocks(plan)).toEqual([]);
+		expect(validatePlan(plan)).toEqual([]);
+	});
+
+	test("TODOs 섹션에 펜스 예시만 있으면 정식 TODO가 없다고 보고한다", () => {
+		const plan = buildPlan({ TODOs: `${F}md\n- [ ] 1. 예시\n${F}` });
+		expect(validatePlanGraph(plan)).toContain("TODOs section contains no canonical checkbox TODOs");
+	});
+
 	test("닫힌 펜스만 있으면 펜스 위반이 없다", () => {
-		expect(validateFences(`${buildPlan()}\n${F}ts\nx\n${F}\n~~~\ny\n~~~\n`)).toEqual([]);
+		expect(validateUnclosedBlocks(`${buildPlan()}\n${F}ts\nx\n${F}\n~~~\ny\n~~~\n`)).toEqual([]);
 	});
 
 	test("최상위에서 4칸 들여쓴 펜스 줄은 들여쓴 코드라 펜스를 열지 않는다", () => {
 		const plan = buildPlan({ Context: `예시:\n\n    ${F}\n` });
-		expect(validateFences(plan)).toEqual([]);
+		expect(validateUnclosedBlocks(plan)).toEqual([]);
 		expect(validatePlan(plan)).toEqual([]);
 	});
 

@@ -26,8 +26,9 @@
  * predecessor counts). F1-F4 targets are exempt from that path check. The reverse
  * is not required: `Blocks:` may omit dependents, and the field may be absent.
  *
- * Code fences follow `lib/markdown-fence.ts`. Every pass ignores fenced text, and
- * a fence that never closes is reported, since everything after it renders as code.
+ * Code fences follow `lib/markdown-fence.ts`. Every pass ignores fenced text and
+ * HTML comments. A fence, or a line-start `<!--`, that never closes is reported,
+ * since everything after it renders as code or is hidden.
  *
  * Usage: bun skills/prometheus/scripts/validate-plan.ts <plan_path>
  * Exit 0 = all sections present and non-empty, and no graph violations.
@@ -48,41 +49,85 @@ export const REQUIRED_HEADINGS: string[] = [
 	"Success Criteria",
 ];
 
-/**
- * Replace each fenced code block with `placeholder`. Fences follow the shared
- * rules in `lib/markdown-fence.ts`: list-relative indentation, a closer of the
- * same character at least as long, and an unclosed fence running to the end (so
- * nothing after it counts as plan structure; `validateFences` reports it). Line
- * endings are normalized to LF first, so every check built on this sees LF.
- * HTML comments (`<!-- ... -->`, single- or multi-line) outside fences are then
- * removed; an unclosed `<!--` is left untouched. Other text is never changed.
- */
-function stripFences(content: string, placeholder = ""): string {
-	const lines = content.replace(/\r\n?/g, "\n").split("\n");
-	const out: string[] = [];
-	let next = 0;
-	for (const block of findFenceBlocks(lines)) {
-		out.push(...lines.slice(next, block.open), placeholder);
-		next = block.close === -1 ? lines.length : block.close + 1;
-	}
-	out.push(...lines.slice(next));
-	return out.join("\n").replace(/<!--[\s\S]*?-->/g, "");
+interface ScrubbedPlan {
+	/** Plan text with fenced blocks and HTML comments removed. */
+	text: string;
+	/** Opening line (1-based) and text of a fence that never closes, or null. */
+	unclosedFence: { line: number; opener: string } | null;
+	/** 1-based line of a line-start `<!--` that never closes, or null. */
+	unclosedCommentLine: number | null;
 }
 
 /**
- * Report a code fence that never closes. Markdown renders everything after it as
- * code, so the sections and TODOs written there are not part of the plan.
- *
- * @returns One violation message per unclosed fence (at most one), or empty.
+ * Remove what Markdown does not render as plan structure. Line endings are
+ * normalized to LF first, so every check built on this sees LF.
+ * - Each fenced code block becomes `placeholder`. Fences follow the shared rules
+ *   in `lib/markdown-fence.ts`, and an unclosed fence runs to the end.
+ * - Then each HTML comment (`<!-- ... -->`, single- or multi-line) is removed. A
+ *   `<!--` that starts a line (indent up to 3) and never closes runs to the end, as
+ *   an HTML block does. One that never closes mid-line is literal text and stays.
+ * Other text is never changed.
  */
-export function validateFences(content: string): string[] {
+function scrubPlan(content: string, placeholder: string): ScrubbedPlan {
 	const lines = content.replace(/\r\n?/g, "\n").split("\n");
-	return findFenceBlocks(lines)
-		.filter((block) => block.close === -1)
-		.map(
-			(block) =>
-				`Code fence: the fence opened on line ${block.open + 1} (\`${lines[block.open].trim()}\`) never closes, so everything after it renders as code. Close it or remove it.`,
+	let unclosedFence: ScrubbedPlan["unclosedFence"] = null;
+	for (const block of findFenceBlocks(lines)) {
+		if (block.close === -1) unclosedFence = { line: block.open + 1, opener: lines[block.open].trim() };
+		const end = block.close === -1 ? lines.length - 1 : block.close;
+		for (let k = block.open + 1; k <= end; k++) lines[k] = "";
+		lines[block.open] = placeholder;
+	}
+	const text = lines.join("\n");
+	let out = "";
+	let pos = 0;
+	for (;;) {
+		const open = text.indexOf("<!--", pos);
+		if (open === -1) return { text: out + text.slice(pos), unclosedFence, unclosedCommentLine: null };
+		const close = text.indexOf("-->", open + 4);
+		if (close !== -1) {
+			out += text.slice(pos, open);
+			pos = close + 3;
+			continue;
+		}
+		const lineStart = text.lastIndexOf("\n", open - 1) + 1;
+		if (/^ {0,3}$/.test(text.slice(lineStart, open))) {
+			return {
+				text: out + text.slice(pos, open),
+				unclosedFence,
+				unclosedCommentLine: text.slice(0, open).split("\n").length,
+			};
+		}
+		out += text.slice(pos, open + 4);
+		pos = open + 4;
+	}
+}
+
+/** Plan text with fenced blocks replaced by `placeholder` and HTML comments removed. */
+function stripFences(content: string, placeholder = ""): string {
+	return scrubPlan(content, placeholder).text;
+}
+
+/**
+ * Report a code fence or a line-start HTML comment that never closes. Markdown
+ * renders everything after it as code or hides it, so the sections and TODOs
+ * written there are not part of the plan.
+ *
+ * @returns One violation message per kind found, or empty.
+ */
+export function validateUnclosedBlocks(content: string): string[] {
+	const { unclosedFence, unclosedCommentLine } = scrubPlan(content, "");
+	const violations: string[] = [];
+	if (unclosedFence !== null) {
+		violations.push(
+			`Code fence: the fence opened on line ${unclosedFence.line} (\`${unclosedFence.opener}\`) never closes, so everything after it renders as code. Close it or remove it.`,
 		);
+	}
+	if (unclosedCommentLine !== null) {
+		violations.push(
+			`HTML comment: the \`<!--\` on line ${unclosedCommentLine} never closes with \`-->\`, so everything after it is hidden. Close it or remove it.`,
+		);
+	}
+	return violations;
 }
 
 /**
@@ -270,7 +315,9 @@ function parseTodos(content: string): TodoNode[] {
 
 /** Whether a first `## TODOs` section exists and has non-whitespace body text. */
 function hasNonEmptyTodosSection(content: string): boolean {
-	const stripped = stripFences(content);
+	// Same placeholder as validatePlan: a fence-only section is non-empty there, so it
+	// must be non-empty here too, or a TODOs section holding only an example passes both.
+	const stripped = stripFences(content, "[fenced block]");
 	const sectionMatch = /^##[ \t]+TODOs[ \t]*$/m.exec(stripped);
 	if (sectionMatch === null) return false;
 	const bodyStart = sectionMatch.index + sectionMatch[0].length;
@@ -540,7 +587,7 @@ if (import.meta.main) {
 		process.exit(2);
 	}
 	const problems = [
-		...validateFences(content),
+		...validateUnclosedBlocks(content),
 		...validatePlan(content),
 		...validatePlanGraph(content),
 		...validateBoundaryMap(content),
