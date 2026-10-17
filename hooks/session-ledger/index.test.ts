@@ -415,6 +415,50 @@ describe("재시도와 대체 경로", () => {
 		expect(result.markdown).toContain("## All user messages (verbatim)\n- [U1] 로그인 버그 고쳐줘.");
 	});
 
+	test("같은 수의 문제를 가진 시도 중 예산을 넘은 것이 섞이면 크기가 작은 시도를 채택한다", async () => {
+		const attempt = (size: number) => ledgerJson({ current_work: "Editing `src/logn.ts`.", pending: ["x".repeat(size)] });
+		const outputs: ModelResult[] = [{ output: attempt(3000) }, { output: attempt(1000) }, { output: attempt(6000) }];
+		const result = await writeLedger({
+			log,
+			budget: 100,
+			runModel: async () => outputs.shift() as ModelResult,
+			deadline: Date.now() + 60_000,
+			retryDelayMs: 0,
+		});
+		expect(result.status).toBe("accepted-with-warnings");
+		expect(result.markdown).toContain("x".repeat(1000));
+		expect(result.markdown).not.toContain("x".repeat(1001));
+		expect(result.markdown).not.toContain("over budget");
+	});
+
+	test("이전 ledger의 확인 못 한 점이 결정 문장을 인용해도 그 결정 안의 식별자는 확인된 것으로 본다", async () => {
+		const previousLedger =
+			'# Session ledger\n\n## Decisions\n- Use `src/retry_queue.ts` for the retry queue — durable (user\'s decision: U1)\n\n## Unverified points\nThe validator could not verify these against the transcript; check them before relying on them:\n- these decisions are credited to the user (made_by user or agreed) but cite no user message: ["Use `src/retry_queue.ts` for the retry queue"]; cite the U-id\n\n## All user messages (verbatim)\n- [U1] 로그인 버그 고쳐줘.\n';
+		const decision = { decision: "Use `src/retry_queue.ts` for the retry queue", rationale: "durable", made_by: "user" as const, source: "U1" };
+		const result = await writeLedger({
+			log,
+			previousLedger,
+			runModel: async () => ({ output: ledgerJson({ decisions: [decision] }) }),
+			deadline: Date.now() + 60_000,
+		});
+		expect(result.status).toBe("accepted");
+		expect(result.attempts[0].violations).toEqual([]);
+	});
+
+	test("같은 확인 못 한 점 목록에 식별자와 결정 문장이 함께 있으면 식별자만 계속 위반으로 잡는다", async () => {
+		const previousLedger =
+			'# Session ledger\n\n## Decisions\n- Use `src/retry_queue.ts` for the retry queue — durable (user\'s decision: U1)\n\n## Unverified points\nThe validator could not verify these against the transcript; check them before relying on them:\n- these decisions are credited to the user but cite no user message: ["Use `src/retry_queue.ts` for the retry queue"]\n- these code-formatted identifiers do not appear in the work log, so they are misspelled or invented: ["src/logn.ts"]\n\n## All user messages (verbatim)\n- [U1] 로그인 버그 고쳐줘.\n';
+		const decision = { decision: "Use `src/retry_queue.ts` for the retry queue", rationale: "durable", made_by: "user" as const, source: "U1" };
+		const outputs: ModelResult[] = [
+			{ output: ledgerJson({ current_work: "Editing `src/logn.ts`.", decisions: [decision] }) },
+			{ output: ledgerJson({ decisions: [decision] }) },
+		];
+		const result = await writeLedger({ log, previousLedger, runModel: async () => outputs.shift() as ModelResult, deadline: Date.now() + 60_000 });
+		expect(result.attempts[0].violations).toEqual([expect.stringContaining("src/logn.ts")]);
+		expect(result.attempts[0].violations?.join("\n")).not.toContain("retry_queue");
+		expect(result.status).toBe("accepted");
+	});
+
 	test("출력 없이 끝난 호출은 같은 모델로 한 번 다시 부르고, 그래도 없으면 대체 모델로 넘어가 그 뒤 시도도 대체 모델로 한다", async () => {
 		const calls: string[] = [];
 		const codex = async (): Promise<ModelResult> => (calls.push("codex"), { error: "codex exited 1", model: "codex" });

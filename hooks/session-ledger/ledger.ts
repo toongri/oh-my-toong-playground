@@ -392,7 +392,8 @@ function verifiedText(ledger: string | undefined): string {
 	if (!ledger) return "";
 	const section = ledger.split(`\n${UNVERIFIED_HEADING}\n`)[1]?.split("\n## ")[0] ?? "";
 	let text = ledger;
-	for (const [, id] of section.matchAll(/"([^"\n]{6,})"/g)) text = text.replaceAll(id, "");
+	// Only identifier-shaped strings (no whitespace): warning lines also quote whole decision sentences, which must stay.
+	for (const [, id] of section.matchAll(/"([^"\s]{6,})"/g)) text = text.replaceAll(id, "");
 	return text;
 }
 
@@ -545,7 +546,7 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 	const basePrompt = buildPrompt(input.log, input.previousLedger, budget);
 	const attempts: AttemptRecord[] = [];
 	// The attempt with the fewest problems, accepted with its problems listed when no attempt passes.
-	let best: { d: LedgerJson; warnings: string[]; problems: number } | undefined;
+	let best: { d: LedgerJson; warnings: string[]; problems: number; size: number } | undefined;
 	let prompt = basePrompt;
 
 	const retryDelayMs = input.retryDelayMs ?? RETRY_DELAY_MS;
@@ -587,8 +588,10 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 			return { markdown: renderLedger(d, allUsers), status: "accepted-over-budget", attempts };
 		}
 		const warnings = violations.filter((x) => !x.startsWith(OVER_BUDGET));
-		const problems = warnings.length + unknownIdentifiers(d, ctx.sourceText).length;
-		if (!best || problems <= best.problems) best = { d, warnings, problems };
+		// Over budget counts as one problem; on a tie the smaller ledger wins, then the later attempt.
+		const overBudget = violations.length - warnings.length;
+		const problems = warnings.length + overBudget + unknownIdentifiers(d, ctx.sourceText).length;
+		if (!best || problems < best.problems || (problems === best.problems && size <= best.size)) best = { d, warnings, problems, size };
 		prompt =
 			`${basePrompt}\n=== YOUR PREVIOUS OUTPUT WAS REJECTED BY THE VALIDATOR ===\n${violations.map((x) => `- ${x}`).join("\n")}` +
 			`\nPrevious output:\n${JSON.stringify(d)}\nReturn a corrected handoff JSON.\n`;
