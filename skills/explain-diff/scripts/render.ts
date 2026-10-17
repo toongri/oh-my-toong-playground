@@ -313,10 +313,13 @@ const RESERVED_ID = /^(?:dz|mmd)-\d+$/;
  */
 function headingInlineTokens(tokens: Token[], flattenLinks: boolean): Token[] {
 	return tokens.flatMap((t): Token[] => {
-		if (t.type === "html") return [{ type: "text", raw: t.raw, text: t.raw } as Tokens.Text];
+		if (t.type === "html") {
+			const text: Tokens.Text = { type: "text", raw: t.raw, text: t.raw };
+			return [text];
+		}
 		const inner = "tokens" in t && Array.isArray(t.tokens) ? headingInlineTokens(t.tokens, flattenLinks) : undefined;
 		if (flattenLinks && t.type === "link") return inner ?? [];
-		return [inner ? ({ ...t, tokens: inner } as Token) : t];
+		return [inner ? Object.assign({}, t, { tokens: inner }) : t];
 	});
 }
 
@@ -434,6 +437,7 @@ export function findBackslashEndedCodeSpans(markdown: string): string[] {
 
 /** Drops control characters from text echoed to the terminal, so a document cannot drive the cursor or the screen. */
 export function stripControlChars(text: string): string {
+	// eslint-disable-next-line no-control-regex -- intentional: strips literal control chars from terminal-echoed text
 	return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "");
 }
 

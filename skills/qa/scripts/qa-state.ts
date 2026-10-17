@@ -993,7 +993,8 @@ export function amendScenario(sessionId: string, opts: AmendScenarioOpts): void 
 	withStateLock(resolveStatePath(sessionId), () => {
 		const prior = readPrior(sessionId);
 		const next = buildScenario("amend-scenario", prior, opts);
-		const cycle = next.cycle as number;
+		const cycle = next.cycle;
+		if (typeof cycle !== "number") throw new Error("amend-scenario: scenario has no cycle");
 		const scenarios = [...(prior.scenarios ?? [])];
 		const index = scenarios.findIndex((candidate) => candidate.cycle === cycle && sameScenario(candidate, next));
 		if (index < 0) throw new Error(`amend-scenario: no scenario "${next.story}:${next.id}" authored this cycle`);
