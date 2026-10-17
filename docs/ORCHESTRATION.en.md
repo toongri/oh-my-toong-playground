@@ -81,6 +81,10 @@ flowchart TD
         TaskPlan -->|Yes| Prometheus
         Prometheus --> Metis[metis<br/>Gap Analysis]
         Metis --> Prometheus
+        Prometheus --> Daedalus[daedalus<br/>Design Review]
+        Daedalus --> Prometheus
+        Prometheus --> Momus[momus<br/>Plan Review]
+        Momus --> Prometheus
         Prometheus --> PlanFile["~/.omt/{OMT_PROJECT}/plans/*.md"]
     end
 
@@ -123,7 +127,7 @@ Questions have no count limit and resolve prerequisite decisions first. Each ans
 - **Role**: Strategic planning, requirements interviews
 - **Constraint**: **READ-ONLY**. NEVER writes code.
 - **Output**: `~/.omt/{OMT_PROJECT}/plans/{name}.md` (via `$OMT_DIR`)
-- **Workflow**: Scope split gate -> Interview -> Research -> Metis consultation -> Plan creation -> hand off to `/ultragoal`
+- **Workflow**: Scope split gate -> Interview -> Research -> Metis consultation -> Co-design (Daedalus advisory, human design approval) -> Plan creation -> Momus review -> Presentation (Stage A), recommendation (Stage B), execution options (Stage C) -> hand off to `/ultragoal`
 - **When to use**: Use it for the AI-execution-only route, or only when an individual task created by `craft-tasks` needs a separate AI-execution plan.
 - **Scope split**: Complex and Architecture requests first settle whether a subset could be merged on its own and leave the system working. If one could, only the first subset becomes this run's scope; the rest each become their own prometheus run.
 
@@ -198,7 +202,10 @@ When requirements are clear and you only need an AI-execution plan, use `/promet
 2. **Interview Mode**: Collects context through questions
 3. **Research**: Investigates codebase via explore/librarian agents
 4. **Metis Consultation**: MANDATORY gap analysis before plan creation
-5. **Plan Generation**: Writes structured plan to `~/.omt/{OMT_PROJECT}/plans/*.md`
+5. **Co-Design**: Refines the design with Daedalus advisory input and gets human design approval
+6. **Plan Generation**: Writes structured plan to `~/.omt/{OMT_PROJECT}/plans/*.md`
+7. **Momus Review**: Reviews the plan; on REQUEST_CHANGES the plan is revised and reviewed again
+8. **Presentation and Execution Choice**: Presents the HTML presentation (Stage A), the recommendation (Stage B), and the execution options (Stage C)
 
 ### Phase 2: Story Execution
 

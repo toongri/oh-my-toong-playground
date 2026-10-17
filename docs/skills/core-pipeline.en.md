@@ -139,8 +139,11 @@ flowchart TB
     Criteria -->|Yes| Metis[Consult metis]
     Criteria -->|No| Draft[Draft criteria<br/>-> user confirms]
     Draft --> Metis
-    Metis --> Write["Write plan to<br/>$OMT_DIR/plans/*.md"]
-    Write --> Handoff([Hand off to ultragoal])
+    Metis --> CoDesign["Co-design<br/>daedalus advisory + human design approval"]
+    CoDesign --> Write["Write plan to<br/>$OMT_DIR/plans/*.md"]
+    Write --> Momus[momus review]
+    Momus --> Present["Stage A HTML presentation<br/>Stage B recommendation<br/>Stage C execution options"]
+    Present --> Handoff([Hand off to ultragoal])
 ```
 
 **Forbidden actions**:
@@ -152,7 +155,7 @@ flowchart TB
 
 **Scope Split Gate**: Requests classified Complex or Architecture settle one question before the interview begins — *is there a subset of this work that could be merged on its own, leaving the system working, with something that verifies it?* If there is, the request is not one plan. The subsets are listed in order with the behavior-preserving one first, **only the first subset** becomes this run's scope, and the rest are recorded under `## Context` as deferred, each naming its blocker. Each deferred subset becomes its own prometheus run. Trivial and Scoped skip this gate.
 
-**Pipeline link**: It proceeds interview → research (explore/librarian) → metis gap analysis → plan writing. The resulting plan is saved to `$OMT_DIR/plans/*.md` and becomes ultragoal's input. One prometheus run produces one plan — a request that splits into several plans is run one subset at a time.
+**Pipeline link**: It proceeds interview → research (explore/librarian) → metis gap analysis → co-design (daedalus advisory, human design approval) → plan writing → momus review → presentation and execution options (Stages A–C). The resulting plan is saved to `$OMT_DIR/plans/*.md` and becomes ultragoal's input. One prometheus run produces one plan — a request that splits into several plans is run one subset at a time.
 
 Question count does not end the interview. The requirements draft records decisions, dependencies, evidence, rejected alternatives, and counterexamples, carrying them into the design ADR and plan. Valid deep-interview agreements are reused; changed premises reopen only affected decisions and dependents. Silence and uncertainty are not delegation. Weighted score reports and five questioning stances remain, with librarian or ultraresearch verifying necessary external facts. Normal completion follows requirements closure audit → Metis → co-design and human approval → plan and Momus → HTML presentation. The new decision closure audit is a prompt contract and does not replace existing state or submission gates.
 

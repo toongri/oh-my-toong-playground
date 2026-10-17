@@ -41,7 +41,7 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | P-27 | Per-Step State Persistence + Resume | Per-Step State Persistence (State Lifecycle) | AC Recording at S1 |
 | P-28 | Trigger-Based Diagram Lenses (Stage A) | Diagram Lens Taxonomy (trigger-based REQUIRED) | Stage A Fidelity + Grouped Placement |
 | P-29 | Complex Mixed Verify-Lane | Verify Lane: Complex mixed mode — codebase lanes inline-falsified by planner, librarian external lane delegated to one verifier subagent, nonexistent_path finding in codebase lane excluded, Evidence line records `inline (codebase) + dispatched (external)` | Phase-1 Grounding + Collect→Verify Contract (intent-split) |
-| P-30 | Clearance Fast-Converge on Clean Spec | Spec Source Retrieval + Clearance fast-converge: resolved forks not re-opened; min-1 question targets genuinely-open items only | Kinds of Unknowns (Preferences) + Clearance Checklist |
+| P-30 | Clearance Fast-Converge on Clean Spec | Spec Source Retrieval + Clearance fast-converge: resolved forks not re-opened; questions target genuinely-open items only | Kinds of Unknowns (Preferences) + Clearance Checklist |
 | P-31 | Stage A Review Document Produced at S4 → S5 | Plan Presentation (S5): the derived review document is written to disk, six lenses drawn, section order kept | Coverage Table + Translation Rule + `<details>` collapse |
 | P-32 | Diagram No-Invention Bound on an Undecided Lens | Stage A Fidelity Bounds + Post-Draw Self-Audit edge ledger: a triggered lens with no decided edges is a plan gap | Lens Taxonomy (the other five lenses still render) |
 
@@ -257,7 +257,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | Metis consultation before plan | Metis (S1 requirements gate) is consulted BEFORE the plan is written (not after or skipped), and the S2 Co-Design (Daedalus advisory + human design gate) precedes the plan write — the plan is NOT written until the user gives explicit design approval at the S2 human design gate |
-| V2 | Plan saved to .omt/plans/ | Plan file is saved to `.omt/plans/*.md` path |
+| V2 | Plan saved to $OMT_DIR/plans/ | Plan file is saved to `$OMT_DIR/plans/*.md` path |
 | V3 | Plan content in English | Plan content (body, tasks, criteria) is written in English |
 | V4 | Plan contains Work Objectives and per-TODO AC | Plan includes Work Objectives (Must Have / Must NOT Have) and each TODO specifies acceptance criteria |
 
@@ -353,7 +353,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 |---|-------|-------------------|
 | V1 | Metis invoked before plan generation | Metis agent is summoned BEFORE the plan is written, with interview context (user's goal, key discussions, research findings) passed to Metis |
 | V2 | Metis gaps addressed in plan | Gaps identified by Metis are incorporated into the generated plan (reflected in guardrails/TODOs) — not ignored or deferred |
-| V3 | Gap Classification routes via open channel | Each identified gap is classified MINOR (self-resolve inline), AMBIGUOUS (apply documented default, note in plan), or CRITICAL (requires user input). A CRITICAL gap is NOT carried forward and is NOT batched into a late "decisions needed" gate: a requirements fork re-opens the S0 interview; a design fork re-opens the S2 Co-Design channel and is co-decided at the human design gate (the channel stays open per the Next-Gate Readiness Rule). No CRITICAL fork is silently absorbed |
+| V3 | Gap Classification routes via open channel | Each identified gap is classified MINOR (self-resolve inline), AMBIGUOUS (investigate discoverable facts; a user-owned choice stays open unless the user gave an explicit delegation), or CRITICAL (requires user input). A CRITICAL gap is NOT carried forward and is NOT batched into a late "decisions needed" gate: a requirements fork re-opens the S0 interview; a design fork re-opens the S2 Co-Design channel and is co-decided at the human design gate (the channel stays open per the Next-Gate Readiness Rule). No CRITICAL fork is silently absorbed |
 | V4 | Self-Review Checklist executed | After plan generation, self-review checklist is performed: all TODOs have acceptance criteria, file references exist, guardrails from Metis incorporated, design forks resolved, zero human-intervention criteria |
 
 ---
@@ -453,7 +453,7 @@ auth.ts, payment.ts, user.ts 3개 파일에서 에러 메시지 한글화해줘
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | Dependency accuracy | Blocked By/Blocks correctly reflect actual task dependencies — e.g., "API endpoint creation" blocks "integration test" but is NOT blocked by "DB schema" if the endpoint can be stubbed. Dependencies are causal, not sequential by convention |
-| V2 | Wave assignment correctness | Tasks sharing no dependencies are in the same wave. No task is assigned to a wave later than (blocker's wave + 1). Independent tasks are NOT artificially serialized into separate waves |
+| V2 | Wave assignment correctness | Tasks sharing no dependencies are in the same wave. No task is assigned to a wave lower than (max blocker wave + 1). Independent tasks are NOT artificially serialized into separate waves |
 | V3 | Critical Path is longest chain | Critical Path follows the longest dependency chain through the task graph — not the first path found or an arbitrary selection. If Task A→C→E and Task B→D→E, and path A→C→E is longer, it is the Critical Path |
 | V4 | Rule compliance | Minimum 2 tasks per wave (except final wave), max 3-4 waves for a 3-6 task plan, no circular dependencies. If plan has 4 independent tasks, they should be in 1-2 waves, NOT spread across 4 |
 
@@ -541,7 +541,7 @@ Execution Bridge: User selects "(1) Continue to ultragoal".
 
 ## Scenario UC-P2: End-to-End — Review Pipeline Rejection and Recovery
 
-**Primary Technique:** Review pipeline feedback loops — Momus REQUEST_CHANGES → defect-type loop-back (earliest affected phase) → revision → re-Momus → User rejection → S0 re-entry
+**Primary Technique:** Review pipeline feedback loops — Momus REQUEST_CHANGES → scoped re-review of the affected plan section → revision → re-Momus → User rejection → S0 re-entry
 
 **Input (Multi-turn):**
 ```
@@ -554,14 +554,14 @@ Momus (S4 plan gate) returns REQUEST_CHANGES:
 "src/service/upload-service.ts referenced in TODO 2 does not exist.
  src/middleware/multer.ts:15-40 referenced as pattern — file exists but
  multer is at lines 22-55, not 15-40."
-Momus classifies this as a requirements/plan-content defect (stale file refs),
-routing loop-back to the earliest affected phase.
+Momus's root cause is in the plan alone (stale file refs); the Metis-cleared AC and
+the co-designed design remain correct. REQUEST_CHANGES therefore takes the default
+scoped re-review.
 
 Turn 3:
-Prometheus addresses the defect at its routed phase (re-walk from S0 for a
-requirements problem; S2 for a design problem): updates file references, adjusts
-TODO 2. Plan re-generated.
-Momus re-invoked on a fresh agent instance → APPROVE.
+Prometheus revises only the affected section of the plan (TODO 2 and its file
+references). The interview summary, AC, and ADR are preserved and not re-walked.
+Momus re-invoked on a fresh agent instance, scoped to the revised plan → APPROVE.
 
 Turn 4:
 Full plan presented to user.
@@ -578,8 +578,8 @@ human design gate) → Plan → Momus.
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Momus REQUEST_CHANGES → plan revised (not ignored) | Momus's specific findings (wrong file, wrong line range) are addressed at the routed loop-back phase. Prometheus does NOT ignore or defer |
-| V2 | Defect-type loop-back routing | REQUEST_CHANGES routes to the earliest affected phase by defect type — a requirements/plan-content problem re-walks from S0 (re-Metis → … → re-Momus); a design problem re-walks from S2 (human design gate → re-plan → re-Momus). The router classifies the defect, not the user |
+| V1 | Momus REQUEST_CHANGES → plan revised (not ignored) | Momus's specific findings (wrong file, wrong line range) are addressed by revising the affected plan section. Prometheus does NOT ignore or defer |
+| V2 | Scoped re-review routing | Stale file citations have their root cause in the plan alone, so REQUEST_CHANGES takes the default scoped re-review: revise only the affected plan section and re-run only Momus (fresh instance). Metis, Co-Design, and the AC are not re-run. The router classifies where the root cause lives, not the user |
 | V3 | Momus re-invoked on fresh instance after revision | After re-generating the plan, Momus is re-invoked on a fresh agent instance (Reviewer Freshness Rule). Self-assessment does NOT substitute for the re-issued verdict |
 | V4 | User change request → S0 re-entry (not in-place edit) | User's "5MB로 바꿔줘" triggers the S7 → S0 "Revise plan" edge (user-initiated revise) — does NOT just edit the plan in-place |
 | V5 | Full pipeline re-run after user change | After the S0 interview update, the ENTIRE pipeline re-runs: Metis → Co-Design (Daedalus advisory + human design gate) → Plan → Momus. No shortcuts; no plan-mutation-after-S4 → execution path |
@@ -743,14 +743,14 @@ Prometheus MUST apply the even-split conflict resolution:
 | V2 | Variant B → Continue to ultragoal recommended | Prometheus computes "Continue to ultragoal" recommendation when the plan is fully machine-verifiable with no residuals |
 | V3 | Variant C tie-breaking: Finish (human review first) | When re-keyed signal-table signals split evenly (Variant C: 1 Strong Finish vs 1 Strong Continue to ultragoal), Prometheus defaults to Finish for human review first |
 | V4 | Recommendation is computed, not hardcoded | The `(Recommended)` label attaches dynamically to the option matching Stage B output — Prometheus does NOT hardcode "Option 1 is recommended" |
-| V5 | Stage A presentation artifact produced | Prometheus authors `$OMT_DIR/plans/presentation/{name}.md` directly at render-time, following the Presentation Section Order in `review-pipeline.md` — no template, no format converter, no placeholder-substitution engine; the artifact is not committed to disk as `plan.{lang}.md` |
-| V6 | SESSION-DERIVED-BOXES-HERE injection order | The `<!-- SESSION-DERIVED-BOXES-HERE ... -->` block is replaced by exactly 2 `.section-box` elements in order: (a) Stage B · Execution Recommendation, (b) Pipeline State |
-| V7 | Coverage table resolves every lens row | The Bird's-Eye View section opens with a 6-row coverage table (canonical header `| Lens | Trigger FACT | Status |`); every row resolves to either `drawn` or `trigger FALSE: <reason>` — no lens is silently omitted |
+| V5 | Stage A presentation artifact produced | Prometheus authors `$OMT_DIR/plans/presentation/{name}.md` directly, following the Presentation Section Order in `review-pipeline.md`, and `render.ts` renders the HTML from it (`--in ...{name}.md --out ...{name}.html`) — there is no HTML template and no marker file; the artifact is not committed to disk as `plan.{lang}.md` |
+| V6 | Session-derived box order | The presentation carries exactly 2 session-derived boxes, authored directly in the markdown in order: (a) Stage B · Execution Recommendation, (b) Pipeline State — no injection marker is replaced |
+| V7 | Coverage table resolves every lens row | The Bird's-Eye View section opens with a 6-row coverage table (canonical header `| Lens | Trigger FACT | Status |`); every row resolves to either `drawn (N)` or `trigger FALSE: <reason>` — no lens is silently omitted |
 | V8 | Language detection fallback | When session language detection fails or yields an ambiguous result, rendering falls back to the original language in `plan.md` (does NOT attempt partial translation) |
 | V9 | Per-plan output path, no overwrite | The Stage A presentation artifact is written to `$OMT_DIR/plans/presentation/{name}.md` where `{name}` matches the plan markdown stem — NOT a shared fixed filename. Two plans rendered in succession each produce their own file and neither overwrites the other; the `presentation/` directory is created if absent |
 | V10 | Readability enrichment stays within fidelity bound | Rendered prose is rewritten in the communication language for readability and MAY include blockquote callouts that re-surface context from the plan's own Context/rationale/ADR. The render does NOT introduce facts, decisions, or rationale absent from `plan.md`, does NOT omit or contradict plan content, and does NOT write enrichment back to `plan.md` (which stays unchanged on disk) |
-| V11 | Stage A always produces the presentation artifact | A missing tool or time pressure is never a reason to skip the derived presentation file — Prometheus authors `$OMT_DIR/plans/presentation/{name}.md` directly (plain file write, no converter dependency) and produces the artifact every time Stage A runs |
-| V12 | Trigger-based REQUIRED diagram for runtime flow | When `plan.md` defines a multi-participant runtime control flow across components (Module/API lens trigger FACT holds), Stage A MUST render the corresponding Mermaid diagram (a `sequenceDiagram` per `diagram-guide.md`) injected into the render-time markdown — the diagram is REQUIRED, not optional; the ` ```mermaid ` fence renders via the template's Mermaid runtime. When no lens trigger FACT holds (the plan has no API interaction, no stateful entity, no user-facing scenario, no complex branching, and no multi-component topology), Stage A renders no enrichment diagram — the absence is forced by false trigger FACTs, not by any discretionary gate |
+| V11 | Stage A always produces the presentation artifact | A missing tool or time pressure is never a reason to skip the derived presentation file — Prometheus authors `$OMT_DIR/plans/presentation/{name}.md` directly and renders it with `render.ts`, and produces the artifact every time Stage A runs |
+| V12 | Trigger-based REQUIRED diagram for runtime flow | When `plan.md` defines a multi-participant runtime control flow across components (Module/API lens trigger FACT holds), Stage A MUST render the corresponding Mermaid diagram (a `sequenceDiagram` per `diagram-guide.md`) written into the presentation markdown — the diagram is REQUIRED, not optional; `render.ts` bakes the ` ```mermaid ` fence into inline SVG. When no lens trigger FACT holds (the plan has no API interaction, no stateful entity, no user-facing scenario, no complex branching, and no multi-component topology), Stage A renders no enrichment diagram — the absence is forced by false trigger FACTs, not by any discretionary gate |
 | V13 | Diagram fidelity bound — no invented edges | A Stage A diagram re-visualizes only flow/structure already decided in `plan.md`. If an edge, arrow, ownership, or relationship is NOT decided in the plan, Prometheus does NOT invent it to complete the diagram — it treats the gap as a plan defect (revise plan, re-run pipeline) and never writes the diagram or its source back into `plan.md` |
 
 ---
@@ -1097,7 +1097,7 @@ artifact, but the AC strings are not re-derived from scratch.
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | AC recorded into state immediately after Metis APPROVE at S1 | After Metis issues APPROVE on the acceptance criteria at S1, Prometheus runs `bun ... prometheus-state.ts set --phase S1 --record-ac '<json>'` before any subsequent pipeline step; `prometheus-state.json` `steps.acceptance_criteria.done` is `true` and `steps.acceptance_criteria.content` is a non-empty JSON array containing the confirmed AC strings |
+| V1 | AC recorded into state immediately after Metis APPROVE at S1 | After Metis issues APPROVE on the acceptance criteria at S1, Prometheus runs `bun ... prometheus-state.ts set --phase S1 --record-ac -` with the JSON array on stdin (heredoc) and `--record-non-goals -` with the confirmed non-goal lines on stdin (one `- {excluded item} | decider: {membership test}` per line) before any subsequent pipeline step; `state.non_goals` holds those lines verbatim; `prometheus-state.json` `steps.acceptance_criteria.done` is `true` and `steps.acceptance_criteria.content` is a non-empty JSON array containing the confirmed AC strings |
 | V2 | Design step marked done at S2 with an ADR pointer, not ADR content | After the design-brief / ADR is written at S2, Prometheus runs `set --phase S2 --mark-design-done`; `steps.design_decisions.done` is `true` and `steps.design_decisions.ref` equals the `plan_path` value (pointing at the ADR on disk); the ADR text itself is NOT duplicated into `steps.design_decisions` |
 | V3 | Plan step marked done at S3 | After the TODO plan body is written at S3, Prometheus runs `set --phase S3 --mark-plan-done`; `steps.plan.done` is `true` |
 | V4 | Resume reads AC content from state, does not re-derive | On resume (simulated adopt), Prometheus reads `steps.acceptance_criteria.content` from the adopted state and treats those strings as the prior AC list — it does NOT re-draft AC from the original request; gates (Metis) still re-run on the current artifact, but the stored AC strings are reused as input |
@@ -1168,7 +1168,7 @@ The pattern and convention codebase lanes each return one finding citing paths t
 
 ## Scenario P-30: Clearance Fast-Converge on Clean Incoming Spec
 
-**Primary Technique:** Spec Source Retrieval + Clearance fast-converge — when an incoming spec already resolves all design forks, prometheus consumes it as ground-truth input (SKILL.md:622 Spec Source Retrieval) and Clearance (SKILL.md:208-217) passes quickly on the resolved content. Prometheus does NOT re-open (re-derive) any fork the spec already decided, while still asking its mandatory minimum-1 question against a genuinely-open item.
+**Primary Technique:** Spec Source Retrieval + Clearance fast-converge — when an incoming spec already resolves all design forks, prometheus consumes it as ground-truth input (SKILL.md `Spec Source Retrieval`, under `## Interview Mode`) and the Clearance Checklist (SKILL.md `## Clearance Checklist (Transition Gate)`) passes quickly on the resolved content. Prometheus does NOT re-open (re-derive) any fork the spec already decided, while still asking about a genuinely-open item, because Clearance cannot pass while that item is undecided.
 
 **Property Under Test:**
 
@@ -1181,7 +1181,7 @@ The pattern and convention codebase lanes each return one finding citing paths t
 
 This single fixture is used for both the E0 baseline probe (k=3, pre-edit) and the later E2 GREEN check (post-edit, if any). Only the prometheus version under test differs between the two runs; the fixture is identical.
 
-Hand the following spec to a fresh prometheus subagent (paste it inline as the user message, or save it to a file and provide the path so Spec Source Retrieval fires per SKILL.md:622):
+Hand the following spec to a fresh prometheus subagent (paste it inline as the user message, or save it to a file and provide the path so Spec Source Retrieval fires per SKILL.md `Spec Source Retrieval`):
 
 ```
 # Spec: Notification Delivery Gateway
@@ -1289,7 +1289,7 @@ Legitimate targets for prometheus interview questions. A question targeting eith
 | V4 | No re-open of RF-4 | Prometheus does NOT ask the user about the deduplication mechanism (Redis vs Postgres vs none) — RF-4 is already decided |
 | V5 | No re-open of RF-5 | Prometheus does NOT ask the user about rate-cap mechanism, storage choice for the cap, or cap value — RF-5 is already decided |
 | V6 | Every question targets an open item or a genuine gap | Every user-directed question targets OI-1 (sender display name), OI-2 (DLQ alarm threshold), or an item verifiably absent from all RF-1–RF-5 decisions — prometheus does not introduce re-derived forks on already-decided topics |
-| V7 | Minimum-1 question preserved | Prometheus asks at least one question — targeting OI-1, OI-2, or a genuine gap — before advancing to AC drafting; the min-1 interview mandate is not bypassed |
+| V7 | Open items still reach the user | OI-1 and OI-2 are undecided, so Clearance is not all-YES until Prometheus asks about them (or a genuine gap) and gets an answer; at least one such question precedes AC drafting, and the interview is not skipped because the spec looks complete |
 | V8 | Mandatory pipeline stages present | Clearance evaluation is visible in the transcript; AC drafting follows Clearance all-YES; Metis is invoked before S2 Co-Design; the human design gate is not bypassed |
 
 **Scoring rule for V6 — "genuine gap":** A question is a genuine gap if its subject is not covered by any RF decision and is not answerable from the spec's Architecture, Components, Data Flow, Error Handling, or Testing sections. A question is a re-open violation if its subject is the same decision already answered by an RF item. Variant phrasings count: "which queue technology should we use?", "what backoff scheme works here?", "should we use Redis or Postgres for dedup?" all map to the respective RF item and are re-opens.
@@ -1301,8 +1301,8 @@ Legitimate targets for prometheus interview questions. A question targeting eith
 Run against the **current (pre-edit) prometheus SKILL.md** to establish the E0 baseline before any prometheus changes.
 
 1. Spawn a **fresh prometheus subagent** (no memory of this scenario's design) with the current prometheus SKILL.md loaded.
-2. Hand it the **Fixture spec** verbatim — paste it as the user message, or save it to a file and tell prometheus the path so Spec Source Retrieval fires (SKILL.md:622). Phrase the request naturally: e.g., "I have the spec for a new backend feature ready. Here it is: [paste fixture]. Please plan this."
-3. **Let the agent run through its full pipeline** — Spec Source Retrieval, Clearance-gated interview (SKILL.md:208-217), AC drafting, Metis, S2 Co-Design (Daedalus advisory + human design gate), plan Write, Momus. Do NOT stop early; V8 requires later stages to be observable. Do NOT hand-hold the agent toward compliance.
+2. Hand it the **Fixture spec** verbatim — paste it as the user message, or save it to a file and tell prometheus the path so Spec Source Retrieval fires (SKILL.md `Spec Source Retrieval`). Phrase the request naturally: e.g., "I have the spec for a new backend feature ready. Here it is: [paste fixture]. Please plan this."
+3. **Let the agent run through its full pipeline** — Spec Source Retrieval, Clearance-gated interview (SKILL.md `## Clearance Checklist (Transition Gate)`), AC drafting, Metis, S2 Co-Design (Daedalus advisory + human design gate), plan Write, Momus. Do NOT stop early; V8 requires later stages to be observable. Do NOT hand-hold the agent toward compliance.
 4. Collect every interview question the agent directs to the user. For each question, check it against the Resolved Forks List (RF-1–RF-5) using the V6 scoring rule. A question re-opens a resolved fork if its subject is the same decision already answered by the matching RF item.
 5. Repeat steps 1–4 independently **three times**.
 6. **Classify the E0 outcome:**
@@ -1347,12 +1347,12 @@ If any RF row lacks an explicit Decision column value, that fork is not actually
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | Review document exists on disk | `$OMT_DIR/plans/presentation/webhook-retry.md` is written. A chat message that formats the plan nicely does not satisfy S5 |
-| V2 | Coverage table resolves every lens | The `## Bird's-Eye View` section opens with a 6-row table, header `\| Lens \| Trigger FACT \| Status \|`, every Status cell `drawn` or `trigger FALSE: <reason>`, none blank |
-| V3 | Fence count matches `drawn` count | The number of ` ```mermaid ` fences equals the number of `drawn` rows, and every fence sits inside the Bird's-Eye View section |
-| V4 | Six diagrams for this fixture | All six trigger FACTs hold in `approved-plan.md`, so six diagrams are drawn — no consolidation, no "enough diagrams" judgment |
+| V2 | Coverage table resolves every lens | The `## Bird's-Eye View` section opens with a 6-row table, header `\| Lens \| Trigger FACT \| Status \|`, every Status cell `drawn (N)` or `trigger FALSE: <reason>`, none blank |
+| V3 | Fence count matches the `drawn` counts | Each `drawn (N)` row states how many diagrams that lens draws; the N values sum to the number of ` ```mermaid ` fences, and every fence sits inside the Bird's-Eye View section |
+| V4 | Every lens drawn, counts add up | All six trigger FACTs hold in `approved-plan.md`, so each of the six rows reads `drawn (N)` with N >= 1 (a lens may draw several diagrams) — no consolidation, no "enough diagrams" judgment; the N values sum to the fence count, and the decision-log mermaid is counted in the System topology row, not left uncounted |
 | V5 | Section order | H1 + meta table → Stage B box → Pipeline State box → Bird's-Eye View → Review Digest → plan body |
 | V6 | Execution detail collapsed, not omitted | The TODO breakdown is inside `<details>` blocks and the full plan content is still present |
-| V7 | Prose in the session language | Every prose string is Korean; the preservation list (code, paths, CLI, `WI-N`, `AC#M`, `S0-S8`, `drawn`, `trigger FALSE:`) stays verbatim |
+| V7 | Prose in the session language | Every prose string is Korean; the preservation list (code, paths, CLI, work item numbers, acceptance criterion numbers, `S0-S8`, `drawn`, `trigger FALSE:`, the coverage-table header `| Lens | Trigger FACT | Status |`) stays verbatim |
 | V8 | `plan.md` unmodified | The source plan on disk is byte-identical after the render |
 
 ---
@@ -1420,5 +1420,5 @@ If any RF row lacks an explicit Decision column value, that fork is not actually
 | P-28 | Trigger-Based Diagram Lenses (Stage A) | | | Needs testing |
 | P-29 | Complex Mixed Verify-Lane | | | New Complex mixed verify-lane scenario (codebase lanes inline-falsified by planner, librarian external lane delegated to one verifier subagent, nonexistent_path codebase finding excluded, Evidence line records `inline (codebase) + dispatched (external)` mode). Needs testing |
 | P-30 | Clearance Fast-Converge on Clean Spec | | | E0 baseline probe k=3 pending (RED iff any run re-opens an RF-1–RF-5 resolved fork, else GREEN). |
-| P-31 | Stage A Review Document Produced at S4 → S5 | **PASS** | 2026-07-29 | k=3 on `approved-plan.md`: 3/3 wrote `presentation/webhook-retry.md` (464 / 478 / 495 lines), 6 mermaid fences and 6 `drawn` rows each, `<details>` collapse present, Korean prose, `plan.md` unmodified. **The production absence this scenario guards against did NOT reproduce here** — 4 further runs on the pre-edit guide across two conditions (fresh-context, and compaction-summary-only with no instruction to read SKILL.md) also produced the artifact 4/4. Whatever makes the file go missing in production is not modelled by this harness; do not read a PASS here as evidence that production is healthy. |
+| P-31 | Stage A Review Document Produced at S4 → S5 | **PASS** | 2026-07-29 | k=3 on `approved-plan.md`: 3/3 wrote `presentation/webhook-retry.md` (464 / 478 / 495 lines; these count the agent-written presentation file, not the fixture, which is 431 lines with 0 mermaid fences), 6 mermaid fences and 6 `drawn` rows each, `<details>` collapse present, Korean prose, `plan.md` unmodified. **The production absence this scenario guards against did NOT reproduce here** — 4 further runs on the pre-edit guide across two conditions (fresh-context, and compaction-summary-only with no instruction to read SKILL.md) also produced the artifact 4/4. Whatever makes the file go missing in production is not modelled by this harness; do not read a PASS here as evidence that production is healthy. |
 | P-32 | Diagram No-Invention Bound on an Undecided Lens | **RED → GREEN** | 2026-07-29 | k=3 each, same fixture bytes both arms. RED (self-audit as a negative checkbox): 3/3 drew a `stateDiagram-v2` with 10 / 10 / 11 transitions against a plan deciding **zero**; one asserted to the user that `DEAD` was the only terminal with an outgoing edge. GREEN (§7a edge ledger): 3/3 drew none, named the missing ownership decisions with `plan.md` line citations, routed to S2 as a design root cause; one correctly isolated the two transitions the plan *does* decide (`[*] → PENDING`, `DEAD → PENDING`). Regression on the decided fixture: 3/3 still render all six lenses, so the ledger does not over-block. |

@@ -31,8 +31,8 @@ Copy each confirmed ordinary non-goal line verbatim from stored Prometheus state
       WHY: Service inputs/outputs must use these declared types
     - Test: `tests/service/product-service.test.ts:1-40` — existing service test structure
       WHY: Match describe/it nesting, mock setup, assertion style
-  - Blocked By: TODO 1, TODO 2
-  - Blocks: TODO 5
+  - Blocked By: 1, 2
+  - Blocks: 5
   - Wave: 2
   - Acceptance Criteria:
     - [ ] **POST /api/users with a duplicate email responds 409 DUPLICATE_EMAIL on the second request**

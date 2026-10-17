@@ -603,13 +603,18 @@ export interface SetGoalOpts {
  */
 const NON_GOAL_LINE_PATTERN = /^-\s+\S.*\|\s*decider:\s*\S.*$/;
 
+const nonGoalFixHint = (line: string): string =>
+	line.startsWith("- ")
+		? ` — add a membership test: "${line.trimEnd()} | decider: <what change would make a finding out of scope, e.g. a file path or function>"`
+		: ' — each line must start with "- "';
+
 function validateNonGoals(value: string): void {
 	if (value.trim() === "") return;
 	for (const line of value.split("\n")) {
 		if (line.trim() === "") continue;
 		if (!NON_GOAL_LINE_PATTERN.test(line)) {
 			throw new Error(
-				`set: non-goals refused — line does not match "- {what this pursuit will NOT do} | decider: {...}" format: "${line}"`,
+				`set: non-goals refused — line does not match "- {what this pursuit will NOT do} | decider: {...}" format: "${line}"${nonGoalFixHint(line)}`,
 			);
 		}
 	}

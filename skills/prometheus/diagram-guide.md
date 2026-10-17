@@ -41,20 +41,27 @@ System topology applies that general rule, with two specifics preserved: its exi
 The rendered presentation's Bird's-Eye View section starts with a 6-row
 coverage table, header
 exactly `| Lens | Trigger FACT | Status |`. Every Status cell is exactly
-`drawn` or `trigger FALSE: <reason>` — never blank. The count of `drawn`
-rows MUST match the number of mermaid fences in the presentation, and every
+`drawn (N)` or `trigger FALSE: <reason>` — never blank. Each `drawn` row
+states N, the number of diagrams that lens draws (one lens may need several,
+e.g. one per API or system; there is no cap). The N values of all `drawn`
+rows MUST sum to the number of mermaid fences in the presentation, and every
 mermaid fence lives inside the Bird's-Eye View section (fence-locality).
+Every mermaid fence counts under exactly one lens row — the lens it depicts.
+The decision-log-derived flow mermaid is the System topology diagram and
+counts in that row; any other decision-log re-visualization counts under the
+lens it depicts. No fence goes uncounted.
 
-This table is an audit ledger for lens coverage: a mechanical check catches
-a lying `drawn` row (fence count mismatch), while a wrong `trigger FALSE`
-reason is caught by human review. A blank Status cell is a defect, not an
-acceptable omission.
+This table is an audit ledger for lens coverage. No tool checks it. After
+drawing, the author audits it: count the mermaid fences, confirm the `drawn`
+counts sum to that number, and confirm each `trigger FALSE` reason against
+`plan.md`. Human review also checks the reasons. A blank Status cell is a
+defect, not an acceptable omission.
 
 When the System topology lens draws >= 2 systems, each `drawn` row's Trigger
 FACT cell names every system where that lens's FACT holds (per-system
 evaluation above), and the lens's diagram set must render each named system.
 A `drawn` row whose FACT holds in a system the diagrams never render is a
-lying row — the same defect class as a fence-count mismatch, caught by the
+lying row — the same defect class as a count mismatch, caught by the
 per-system audit item in the post-draw checklist.
 
 Note: this coverage table follows the lens composition defined by this guide's

@@ -1062,6 +1062,20 @@ describe("non_goals declaration-format gate", () => {
 		).toThrow(/non-goals refused/);
 	});
 
+	test("non-goals refusal hints how to add a decider to a '- ' line", () => {
+		expect(() =>
+			setGoalState(S, { phase: "planning", outcome: "x", non_goals: "- 인증 리팩터는 이번에 안 함" }),
+		).toThrow(
+			'add a membership test: "- 인증 리팩터는 이번에 안 함 | decider: <what change would make a finding out of scope, e.g. a file path or function>"',
+		);
+	});
+
+	test("non-goals refusal hints that each line must start with '- '", () => {
+		expect(() =>
+			setGoalState(S, { phase: "planning", outcome: "x", non_goals: "인증 리팩터는 이번에 안 함" }),
+		).toThrow('each line must start with "- "');
+	});
+
 	// Case 3: a well-formed multi-line value passes and round-trips verbatim.
 	test("non-goals accepts a well-formed multi-line value and round-trips it verbatim", () => {
 		const value =

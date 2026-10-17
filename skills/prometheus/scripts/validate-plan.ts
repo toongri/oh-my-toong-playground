@@ -7,14 +7,37 @@
  * (2) Graph semantics — a non-empty `## TODOs` section contains at least one
  *     canonical checkbox TODO; IDs are unique and either numeric or F1-F4;
  *     Blocked By references resolve with no self-dependency/cycles; `Wave: FINAL`
- *     is reserved for F1-F4 audit TODOs and required for them; numeric
- *     implementation TODOs satisfy `Wave = max(blocker waves) + 1` (no blockers
- *     means Wave 1).
+ *     is reserved for F1-F4 audit TODOs and required for them; a numeric
+ *     implementation TODO's Wave is at least `max(blocker waves) + 1` (no
+ *     blockers means at least 1). A later Wave is the planner's call and passes.
+ *     A TODO whose Blocked By has an unparseable entry skips the Wave check (the
+ *     parse violation is already reported).
+ *
+ * `Blocked By:` and `Blocks:` share one id-list parser: one pair of surrounding
+ * brackets is stripped; "no ids" tokens (empty, none, —, –, -, n/a, 없음, or a
+ * parenthesized none such as `(none — first task)`) give an empty list; ids may
+ * carry a `T` or `TODO ` prefix; ranges with a shared prefix and numeric ends
+ * (`1-6`, `T1-T10`, `F1-F4`, hyphen or en dash) expand to each id. Reversed or
+ * mixed-prefix ranges, ranges spanning more than 1000 ids, and anything else are
+ * unparseable.
+ *
+ * `Blocks:` entries must be defined and not the declaring TODO itself. A numeric
+ * target must reach the declaring TODO through `Blocked By` edges (a transitive
+ * predecessor counts). F1-F4 targets are exempt from that path check. The reverse
+ * is not required: `Blocks:` may omit dependents, and the field may be absent.
+ *
+ * Code blocks and HTML comments come from `lib/markdown-blocks.ts` (marked's lexer).
+ * Every pass ignores them. A fence, or a line-start `<!--`, that never closes is reported,
+ * since everything after it renders as code or is hidden.
  *
  * Usage: bun skills/prometheus/scripts/validate-plan.ts <plan_path>
  * Exit 0 = all sections present and non-empty, and no graph violations.
  * Exit 1 = violations found (offending literals/messages printed to stdout).
+ * Exit 2 = usage or I/O error (missing argument, or the plan file cannot be
+ *          read; a one-line message goes to stderr, nothing to stdout).
  */
+
+import { findMarkdownBlocks } from "@lib/markdown-blocks";
 
 export const REQUIRED_HEADINGS: string[] = [
 	"TL;DR",
@@ -26,19 +49,77 @@ export const REQUIRED_HEADINGS: string[] = [
 	"Success Criteria",
 ];
 
+interface ScrubbedPlan {
+	/** Plan text with code blocks and HTML comments removed. */
+	text: string;
+	/** First and last line (1-based) and opening text of a fence that never closes, or null. */
+	unclosedFence: { line: number; endLine: number; opener: string } | null;
+	/** First and last line (1-based) of a `<!--` block that never closes, or null. */
+	unclosedComment: { line: number; endLine: number } | null;
+}
+
 /**
- * Strip fenced code blocks (``` ... ```) from markdown content.
- * This prevents headings inside fences from being counted.
+ * Remove what Markdown does not render as plan structure. Line endings are
+ * normalized to LF first, so every check built on this sees LF.
+ * - Each code block (fenced or indented) becomes `placeholder`, and each HTML
+ *   comment block is removed. Both come from `lib/markdown-blocks.ts`, so an
+ *   unclosed fence or `<!--` covers what the renderer covers.
+ * - Then each remaining HTML comment inside a line (`<!-- ... -->`) is removed. A
+ *   `<!--` that never closes mid-line is literal text and stays.
+ * Other text is never changed.
  */
-function stripFences(content: string): string {
-	return content.replace(/^```[\s\S]*?^```/gm, "");
+function scrubPlan(content: string, placeholder: string): ScrubbedPlan {
+	const lines = content.replace(/\r\n?/g, "\n").split("\n");
+	let unclosedFence: ScrubbedPlan["unclosedFence"] = null;
+	let unclosedComment: ScrubbedPlan["unclosedComment"] = null;
+	for (const block of findMarkdownBlocks(lines.join("\n"))) {
+		const span = { line: block.start + 1, endLine: block.end + 1 };
+		if (!block.closed && block.kind === "code") unclosedFence ??= { ...span, opener: lines[block.start].trim() };
+		if (!block.closed && block.kind === "comment") unclosedComment ??= span;
+		for (let k = block.start; k <= block.end; k++) lines[k] = "";
+		if (block.kind === "code") lines[block.start] = placeholder;
+	}
+	return {
+		text: lines.join("\n").replace(/<!--[\s\S]*?-->/g, ""),
+		unclosedFence,
+		unclosedComment,
+	};
+}
+
+/** Plan text with fenced blocks replaced by `placeholder` and HTML comments removed. */
+function stripFences(content: string, placeholder = ""): string {
+	return scrubPlan(content, placeholder).text;
+}
+
+/**
+ * Report a code fence or a line-start HTML comment that never closes. Markdown
+ * renders everything after it as code or hides it, so the sections and TODOs
+ * written there are not part of the plan.
+ *
+ * @returns One violation message per kind found, or empty.
+ */
+export function validateUnclosedBlocks(content: string): string[] {
+	const { unclosedFence, unclosedComment } = scrubPlan(content, "");
+	const violations: string[] = [];
+	if (unclosedFence !== null) {
+		violations.push(
+			`Code fence: the fence opened on line ${unclosedFence.line} (\`${unclosedFence.opener}\`) never closes, so everything through line ${unclosedFence.endLine} renders as code. Close it or remove it.`,
+		);
+	}
+	if (unclosedComment !== null) {
+		violations.push(
+			`HTML comment: the \`<!--\` on line ${unclosedComment.line} never closes with \`-->\`, so everything through line ${unclosedComment.endLine} is hidden. Close it or remove it.`,
+		);
+	}
+	return violations;
 }
 
 /**
  * Validate a plan's text for section presence and non-emptiness.
  *
  * Rules:
- * (a) Fenced code blocks are stripped before scanning.
+ * (a) Fenced code blocks are stripped before scanning, but a fenced block
+ *     counts as section content (headings inside it still do not count).
  * (b) A heading matches exactly `## <literal>` (level-2, case-sensitive, no extra text).
  * (c) Duplicate headings: first occurrence wins.
  * (d) Non-empty = body between this heading and the next ## heading has trimmed length > 0.
@@ -46,7 +127,7 @@ function stripFences(content: string): string {
  * @returns Array of heading literals that are missing or empty.
  */
 export function validatePlan(content: string): string[] {
-	const stripped = stripFences(content);
+	const stripped = stripFences(content, "[fenced block]");
 
 	// Parse the heading line regex: exactly ## <literal> (optional trailing whitespace)
 	const headingRegex = /^##[ \t]+(.+?)[ \t]*$/gm;
@@ -100,14 +181,58 @@ export function validatePlan(content: string): string[] {
 interface TodoNode {
 	id: string;
 	blockedBy: string[]; // resolved blocker ids (self included if self-referenced)
+	blockedByUnparseable: boolean; // true when any Blocked By entry could not be parsed
+	blocks: string[] | null; // resolved ids from `Blocks:`; null when the line is absent
 	wave: string | null; // raw Wave value ("2", "FINAL", …) or null when absent
 	violations: string[]; // parse-level violations local to this TODO
+}
+
+const NO_IDS = /^(?:none|—|–|-|n\/a|없음|\(\s*none\b.*\))$/i;
+// Ranges are expanded id by id, so one typo such as `1-99999999999999999999` would
+// exhaust memory. No real plan has this many TODOs.
+const MAX_RANGE_IDS = 1000;
+
+/**
+ * Parse a `Blocked By:` / `Blocks:` value into TODO ids. See the file header for
+ * the accepted forms; entries that match none of them are returned in `bad`.
+ */
+function parseIdList(raw: string): { ids: string[]; bad: string[] } {
+	let value = raw.trim();
+	const bracketed = /^\[(.*)\]$/.exec(value);
+	if (bracketed !== null) value = bracketed[1].trim();
+	const ids: string[] = [];
+	const bad: string[] = [];
+	if (value === "" || NO_IDS.test(value)) return { ids, bad };
+
+	const norm = (prefix: string, digits: string): string =>
+		prefix === "F" ? `F${digits}` : digits;
+	for (const part of value.split(",")) {
+		const entry = part.trim();
+		if (entry === "") continue;
+		const single = /^(?:TODO\s+|T)?(F)?(\d+)$/.exec(entry);
+		if (single !== null) {
+			ids.push(norm(single[1] ?? "", single[2]));
+			continue;
+		}
+		const range = /^(F|T|TODO\s+)?(\d+)\s*[-–]\s*\1(\d+)$/.exec(entry);
+		if (range !== null) {
+			const prefix = range[1] ?? "";
+			const from = Number(range[2]);
+			const to = Number(range[3]);
+			if (from <= to && to - from < MAX_RANGE_IDS) {
+				for (let n = from; n <= to; n++) ids.push(norm(prefix, String(n)));
+				continue;
+			}
+		}
+		bad.push(entry);
+	}
+	return { ids, bad };
 }
 
 /**
  * Parse TODO nodes out of the `## TODOs` section (first occurrence, fences
  * stripped). A TODO is a checkbox line `- [ ] <id>. Title` where id is a
- * number or F-number (F1-F4 FINAL-wave tasks). `Blocked By:` / `Wave:` lines
+ * number or F-number (F1-F4 FINAL-wave tasks). `Blocked By:` / `Blocks:` / `Wave:` lines
  * up to the next checkbox line belong to that TODO.
  */
 function parseTodos(content: string): TodoNode[] {
@@ -129,7 +254,14 @@ function parseTodos(content: string): TodoNode[] {
 	for (const line of body.split("\n")) {
 		const todoMatch = /^\s*- \[[ xX]\] (F?\d+)\.\s/.exec(line);
 		if (todoMatch !== null) {
-			current = { id: todoMatch[1], blockedBy: [], wave: null, violations: [] };
+			current = {
+				id: todoMatch[1],
+				blockedBy: [],
+				blockedByUnparseable: false,
+				blocks: null,
+				wave: null,
+				violations: [],
+			};
 			todos.push(current);
 			continue;
 		}
@@ -137,20 +269,21 @@ function parseTodos(content: string): TodoNode[] {
 
 		const blockedMatch = /^\s*-?\s*Blocked By:\s*(.*)$/.exec(line);
 		if (blockedMatch !== null) {
-			const value = blockedMatch[1].trim();
-			if (value !== "" && !/^none$/i.test(value)) {
-				for (const raw of value.split(",")) {
-					const entry = raw.trim();
-					if (entry === "") continue;
-					const ref = /^(?:TODO\s+)?(F?\d+)$/.exec(entry);
-					if (ref === null) {
-						current.violations.push(
-							`TODO ${current.id}: unparseable Blocked By entry "${entry}"`,
-						);
-					} else {
-						current.blockedBy.push(ref[1]);
-					}
-				}
+			const { ids, bad } = parseIdList(blockedMatch[1]);
+			current.blockedBy.push(...ids);
+			for (const entry of bad) {
+				current.violations.push(`TODO ${current.id}: unparseable Blocked By entry "${entry}"`);
+			}
+			if (bad.length > 0) current.blockedByUnparseable = true;
+			continue;
+		}
+
+		const blocksMatch = /^\s*-?\s*Blocks:\s*(.*)$/.exec(line);
+		if (blocksMatch !== null) {
+			const { ids, bad } = parseIdList(blocksMatch[1]);
+			current.blocks = ids;
+			for (const entry of bad) {
+				current.violations.push(`TODO ${current.id}: unparseable Blocks entry "${entry}"`);
 			}
 			continue;
 		}
@@ -166,7 +299,9 @@ function parseTodos(content: string): TodoNode[] {
 
 /** Whether a first `## TODOs` section exists and has non-whitespace body text. */
 function hasNonEmptyTodosSection(content: string): boolean {
-	const stripped = stripFences(content);
+	// Same placeholder as validatePlan: a fence-only section is non-empty there, so it
+	// must be non-empty here too, or a TODOs section holding only an example passes both.
+	const stripped = stripFences(content, "[fenced block]");
 	const sectionMatch = /^##[ \t]+TODOs[ \t]*$/m.exec(stripped);
 	if (sectionMatch === null) return false;
 	const bodyStart = sectionMatch.index + sectionMatch[0].length;
@@ -184,11 +319,12 @@ function hasNonEmptyTodosSection(content: string): boolean {
  * Checks:
  * (a) a non-empty TODOs section contains at least one canonical checkbox TODO
  * (b) TODO IDs are unique and either numeric or F1-F4
- * (c) every Blocked By reference resolves to a defined TODO
+ * (c) every Blocked By / Blocks reference resolves to a defined TODO
+ *     (a numeric `Blocks:` target must reach the declaring TODO via Blocked By)
  * (d) no self-dependency, no dependency cycles
  * (e) `Wave: FINAL` is reserved for F1-F4 audit TODOs and required for them
- * (f) numeric implementation TODOs satisfy `Wave = max(blocker waves) + 1`
- *     (no blockers → Wave 1); a numeric task blocked by a FINAL task is invalid
+ * (f) numeric implementation TODOs have `Wave >= max(blocker waves) + 1`
+ *     (no blockers → at least Wave 1); a numeric task blocked by a FINAL task is invalid
  *
  * @returns Array of human-readable violation messages (empty = OK).
  */
@@ -217,6 +353,38 @@ export function validatePlanGraph(content: string): string[] {
 				violations.push(`TODO ${todo.id}: blocked by itself`);
 			} else if (!byId.has(ref)) {
 				violations.push(`TODO ${todo.id}: Blocked By references undefined TODO ${ref}`);
+			}
+		}
+	}
+
+	// (b2) Blocks: resolution, self-reference, and path check. A numeric target must
+	// reach the declaring TODO by following Blocked By edges (transitive predecessors
+	// count); F1-F4 targets are exempt.
+	function reachesViaBlockedBy(from: string, goal: string): boolean {
+		const seen = new Set<string>();
+		const queue = [from];
+		for (let id = queue.pop(); id !== undefined; id = queue.pop()) {
+			if (seen.has(id)) continue;
+			seen.add(id);
+			for (const ref of byId.get(id)?.blockedBy ?? []) {
+				if (ref === goal) return true;
+				queue.push(ref);
+			}
+		}
+		return false;
+	}
+	for (const todo of byId.values()) {
+		if (todo.blocks === null) continue;
+		for (const ref of todo.blocks) {
+			const target = byId.get(ref);
+			if (ref === todo.id) {
+				violations.push(`TODO ${todo.id}: blocks itself`);
+			} else if (target === undefined) {
+				violations.push(`TODO ${todo.id}: Blocks references undefined TODO ${ref}`);
+			} else if (!/^F[1-4]$/.test(ref) && !reachesViaBlockedBy(ref, todo.id)) {
+				violations.push(
+					`TODO ${todo.id}: Blocks ${ref} but TODO ${ref} has no Blocked By path to ${todo.id}`,
+				);
 			}
 		}
 	}
@@ -277,6 +445,7 @@ export function validatePlanGraph(content: string): string[] {
 			continue;
 		}
 		if (inCycle.has(todo.id)) continue; // expected wave undefined inside a cycle
+		if (todo.blockedByUnparseable) continue; // parse violation already reported
 
 		let expected = 1;
 		let computable = true;
@@ -293,9 +462,9 @@ export function validatePlanGraph(content: string): string[] {
 				expected = Math.max(expected, Number(blocker.wave) + 1);
 			}
 		}
-		if (computable && Number(todo.wave) !== expected) {
+		if (computable && Number(todo.wave) < expected) {
 			violations.push(
-				`TODO ${todo.id}: Wave ${todo.wave} but expected ${expected} (= max(blocker waves) + 1)`,
+				`TODO ${todo.id}: Wave ${todo.wave} but must be at least ${expected} (= max(blocker waves) + 1)`,
 			);
 		}
 	}
@@ -308,6 +477,19 @@ export function validatePlanGraph(content: string): string[] {
 // ---------------------------------------------------------------------------
 
 /**
+ * Label forms of the D-item `Must NOT own` field (case-insensitive); prose
+ * mentions without label punctuation match none of them.
+ * (a) at the start of a line's content, after optional indent / list marker / `**`;
+ * (b) anywhere in a line, followed by optional `**`, optional spaces, then `:`;
+ * (c) a bold `**Must NOT own.**` / `**Must NOT own:**` anywhere in a line.
+ */
+const MUST_NOT_OWN_LABEL: RegExp[] = [
+	/^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?(?:\*\*)?Must NOT own(?:[:.*]|[ \t]*$)/im,
+	/Must NOT own(?:\*\*)?[ \t]*:/i,
+	/\*\*Must NOT own[.:]\*\*/i,
+];
+
+/**
  * Validate the Boundary Map block.
  *
  * A plan that carries structural enumeration must also render the consolidated
@@ -315,9 +497,11 @@ export function validatePlanGraph(content: string): string[] {
  * part named with its layer + collaborators, classified affected vs modified,
  * and a dependency-direction verdict. This mirrors the ADR structural
  * enumeration's own gating — structural enumeration is Complex/Architecture
- * only, detected here by the `Must NOT own` ownership marker every structural
- * D-item declares (an explicit `Must NOT own: none` counts). When that marker
- * is absent the plan carries no structural enumeration and the block is not
+ * only, detected here by the `Must NOT own` ownership field every structural
+ * D-item declares (an explicit `Must NOT own: none` counts). Only the label
+ * forms in `MUST_NOT_OWN_LABEL` trigger (line-start label, `Must NOT own:`
+ * anywhere in a line, bold `**Must NOT own.**`); prose mentions do not.
+ * When that field is absent the plan carries no structural enumeration and the block is not
  * required.
  *
  * The three content markers parallel the explain-diff R15 gate: presence only
@@ -331,7 +515,7 @@ export function validateBoundaryMap(content: string): string[] {
 	const stripped = stripFences(content);
 
 	// No structural enumeration → block not required.
-	if (!/Must NOT own/.test(stripped)) return [];
+	if (!MUST_NOT_OWN_LABEL.some((re) => re.test(stripped))) return [];
 
 	// The block anchors on a heading whose text contains "Boundary Map".
 	const headingMatch = /^#{2,4}[ \t]+.*Boundary Map.*$/im.exec(stripped);
@@ -378,8 +562,16 @@ if (import.meta.main) {
 	}
 
 	const { readFileSync } = await import("fs");
-	const content = readFileSync(planPath, "utf8");
+	let content: string;
+	try {
+		content = readFileSync(planPath, "utf8");
+	} catch (err) {
+		const reason = err instanceof Error ? err.message : String(err);
+		console.error(`validate-plan: cannot read ${planPath}: ${reason}`);
+		process.exit(2);
+	}
 	const problems = [
+		...validateUnclosedBlocks(content),
 		...validatePlan(content),
 		...validatePlanGraph(content),
 		...validateBoundaryMap(content),

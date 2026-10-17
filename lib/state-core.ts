@@ -53,6 +53,8 @@ import { createHash } from "crypto";
 // (the sync alias-rewriter skips lib/** files). Relative imports let `make sync`'s dep collector
 // follow the path and deploy omt-dir alongside this module.
 import { getOmtDir, resolveOmtDir } from "./omt-dir";
+import { linesOutsideBlocks } from "./markdown-blocks";
+import { withStateLock } from "./persistent-mode-core/state-lock";
 import { chainComplete, commentOk, approveOk, driverGateArmed, recordComplete } from "./qa-chain-core";
 import type { QaChainState } from "./qa-chain-core";
 import { normalizeExplainDiffState } from "./explain-diff-core";
@@ -929,21 +931,30 @@ function seedSkeleton(type: StateType, ts: string): Record<string, unknown> {
  * writes) is fully covered.
  */
 function wasAdoptedAway(type: StateType, srcSid: string): boolean {
+	return adoptedAwayTo(type, srcSid) !== null;
+}
+
+/**
+ * The session id that adopted `srcSid`'s state of `type` away, per adoption.log, or
+ * null when no adoption is recorded (same fail-open reading as wasAdoptedAway, which
+ * is defined in terms of this). Lets a refused writer name who holds its work.
+ */
+export function adoptedAwayTo(type: StateType, srcSid: string): string | null {
 	const logPath = join(getOmtDir(), "adoption.log");
 	let content: string;
 	try {
 		content = readFileSync(logPath, "utf8");
 	} catch {
-		return false; // no log → no adoption ever happened
+		return null; // no log → no adoption ever happened
 	}
 	for (const line of content.split("\n")) {
 		const parts = line.trim().split(/\s+/);
 		// parts: [<iso-ts>, <type>, <srcSid>, '->', <curSid>]
 		if (parts.length >= 5 && parts[1] === type && parts[2] === srcSid && parts[3] === "->") {
-			return true;
+			return parts[4];
 		}
 	}
-	return false;
+	return null;
 }
 
 /**
@@ -1024,9 +1035,12 @@ function typeFromStateFilename(filename: string): StateType | null {
  * pre-overwrite value when absent, so a heartbeat on a legacy file does not erase
  * that file's last genuine-activity timestamp.
  *
- * Read-modify-write, no lock: each iteration does read → parse → stamp →
- * writeFileNoCreate (temp-write + renameSync, crash-atomic, no lock — see its own
- * doc comment). This is
+ * Read-modify-write under withStateLock (the same per-file mkdir lock the state
+ * CLIs hold for their own read-modify-write; a contended lock skips that file like
+ * any other per-file error). The lock is what closes the lost-update race with a
+ * concurrent `set`; the paragraph below records the earlier, lock-free invariant
+ * and why it was not enough on its own. Each iteration does read → parse → stamp →
+ * writeFileNoCreate (temp-write + renameSync, crash-atomic). The lock-free design was
  * only safe because the main thread is the sole writer of any given session state
  * file — the code review on PR #209 flagged this as a lost-update risk, and the
  * invariant that closes it is measured, not assumed: no agent definition under
@@ -1066,15 +1080,19 @@ export function touchSessionStates(sessionId: string): void {
 		if (type === null) continue;
 		const path = join(omtDir, entry);
 		try {
-			const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-			if (!isPlainObject(parsed)) continue;
-			if (isPristine(type, parsed)) continue;
-			const stamped = {
-				...parsed,
-				...backfillProgressTouchedAt(parsed),
-				last_touched_at: nowStamp(),
-			};
-			writeFileNoCreate(path, JSON.stringify(stamped, null, 2));
+			// Same mkdir lock the state CLIs use for their read-modify-write, so a
+			// heartbeat cannot overwrite a concurrent `set` with its stale snapshot.
+			withStateLock(path, () => {
+				const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+				if (!isPlainObject(parsed)) return;
+				if (isPristine(type, parsed)) return;
+				const stamped = {
+					...parsed,
+					...backfillProgressTouchedAt(parsed),
+					last_touched_at: nowStamp(),
+				};
+				writeFileNoCreate(path, JSON.stringify(stamped, null, 2));
+			});
 		} catch (err) {
 			if (isErrnoException(err) && err.code === "ENOENT") continue; // vanished between readdir and write — harmless race
 			continue; // any other per-file error must not abort the sweep
@@ -1153,6 +1171,39 @@ export function stageAPresentationPath(planPath: string): string {
 	const planExtension = extname(planBasename);
 	const planStem = planExtension ? planBasename.slice(0, -planExtension.length) : planBasename;
 	return join(dirname(planPath), "presentation", `${planStem}.html`);
+}
+
+const PLAN_TODOS_HEADING = /^##\s+TODOs\s*$/;
+const PLAN_NEXT_H2_HEADING = /^##(?!#)\s/;
+const PLAN_TODO_LINE = /^\s*- \[[ xX]\] (F?\d+)\.\s/;
+
+/**
+ * True iff the plan file at `planPath` has a `## TODOs` heading followed, before the
+ * next `##` heading, by at least one TODO line (`- [ ] 3. ...`, `- [x] F1. ...`).
+ * Lines inside code blocks or HTML comments never count, as heading or as TODO, the
+ * same text the plan validator ignores. This is the
+ * file-level proof that S3 wrote the TODO plan (the S0 interview draft holds a
+ * Decision Register and no TODOs), independent of the `steps.plan.done` flag that a
+ * session can forget to set. A missing or unreadable file is "not written".
+ */
+export function planFileHasTodos(planPath: string): boolean {
+	let content: string;
+	try {
+		content = readFileSync(planPath, "utf8");
+	} catch {
+		return false;
+	}
+	let inTodos = false;
+	for (const line of linesOutsideBlocks(content, ["code", "comment"])) {
+		if (PLAN_TODOS_HEADING.test(line)) {
+			inTodos = true;
+		} else if (PLAN_NEXT_H2_HEADING.test(line)) {
+			inTodos = false;
+		} else if (inTodos && PLAN_TODO_LINE.test(line)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**
