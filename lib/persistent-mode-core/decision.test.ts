@@ -161,6 +161,20 @@ describe("makeDecision", () => {
 			expect(result.reason).toContain("<prometheus-continuation>");
 		});
 
+		it("prometheus continuation message names the pause and abort exits", async () => {
+			const fresh = new Date().toISOString();
+			await writeFile(
+				join(omtDir, "prometheus-state-test-session.json"),
+				JSON.stringify({ active: true, sessionId: "test-session", started_at: fresh, last_touched_at: fresh }),
+			);
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "wrapping up for now" }));
+
+			expect(result.reason).toContain("stop for now and continue later");
+			expect(result.reason).toContain("set --await-user");
+			expect(result.reason).toContain('set --abort --reason "<the user\'s words>"');
+		});
+
 		it("deep-interview awaiting_answer=true allows stop and keeps state", async () => {
 			const fresh = new Date().toISOString();
 			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
@@ -1298,6 +1312,67 @@ describe("makeDecision", () => {
 
 			expect(result.decision).not.toBe("block");
 			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(false);
+		});
+
+		const writeAbortableState = async (aborted?: { reason: string; phase: string; at: string }) => {
+			await writeFile(
+				join(omtDir, "prometheus-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: new Date().toISOString(),
+					last_touched_at: new Date().toISOString(),
+					plan_path: planPathFor(),
+					steps: { plan: { done: true } },
+					...(aborted ? { aborted } : {}),
+				}),
+			);
+		};
+		const abortRecord = { reason: "user quit", phase: "S4", at: new Date().toISOString() };
+
+		it("tears down on <prometheus-done/> when the state records an abort, without a presentation", async () => {
+			await writePlanOnDisk();
+			await writeAbortableState(abortRecord);
+			await writeFile(join(stateDir, "block-count-prometheus-stage-a-test-session"), "2");
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "Stopped.\n<prometheus-done/>" }));
+
+			expect(result.decision).not.toBe("block");
+			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(false);
+			expect(fs.existsSync(join(stateDir, "block-count-prometheus-stage-a-test-session"))).toBe(false);
+		});
+
+		it("still refuses <prometheus-done/> without an abort record (regression guard)", async () => {
+			await writePlanOnDisk();
+			await writeAbortableState();
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "Done.\n<prometheus-done/>" }));
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("Stage A");
+		});
+
+		it("refuses again once a later set cleared the abort record", async () => {
+			await writePlanOnDisk();
+			await writeAbortableState(abortRecord);
+			const path = join(omtDir, "prometheus-state-test-session.json");
+			const resumed = JSON.parse(fs.readFileSync(path, "utf8"));
+			delete resumed.aborted;
+			await writeFile(path, JSON.stringify(resumed));
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "Done.\n<prometheus-done/>" }));
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("Stage A");
+		});
+
+		it("the Stage A refusal names the abort exit", async () => {
+			await writePlanOnDisk();
+			await writeAbortableState();
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "Done.\n<prometheus-done/>" }));
+
+			expect(result.reason).toContain('prometheus-state.ts set --abort --reason "<the user\'s words>"');
 		});
 
 		it("honors <prometheus-done/> on a pre-plan abort (plan step not done)", async () => {

@@ -1420,3 +1420,71 @@ describe("set 입력 검증", () => {
 		expect(state.steps.plan.done).toBe(true);
 	});
 });
+
+describe("set --abort --reason (recorded abandonment)", () => {
+	function runAbort(sid: string, args: string) {
+		writePristinePromState(sid);
+		return runPromCliMerged(`set ${args}`, { OMT_SESSION_ID: sid, OMT_DIR: tmpDir });
+	}
+	const readState = (sid: string) => JSON.parse(readFileSync(`${tmpDir}/prometheus-state-${sid}.json`, "utf8"));
+
+	test("records aborted {reason, phase, at} with the resolved current phase", () => {
+		const { code } = runAbort("abortOk", `--abort --reason "그만 할래요"`);
+		expect(code).toBe(0);
+		const state = readState("abortOk");
+		expect(state.aborted.reason).toBe("그만 할래요");
+		expect(state.aborted.phase).toBe("S0");
+		expect(state.aborted.at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+	});
+
+	test("sanitizes control characters in the reason", () => {
+		runAbort("abortCtl", `--abort --reason "$(printf 'a\\tb')"`);
+		expect(readState("abortCtl").aborted.reason).toBe("a b");
+	});
+
+	test("refuses --abort without --reason and writes no abort", () => {
+		const { code, out } = runAbort("abortNoReason", "--abort");
+		expect(code).not.toBe(0);
+		expect(out).toContain("--reason");
+		expect(readState("abortNoReason").aborted).toBeUndefined();
+	});
+
+	test("refuses a blank --reason", () => {
+		const { code } = runAbort("abortBlank", `--abort --reason "   "`);
+		expect(code).not.toBe(0);
+		expect(readState("abortBlank").aborted).toBeUndefined();
+	});
+
+	test("refuses --reason with no value", () => {
+		const { code, out } = runAbort("abortNoValue", "--abort --reason");
+		expect(code).not.toBe(0);
+		expect(out).toContain("--reason requires a value");
+	});
+
+	test("refuses --reason without --abort", () => {
+		const { code, out } = runAbort("reasonAlone", `--reason "x"`);
+		expect(code).not.toBe(0);
+		expect(out).toContain("--abort");
+		expect(readState("reasonAlone").aborted).toBeUndefined();
+	});
+
+	test("a later set without --abort clears aborted", () => {
+		runAbort("abortCleared", `--abort --reason "stop"`);
+		const { code } = runPromCliMerged("set --await-user", { OMT_SESSION_ID: "abortCleared", OMT_DIR: tmpDir });
+		expect(code).toBe(0);
+		expect(readState("abortCleared").aborted).toBeUndefined();
+	});
+
+	test("appends one prometheus-abort line to the OMT-dir abort log", () => {
+		runAbort("abortLog", `--abort --reason "line one"`);
+		const lines = readFileSync(`${tmpDir}/prometheus-abort.log`, "utf8").trim().split("\n");
+		expect(lines).toHaveLength(1);
+		expect(lines[0]).toMatch(/^\S+ prometheus-abort abortLog S0 line one$/);
+	});
+
+	test("help documents --abort and --reason", () => {
+		const out = runPromCli("help", { OMT_SESSION_ID: "", CODEX_THREAD_ID: "" });
+		expect(out).toContain("--abort");
+		expect(out).toContain("--reason");
+	});
+});

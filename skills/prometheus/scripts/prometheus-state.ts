@@ -13,12 +13,13 @@
  *   clear (system-only internal teardown)
  */
 
-import { existsSync, readFileSync, unlinkSync, statSync } from "fs";
+import { appendFileSync, existsSync, readFileSync, unlinkSync, statSync } from "fs";
 import { isAbsolute } from "path";
 import { execSync } from "child_process";
 import { getOmtDir } from "@lib/omt-dir";
 import {
 	mergeWithHeartbeat,
+	nowStamp,
 	resolveSessionIdOrThrow,
 	listOthers,
 	adopt,
@@ -47,6 +48,13 @@ export interface PrometheusState {
 	 * It never marks completion; only <prometheus-done/> + the Stage A gate does.
 	 */
 	awaiting_user: boolean;
+	/**
+	 * Set by `set --abort --reason "<the user's words>"` when the user abandons the
+	 * plan. The persistent-mode Stop gate lets <prometheus-done/> tear the session
+	 * down without a Stage A presentation while this is present. Cleared by any
+	 * later `set` without --abort, so a resumed session keeps no stale abort.
+	 */
+	aborted?: { reason: string; phase: string; at: string };
 	/** Pipeline token: S0-S8 */
 	phase: string;
 	/** Absolute path under $OMT_DIR/plans/, empty string until plan written */
@@ -227,6 +235,8 @@ export function setPrometheusState(
 		submit_presentation?: string;
 		/** Sets awaiting_user=true (legitimate pause at a human gate). Omitting it on any set clears the flag. */
 		await_user?: boolean;
+		/** Records `aborted` with this reason (the user's words). Omitting it on any set clears `aborted`. */
+		abort_reason?: string;
 	},
 ): void {
 	// Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
@@ -345,6 +355,14 @@ function writePrometheusState(
 		}
 	}
 
+	if (opts.abort_reason !== undefined && opts.abort_reason.trim() === "") {
+		throw new PrometheusRefusal("--abort requires a non-empty --reason (quote the user's words)");
+	}
+	const aborted =
+		opts.abort_reason !== undefined
+			? { reason: normalizeResumeSummary(opts.abort_reason).trim(), phase: resolvedPhase, at: nowStamp() }
+			: undefined;
+
 	const priorSteps = prior.steps ?? FRESH_STEPS;
 
 	// Merge each step sub-object — only update the sub-object whose flag was passed.
@@ -365,6 +383,8 @@ function writePrometheusState(
 		// Recomputed every write: true only when THIS set passed --await-user, so any
 		// later progress write auto-clears the pause (mirrors explain-diff's grade clearing awaiting_answer).
 		awaiting_user: opts.await_user === true,
+		// Recomputed every write: present only when THIS set passed --abort.
+		...(aborted ? { aborted } : {}),
 		phase: resolvedPhase,
 		plan_path: resolvedPlanPath,
 		resume_summary: normalizeResumeSummary(opts.resume_summary ?? prior.resume_summary ?? ""),
@@ -394,6 +414,14 @@ function writePrometheusState(
 			);
 		}
 		throw err;
+	}
+	if (aborted) {
+		// Teardown deletes the state file; this append-only line is the surviving record.
+		appendFileSync(
+			`${getOmtDir()}/prometheus-abort.log`,
+			`${aborted.at} prometheus-abort ${sessionId} ${aborted.phase} ${aborted.reason}\n`,
+			"utf8",
+		);
 	}
 }
 
@@ -462,7 +490,12 @@ function stringFlag(args: Record<string, string | boolean>, name: string): strin
  * <prometheus-done/>; `clear` is retained as an internal system-only subcommand.
  */
 const ROSTER: CliCommand[] = [
-	{ name: "set", authority: "ai", effect: "writes phase/plan/AC state fields" },
+	{
+		name: "set",
+		authority: "ai",
+		effect:
+			"writes phase/plan/AC state fields; `set --abort --reason \"<the user's words>\"` records that the user abandoned the plan (the done token then skips the Stage A gate)",
+	},
 	{ name: "get", authority: "ai", effect: "reads the full state" },
 	{ name: "clear", authority: "system", effect: "internal session-state teardown" },
 	{ name: "list-others", authority: "ai", effect: "lists other live sessions eligible for adoption" },
@@ -554,6 +587,12 @@ function main(): void {
 			const markDesignDone = args["mark-design-done"] === true;
 			const markPlanDone = args["mark-plan-done"] === true;
 			const awaitUser = args["await-user"] === true;
+			const reason = stringFlag(args, "reason");
+			const abort = args["abort"] === true;
+			if (reason !== undefined && !abort) fail("--reason is only valid with --abort");
+			if (abort && (reason === undefined || reason.trim() === "")) {
+				fail("--abort requires a non-empty --reason (quote the user's words)");
+			}
 
 			setPrometheusState(sessionId, {
 				phase,
@@ -565,6 +604,7 @@ function main(): void {
 				mark_plan_done: markPlanDone || undefined,
 				submit_presentation: submitPresentation,
 				await_user: awaitUser || undefined,
+				abort_reason: abort ? reason : undefined,
 			});
 		} else if (subcommand === "clear") {
 			clearPrometheusState(sessionId);

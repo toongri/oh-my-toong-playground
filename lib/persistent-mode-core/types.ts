@@ -94,6 +94,12 @@ export interface PrometheusState {
 	 * states — fail closed to "not paused" (blocks, as before).
 	 */
 	awaiting_user?: boolean;
+	/**
+	 * Written by `prometheus-state.ts set --abort --reason`. When present, the
+	 * done-token Stage A gate is skipped: the user abandoned the plan. Cleared by
+	 * any later `set` without --abort.
+	 */
+	aborted?: { reason: string; phase: string; at: string };
 	/** Heartbeat timestamps (managed StateType) — read by the isStateLive TTL check. */
 	last_touched_at?: string;
 	started_at?: string;

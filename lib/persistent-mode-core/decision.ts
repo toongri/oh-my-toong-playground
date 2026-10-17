@@ -183,6 +183,7 @@ INSTRUCTIONS:
 2. Never interpret a user "continue" reply as permission to bypass a human gate (S2, design gate, S7)
 3. When the pipeline is fully complete or explicitly aborted, output: <prometheus-done/>
 4. Do NOT stop until <prometheus-done/> is emitted
+5. If the user wants to stop for now and continue later, ask/confirm in plain text after \`prometheus-state.ts set --await-user\`. If the user abandoned the work, run \`prometheus-state.ts set --abort --reason "<the user's words>"\`, then output <prometheus-done/>.
 
 ${continuationContract("preferred", "when your turn ends on a question to the user (an S0 interview question or a human gate such as S2/design gate/S7), run `prometheus-state.ts set --await-user`, then end your turn (the next progress write clears the pause).")}
 
@@ -227,6 +228,8 @@ function prometheusStageAGateReason(state: PrometheusState): string | null {
 <prometheus-done/> was refused: the plan at ${planPath} is written, but ${problem}.
 
 "Finish" defers execution only — it never skips S5. Render the plan to ${presentationPath} now (review-pipeline.md Stage A: faithful render, Bird's-Eye coverage table + triggered diagrams, Review Digest, collapsed plan body), then emit <prometheus-done/> again.
+
+If the user abandoned the plan instead, run \`prometheus-state.ts set --abort --reason "<the user's words>"\`, then emit <prometheus-done/> again.
 
 </prometheus-stage-a-gate>
 
@@ -760,7 +763,9 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			// Stage A gate before honoring the token. The block-count cap keeps this
 			// walk-away safe: a wedged session escapes (and tears down) after
 			// MAX_BLOCK_COUNT refusals, same bound as the token-less branch.
-			const gateReason = prometheusStageAGateReason(prometheusState);
+			// A recorded abort (`set --abort --reason`) means the user abandoned the plan:
+			// there is nothing to present, so the gate stays closed to that exit.
+			const gateReason = prometheusState.aborted ? null : prometheusStageAGateReason(prometheusState);
 			if (gateReason !== null && getBlockCount(stateDir, prometheusStageAAttemptId) < MAX_BLOCK_COUNT) {
 				incrementBlockCount(stateDir, prometheusStageAAttemptId);
 				return formatBlockOutput(gateReason);
