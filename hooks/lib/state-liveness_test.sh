@@ -744,7 +744,8 @@ test_reap_session_artifacts_uses_own_now_epoch_not_internal_wall_clock() {
   # that same now_epoch also reaches list_live_session_ids.
   touch_ago "$artifact" 0
 
-  local far_future=$((NOW + ACTIVE_IDLE_TTL + 3600))
+  # Past ACTIVE_STATE_RETENTION_TTL, the window this delete path judges an active state by.
+  local far_future=$((NOW + ACTIVE_STATE_RETENTION_TTL + 3600))
   reap_session_artifacts "$d" "__none__" "$far_future" 0 > /dev/null
 
   if [ -f "$artifact" ]; then
@@ -1332,6 +1333,30 @@ test_reap_session_artifacts_other_live_session_survives_without_sid() {
 
   if [ ! -f "$artifact" ]; then
     echo "  ASSERTION FAILED: another session's artifact must survive via list_live_session_ids, not identity"
+    return 1
+  fi
+  return 0
+}
+
+# An active state the delete path still retains (idle past ACTIVE_IDLE_TTL, within
+# ACTIVE_STATE_RETENTION_TTL) keeps its session's artifacts too; past retention both go.
+test_reap_session_artifacts_retained_active_state_keeps_its_artifacts() {
+  local d="$TEST_TMP_DIR"
+  write_state "$d/qa-state-kept-sid.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 32880)\"}"
+  write_state "$d/session-resources-kept-sid.json" "{}"
+  touch_ago "$d/session-resources-kept-sid.json" 32880
+  write_state "$d/qa-state-gone-sid.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago "$REAP_STALE_ACTIVE_AGE")\"}"
+  write_state "$d/session-resources-gone-sid.json" "{}"
+  touch_ago "$d/session-resources-gone-sid.json" "$REAP_STALE_ACTIVE_AGE"
+
+  reap_session_artifacts "$d" "__none__" "$NOW" 0 > /dev/null
+
+  if [ ! -f "$d/session-resources-kept-sid.json" ]; then
+    echo "  ASSERTION FAILED: artifact of an active state idle 9h8m (retained) must survive"
+    return 1
+  fi
+  if [ -f "$d/session-resources-gone-sid.json" ]; then
+    echo "  ASSERTION FAILED: artifact of an active state past ACTIVE_STATE_RETENTION_TTL must be reaped"
     return 1
   fi
   return 0
@@ -2218,6 +2243,7 @@ run_test test_reap_dead_state_files_emits_diag_breadcrumb_to_stderr
 run_test test_is_current_session_suffix_match_diverges_from_base_exact_match_over_preserves
 run_test test_reap_session_artifacts_current_session_self_artifact_survives
 run_test test_reap_session_artifacts_other_live_session_survives_without_sid
+run_test test_reap_session_artifacts_retained_active_state_keeps_its_artifacts
 run_test test_reap_session_artifacts_execute_mode_echoes_affected_paths
 run_test test_reap_session_artifacts_execute_mode_echoes_real_path_not_constant
 run_test test_reap_session_artifacts_empty_tail_fresh_survives_mtime_guard_only
