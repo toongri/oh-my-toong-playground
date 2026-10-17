@@ -22,7 +22,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { basename, extname, join } from "path";
 import { Marked, marked, type Token, type Tokens } from "marked";
-import { findFenceBlocks } from "@lib/markdown-fence";
+import { findMarkdownBlocks } from "@lib/markdown-blocks";
 
 /** Heading rows the table of contents is built from. */
 interface TocEntry {
@@ -159,19 +159,26 @@ export function preRenderMermaid(
 	const out: string[] = [];
 	let index = 0;
 	let next = 0;
-	// Fences follow lib/markdown-fence.ts. Only a line that starts (after whitespace) with the
-	// fence opens one: a `> ` blockquote prefix never matches, so a quoted fence stays code with
-	// no `> ` leaking into the diagram source. Every fence is consumed whole, so a mermaid fence
-	// nested in another fenced block stays code, and an unclosed fence runs to the end as code.
-	for (const block of findFenceBlocks(lines)) {
-		out.push(...lines.slice(next, block.open));
-		const { open, close, indent, info } = block;
-		if (close === -1 || info.trim().split(/\s+/)[0].toLowerCase() !== "mermaid") {
-			next = close === -1 ? lines.length : close + 1;
-			out.push(...lines.slice(open, next));
+	// Code blocks come from lib/markdown-blocks.ts (marked's lexer, the parser that renders the
+	// page), so a mermaid fence nested in another code block or left unclosed stays code. Only a
+	// closed fence whose line starts (after whitespace) with the fence becomes a figure: one inside
+	// a `> ` blockquote stays code with no `> ` leaking into the diagram source, and so does one
+	// opened on a list marker line.
+	for (const block of findMarkdownBlocks(lines.join("\n"))) {
+		const { start, end, info } = block;
+		const opener = /^([ \t]*)(`{3,}|~{3,})/.exec(lines[start]);
+		if (
+			block.kind !== "code" ||
+			!block.fenced ||
+			!block.closed ||
+			opener === null ||
+			info.trim().split(/\s+/)[0].toLowerCase() !== "mermaid"
+		) {
 			continue;
 		}
-		const body = lines.slice(open + 1, close).map((l) => {
+		out.push(...lines.slice(next, start));
+		const indent = opener[1];
+		const body = lines.slice(start + 1, end).map((l) => {
 			let k = 0;
 			while (k < indent.length && k < l.length && (l[k] === " " || l[k] === "\t")) k += 1;
 			return l.slice(k);
@@ -188,7 +195,7 @@ export function preRenderMermaid(
 			});
 		}
 		out.push(indent + zoomableFigure(normalizeSvgWidth(svg), n));
-		next = close + 1;
+		next = end + 1;
 	}
 	out.push(...lines.slice(next));
 	return out.join("\n");

@@ -720,6 +720,12 @@ describe("코드 펜스", () => {
 		expect(validatePlanGraph(plan)).toContain("TODOs section contains no canonical checkbox TODOs");
 	});
 
+	test("목록 마커와 같은 줄에서 연 펜스가 뒤의 섹션을 삼키지 않는다", () => {
+		const plan = buildPlan({ Context: "- 실행:\n  - ```bash\n    make test\n    ```\n\n뒤 문단" });
+		expect(validateUnclosedBlocks(plan)).toEqual([]);
+		expect(validatePlan(plan)).toEqual([]);
+	});
+
 	test("닫힌 펜스만 있으면 펜스 위반이 없다", () => {
 		expect(validateUnclosedBlocks(`${buildPlan()}\n${F}ts\nx\n${F}\n~~~\ny\n~~~\n`)).toEqual([]);
 	});

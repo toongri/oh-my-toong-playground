@@ -53,7 +53,7 @@ import { createHash } from "crypto";
 // (the sync alias-rewriter skips lib/** files). Relative imports let `make sync`'s dep collector
 // follow the path and deploy omt-dir alongside this module.
 import { getOmtDir, resolveOmtDir } from "./omt-dir";
-import { linesOutsideFences } from "./markdown-fence";
+import { linesOutsideCode } from "./markdown-blocks";
 import { withStateLock } from "./persistent-mode-core/state-lock";
 import { chainComplete, commentOk, approveOk, driverGateArmed, recordComplete } from "./qa-chain-core";
 import type { QaChainState } from "./qa-chain-core";
@@ -1193,7 +1193,7 @@ export function planFileHasTodos(planPath: string): boolean {
 		return false;
 	}
 	let inTodos = false;
-	for (const line of linesOutsideFences(content)) {
+	for (const line of linesOutsideCode(content)) {
 		if (PLAN_TODOS_HEADING.test(line)) {
 			inTodos = true;
 		} else if (PLAN_NEXT_H2_HEADING.test(line)) {

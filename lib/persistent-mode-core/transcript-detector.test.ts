@@ -80,6 +80,14 @@ describe("transcript-detector", () => {
 			expect(detectPrometheusDone("-\n\n    ```\n\n<prometheus-done/>")).toBe(true);
 		});
 
+		it("목록 마커와 같은 줄에서 연 펜스 안의 토큰은 감지하지 않음", () => {
+			expect(detectPrometheusDone("- ```\n  <prometheus-done/>\n  ```")).toBe(false);
+		});
+
+		it("최상위에서 4칸 들여쓴 토큰은 들여쓴 코드라 감지하지 않음", () => {
+			expect(detectPrometheusDone("완료:\n\n    <prometheus-done/>")).toBe(false);
+		});
+
 		it("최상위에서 4칸 들여쓴 펜스 줄은 들여쓴 코드라 펜스를 열지 않음", () => {
 			expect(detectPrometheusDone("예시:\n\n    ```\n\n<prometheus-done/>")).toBe(true);
 		});

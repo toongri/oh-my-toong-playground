@@ -26,8 +26,8 @@
  * predecessor counts). F1-F4 targets are exempt from that path check. The reverse
  * is not required: `Blocks:` may omit dependents, and the field may be absent.
  *
- * Code fences follow `lib/markdown-fence.ts`. Every pass ignores fenced text and
- * HTML comments. A fence, or a line-start `<!--`, that never closes is reported,
+ * Code blocks and HTML comments come from `lib/markdown-blocks.ts` (marked's lexer).
+ * Every pass ignores them. A fence, or a line-start `<!--`, that never closes is reported,
  * since everything after it renders as code or is hidden.
  *
  * Usage: bun skills/prometheus/scripts/validate-plan.ts <plan_path>
@@ -37,7 +37,7 @@
  *          read; a one-line message goes to stderr, nothing to stdout).
  */
 
-import { findFenceBlocks } from "@lib/markdown-fence";
+import { findMarkdownBlocks } from "@lib/markdown-blocks";
 
 export const REQUIRED_HEADINGS: string[] = [
 	"TL;DR",
@@ -50,56 +50,40 @@ export const REQUIRED_HEADINGS: string[] = [
 ];
 
 interface ScrubbedPlan {
-	/** Plan text with fenced blocks and HTML comments removed. */
+	/** Plan text with code blocks and HTML comments removed. */
 	text: string;
-	/** Opening line (1-based) and text of a fence that never closes, or null. */
-	unclosedFence: { line: number; opener: string } | null;
-	/** 1-based line of a line-start `<!--` that never closes, or null. */
-	unclosedCommentLine: number | null;
+	/** First and last line (1-based) and opening text of a fence that never closes, or null. */
+	unclosedFence: { line: number; endLine: number; opener: string } | null;
+	/** First and last line (1-based) of a `<!--` block that never closes, or null. */
+	unclosedComment: { line: number; endLine: number } | null;
 }
 
 /**
  * Remove what Markdown does not render as plan structure. Line endings are
  * normalized to LF first, so every check built on this sees LF.
- * - Each fenced code block becomes `placeholder`. Fences follow the shared rules
- *   in `lib/markdown-fence.ts`, and an unclosed fence runs to the end.
- * - Then each HTML comment (`<!-- ... -->`, single- or multi-line) is removed. A
- *   `<!--` that starts a line (indent up to 3) and never closes runs to the end, as
- *   an HTML block does. One that never closes mid-line is literal text and stays.
+ * - Each code block (fenced or indented) becomes `placeholder`, and each HTML
+ *   comment block is removed. Both come from `lib/markdown-blocks.ts`, so an
+ *   unclosed fence or `<!--` covers what the renderer covers.
+ * - Then each remaining HTML comment inside a line (`<!-- ... -->`) is removed. A
+ *   `<!--` that never closes mid-line is literal text and stays.
  * Other text is never changed.
  */
 function scrubPlan(content: string, placeholder: string): ScrubbedPlan {
 	const lines = content.replace(/\r\n?/g, "\n").split("\n");
 	let unclosedFence: ScrubbedPlan["unclosedFence"] = null;
-	for (const block of findFenceBlocks(lines)) {
-		if (block.close === -1) unclosedFence = { line: block.open + 1, opener: lines[block.open].trim() };
-		const end = block.close === -1 ? lines.length - 1 : block.close;
-		for (let k = block.open + 1; k <= end; k++) lines[k] = "";
-		lines[block.open] = placeholder;
+	let unclosedComment: ScrubbedPlan["unclosedComment"] = null;
+	for (const block of findMarkdownBlocks(lines.join("\n"))) {
+		const span = { line: block.start + 1, endLine: block.end + 1 };
+		if (!block.closed && block.kind === "code") unclosedFence ??= { ...span, opener: lines[block.start].trim() };
+		if (!block.closed && block.kind === "comment") unclosedComment ??= span;
+		for (let k = block.start; k <= block.end; k++) lines[k] = "";
+		if (block.kind === "code") lines[block.start] = placeholder;
 	}
-	const text = lines.join("\n");
-	let out = "";
-	let pos = 0;
-	for (;;) {
-		const open = text.indexOf("<!--", pos);
-		if (open === -1) return { text: out + text.slice(pos), unclosedFence, unclosedCommentLine: null };
-		const close = text.indexOf("-->", open + 4);
-		if (close !== -1) {
-			out += text.slice(pos, open);
-			pos = close + 3;
-			continue;
-		}
-		const lineStart = text.lastIndexOf("\n", open - 1) + 1;
-		if (/^ {0,3}$/.test(text.slice(lineStart, open))) {
-			return {
-				text: out + text.slice(pos, open),
-				unclosedFence,
-				unclosedCommentLine: text.slice(0, open).split("\n").length,
-			};
-		}
-		out += text.slice(pos, open + 4);
-		pos = open + 4;
-	}
+	return {
+		text: lines.join("\n").replace(/<!--[\s\S]*?-->/g, ""),
+		unclosedFence,
+		unclosedComment,
+	};
 }
 
 /** Plan text with fenced blocks replaced by `placeholder` and HTML comments removed. */
@@ -115,16 +99,16 @@ function stripFences(content: string, placeholder = ""): string {
  * @returns One violation message per kind found, or empty.
  */
 export function validateUnclosedBlocks(content: string): string[] {
-	const { unclosedFence, unclosedCommentLine } = scrubPlan(content, "");
+	const { unclosedFence, unclosedComment } = scrubPlan(content, "");
 	const violations: string[] = [];
 	if (unclosedFence !== null) {
 		violations.push(
-			`Code fence: the fence opened on line ${unclosedFence.line} (\`${unclosedFence.opener}\`) never closes, so everything after it renders as code. Close it or remove it.`,
+			`Code fence: the fence opened on line ${unclosedFence.line} (\`${unclosedFence.opener}\`) never closes, so everything through line ${unclosedFence.endLine} renders as code. Close it or remove it.`,
 		);
 	}
-	if (unclosedCommentLine !== null) {
+	if (unclosedComment !== null) {
 		violations.push(
-			`HTML comment: the \`<!--\` on line ${unclosedCommentLine} never closes with \`-->\`, so everything after it is hidden. Close it or remove it.`,
+			`HTML comment: the \`<!--\` on line ${unclosedComment.line} never closes with \`-->\`, so everything through line ${unclosedComment.endLine} is hidden. Close it or remove it.`,
 		);
 	}
 	return violations;

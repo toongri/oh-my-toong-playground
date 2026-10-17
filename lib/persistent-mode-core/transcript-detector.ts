@@ -1,15 +1,15 @@
 import { logDebug } from "@lib/logging";
-import { linesOutsideFences } from "@lib/markdown-fence";
+import { linesOutsideCode } from "@lib/markdown-blocks";
 
 // Pattern matchers
 const DEEP_INTERVIEW_DONE_PATTERN = /<deep-interview-done\s*\/>/i;
 // The prometheus token tears the session down, so it must stand alone on its own line
-// (whitespace only around it) outside fenced code. A message that merely mentions it
-// mid-sentence, in inline code, or in a code example is not a completion signal.
+// (whitespace only around it) outside code blocks, fenced or indented. A message that merely
+// mentions it mid-sentence, in inline code, or in a code example is not a completion signal.
 const PROMETHEUS_DONE_LINE_PATTERN = /^\s*<prometheus-done\s*\/>\s*$/i;
 
-function hasPrometheusDoneLineOutsideFence(message: string): boolean {
-	return linesOutsideFences(message).some((line) => PROMETHEUS_DONE_LINE_PATTERN.test(line));
+function hasPrometheusDoneLineOutsideCode(message: string): boolean {
+	return linesOutsideCode(message).some((line) => PROMETHEUS_DONE_LINE_PATTERN.test(line));
 }
 
 export function detectDeepInterviewDone(lastAssistantMessage: string | null): boolean {
@@ -25,7 +25,7 @@ export function detectDeepInterviewDone(lastAssistantMessage: string | null): bo
 export function detectPrometheusDone(lastAssistantMessage: string | null): boolean {
 	if (!lastAssistantMessage) return false;
 
-	const detected = hasPrometheusDoneLineOutsideFence(lastAssistantMessage);
+	const detected = hasPrometheusDoneLineOutsideCode(lastAssistantMessage);
 	if (detected) {
 		logDebug("detected prometheus done <prometheus-done/>");
 	}
