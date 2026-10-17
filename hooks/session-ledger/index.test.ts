@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { extractClaude, extractCodex, outputExcerpt } from "./extract.ts";
 import { headOf, ledgerPath, preCompact, selectLog, sessionStartContext } from "./index.ts";
 import {
+	fallbackLedger,
 	isLedgerJson,
 	type LedgerJson,
 	type ModelResult,
@@ -613,6 +614,30 @@ describe("재시도와 대체 경로", () => {
 			{ id: "U1", text: "첫째" },
 			{ id: "U2", text: "이렇게 적혀 있었어:\n- [U1] 인용된 줄\n- [U2] 또 인용" },
 			{ id: "U3", text: "셋째" },
+		]);
+	});
+
+	test("이전 ledger 전체를 붙여넣은 사용자 메시지가 있어도 실제 메시지를 모두 되살린다", () => {
+		const pasted = "# Session ledger\n\n## All user messages (verbatim)\n- [U6] 붙여넣은 여섯째\n- [U7] 붙여넣은 일곱째\n둘째 줄";
+		const users = [
+			{ id: "U1", text: "하나" },
+			{ id: "U2", text: `이전 ledger야:\n${pasted}` },
+			{ id: "U3", text: "셋" },
+		];
+		expect(previousUsers(renderLedger(ledgerJson(), users))).toEqual(users);
+		expect(previousUsers(fallbackLedger(log, users, "test"))).toEqual(users);
+	});
+
+	test("제목 줄과 앞 공백 줄이 있는 메시지가 왕복 후에도 바이트 단위로 같다", () => {
+		const users = [{ id: "U1", text: "## 제목\n  들여쓴 줄\n    더 들여쓴 줄\n\n- [U1] 인용\n마지막" }];
+		expect(previousUsers(renderLedger(ledgerJson(), users))).toEqual(users);
+	});
+
+	test("이어지는 줄을 들여쓰지 않은 옛 형식 ledger도 그대로 읽는다", () => {
+		const previous = "# Session ledger\n\n## All user messages (verbatim)\n- [U1] 첫 줄\n둘째 줄\n\n넷째 줄\n- [U2] 좋아\n";
+		expect(previousUsers(previous)).toEqual([
+			{ id: "U1", text: "첫 줄\n둘째 줄\n\n넷째 줄" },
+			{ id: "U2", text: "좋아" },
 		]);
 	});
 });

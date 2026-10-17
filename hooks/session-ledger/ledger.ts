@@ -143,6 +143,11 @@ const OLD_APPENDIX_HEADING = "## Appendix: original text of approved proposals";
  * The section runs to the next known heading or the end of the file: a message may itself contain
  * `## ` lines or a quoted `- [U<n>] ` line. U-ids only increase, so a line is a new entry only when
  * its number exceeds the previous entry's.
+ *
+ * Current ledgers escape the payload (see `userEntry`): every continuation line is indented two spaces,
+ * so no message line can equal a heading (a pasted earlier ledger would otherwise move `lastIndexOf` to
+ * the pasted heading) or start an entry. A line starting with two spaces continues the current entry and
+ * loses exactly those two spaces. Older ledgers did not indent; their continuation lines are read as before.
  */
 export function previousUsers(ledger: string | undefined): Message[] {
 	if (!ledger) return [];
@@ -156,7 +161,8 @@ export function previousUsers(ledger: string | undefined): Message[] {
 	for (const line of ledger.slice(start).split("\n")) {
 		if (line === UNVERIFIED_HEADING || line === OLD_APPENDIX_HEADING) break;
 		const match = line.match(/^- \[U(\d+)\] ([\s\S]*)$/);
-		if (match && Number(match[1]) > lastNumber) {
+		if (line.startsWith("  ") && users.length > 0) users[users.length - 1].text += `\n${line.slice(2)}`;
+		else if (match && Number(match[1]) > lastNumber) {
 			lastNumber = Number(match[1]);
 			users.push({ id: `U${match[1]}`, text: match[2] });
 		} else if (users.length > 0) users[users.length - 1].text += `\n${line}`;
@@ -166,6 +172,15 @@ export function previousUsers(ledger: string | undefined): Message[] {
 }
 
 // ─── Rendering ──────────────────────────────────────────────────────────────
+
+/**
+ * One user message as ledger lines: `- [U<n>] <first line>`, then every later line indented two spaces.
+ * The indent keeps the message from forming a heading line or an entry line of its own, so the parser
+ * (`previousUsers`) finds the real section even when the message contains a pasted ledger.
+ */
+function userEntry(u: Message): string {
+	return `- [${u.id}] ${u.text.split("\n").join("\n  ")}`;
+}
 
 const MADE_BY: Record<LedgerJson["decisions"][number]["made_by"], string> = {
 	user: "user's decision",
@@ -238,7 +253,7 @@ export function renderLedger(d: LedgerJson, users: Message[], warnings: string[]
 		warnings.length > 0
 			? ["", UNVERIFIED_HEADING, "The validator could not verify these against the transcript; check them before relying on them:", ...warnings.map((w) => `- ${w}`)]
 			: [];
-	const userLines = ["", USERS_HEADING, ...users.map((u) => `- [${u.id}] ${u.text}`)];
+	const userLines = ["", USERS_HEADING, ...users.map(userEntry)];
 	return `${renderFields(d).trimEnd()}\n${[...warningLines, ...userLines].join("\n")}`.trimEnd() + "\n";
 }
 
@@ -503,7 +518,7 @@ export function fallbackLedger(log: WorkLog, users: Message[], reason: string, p
 		"",
 		...(previousFields ? [PREVIOUS_HEADING, previousFields, ""] : []),
 		USERS_HEADING,
-		...users.map((u) => `- [${u.id}] ${u.text}`),
+		...users.map(userEntry),
 		"",
 	].join("\n");
 }
