@@ -11,9 +11,16 @@
  *     implementation TODOs satisfy `Wave = max(blocker waves) + 1` (no blockers
  *     means Wave 1).
  *
+ * `Blocks:` is parsed like `Blocked By:`; every id it lists must be defined and
+ * must list the declaring TODO in its own `Blocked By:`. The reverse is not
+ * required: `Blocks:` may omit TODOs that list it in `Blocked By:` (plans
+ * conventionally leave F1-F4 out), and the field may be absent altogether.
+ *
  * Usage: bun skills/prometheus/scripts/validate-plan.ts <plan_path>
  * Exit 0 = all sections present and non-empty, and no graph violations.
  * Exit 1 = violations found (offending literals/messages printed to stdout).
+ * Exit 2 = usage or I/O error (missing argument, or the plan file cannot be
+ *          read; a one-line message goes to stderr, nothing to stdout).
  */
 
 export const REQUIRED_HEADINGS: string[] = [
@@ -31,7 +38,8 @@ export const REQUIRED_HEADINGS: string[] = [
  * list-nested fences are) with `placeholder`, closing on a fence line of the
  * same character at least as long. Line endings are normalized to LF first, so
  * every check built on this sees LF. An unclosed fence is left untouched.
- * Text outside fences is never changed.
+ * HTML comments (`<!-- ... -->`, single- or multi-line) outside fences are then
+ * removed; an unclosed `<!--` is left untouched. Other text is never changed.
  */
 function stripFences(content: string, placeholder = ""): string {
 	const lines = content.replace(/\r\n?/g, "\n").split("\n");
@@ -56,7 +64,7 @@ function stripFences(content: string, placeholder = ""): string {
 		}
 		out.push(lines[i]);
 	}
-	return out.join("\n");
+	return out.join("\n").replace(/<!--[\s\S]*?-->/g, "");
 }
 
 /**
@@ -126,6 +134,7 @@ export function validatePlan(content: string): string[] {
 interface TodoNode {
 	id: string;
 	blockedBy: string[]; // resolved blocker ids (self included if self-referenced)
+	blocks: string[] | null; // resolved ids from `Blocks:`; null when the line is absent
 	wave: string | null; // raw Wave value ("2", "FINAL", …) or null when absent
 	violations: string[]; // parse-level violations local to this TODO
 }
@@ -133,7 +142,7 @@ interface TodoNode {
 /**
  * Parse TODO nodes out of the `## TODOs` section (first occurrence, fences
  * stripped). A TODO is a checkbox line `- [ ] <id>. Title` where id is a
- * number or F-number (F1-F4 FINAL-wave tasks). `Blocked By:` / `Wave:` lines
+ * number or F-number (F1-F4 FINAL-wave tasks). `Blocked By:` / `Blocks:` / `Wave:` lines
  * up to the next checkbox line belong to that TODO.
  */
 function parseTodos(content: string): TodoNode[] {
@@ -155,7 +164,7 @@ function parseTodos(content: string): TodoNode[] {
 	for (const line of body.split("\n")) {
 		const todoMatch = /^\s*- \[[ xX]\] (F?\d+)\.\s/.exec(line);
 		if (todoMatch !== null) {
-			current = { id: todoMatch[1], blockedBy: [], wave: null, violations: [] };
+			current = { id: todoMatch[1], blockedBy: [], blocks: null, wave: null, violations: [] };
 			todos.push(current);
 			continue;
 		}
@@ -175,6 +184,25 @@ function parseTodos(content: string): TodoNode[] {
 						);
 					} else {
 						current.blockedBy.push(ref[1]);
+					}
+				}
+			}
+			continue;
+		}
+
+		const blocksMatch = /^\s*-?\s*Blocks:\s*(.*)$/.exec(line);
+		if (blocksMatch !== null) {
+			current.blocks = [];
+			const value = blocksMatch[1].trim();
+			if (value !== "" && !/^none$/i.test(value)) {
+				for (const raw of value.split(",")) {
+					const entry = raw.trim();
+					if (entry === "") continue;
+					const ref = /^(?:TODO\s+)?(F?\d+)$/.exec(entry);
+					if (ref === null) {
+						current.violations.push(`TODO ${current.id}: unparseable Blocks entry "${entry}"`);
+					} else {
+						current.blocks.push(ref[1]);
 					}
 				}
 			}
@@ -210,7 +238,8 @@ function hasNonEmptyTodosSection(content: string): boolean {
  * Checks:
  * (a) a non-empty TODOs section contains at least one canonical checkbox TODO
  * (b) TODO IDs are unique and either numeric or F1-F4
- * (c) every Blocked By reference resolves to a defined TODO
+ * (c) every Blocked By / Blocks reference resolves to a defined TODO
+ *     (a listed `Blocks:` target must list the declaring TODO in `Blocked By:`)
  * (d) no self-dependency, no dependency cycles
  * (e) `Wave: FINAL` is reserved for F1-F4 audit TODOs and required for them
  * (f) numeric implementation TODOs satisfy `Wave = max(blocker waves) + 1`
@@ -243,6 +272,24 @@ export function validatePlanGraph(content: string): string[] {
 				violations.push(`TODO ${todo.id}: blocked by itself`);
 			} else if (!byId.has(ref)) {
 				violations.push(`TODO ${todo.id}: Blocked By references undefined TODO ${ref}`);
+			}
+		}
+	}
+
+	// (b2) Blocks: resolution, self-reference, and forward mirror (A Blocks B → B Blocked By A)
+	for (const todo of byId.values()) {
+		if (todo.blocks !== null) {
+			for (const ref of todo.blocks) {
+				const target = byId.get(ref);
+				if (ref === todo.id) {
+					violations.push(`TODO ${todo.id}: blocks itself`);
+				} else if (target === undefined) {
+					violations.push(`TODO ${todo.id}: Blocks references undefined TODO ${ref}`);
+				} else if (!target.blockedBy.includes(todo.id)) {
+					violations.push(
+						`TODO ${todo.id}: Blocks ${ref} but TODO ${ref} does not list ${todo.id} in Blocked By`,
+					);
+				}
 			}
 		}
 	}
@@ -334,6 +381,19 @@ export function validatePlanGraph(content: string): string[] {
 // ---------------------------------------------------------------------------
 
 /**
+ * Label forms of the D-item `Must NOT own` field (case-insensitive); prose
+ * mentions without label punctuation match none of them.
+ * (a) at the start of a line's content, after optional indent / list marker / `**`;
+ * (b) anywhere in a line, followed by optional `**`, optional spaces, then `:`;
+ * (c) a bold `**Must NOT own.**` / `**Must NOT own:**` anywhere in a line.
+ */
+const MUST_NOT_OWN_LABEL: RegExp[] = [
+	/^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?(?:\*\*)?Must NOT own(?:[:.*\s]|$)/im,
+	/Must NOT own(?:\*\*)?[ \t]*:/i,
+	/\*\*Must NOT own[.:]\*\*/i,
+];
+
+/**
  * Validate the Boundary Map block.
  *
  * A plan that carries structural enumeration must also render the consolidated
@@ -341,9 +401,11 @@ export function validatePlanGraph(content: string): string[] {
  * part named with its layer + collaborators, classified affected vs modified,
  * and a dependency-direction verdict. This mirrors the ADR structural
  * enumeration's own gating — structural enumeration is Complex/Architecture
- * only, detected here by the `Must NOT own` ownership marker every structural
- * D-item declares (an explicit `Must NOT own: none` counts). When that marker
- * is absent the plan carries no structural enumeration and the block is not
+ * only, detected here by the `Must NOT own` ownership field every structural
+ * D-item declares (an explicit `Must NOT own: none` counts). Only the label
+ * forms in `MUST_NOT_OWN_LABEL` trigger (line-start label, `Must NOT own:`
+ * anywhere in a line, bold `**Must NOT own.**`); prose mentions do not.
+ * When that field is absent the plan carries no structural enumeration and the block is not
  * required.
  *
  * The three content markers parallel the explain-diff R15 gate: presence only
@@ -357,7 +419,7 @@ export function validateBoundaryMap(content: string): string[] {
 	const stripped = stripFences(content);
 
 	// No structural enumeration → block not required.
-	if (!/Must NOT own/.test(stripped)) return [];
+	if (!MUST_NOT_OWN_LABEL.some((re) => re.test(stripped))) return [];
 
 	// The block anchors on a heading whose text contains "Boundary Map".
 	const headingMatch = /^#{2,4}[ \t]+.*Boundary Map.*$/im.exec(stripped);
@@ -404,7 +466,14 @@ if (import.meta.main) {
 	}
 
 	const { readFileSync } = await import("fs");
-	const content = readFileSync(planPath, "utf8");
+	let content: string;
+	try {
+		content = readFileSync(planPath, "utf8");
+	} catch (err) {
+		const reason = err instanceof Error ? err.message : String(err);
+		console.error(`validate-plan: cannot read ${planPath}: ${reason}`);
+		process.exit(2);
+	}
 	const problems = [
 		...validatePlan(content),
 		...validatePlanGraph(content),
