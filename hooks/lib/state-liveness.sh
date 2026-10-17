@@ -10,6 +10,13 @@
 ACTIVE_IDLE_TTL=21600   # 6 hours — active session idle window
 TERMINAL_TTL=1800       # 30 minutes — terminal (active:false) grace period
 PRETOOL_TRACE_RETENTION_TTL=604800 # 7 days — strict mtime retention boundary
+# Delete-path only: an active state file is unfinished work, and its session can
+# sit idle past ACTIVE_IDLE_TTL while still alive (waiting overnight for the
+# user). reap_dead_state_files keeps an active file until this age, and
+# reap_session_artifacts keeps that session's artifacts as long; liveness
+# (is_state_live and list_live_session_ids with their default TTL) still uses
+# ACTIVE_IDLE_TTL.
+ACTIVE_STATE_RETENTION_TTL=604800 # 7 days
 
 # STATE_PREFIXES — the 6 managed state-file prefixes. This is the single
 # definition site for bash; the out-of-scope *seeding* point is
@@ -433,6 +440,8 @@ list_pretool_trace_unclassified() {
 is_state_live() {
   local file="$1"
   local now_epoch="$2"
+  # Optional: the TTL an ACTIVE state is judged by (default ACTIVE_IDLE_TTL).
+  local active_ttl="${3:-$ACTIVE_IDLE_TTL}"
 
   if [ ! -f "$file" ]; then
     return 1
@@ -530,7 +539,7 @@ is_state_live() {
   # Apply the Single liveness rule
   # ---------------------------------------------------------------------------
   if [ "$active_val" = "true" ]; then
-    if [ "$age" -lt "$ACTIVE_IDLE_TTL" ]; then
+    if [ "$age" -lt "$active_ttl" ]; then
       return 0
     else
       return 1
@@ -783,7 +792,10 @@ is_artifact_live() {
   _artifact_age_live "$touched_epoch" "$now_epoch"
 }
 
-# list_live_session_ids <dir> <now_epoch>
+# list_live_session_ids <dir> <now_epoch> [active_ttl]
+#
+# [active_ttl] is passed to is_state_live for STATE_PREFIXES entries (default
+# ACTIVE_IDLE_TTL); a delete path passes ACTIVE_STATE_RETENTION_TTL.
 #
 # Echoes the bare session id of every currently-live session witness in
 # <dir>, one per line, deduplicated. This is what lets reap_session_artifacts
@@ -835,6 +847,7 @@ is_artifact_live() {
 list_live_session_ids() {
   local dir="$1"
   local now_epoch="$2"
+  local active_ttl="${3:-$ACTIVE_IDLE_TTL}"
 
   local prefix f sid seen
   local -a candidates
@@ -843,7 +856,7 @@ list_live_session_ids() {
   for prefix in $STATE_PREFIXES; do
     for f in "$dir"/${prefix}*.json; do
       [ -f "$f" ] || continue
-      if is_state_live "$f" "$now_epoch"; then
+      if is_state_live "$f" "$now_epoch" "$active_ttl"; then
         # $dir/$prefix MUST be quoted here: unquoted, the right-hand side of
         # `#` is a glob pattern, not a literal string (SC2295). A directory
         # name containing a glob metacharacter (e.g. "proj[1]") then fails to
@@ -963,7 +976,7 @@ reap_dead_state_files() {
       if is_current_session "$f" "$current_sid"; then
         continue
       fi
-      if ! is_state_live "$f" "$now_epoch"; then
+      if ! is_state_live "$f" "$now_epoch" "$ACTIVE_STATE_RETENTION_TTL"; then
         # reap-diag breadcrumb: raw inputs behind this reap decision, for
         # debugging the intermittent ultragoal-state wipe. Reads the SAME
         # raw fields is_state_live itself parses (one jq call, no re-parse
@@ -1108,7 +1121,9 @@ reap_session_artifacts() {
   local dry_run="$4"
 
   local live_ids
-  live_ids=$(list_live_session_ids "$dir" "$now_epoch")
+  # Same retention as reap_dead_state_files: a retained active state's
+  # artifacts (session-resources-, ultragoal-codereview-, ...) stay with it.
+  live_ids=$(list_live_session_ids "$dir" "$now_epoch" "$ACTIVE_STATE_RETENTION_TTL")
 
   local prefix f tail live_id keep had_failure
   local -a candidates

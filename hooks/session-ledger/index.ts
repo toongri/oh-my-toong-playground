@@ -27,7 +27,7 @@ import {
 	readTranscript,
 	type WorkLog,
 } from "./extract.ts";
-import { codexRunner, type ModelRunner, WORKER_ENV, writeLedger } from "./ledger.ts";
+import { claudeRunner, codexRunner, type ModelRunner, WORKER_ENV, writeLedger } from "./ledger.ts";
 
 export type Platform = "claude" | "codex";
 
@@ -98,7 +98,7 @@ function transcriptFor(platform: Platform, input: HookInput): string | null {
 export async function preCompact(
 	platform: Platform,
 	input: HookInput,
-	options: { runModel?: ModelRunner; home?: string; sessionsRoot?: string; now?: number } = {},
+	options: { runModel?: ModelRunner; fallbackModel?: ModelRunner; home?: string; sessionsRoot?: string; now?: number } = {},
 ): Promise<string | null> {
 	const sessionId = input.session_id;
 	const transcript = transcriptFor(platform, input);
@@ -110,6 +110,8 @@ export async function preCompact(
 		log,
 		previousLedger,
 		runModel: options.runModel ?? codexRunner(),
+		// An injected model (tests, replays) gets no real fallback unless one is injected too.
+		fallbackModel: options.runModel ? options.fallbackModel : claudeRunner(),
 		deadline: (options.now ?? Date.now()) + WRITE_DEADLINE_MS,
 	});
 	writeAtomic(path, result.markdown);
@@ -149,7 +151,7 @@ export function sessionStartContext(platform: Platform, input: HookInput, home?:
 		: `The complete ledger is below (also saved at ${path}).`;
 	return [
 		"[SESSION LEDGER]",
-		"Your context was just compacted. This ledger was written from the full transcript before compaction, with every user quote and identifier checked against it. Where the compaction summary and this ledger disagree, trust the ledger. An approval cited in a next step is the summarizer's reading of the quoted user message: before a commit, push, deletion, or any command that acts outside the repository, read that user message yourself and confirm it covers the action.",
+		"Your context was just compacted. This ledger was written from the full transcript before compaction, with its identifiers checked against it (any it could not verify are listed under Unverified points). Where the compaction summary and this ledger disagree, trust the ledger. Continue the work from its next steps.",
 		order,
 		"",
 		head,

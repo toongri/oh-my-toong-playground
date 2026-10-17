@@ -538,11 +538,11 @@ EOF
     return 0
 }
 
-# C4/omt-cleanup: a dir whose ONLY goal-state is active-but-7h-idle is NOT preserved
-# (dead active: 7h > ACTIVE_IDLE_TTL 6h) — parity with session-start GC
-test_liveness_active_7h_idle_dir_not_preserved() {
+# C4/omt-cleanup: a dir whose ONLY goal-state is active but idle past
+# ACTIVE_STATE_RETENTION_TTL (8 days > 7d) is NOT preserved — parity with session-start GC
+test_liveness_active_past_retention_dir_not_preserved() {
     local stale_ts
-    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    stale_ts=$(date -j -v-8d "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "8 days ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
 
     local stale_dir="$FIXTURE_HOME/.omt/stale-active-project"
     mkdir -p "$stale_dir"
@@ -560,16 +560,16 @@ EOF
     # Not preserved means its dead state file is actually reaped by --execute
     # (parity with session-start GC).
     if [[ -f "$stale_dir/goal-state-stale-sess.json" ]]; then
-        echo "ASSERTION FAILED: dir with only a 7h-idle active state must have that state file reaped"
+        echo "ASSERTION FAILED: dir with only an 8-day-idle active state must have that state file reaped"
         return 1
     fi
     return 0
 }
 
 # C4/omt-cleanup execute: dir with dead state + plans/plan.md keeps plan.md and the dir; state file is deleted
-test_liveness_active_7h_idle_execute_keeps_plan() {
+test_liveness_active_past_retention_execute_keeps_plan() {
     local stale_ts
-    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    stale_ts=$(date -j -v-8d "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "8 days ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
 
     local stale_dir="$FIXTURE_HOME/.omt/stale-project-with-plans"
     mkdir -p "$stale_dir/plans"
@@ -607,7 +607,7 @@ EOF
 # dry-run for dead-state dir lists state file path, not bare directory name
 test_dead_state_dryrun_shows_state_file_path() {
     local stale_ts
-    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    stale_ts=$(date -j -v-8d "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "8 days ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
 
     local stale_dir="$FIXTURE_HOME/.omt/stale-dry-run-project"
     mkdir -p "$stale_dir"
@@ -642,7 +642,7 @@ EOF
 # dry-run: state file path appears verbatim (with spaces) in output
 test_dead_state_space_in_home_dryrun_shows_full_path() {
     local stale_ts
-    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    stale_ts=$(date -j -v-8d "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "8 days ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
 
     # Create a HOME directory whose path contains spaces
     local space_home
@@ -688,7 +688,7 @@ EOF
 # seeded sibling file in the same project dir both survive untouched
 test_dead_state_space_in_home_execute_deletes_correct_file() {
     local stale_ts
-    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    stale_ts=$(date -j -v-8d "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "8 days ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
 
     local space_home
     space_home=$(mktemp -d)
@@ -1285,7 +1285,7 @@ EOF
 # — these prove --execute alone still reaps and no-args still preserves.
 test_negative_control_execute_alone_still_deletes() {
     local stale_ts
-    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    stale_ts=$(date -j -v-8d "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "8 days ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
 
     local proj_dir="$FIXTURE_HOME/.omt/negative-control-execute-project"
     mkdir -p "$proj_dir"
@@ -1611,8 +1611,8 @@ main() {
 
     # AC liveness unification (TODO 7)
     run_test test_liveness_all_dead_dir_not_preserved
-    run_test test_liveness_active_7h_idle_dir_not_preserved
-    run_test test_liveness_active_7h_idle_execute_keeps_plan
+    run_test test_liveness_active_past_retention_dir_not_preserved
+    run_test test_liveness_active_past_retention_execute_keeps_plan
     run_test test_dead_state_dryrun_shows_state_file_path
     run_test test_liveness_fresh_active_dir_preserved
     run_test test_liveness_ultragoal_only_live_dir_preserved

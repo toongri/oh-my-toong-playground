@@ -1,6 +1,7 @@
 export {
 	createSessionState,
 	clearSession,
+	dynamicDedupKey,
 	isDynamicInjected,
 	isStaticInjected,
 	markDynamicInjected,

@@ -264,15 +264,17 @@ export function extractClaude(records: Json[], windowStart = 0): WorkLog {
 			} else if (text && !text.startsWith("[Request interrupted") && !text.includes("<tool_use_error>")) {
 				log.user(capUserText(text), inWindow);
 			}
-			if (!inWindow) return;
 			for (const block of list(content).map(rec)) {
 				if (block.type !== "tool_result") continue;
 				const toolUseId = str(block.tool_use_id);
 				const body = clean(typeof block.content === "string" ? block.content : textOf(block.content, " "));
 				const isError = Boolean(block.is_error) || body.includes("<tool_use_error>");
+				// Answers are counted outside the window too, or every later U-id shifts after a compaction.
 				if (pendingAsk.has(toolUseId) && !isError) {
 					const answer = body.replace(/\s*Read the answers carefully[\s\S]*$/, "");
 					log.user(capUserText(answer), inWindow, "user answer");
+				} else if (!inWindow) {
+					continue;
 				} else if (isError) {
 					log.lines.push(`[tool error] ${body.slice(0, TOOL_ERROR_LIMIT)}`);
 				} else {

@@ -144,6 +144,11 @@ export interface SessionState {
 	cwd: string | undefined;
 	staticDedup: Set<string>;
 	dynamicDedup: Map<string, Set<string>>;
+	/**
+	 * `dynamicDedup` keys the most recent rule-emitting PostToolUse injected — the one
+	 * lazy unit that post-compact recovery restores.
+	 */
+	latestDynamicInjectionKeys: string[];
 	loadedRules: LoadedRule[];
 	diagnostics: RuleDiagnostic[];
 }

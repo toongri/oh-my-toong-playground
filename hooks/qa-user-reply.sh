@@ -49,8 +49,11 @@ printf '{"ownerPid":%d,"token":"qa-user-reply-%d","startedAt":%s000}' "$$" "$$" 
 waiting=$(jq -r 'if .active == true and .awaiting_user == true then "yes" else "no" end' "$state_file" 2>/dev/null) || exit 0
 [ "$waiting" = "yes" ] || exit 0
 
+# The reply is session activity, so it refreshes the heartbeat the state GC reads
+# (hooks/lib/state-liveness.sh); same format as the CLI's nowStamp().
+now=$(date "+%Y-%m-%dT%H:%M:%S%z" | sed -E 's/([+-][0-9]{2})([0-9]{2})$/\1:\2/')
 # tmp + mv keeps the state file whole if the hook is killed mid-write.
-if jq --argjson reply "$prompt_json" '.user_reply = $reply | .user_answer_open = true | .awaiting_user = false' "$state_file" > "$tmp" 2>/dev/null; then
+if jq --argjson reply "$prompt_json" --arg now "$now" '.user_reply = $reply | .user_answer_open = true | .awaiting_user = false | .last_touched_at = $now' "$state_file" > "$tmp" 2>/dev/null; then
     mv -f "$tmp" "$state_file" 2>/dev/null || true
 fi
 exit 0

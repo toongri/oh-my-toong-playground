@@ -46,6 +46,8 @@ run_test() {
 source "$SCRIPT_DIR/state-liveness.sh"
 
 NOW=$(date +%s)
+# An active state's idle age that the delete path (reap_dead_state_files) reaps.
+REAP_STALE_ACTIVE_AGE=$((ACTIVE_STATE_RETENTION_TTL + 3600))
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -742,7 +744,8 @@ test_reap_session_artifacts_uses_own_now_epoch_not_internal_wall_clock() {
   # that same now_epoch also reaches list_live_session_ids.
   touch_ago "$artifact" 0
 
-  local far_future=$((NOW + ACTIVE_IDLE_TTL + 3600))
+  # Past ACTIVE_STATE_RETENTION_TTL, the window this delete path judges an active state by.
+  local far_future=$((NOW + ACTIVE_STATE_RETENTION_TTL + 3600))
   reap_session_artifacts "$d" "__none__" "$far_future" 0 > /dev/null
 
   if [ -f "$artifact" ]; then
@@ -1061,8 +1064,8 @@ seed_state_gc_fixture() {
   local current_sid="$2"
   write_state "$d/goal-state-$current_sid.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 25200)\"}"   # current session, old — must survive
   write_state "$d/goal-state-other-live.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 600)\"}"       # other session, fresh — survives
-  write_state "$d/goal-state-other-dead.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 25200)\"}"     # other session, stale — reaped
-  write_state "$d/ultragoal-state-other-dead2.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 25200)\"}" # other session, stale — reaped
+  write_state "$d/goal-state-other-dead.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago "$REAP_STALE_ACTIVE_AGE")\"}"     # other session, stale — reaped
+  write_state "$d/ultragoal-state-other-dead2.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago "$REAP_STALE_ACTIVE_AGE")\"}" # other session, stale — reaped
   write_state "$d/deep-interview-active-state-other-dead.json.closed.bak" "{}"                                  # .closed.bak — never state-reaped
   touch_ago "$d/deep-interview-active-state-other-dead.json.closed.bak" 25200
 }
@@ -1120,7 +1123,7 @@ test_reap_dead_state_files_execute_mode_echoes_real_path_not_constant() {
   local sid="realpath-sid-25"
   local d="$TEST_TMP_DIR"
   local f="$d/goal-state-other-$sid.json"
-  write_state "$f" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 25200)\"}"
+  write_state "$f" "{\"active\":true,\"last_touched_at\":\"$(iso_ago "$REAP_STALE_ACTIVE_AGE")\"}"
 
   local out
   out=$(reap_dead_state_files "$d" "current-$sid" "$NOW" 0)
@@ -1131,6 +1134,37 @@ test_reap_dead_state_files_execute_mode_echoes_real_path_not_constant() {
   fi
   if [ -f "$f" ]; then
     echo "  ASSERTION FAILED: execute mode must have actually deleted the state file"
+    return 1
+  fi
+  return 0
+}
+
+# An active state is unfinished work. A session that waits on the user overnight
+# (the user answers the next morning) goes past ACTIVE_IDLE_TTL while it is still
+# alive, so the delete path keeps an active file until ACTIVE_STATE_RETENTION_TTL.
+test_reap_dead_state_files_keeps_active_state_past_idle_ttl() {
+  local d="$TEST_TMP_DIR"
+  local f="$d/qa-state-other-overnight.json"
+  write_state "$f" "{\"active\":true,\"awaiting_user\":true,\"last_touched_at\":\"$(iso_ago 32880)\"}"   # 9h08m
+
+  reap_dead_state_files "$d" "current-sid" "$NOW" 0 > /dev/null
+
+  if [ ! -f "$f" ]; then
+    echo "  ASSERTION FAILED: an active state idle past ACTIVE_IDLE_TTL but within ACTIVE_STATE_RETENTION_TTL must survive the reap"
+    return 1
+  fi
+  return 0
+}
+
+test_reap_dead_state_files_reaps_active_state_past_retention_ttl() {
+  local d="$TEST_TMP_DIR"
+  local f="$d/qa-state-other-abandoned.json"
+  write_state "$f" "{\"active\":true,\"last_touched_at\":\"$(iso_ago "$REAP_STALE_ACTIVE_AGE")\"}"
+
+  reap_dead_state_files "$d" "current-sid" "$NOW" 0 > /dev/null
+
+  if [ -f "$f" ]; then
+    echo "  ASSERTION FAILED: an active state idle past ACTIVE_STATE_RETENTION_TTL must be reaped"
     return 1
   fi
   return 0
@@ -1150,7 +1184,7 @@ test_reap_dead_state_files_dry_run_emits_candidate_but_does_not_delete() {
   local sid="dryrun-sid-21"
   local d="$TEST_TMP_DIR"
   local f="$d/goal-state-other-$sid.json"
-  write_state "$f" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 25200)\"}"   # 7h — past ACTIVE_IDLE_TTL, a genuine candidate
+  write_state "$f" "{\"active\":true,\"last_touched_at\":\"$(iso_ago "$REAP_STALE_ACTIVE_AGE")\"}"   # past ACTIVE_STATE_RETENTION_TTL, a genuine candidate
 
   local out
   out=$(reap_dead_state_files "$d" "current-$sid" "$NOW" 1)
@@ -1181,7 +1215,7 @@ test_reap_dead_state_files_dry_run_preserves_candidate_bytes() {
   local sid="drynowrite-sid-26"
   local d="$TEST_TMP_DIR"
   local f="$d/goal-state-other-$sid.json"
-  write_state "$f" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 25200)\"}"   # 7h — past ACTIVE_IDLE_TTL, a genuine candidate
+  write_state "$f" "{\"active\":true,\"last_touched_at\":\"$(iso_ago "$REAP_STALE_ACTIVE_AGE")\"}"   # past ACTIVE_STATE_RETENTION_TTL, a genuine candidate
   local ref="$TEST_TMP_DIR/ref-state.json"
   cp "$f" "$ref"
 
@@ -1225,7 +1259,7 @@ test_reap_dead_state_files_emits_diag_breadcrumb_to_stderr() {
   local d="$TEST_TMP_DIR"
   local f="$d/ultragoal-state-other-$sid.json"
   local touched_ago
-  touched_ago=$(iso_ago 25200)   # 7 hours — past ACTIVE_IDLE_TTL, a genuine dead candidate
+  touched_ago=$(iso_ago "$REAP_STALE_ACTIVE_AGE")   # past ACTIVE_STATE_RETENTION_TTL, a genuine dead candidate
   write_state "$f" "{\"active\":true,\"last_touched_at\":\"$touched_ago\"}"
 
   local err_file="$TEST_TMP_DIR/stderr.out"
@@ -1299,6 +1333,30 @@ test_reap_session_artifacts_other_live_session_survives_without_sid() {
 
   if [ ! -f "$artifact" ]; then
     echo "  ASSERTION FAILED: another session's artifact must survive via list_live_session_ids, not identity"
+    return 1
+  fi
+  return 0
+}
+
+# An active state the delete path still retains (idle past ACTIVE_IDLE_TTL, within
+# ACTIVE_STATE_RETENTION_TTL) keeps its session's artifacts too; past retention both go.
+test_reap_session_artifacts_retained_active_state_keeps_its_artifacts() {
+  local d="$TEST_TMP_DIR"
+  write_state "$d/qa-state-kept-sid.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 32880)\"}"
+  write_state "$d/session-resources-kept-sid.json" "{}"
+  touch_ago "$d/session-resources-kept-sid.json" 32880
+  write_state "$d/qa-state-gone-sid.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago "$REAP_STALE_ACTIVE_AGE")\"}"
+  write_state "$d/session-resources-gone-sid.json" "{}"
+  touch_ago "$d/session-resources-gone-sid.json" "$REAP_STALE_ACTIVE_AGE"
+
+  reap_session_artifacts "$d" "__none__" "$NOW" 0 > /dev/null
+
+  if [ ! -f "$d/session-resources-kept-sid.json" ]; then
+    echo "  ASSERTION FAILED: artifact of an active state idle 9h8m (retained) must survive"
+    return 1
+  fi
+  if [ -f "$d/session-resources-gone-sid.json" ]; then
+    echo "  ASSERTION FAILED: artifact of an active state past ACTIVE_STATE_RETENTION_TTL must be reaped"
     return 1
   fi
   return 0
@@ -1902,7 +1960,7 @@ test_reap_dead_state_files_rm_failure_not_echoed_and_reported() {
   mkdir -p "$d"
   local sid="rmfail-sid-19"
   local f="$d/goal-state-other-$sid.json"
-  write_state "$f" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 25200)\"}"
+  write_state "$f" "{\"active\":true,\"last_touched_at\":\"$(iso_ago "$REAP_STALE_ACTIVE_AGE")\"}"
   chmod 555 "$d"   # no write permission on the directory: rm inside must fail
 
   local out err_file rc
@@ -2176,6 +2234,8 @@ run_test test_list_unclassified_reports_all_four_plan_ac_forms
 run_test test_reap_dead_state_files_relocation_equivalence
 run_test test_reap_dead_state_files_execute_mode_echoes_affected_paths
 run_test test_reap_dead_state_files_execute_mode_echoes_real_path_not_constant
+run_test test_reap_dead_state_files_keeps_active_state_past_idle_ttl
+run_test test_reap_dead_state_files_reaps_active_state_past_retention_ttl
 run_test test_reap_dead_state_files_dry_run_emits_candidate_but_does_not_delete
 run_test test_reap_dead_state_files_dry_run_preserves_candidate_bytes
 run_test test_reap_dead_state_files_old_closed_bak_survives_json_anchor
@@ -2183,6 +2243,7 @@ run_test test_reap_dead_state_files_emits_diag_breadcrumb_to_stderr
 run_test test_is_current_session_suffix_match_diverges_from_base_exact_match_over_preserves
 run_test test_reap_session_artifacts_current_session_self_artifact_survives
 run_test test_reap_session_artifacts_other_live_session_survives_without_sid
+run_test test_reap_session_artifacts_retained_active_state_keeps_its_artifacts
 run_test test_reap_session_artifacts_execute_mode_echoes_affected_paths
 run_test test_reap_session_artifacts_execute_mode_echoes_real_path_not_constant
 run_test test_reap_session_artifacts_empty_tail_fresh_survives_mtime_guard_only
