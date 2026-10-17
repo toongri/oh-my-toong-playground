@@ -65,13 +65,26 @@
     "additionalProperties": false,
     "required": [
      "decision",
-     "rationale"
+     "rationale",
+     "made_by",
+     "source"
     ],
     "properties": {
      "decision": {
       "type": "string"
      },
      "rationale": {
+      "type": "string"
+     },
+     "made_by": {
+      "type": "string",
+      "enum": [
+       "user",
+       "agent",
+       "agreed"
+      ]
+     },
+     "source": {
       "type": "string"
      }
     }

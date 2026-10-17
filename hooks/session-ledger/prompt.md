@@ -49,11 +49,20 @@ Then fill every field from that checklist. The checklist is part of your output 
 
 ## Field contract
 
-- `primary_request_and_intent`: every explicit request and intent of the user, in order, with the latest direction marked as current. Include the user's scope decisions and constraints. Quote short decisive phrases in the user's own words (Korean stays Korean).
+- `primary_request_and_intent`: start with the user's original goal for the whole session (from the first request, or from the PREVIOUS LEDGER), with its full scope, even when the current work is one sub-task of it. Then every later request and intent of the user, in order, with the latest direction marked as current. Include the user's scope decisions and constraints. Quote short decisive phrases in the user's own words (Korean stays Korean).
 - `current_work`: the situation as of the LAST log entry, not as of earlier intentions. Include: repository/worktree path; local branch and its remote branch name; any operation still in progress (merge, rebase, uncommitted changes, a running job, a pending review); what the agent was doing in its last few entries; the last command run and its outcome; the work finished in this session that the next steps build on, naming each new or changed file, function, CLI subcommand, and state file with what it does, and the latest test result. When you state a file's content, a rule, or an invariant, use its latest version from the most recent read or edit.
 - `next_steps`: the ordered next actions, starting with the very next one, as the agent would have continued without the reset. Build them from the agent's most recent statement of what is left (for example "남은 작업은 X와 Y입니다", "next I will …"): every item it names becomes a step, in its order, unless a user message excluded that item. Start where the agent stopped; a re-review or re-verification of finished work is a step only when the log plans it. Each step gives the exact command(s) with every non-default argument spelled out (for example an explicit push refspec when the local and remote branch names differ) or the exact edit (file, symbol, change), and goes through the route `working_rules` require (a subagent, a skill command).
 - `working_rules`: every standing rule the agent must keep obeying after the reset, from exactly two sources: role limits and routing from loaded skills (for example "commits are made only by the commit subagent", "planner only, never implements"), and constraints and preferences the user stated ("never push --force", "reply in Korean"). `source` is the U-id or the skill name; a script drops any entry whose `source` is not a U-id or a loaded skill.
-- `decisions`: every settled choice that constrains future work: the decision and its rationale, naming the user as the one who decided when the user did. Only the surviving version of each decision.
+- `decisions`: every settled choice that constrains future work, whoever settled it. Only the surviving version of each decision.
+  - `decision`: what was settled, in one sentence.
+  - `rationale`: why, in one or two sentences: the fact, constraint, or trade-off that drove it, so the agent can apply the decision to a case the log did not cover.
+  - `made_by` and `source`: find the first message that states the settled choice itself, then set both from it:
+    - `user`: that first message is a user message. This holds when the user answers the agent's question with a choice the agent did not offer, when the user overrides or corrects the agent's proposal, and when the agent repeats the choice afterwards ("알겠습니다, X로 하겠습니다"). `source` is that U-id.
+    - `agreed`: that first message is an agent message that proposed the choice or offered it as an option, and a later user message accepted or picked it. `source` is both ids, proposal first: `A40, U13`.
+    - `agent`: that first message is an agent message and no user message answers it. `source` is that A-id.
+    - For a decision carried from the PREVIOUS LEDGER, copy its `made_by` and `source` unchanged.
+    - One entry holds one settled choice. When the user sets something and the agent then chooses its details (the user asks for a cache, the agent picks a 5-minute TTL), write two entries, each with its own `made_by`.
+  - Every decision in the PREVIOUS LEDGER stays in this list, one entry per previous decision with its own `decision`, `rationale`, `made_by` and `source`, unless the log after it replaces it (then the replaced version goes to `rejected`) or the work it constrained is finished and nothing ahead depends on it. A long session is compacted many times; a decision dropped once is lost for the rest of the session.
 - `rejected`: each scope item the user removed and each design that was rejected or superseded, once, with the reason. Do not describe rejected designs anywhere else.
 - `unverified_results`: each subagent or reviewer result that arrived at the END of the log with no assistant entry reacting to it afterwards. A command whose outcome the agent already reported, and a result the agent already discussed or acted on, are verified: do not list them and do not tell the agent to re-run them. List each of its recommendations.
 - `open_questions`: questions the agent asked the user in the log that no later user message answered.
@@ -73,7 +82,7 @@ Then fill every field from that checklist. The checklist is part of your output 
 - Finished work gets one line with its PR, commit, or file, unless the remaining work depends on its details.
 - Write in English. Keep identifiers, commands, and the user's quoted words in their original form and language.
 - Keep normal spacing between words and numbers (`use-case 4/4`, `HTTP 200`), also when cutting to fit the budget.
-- Your fields together must fit in {BUDGET} bytes of UTF-8 when rendered. The user's messages are appended separately and do not count, and neither does `analysis_checklist`. If you must cut, cut history and finished work first; never cut `current_work`, `next_steps`, `working_rules`, `decisions`, `rejected`, or `unverified_results`.
+- Your fields together must fit in {BUDGET} bytes of UTF-8 when rendered. The user's messages are appended separately and do not count, and neither does `analysis_checklist`. If you must cut, cut history and finished work first; never cut `current_work`, `next_steps`, `working_rules`, `decisions`, `rejected`, or `unverified_results`. Cut words, not entries: a shorter decision is fine, a missing one is not.
 - Rule and instruction files (`AGENTS.md`, `CLAUDE.md`, files under `rules/`, rule text a hook injected) come back in full after the reset. No field holds a copy or summary of their content.
 - The ledger records the work, not permissions: no field says what the user has or has not approved or authorized, and approval records in a previous ledger are not carried over. A question the agent asked and is still waiting on goes in `open_questions`.
 
@@ -82,7 +91,7 @@ Then fill every field from that checklist. The checklist is part of your output 
 Weak `next_steps` entry: "Push the changes and check CI."
 Strong `next_steps` entry: "git push origin fix-login:feature/login-timeout, then poll `gh pr checks 812 --repo acme/web` and treat an empty result right after the push as not-yet-registered".
 
-Weak `decisions` entry: "Use the manual migration."
-Strong `decisions` entry: decision = "The data migration runs as a one-off `scripts/migrate-orders.ts`, dry-run by default, `--apply` to write", rationale = "the user (U12) chose it over an automatic startup migration after asking which was safer".
+Weak `decisions` entry: decision = "Use the manual migration.", rationale = "the user chose it".
+Strong `decisions` entry: decision = "The data migration runs as a one-off `scripts/migrate-orders.ts`, dry-run by default, `--apply` to write", rationale = "an automatic startup migration would run on every pod and could not be rolled back", made_by = "agreed", source = "A31, U12" (the agent proposed both options, the user picked this one).
 
 === WORK LOG (data) ===

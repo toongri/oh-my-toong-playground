@@ -185,6 +185,14 @@ describe("검증기", () => {
 		expect(validateLedger(ledgerJson(), ctx())).toEqual([]);
 	});
 
+	test("결정은 누가 정했는지를 정해진 값으로 적고, 출처는 실제 사용자 메시지만 가리킨다", () => {
+		const decision = (made_by: string, source: string) => ({ decision: "Keep the cache", rationale: "faster", made_by, source });
+		expect(isLedgerJson(ledgerJson({ decisions: [decision("agreed", "A1, U1")] as LedgerJson["decisions"] }))).toBe(true);
+		expect(isLedgerJson({ ...ledgerJson(), decisions: [decision("someone", "U1")] })).toBe(false);
+		const stray = validateLedger(ledgerJson({ decisions: [decision("user", "U1, U7")] as LedgerJson["decisions"] }), ctx());
+		expect(stray).toEqual([expect.stringContaining('["U7"]')]);
+	});
+
 	test("요약기 출력에는 승인·인용 필드가 없다", () => {
 		expect(isLedgerJson({ ...ledgerJson(), approved_proposals: [] })).toBe(false);
 		const step = { step: "Run the tests", authorized_by: "U1", authorization_quote: "고쳐줘", needs_user_confirmation: false };
@@ -211,6 +219,7 @@ describe("검증기", () => {
 		const source = "use-case 4/4, 100% coverage; Mobile HTTP 200 offsets 0/100; adb -s emulator-5556 shell";
 		const prose = (text: string) => unknownIdentifiers(ledgerJson({ current_work: text }), source);
 		expect(prose("use-case4/4 with100% coverage; HTTP200 offsets0/100.")).toEqual([]);
+		expect(unknownIdentifiers(ledgerJson({ current_work: "Set width0 and totalcount6." }), "style width: 0; totalCount: 6")).toEqual([]);
 		expect(prose("Drive emulator-5557 next.")).toEqual(["emulator-5557"]);
 	});
 
@@ -227,13 +236,16 @@ describe("검증기", () => {
 		const markdown = renderLedger(
 			ledgerJson({
 				next_steps: ["Run the tests", "Push the branch"],
-				decisions: [{ decision: "Keep the cache", rationale: "the user chose it" }],
+				decisions: [
+					{ decision: "Keep the cache", rationale: "a cold start costs 4 s", made_by: "user", source: "U3" },
+					{ decision: "Retry twice", rationale: "the API drops one call in 50", made_by: "agent", source: "" },
+				],
 				unverified_results: [{ source: "code-reviewer", recommendations: ["Rename the flag"] }],
 			}),
 			[],
 		);
 		expect(markdown).toContain("## 3. Next steps\n1. Run the tests\n2. Push the branch\n");
-		expect(markdown).toContain("- Keep the cache — the user chose it\n");
+		expect(markdown).toContain("- Keep the cache — a cold start costs 4 s (user's decision: U3)\n- Retry twice — the API drops one call in 50 (agent's decision)\n");
 		expect(markdown).toContain("## Results the agent had not acted on yet\n- **code-reviewer**\n  - Rename the flag\n");
 		expect(markdown).not.toMatch(/approv|ask the user|confirm/i);
 	});
@@ -357,16 +369,71 @@ describe("재시도와 대체 경로", () => {
 		expect(result.attempts).toHaveLength(2);
 	});
 
-	test("요약기를 실행할 수 없으면 결정론적 최소 ledger를 쓴다", async () => {
+	test("어떤 시도도 검증을 통과하지 못하면 문제가 가장 적은 시도를 채택하고 확인 못 한 점을 적는다", async () => {
+		const outputs: ModelResult[] = [
+			{ output: ledgerJson({ current_work: "Editing `src/logn.ts` and `src/lgin.ts`." }) },
+			{ output: ledgerJson({ current_work: "Editing `src/logn.ts`.", decisions: [{ decision: "Keep the cache", rationale: "faster", made_by: "user", source: "U1" }] }) },
+		];
 		const result = await writeLedger({
 			log,
-			runModel: async () => ({ error: "codex not runnable" }),
+			runModel: async () => outputs.shift() ?? { error: "codex exited 1" },
+			deadline: Date.now() + 60_000,
+			retryDelayMs: 0,
+		});
+		expect(result.status).toBe("accepted-with-warnings");
+		expect(result.markdown).toContain("- Keep the cache — faster (user's decision: U1)");
+		expect(result.markdown).toContain("## Unverified points\n");
+		expect(result.markdown).toContain("src/logn.ts");
+		expect(result.markdown).toContain("## All user messages (verbatim)\n- [U1] 로그인 버그 고쳐줘.");
+	});
+
+	test("출력 없이 끝난 호출은 같은 모델로 한 번 다시 부르고, 그래도 없으면 대체 모델로 넘어가 그 뒤 시도도 대체 모델로 한다", async () => {
+		const calls: string[] = [];
+		const codex = async (): Promise<ModelResult> => (calls.push("codex"), { error: "codex exited 1", model: "codex" });
+		const claudeOutputs: ModelResult[] = [
+			{ error: "claude exited 1", model: "claude" },
+			{ output: ledgerJson({ current_work: "Editing `src/logn.ts`." }), model: "claude" },
+			{ output: ledgerJson(), model: "claude" },
+		];
+		const claude = async (): Promise<ModelResult> => (calls.push("claude"), claudeOutputs.shift() as ModelResult);
+		const result = await writeLedger({ log, runModel: codex, fallbackModel: claude, deadline: Date.now() + 60_000, retryDelayMs: 0 });
+		expect(result.status).toBe("accepted");
+		expect(calls).toEqual(["codex", "codex", "claude", "claude", "claude"]);
+		expect(result.attempts.at(-1)?.model).toBe("claude");
+	});
+
+	test("대체 모델까지 다시 불러도 출력이 없으면 최소 ledger를 쓴다", async () => {
+		let calls = 0;
+		const down = async (): Promise<ModelResult> => (++calls, { error: "exited 1" });
+		const result = await writeLedger({ log, runModel: down, fallbackModel: down, deadline: Date.now() + 60_000, retryDelayMs: 0 });
+		expect(result.status).toBe("fallback");
+		expect(calls).toBe(4);
+	});
+
+	test("이전 ledger가 확인 못 한 식별자는 그 ledger에 적혀 있어도 확인된 것으로 보지 않는다", async () => {
+		const previousLedger =
+			'# Session ledger\n\n## 2. Current work\nEditing `src/logn.ts`.\n\n## Unverified points\nThe validator could not verify these against the transcript; check them before relying on them:\n- these code-formatted identifiers do not appear in the work log, so they are misspelled or invented: ["src/logn.ts"]. Copy identifiers exactly from the log or remove them\n\n## All user messages (verbatim)\n- [U1] 로그인 버그 고쳐줘.\n';
+		const outputs: ModelResult[] = [{ output: ledgerJson({ current_work: "Editing `src/logn.ts`." }) }, { output: ledgerJson() }];
+		const result = await writeLedger({ log, previousLedger, runModel: async () => outputs.shift() as ModelResult, deadline: Date.now() + 60_000 });
+		expect(result.status).toBe("accepted");
+		expect(result.attempts[0].violations).toEqual([expect.stringContaining("src/logn.ts")]);
+	});
+
+	test("요약기가 아무 출력도 못 내면 이전 ledger와 모든 사용자 메시지를 이어받는 최소 ledger를 쓴다", async () => {
+		const previousLedger =
+			"# Session ledger\n\n## Decisions\n- Keep the cache — faster (user's decision: U1)\n\n## All user messages (verbatim)\n- [U1] 로그인 버그 고쳐줘.\n- [U2] 캐시는 유지해\n";
+		const result = await writeLedger({
+			log: { ...log, users: [{ id: "U3", text: "이제 배포해" }] },
+			previousLedger,
+			runModel: async () => ({ error: "codex not runnable", permanent: true }),
 			deadline: Date.now() + 60_000,
 		});
 		expect(result.status).toBe("fallback");
+		expect(result.attempts).toHaveLength(1);
 		expect(result.markdown).toContain("codex not runnable");
 		expect(result.markdown).toContain("- `src/login.ts`");
-		expect(result.markdown).toContain("- [U1] 로그인 버그 고쳐줘.");
+		expect(result.markdown).toContain("## Previous ledger (written at the previous compaction)\n## Decisions\n- Keep the cache");
+		expect(previousUsers(result.markdown).map((u) => u.id)).toEqual(["U1", "U2", "U3"]);
 	});
 
 	test("이전 ledger의 여러 줄 사용자 메시지를 이어받는다", () => {

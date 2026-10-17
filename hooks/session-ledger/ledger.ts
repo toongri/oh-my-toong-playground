@@ -16,8 +16,11 @@ import type { Message, WorkLog } from "./extract.ts";
 
 export const SCHEMA_PATH = join(import.meta.dir, "schema.json");
 const PROMPT_PATH = join(import.meta.dir, "prompt.md");
-export const DEFAULT_BUDGET = 32000;
+export const DEFAULT_BUDGET = 48000;
 export const DEFAULT_ATTEMPTS = 3;
+/** Calls repeated on the same model after a call returns no output (network, API, or rate-limit error). */
+export const MODEL_RETRIES = 1;
+const RETRY_DELAY_MS = 2_000;
 const OVER_BUDGET = "your rendered fields are";
 
 /** The summarizer's output; mirrors schema.json, which `isLedgerJson` checks at runtime. */
@@ -27,7 +30,7 @@ export interface LedgerJson {
 	current_work: string;
 	next_steps: string[];
 	working_rules: { rule: string; source: string }[];
-	decisions: { decision: string; rationale: string }[];
+	decisions: { decision: string; rationale: string; made_by: "user" | "agent" | "agreed"; source: string }[];
 	rejected: { item: string; reason: string }[];
 	unverified_results: { source: string; recommendations: string[] }[];
 	open_questions: string[];
@@ -45,12 +48,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** The subset of JSON Schema that schema.json uses: object/array/string/boolean, required, items, properties. */
+/** The subset of JSON Schema that schema.json uses: object/array/string/boolean, enum, required, items, properties. */
 function conforms(value: unknown, schema: unknown): boolean {
 	if (!isRecord(schema)) return false;
 	switch (schema.type) {
 		case "string":
-			return typeof value === "string";
+			return typeof value === "string" && (!Array.isArray(schema.enum) || schema.enum.includes(value));
 		case "boolean":
 			return typeof value === "boolean";
 		case "array":
@@ -78,6 +81,10 @@ export function isLedgerJson(value: unknown): value is LedgerJson {
 export interface ModelResult {
 	output?: LedgerJson;
 	error?: string;
+	/** True when calling again cannot help, such as a `codex` binary that cannot start. */
+	permanent?: boolean;
+	/** The model that ran the call. */
+	model?: string;
 }
 
 /** Runs one summarizer call; `timeoutMs` is the time left before the hook's deadline. */
@@ -88,9 +95,13 @@ export interface LedgerInput {
 	/** Ledger written at the previous compaction, when the log covers only the part after it. */
 	previousLedger?: string;
 	runModel: ModelRunner;
+	/** Used when `runModel` still returns no output after its retry, for that attempt and every later one. */
+	fallbackModel?: ModelRunner;
 	deadline: number;
 	budget?: number;
 	maxAttempts?: number;
+	/** Wait before calling again after a model call returns no output. */
+	retryDelayMs?: number;
 }
 
 export interface AttemptRecord {
@@ -99,17 +110,19 @@ export interface AttemptRecord {
 	bytes?: number;
 	violations?: string[];
 	error?: string;
+	model?: string;
 }
 
 export interface LedgerResult {
 	markdown: string;
-	status: "accepted" | "accepted-over-budget" | "fallback";
+	status: "accepted" | "accepted-over-budget" | "accepted-with-warnings" | "fallback";
 	attempts: AttemptRecord[];
 }
 
 // ─── Previous ledger carry-over ──────────────────────────────────────────────
 
 const USERS_HEADING = "## All user messages (verbatim)";
+const UNVERIFIED_HEADING = "## Unverified points";
 
 /** User messages recorded in an earlier ledger, so a windowed log keeps every U-id resolvable. */
 export function previousUsers(ledger: string | undefined): Message[] {
@@ -128,6 +141,12 @@ export function previousUsers(ledger: string | undefined): Message[] {
 }
 
 // ─── Rendering ──────────────────────────────────────────────────────────────
+
+const MADE_BY: Record<LedgerJson["decisions"][number]["made_by"], string> = {
+	user: "user's decision",
+	agent: "agent's decision",
+	agreed: "agent proposed, user agreed",
+};
 
 export function renderFields(d: LedgerJson): string {
 	const o: string[] = [
@@ -157,7 +176,7 @@ export function renderFields(d: LedgerJson): string {
 		o.push("");
 	}
 	const sections: [string, string[]][] = [
-		["Decisions", d.decisions.map((x) => `- ${x.decision} — ${x.rationale}`)],
+		["Decisions", d.decisions.map((x) => `- ${x.decision} — ${x.rationale} (${MADE_BY[x.made_by]}${x.source.trim() ? `: ${x.source}` : ""})`)],
 		["Rejected", d.rejected.map((x) => `- Rejected: ${x.item} - because ${x.reason}`)],
 		["Key technical concepts", d.key_technical_concepts.map((x) => `- ${x}`)],
 		[
@@ -185,10 +204,17 @@ export function renderFields(d: LedgerJson): string {
 	return `${o.join("\n").trimEnd()}\n`;
 }
 
-/** The model never selects user messages: all of them are appended verbatim. */
-export function renderLedger(d: LedgerJson, users: Message[]): string {
+/**
+ * The model never selects user messages: all of them are appended verbatim. `warnings` are the validator's
+ * findings on an attempt accepted because no attempt passed; the agent checks those points before relying on them.
+ */
+export function renderLedger(d: LedgerJson, users: Message[], warnings: string[] = []): string {
+	const warningLines =
+		warnings.length > 0
+			? ["", UNVERIFIED_HEADING, "The validator could not verify these against the transcript; check them before relying on them:", ...warnings.map((w) => `- ${w}`)]
+			: [];
 	const userLines = ["", USERS_HEADING, ...users.map((u) => `- [${u.id}] ${u.text}`)];
-	return `${renderFields(d)}${userLines.join("\n")}\n`.trimEnd() + "\n";
+	return `${renderFields(d).trimEnd()}\n${[...warningLines, ...userLines].join("\n")}`.trimEnd() + "\n";
 }
 
 // ─── Validation ─────────────────────────────────────────────────────────────
@@ -247,8 +273,10 @@ export function unknownIdentifiers(d: LedgerJson, sourceText: string): string[] 
 	// "child-process" for `child_process` is prose, not a typo, so hyphen and underscore compare equal.
 	const lowerSource = sourceText.toLowerCase().replaceAll("_", "-");
 	const unhyphenated = lowerSource.replaceAll("-", "");
-	// "use-case4/4" for `use-case 4/4` drops a space to save bytes; it is not a misspelling.
-	const unspaced = lowerSource.replace(/\s+/g, "");
+	// "use-case4/4" for `use-case 4/4` or "width0" for `width: 0` drops spaces and punctuation to save bytes;
+	// it is not a misspelling.
+	const compact = (text: string) => text.replace(/[^a-z0-9./]+/g, "");
+	const compactSource = compact(lowerSource);
 	let sourceTokens: Set<string> | undefined;
 	for (const raw of rendered.replace(CODE, " ").split(/\s+/)) {
 		const token = raw
@@ -260,7 +288,7 @@ export function unknownIdentifiers(d: LedgerJson, sourceText: string): string[] 
 		for (const part of token.split(/[/:]/).map((x) => x.toLowerCase().replaceAll("_", "-"))) {
 			if (part.length < 6 || !/[a-z]/.test(part) || !/[-_.\d]/.test(part) || part.startsWith("-")) continue;
 			if (lowerSource.includes(part.replace(/e?s$/, "")) || unhyphenated.includes(part.replaceAll("-", ""))) continue;
-			if (unspaced.includes(part)) continue;
+			if (compactSource.includes(compact(part))) continue;
 			sourceTokens ??= new Set(lowerSource.split(/[^\w.-]+/).filter((t) => t.length >= 5));
 			for (const t of sourceTokens) {
 				if (Math.abs(t.length - part.length) <= 1 && editDistance(t, part) === 1) {
@@ -334,6 +362,15 @@ export function repairForeignLetters(d: LedgerJson, sourceText: string): LedgerJ
 	return isLedgerJson(repaired) ? repaired : d;
 }
 
+/** A previous ledger's text minus the identifiers it listed as unverified, so carrying them over does not verify them. */
+function verifiedText(ledger: string | undefined): string {
+	if (!ledger) return "";
+	const section = ledger.split(`\n${UNVERIFIED_HEADING}\n`)[1]?.split("\n## ")[0] ?? "";
+	let text = ledger;
+	for (const [, id] of section.matchAll(/"([^"\n]{6,})"/g)) text = text.replaceAll(id, "");
+	return text;
+}
+
 export function validateLedger(d: LedgerJson, ctx: ValidationContext): string[] {
 	const v: string[] = [];
 	if (!d.primary_request_and_intent.trim()) v.push("field `primary_request_and_intent` is empty");
@@ -346,6 +383,10 @@ export function validateLedger(d: LedgerJson, ctx: ValidationContext): string[] 
 	const shortened = d.pieces.map((p) => p.path).filter((p) => p.includes("...") || p.includes("…"));
 	if (shortened.length > 0) {
 		v.push(`pieces paths are shortened: ${JSON.stringify(shortened)}; write full absolute paths`);
+	}
+	const strayIds = [...new Set(d.decisions.flatMap((x) => x.source.match(/\bU\d+\b/g) ?? []))].filter((id) => !ctx.users.has(id));
+	if (strayIds.length > 0) {
+		v.push(`decision sources cite ${JSON.stringify(strayIds)}, which are not user messages in the log or the user-message list; cite the U-id where the decision was made`);
 	}
 	const unknown = unknownIdentifiers(d, ctx.sourceText);
 	if (unknown.length > 0) {
@@ -381,14 +422,22 @@ export function buildPrompt(log: WorkLog, previousLedger: string | undefined, bu
 	);
 }
 
-/** Written when no model attempt is usable: the facts a script can state without judgment. */
-export function fallbackLedger(log: WorkLog, users: Message[], reason: string): string {
+/**
+ * Written when the summarizer returns no output at all: the facts a script can state without judgment.
+ * It keeps the previous ledger and every user message under the standard heading, so the next
+ * compaction still carries all of them forward.
+ */
+export function fallbackLedger(log: WorkLog, users: Message[], reason: string, previousLedger?: string): string {
 	const lastAssistant = log.assistants.at(-1)?.text ?? "(none)";
-	const recent = users.slice(-10);
+	// Its user messages are re-listed below; its title would be a second top-level heading.
+	const previousFields = previousLedger
+		?.split(`\n${USERS_HEADING}`)[0]
+		.replace(/^# Session ledger.*\n/, "")
+		.trim();
 	return [
 		"# Session ledger (fallback)",
 		"",
-		`The summarizer could not produce a validated ledger (${reason}). This fallback holds only mechanically extracted facts; rely on the conversation summary for everything else.`,
+		`The summarizer produced no ledger this time (${reason}). This fallback holds mechanically extracted facts and the previous ledger, which stays true unless a later user message below changes it.`,
 		"",
 		"## Last assistant message",
 		lastAssistant,
@@ -396,8 +445,9 @@ export function fallbackLedger(log: WorkLog, users: Message[], reason: string): 
 		"## Files edited in this part of the session",
 		...(log.editedFiles.length > 0 ? log.editedFiles.map((f) => `- \`${f}\``) : ["- (none)"]),
 		"",
-		"## Most recent user messages (verbatim)",
-		...recent.map((u) => `- [${u.id}] ${u.text}`),
+		...(previousFields ? ["## Previous ledger (written at the previous compaction)", previousFields, ""] : []),
+		USERS_HEADING,
+		...users.map((u) => `- [${u.id}] ${u.text}`),
 		"",
 	].join("\n");
 }
@@ -441,28 +491,47 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 	const allUsers = [...carried.filter((u) => !windowIds.has(u.id)), ...input.log.users];
 	const ctx: ValidationContext = {
 		users: new Map(allUsers.map((u) => [u.id, u.text])),
-		sourceText: `${input.previousLedger ?? ""}\n${input.log.lines.join("\n")}`,
+		sourceText: `${verifiedText(input.previousLedger)}\n${input.log.lines.join("\n")}`,
 		budget,
 	};
 	const skills = loadedSkills(input.log.lines, input.previousLedger);
 	const basePrompt = buildPrompt(input.log, input.previousLedger, budget);
 	const attempts: AttemptRecord[] = [];
+	// The attempt with the fewest problems, accepted with its problems listed when no attempt passes.
+	let best: { d: LedgerJson; warnings: string[]; problems: number } | undefined;
 	let prompt = basePrompt;
 
+	const retryDelayMs = input.retryDelayMs ?? RETRY_DELAY_MS;
+	const models = input.fallbackModel ? [input.runModel, input.fallbackModel] : [input.runModel];
+	// A model that returned no output on its retry too is not called again.
+	let current = 0;
 	for (let n = 1; n <= maxAttempts; n++) {
-		const remaining = input.deadline - Date.now();
-		if (remaining <= 0) break;
-		const started = Date.now();
-		const result = await input.runModel(prompt, remaining);
-		const secs = Math.round((Date.now() - started) / 100) / 10;
-		if (!result.output) {
-			attempts.push({ n, secs, error: result.error ?? "no output" });
-			break;
+		let output: LedgerJson | undefined;
+		let model: string | undefined;
+		let secs = 0;
+		let failures = 0;
+		while (!output && current < models.length) {
+			const remaining = input.deadline - Date.now();
+			if (remaining <= 0) break;
+			const started = Date.now();
+			const result = await models[current](prompt, remaining);
+			secs = Math.round((Date.now() - started) / 100) / 10;
+			({ output, model } = result);
+			if (output) break;
+			attempts.push({ n, secs, error: result.error ?? "no output", model });
+			failures += 1;
+			if (result.permanent || failures > MODEL_RETRIES) {
+				current += 1;
+				failures = 0;
+				continue;
+			}
+			await new Promise((resolve) => setTimeout(resolve, Math.min(retryDelayMs, Math.max(0, input.deadline - Date.now()))));
 		}
-		const d = keepUserAndSkillRules(repairForeignLetters(result.output, ctx.sourceText), ctx.users, skills);
+		if (!output) break;
+		const d = keepUserAndSkillRules(repairForeignLetters(output, ctx.sourceText), ctx.users, skills);
 		const violations = validateLedger(d, ctx);
 		const size = Buffer.byteLength(renderFields(d));
-		attempts.push({ n, secs, bytes: size, violations });
+		attempts.push({ n, secs, bytes: size, violations, model });
 		if (violations.length === 0) {
 			return { markdown: renderLedger(d, allUsers), status: "accepted", attempts };
 		}
@@ -470,14 +539,18 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 		if (violations.every((x) => x.startsWith(OVER_BUDGET))) {
 			return { markdown: renderLedger(d, allUsers), status: "accepted-over-budget", attempts };
 		}
+		const warnings = violations.filter((x) => !x.startsWith(OVER_BUDGET));
+		const problems = warnings.length + unknownIdentifiers(d, ctx.sourceText).length;
+		if (!best || problems <= best.problems) best = { d, warnings, problems };
 		prompt =
 			`${basePrompt}\n=== YOUR PREVIOUS OUTPUT WAS REJECTED BY THE VALIDATOR ===\n${violations.map((x) => `- ${x}`).join("\n")}` +
 			`\nPrevious output:\n${JSON.stringify(d)}\nReturn a corrected handoff JSON.\n`;
 	}
 
-	const last = attempts.at(-1);
-	const reason = last?.error ?? (last ? "every attempt failed validation" : "deadline reached before the first attempt");
-	return { markdown: fallbackLedger(input.log, allUsers, reason), status: "fallback", attempts };
+	// A summary with a few unverified identifiers keeps every decision; the fallback keeps none of this window's.
+	if (best) return { markdown: renderLedger(best.d, allUsers, best.warnings), status: "accepted-with-warnings", attempts };
+	const reason = attempts.at(-1)?.error ?? "deadline reached before the first attempt";
+	return { markdown: fallbackLedger(input.log, allUsers, reason, input.previousLedger), status: "fallback", attempts };
 }
 
 // ─── Model runner: headless Codex ───────────────────────────────────────────
@@ -515,8 +588,6 @@ export function codexRunner(model = "gpt-6.1-sol", effort = "low"): ModelRunner 
 				model,
 				"-c",
 				`model_reasoning_effort="${effort}"`,
-				"-c",
-				'service_tier="fast"',
 				"--ignore-user-config",
 				"--skip-git-repo-check",
 				"-s",
@@ -547,16 +618,84 @@ export function codexRunner(model = "gpt-6.1-sol", effort = "low"): ModelRunner 
 				rmSync(dir, { recursive: true, force: true });
 				resolve(result);
 			};
-			child.on("error", (error) => finish({ error: `codex not runnable: ${error.message}` }));
+			child.on("error", (error) => finish({ error: `codex not runnable: ${error.message}`, permanent: true, model }));
 			child.on("close", (code) => {
 				let parsed: unknown;
 				try {
 					parsed = JSON.parse(readFileSync(out, "utf8"));
 				} catch {
-					finish({ error: `codex exited ${code} without a parsable output: ${stderr.slice(-400)}` });
+					finish({ error: `codex exited ${code} without a parsable output: ${stderr.slice(-400)}`, model });
 					return;
 				}
-				finish(isLedgerJson(parsed) ? { output: parsed } : { error: "codex output does not match schema.json" });
+				finish(isLedgerJson(parsed) ? { output: parsed, model } : { error: "codex output does not match schema.json", model });
+			});
+			child.stdin.end(prompt);
+		});
+}
+
+// ─── Fallback model runner: headless Claude Code ────────────────────────────
+
+/**
+ * Called when Codex returns no output. With no setting sources it loads no hooks, MCP servers, or
+ * CLAUDE.md, and with no tools it only fills the schema; its answer arrives as `structured_output`.
+ * Default claude-sonnet-5-5 at high effort: in blind-judged four-model replays it kept the most
+ * carried decisions; claude-opus-5-5 low was faster but merged them into one line.
+ */
+export function claudeRunner(model = "claude-sonnet-5-5", effort = "high"): ModelRunner {
+	return (prompt, timeoutMs) =>
+		new Promise((resolve) => {
+			const dir = mkdtempSync(join(tmpdir(), "omt-ledger-"));
+			const args = [
+				"-p",
+				"--model",
+				model,
+				"--effort",
+				effort,
+				"--setting-sources",
+				"",
+				"--tools",
+				"",
+				"--strict-mcp-config",
+				"--no-session-persistence",
+				"--output-format",
+				"json",
+				"--json-schema",
+				readFileSync(SCHEMA_PATH, "utf8"),
+			];
+			const child = spawn("claude", args, {
+				cwd: dir,
+				env: { ...process.env, [WORKER_ENV]: "1" },
+				stdio: ["pipe", "pipe", "pipe"],
+			});
+			let stdout = "";
+			let stderr = "";
+			child.stdout.on("data", (chunk) => {
+				stdout += chunk;
+			});
+			child.stderr.on("data", (chunk) => {
+				stderr = (stderr + chunk).slice(-2000);
+			});
+			const timer = setTimeout(() => child.kill("SIGTERM"), timeoutMs);
+			const finish = (result: ModelResult) => {
+				clearTimeout(timer);
+				rmSync(dir, { recursive: true, force: true });
+				resolve(result);
+			};
+			child.on("error", (error) => finish({ error: `claude not runnable: ${error.message}`, permanent: true, model }));
+			child.on("close", (code) => {
+				let parsed: unknown;
+				try {
+					parsed = JSON.parse(stdout);
+				} catch {
+					finish({ error: `claude exited ${code} without a parsable output: ${stderr.slice(-400)}`, model });
+					return;
+				}
+				const output = isRecord(parsed) ? parsed.structured_output : undefined;
+				finish(
+					isLedgerJson(output)
+						? { output, model }
+						: { error: `claude returned no ledger: ${JSON.stringify(parsed).slice(0, 400)}`, model },
+				);
 			});
 			child.stdin.end(prompt);
 		});
