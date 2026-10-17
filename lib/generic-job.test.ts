@@ -44,9 +44,8 @@ import {
 	assertDenyShape,
 	extractDenySkills,
 	extractDenySubagents,
-	assertMcpAllowShape,
+	assertMcpShape,
 	enumerateConfiguredMcpServers,
-	computeMcpBlockList,
 	prepareMcpEntities,
 	findOrphanJobs,
 	reapOrphanJobs,
@@ -660,41 +659,125 @@ describe("buildAugmentedCommand", () => {
 		}
 	});
 
-	test("codex: mcpBlock translates to -c mcp_servers.<name>.enabled=false per blocked name", () => {
-		const result = buildAugmentedCommand(
-			{ command: "codex exec", mcpBlock: ["linear", "slack"] },
-			"codex",
-		);
-		expect(result.command).toBe(
-			"codex exec -c mcp_servers.linear.enabled=false -c mcp_servers.slack.enabled=false",
-		);
-	});
+	describe("MCP control: mcpReset / mcpAdd / mcpBlock", () => {
+		const codegraphAdd = { codegraph: { command: "codegraph", args: ["serve", "--mcp"] } };
 
-	test("claude: mcpBlock is ignored (negative control — codex-only lever)", () => {
-		const result = buildAugmentedCommand(
-			{ command: "claude -p", mcpBlock: ["linear", "slack"] },
-			"claude",
-		);
-		expect(result.command).toBe("claude -p");
-		expect(result.command).not.toContain("mcp_servers");
-	});
+		test("no MCP fields adds no MCP flag (codex and claude)", () => {
+			expect(buildAugmentedCommand({ command: "codex exec" }, "codex").command).toBe("codex exec");
+			expect(buildAugmentedCommand({ command: "claude -p" }, "claude").command).toBe("claude -p");
+			expect(
+				buildAugmentedCommand(
+					{ command: "codex exec", mcpReset: false, mcpAdd: {}, mcpBlock: [] },
+					"codex",
+				).command,
+			).toBe("codex exec");
+		});
 
-	test("codex: mcpBlock absent or empty leaves command unchanged", () => {
-		const withoutMcpBlock = buildAugmentedCommand({ command: "codex exec" }, "codex");
-		const withEmptyMcpBlock = buildAugmentedCommand(
-			{ command: "codex exec", mcpBlock: [] },
-			"codex",
-		);
-		expect(withoutMcpBlock.command).toBe("codex exec");
-		expect(withEmptyMcpBlock.command).toBe("codex exec");
+		test("codex: reset + add + block translates to --disable plugins, enabled=false and command/args overrides", () => {
+			const result = buildAugmentedCommand(
+				{ command: "codex exec", mcpReset: true, mcpAdd: codegraphAdd, mcpBlock: ["alpha", "beta"] },
+				"codex",
+			);
+			expect(splitCommand(result.command)).toEqual([
+				"codex",
+				"exec",
+				"--disable",
+				"plugins",
+				"-c",
+				"mcp_servers.alpha.enabled=false",
+				"-c",
+				"mcp_servers.beta.enabled=false",
+				"-c",
+				'mcp_servers.codegraph.command="codegraph"',
+				"-c",
+				'mcp_servers.codegraph.args=["serve","--mcp"]',
+			]);
+		});
+
+		test("codex: add without reset adds the server and disables nothing", () => {
+			const result = buildAugmentedCommand({ command: "codex exec", mcpAdd: codegraphAdd }, "codex");
+			const tokens = splitCommand(result.command);
+			expect(tokens).toEqual([
+				"codex",
+				"exec",
+				"-c",
+				'mcp_servers.codegraph.command="codegraph"',
+				"-c",
+				'mcp_servers.codegraph.args=["serve","--mcp"]',
+			]);
+			expect(result.command).not.toContain("--disable");
+			expect(result.command).not.toContain("enabled=false");
+		});
+
+		test("claude: reset + add translates to --strict-mcp-config and --mcp-config JSON", () => {
+			const result = buildAugmentedCommand(
+				{ command: "claude -p", mcpReset: true, mcpAdd: codegraphAdd, mcpBlock: ["ignored"] },
+				"claude",
+			);
+			const tokens = splitCommand(result.command);
+			expect(tokens?.slice(0, 4)).toEqual(["claude", "-p", "--strict-mcp-config", "--mcp-config"]);
+			expect(tokens).toHaveLength(5);
+			expect(JSON.parse(tokens![4])).toEqual({
+				mcpServers: { codegraph: { command: "codegraph", args: ["serve", "--mcp"] } },
+			});
+			expect(result.command).not.toContain("mcp_servers");
+		});
+
+		test("claude: reset alone adds only --strict-mcp-config; add alone adds only --mcp-config", () => {
+			expect(buildAugmentedCommand({ command: "claude -p", mcpReset: true }, "claude").command).toBe(
+				"claude -p --strict-mcp-config",
+			);
+			const addOnly = splitCommand(
+				buildAugmentedCommand({ command: "claude -p", mcpAdd: codegraphAdd }, "claude").command,
+			);
+			expect(addOnly).not.toContain("--strict-mcp-config");
+			expect(addOnly?.[2]).toBe("--mcp-config");
+		});
+
+		test("values with spaces, quotes and backslashes survive splitCommand as one token each", () => {
+			const command = '/opt/my tools/srv "x"';
+			const args = ["a b", "c\\d", "it's"];
+			const add = { odd: { command, args } };
+
+			const codex = splitCommand(
+				buildAugmentedCommand({ command: "codex exec", mcpAdd: add }, "codex").command,
+			);
+			expect(codex).toEqual([
+				"codex",
+				"exec",
+				"-c",
+				`mcp_servers.odd.command=${JSON.stringify(command)}`,
+				"-c",
+				`mcp_servers.odd.args=${JSON.stringify(args)}`,
+			]);
+
+			const claude = splitCommand(
+				buildAugmentedCommand({ command: "claude -p", mcpAdd: add }, "claude").command,
+			);
+			expect(JSON.parse(claude![3])).toEqual({ mcpServers: { odd: { command, args } } });
+		});
+
+		test("opencode and gemini ignore MCP fields", () => {
+			for (const [command, cliType] of [
+				["opencode run", "opencode"],
+				["gemini", "gemini"],
+			] as const) {
+				expect(
+					buildAugmentedCommand(
+						{ command, mcpReset: true, mcpAdd: codegraphAdd, mcpBlock: ["alpha"] },
+						cliType,
+					),
+				).toEqual(buildAugmentedCommand({ command }, cliType));
+			}
+		});
 	});
 });
 
 // ---------------------------------------------------------------------------
-// assertMcpAllowShape — settings.mcps.allow format validation
+// assertMcpShape — settings.mcp format validation
 // ---------------------------------------------------------------------------
 
-describe("assertMcpAllowShape", () => {
+describe("assertMcpShape", () => {
 	let originalExit: typeof process.exit;
 	let originalStderrWrite: typeof process.stderr.write;
 	let stderrOutput: string;
@@ -717,78 +800,53 @@ describe("assertMcpAllowShape", () => {
 		process.stderr.write = originalStderrWrite;
 	});
 
-	test("mcps 미지정(undefined)이면 통과한다", () => {
-		expect(() => assertMcpAllowShape({}, councilConfig, "/path/to/config.yaml")).not.toThrow();
+	test("mcp 미지정(undefined)이거나 null이면 통과한다", () => {
+		expect(() => assertMcpShape({}, councilConfig, "/path/to/config.yaml")).not.toThrow();
+		expect(() => assertMcpShape({ mcp: null }, councilConfig, "/path/to/config.yaml")).not.toThrow();
 	});
 
-	test("mcps가 null이면 통과한다", () => {
+	test("유효한 reset + add는 통과한다", () => {
 		expect(() =>
-			assertMcpAllowShape({ mcps: null }, councilConfig, "/path/to/config.yaml"),
-		).not.toThrow();
-	});
-
-	test("mcps가 배열이면 exit 1이다", () => {
-		expect(() =>
-			assertMcpAllowShape({ mcps: ["codegraph"] }, councilConfig, "/path/to/config.yaml"),
-		).toThrow("process.exit(1)");
-		expect(stderrOutput).toContain("council.settings.mcps");
-		expect(stderrOutput).toContain("must be a mapping/object");
-	});
-
-	test("mcps.allow 미지정(undefined)이면 통과한다", () => {
-		expect(() =>
-			assertMcpAllowShape({ mcps: {} }, councilConfig, "/path/to/config.yaml"),
-		).not.toThrow();
-	});
-
-	test("mcps.allow가 null이면 통과한다", () => {
-		expect(() =>
-			assertMcpAllowShape({ mcps: { allow: null } }, councilConfig, "/path/to/config.yaml"),
-		).not.toThrow();
-	});
-
-	test("mcps.allow가 문자열이면 exit 1이다", () => {
-		expect(() =>
-			assertMcpAllowShape(
-				{ mcps: { allow: "codegraph" } },
-				councilConfig,
-				"/path/to/config.yaml",
-			),
-		).toThrow("process.exit(1)");
-		expect(stderrOutput).toContain("council.settings.mcps.allow");
-		expect(stderrOutput).toContain("must be a list/array of non-empty strings");
-	});
-
-	test("mcps.allow 원소에 '.'이 섞이면 exit 1이다", () => {
-		expect(() =>
-			assertMcpAllowShape(
-				{ mcps: { allow: ["mcp_servers.nutrition-tools"] } },
-				councilConfig,
-				"/path/to/config.yaml",
-			),
-		).toThrow("process.exit(1)");
-		expect(stderrOutput).toContain("must contain only [a-zA-Z0-9_-] MCP server names");
-	});
-
-	test("mcps.allow 원소에 '/'가 섞이면 exit 1이다", () => {
-		expect(() =>
-			assertMcpAllowShape(
-				{ mcps: { allow: ["codegraph/evil"] } },
-				councilConfig,
-				"/path/to/config.yaml",
-			),
-		).toThrow("process.exit(1)");
-	});
-
-	test("유효한 mcps.allow 배열은 통과한다", () => {
-		expect(() =>
-			assertMcpAllowShape(
-				{ mcps: { allow: ["codegraph", "linear-mcp", "slack_bot"] } },
+			assertMcpShape(
+				{
+					mcp: {
+						reset: true,
+						add: { "code-graph_2": { command: "srv", args: ["serve", "--mcp"] }, bare: { command: "x" } },
+					},
+				},
 				councilConfig,
 				"/path/to/config.yaml",
 			),
 		).not.toThrow();
+		expect(() => assertMcpShape({ mcp: { reset: false } }, councilConfig, "/p")).not.toThrow();
+		expect(() => assertMcpShape({ mcp: { add: {} } }, councilConfig, "/p")).not.toThrow();
 	});
+
+	const invalidCases: Array<[string, unknown, string]> = [
+		["mcp가 배열이면", ["codegraph"], "council.settings.mcp' must be a mapping/object"],
+		["mcp가 문자열이면", "reset", "council.settings.mcp' must be a mapping/object"],
+		["mcp에 알 수 없는 키가 있으면", { reset: true, allow: ["x"] }, "unknown key \"allow\""],
+		["reset이 문자열이면", { reset: "true" }, "council.settings.mcp.reset' must be a boolean"],
+		["add가 배열이면", { add: ["x"] }, "council.settings.mcp.add' must be a mapping/object"],
+		["서버 이름에 '.'이 있으면", { add: { "a.b": { command: "x" } } }, "[a-zA-Z0-9_-]+"],
+		["서버 이름에 '/'가 있으면", { add: { "a/b": { command: "x" } } }, "[a-zA-Z0-9_-]+"],
+		["서버 정의가 문자열이면", { add: { a: "cmd" } }, "council.settings.mcp.add.a' must be a mapping/object"],
+		["서버 정의에 알 수 없는 키가 있으면", { add: { a: { command: "x", env: {} } } }, "unknown key \"env\""],
+		["command가 없으면", { add: { a: { args: [] } } }, "council.settings.mcp.add.a.command' must be a non-empty string"],
+		["command가 빈 문자열이면", { add: { a: { command: "" } } }, "add.a.command' must be a non-empty string"],
+		["command가 숫자면", { add: { a: { command: 1 } } }, "add.a.command' must be a non-empty string"],
+		["args가 문자열이면", { add: { a: { command: "x", args: "serve" } } }, "add.a.args' must be a list/array of strings"],
+		["args 원소가 숫자면", { add: { a: { command: "x", args: ["ok", 1] } } }, "add.a.args' must be a list/array of strings"],
+	];
+	for (const [label, mcp, message] of invalidCases) {
+		test(`${label} exit 1이다`, () => {
+			expect(() => assertMcpShape({ mcp }, councilConfig, "/path/to/config.yaml")).toThrow(
+				"process.exit(1)",
+			);
+			expect(stderrOutput).toContain("/path/to/config.yaml");
+			expect(stderrOutput).toContain(message);
+		});
+	}
 });
 
 // ---------------------------------------------------------------------------
@@ -867,83 +925,60 @@ describe("enumerateConfiguredMcpServers", () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
-// computeMcpBlockList — configuredNames minus settings.mcps.allow
-// ---------------------------------------------------------------------------
-
-describe("computeMcpBlockList", () => {
-	test("fail-closed: settings.mcps가 없으면 configuredNames 전부가 차단목록이다", () => {
-		expect(computeMcpBlockList({}, ["codegraph", "linear", "slack"])).toEqual([
-			"codegraph",
-			"linear",
-			"slack",
-		]);
-	});
-
-	test("fail-closed: mcps.allow가 빈 배열이어도 전부 차단된다", () => {
-		expect(computeMcpBlockList({ mcps: { allow: [] } }, ["codegraph", "linear"])).toEqual([
-			"codegraph",
-			"linear",
-		]);
-	});
-
-	test("화이트리스트 동작: allow에 없는 이름만 차단된다", () => {
-		expect(
-			computeMcpBlockList({ mcps: { allow: ["codegraph"] } }, ["codegraph", "linear", "slack"]),
-		).toEqual(["linear", "slack"]);
-	});
-
-	// Regression test for the subset invariant: an allow entry with no matching
-	// configured server ("ghost") must never leak into the block list. Passing
-	// `-c mcp_servers.ghost.enabled=false` for a server codex never declared in
-	// config.toml makes codex fail to boot with "Error loading config.toml:
-	// invalid transport" — the block list must always be built by filtering
-	// configuredNames, never by iterating `allow`.
-	test("차단목록은 항상 configuredNames의 부분집합이다 (allow의 ghost 항목이 새어나오지 않는다)", () => {
-		const result = computeMcpBlockList(
-			{ mcps: { allow: ["codegraph", "ghost"] } },
-			["codegraph", "linear"],
-		);
-		expect(result).toEqual(["linear"]);
-		expect(result).not.toContain("ghost");
-		for (const name of result) {
-			expect(["codegraph", "linear"]).toContain(name);
-		}
-	});
-});
-
 describe("prepareMcpEntities", () => {
 	let tmpDir: string;
+	let originalExit: typeof process.exit;
+	let originalStderrWrite: typeof process.stderr.write;
+	let stderrOutput: string;
+
 	beforeEach(() => {
 		tmpDir = makeTmpDir();
+		originalExit = process.exit;
+		originalStderrWrite = process.stderr.write;
+		stderrOutput = "";
+		(process as any).exit = (code?: number) => {
+			throw new Error(`process.exit(${code})`);
+		};
+		(process.stderr.write as any) = (chunk: string) => {
+			stderrOutput += chunk;
+			return true;
+		};
 	});
 	afterEach(() => {
+		process.exit = originalExit;
+		process.stderr.write = originalStderrWrite;
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	test("malformed mcps.allow is rejected through assertMcpAllowShape", () => {
-		const settings = { mcps: { allow: ["bad.name"] } };
-		const originalExit = process.exit;
-		try {
-			(process as any).exit = (code?: number) => {
-				throw new Error(`process.exit(${code})`);
-			};
-			expect(() =>
-				prepareMcpEntities(settings, [], councilConfig, "/tmp/config.yaml", tmpDir),
-			).toThrow("process.exit(1)");
-		} finally {
-			process.exit = originalExit;
-		}
+	const addAlpha = { alpha: { command: "alpha-bin", args: ["serve"] } };
+
+	test("settings.mcp 미지정이면 모든 멤버가 reset=false, add={}, block=[]이다 (CLI 종류와 무관)", () => {
+		const entities = [
+			{ name: "a", command: "codex exec" },
+			{ name: "b", command: "claude -p" },
+			{ name: "c", command: "gemini" },
+		];
+		const result = prepareMcpEntities({}, entities, councilConfig, "/tmp/config.yaml", tmpDir);
+		expect(result).toEqual(entities.map((e) => ({ ...e, mcpReset: false, mcpAdd: {}, mcpBlock: [] })));
 	});
 
-	test("computes blocks per member CODEX_HOME and preserves input", () => {
+	test("malformed settings.mcp is rejected through assertMcpShape", () => {
+		expect(() =>
+			prepareMcpEntities({ mcp: { reset: "yes" } }, [], councilConfig, "/tmp/config.yaml", tmpDir),
+		).toThrow("process.exit(1)");
+		expect(stderrOutput).toContain("council.settings.mcp.reset");
+	});
+
+	test("reset: codex 멤버별 CODEX_HOME의 config.toml 서버에서 add 이름을 뺀 목록이 mcpBlock이고 입력은 변하지 않는다", () => {
 		const homeA = path.join(tmpDir, "a");
 		const homeB = path.join(tmpDir, "b");
 		fs.mkdirSync(homeA);
 		fs.mkdirSync(homeB);
-		fs.writeFileSync(path.join(homeA, "config.toml"), "[mcp_servers.alpha]\n[mcp_servers.shared]\n");
-		fs.writeFileSync(path.join(homeB, "config.toml"), "[mcp_servers.beta]\n[mcp_servers.shared]\n");
-		const settings = { mcps: { allow: ["shared"] } };
+		const tomlA = "[mcp_servers.alpha]\n[mcp_servers.shared]\n";
+		const tomlB = "[mcp_servers.beta]\n[mcp_servers.shared]\n";
+		fs.writeFileSync(path.join(homeA, "config.toml"), tomlA);
+		fs.writeFileSync(path.join(homeB, "config.toml"), tomlB);
+		const settings = { mcp: { reset: true, add: addAlpha } };
 		const entities = [
 			{ name: "a", command: "codex exec", env: { CODEX_HOME: homeA } },
 			{ name: "b", command: "codex exec", env: { CODEX_HOME: homeB } },
@@ -951,24 +986,71 @@ describe("prepareMcpEntities", () => {
 		];
 		const snapshot = structuredClone(entities);
 		const result = prepareMcpEntities(settings, entities, councilConfig, "/tmp/config.yaml", tmpDir);
+		const mcpAdd = { alpha: { command: "alpha-bin", args: ["serve"] } };
 		expect(result).toEqual([
-			{ ...entities[0], mcpBlock: ["alpha"] },
-			{ ...entities[1], mcpBlock: ["beta"] },
-			{ ...entities[2], mcpBlock: [] },
+			{ ...entities[0], mcpReset: true, mcpAdd, mcpBlock: ["shared"] },
+			{ ...entities[1], mcpReset: true, mcpAdd, mcpBlock: ["beta", "shared"] },
+			{ ...entities[2], mcpReset: true, mcpAdd, mcpBlock: [] },
 		]);
 		expect(entities).toEqual(snapshot);
+		// config.toml is read only.
+		expect(fs.readFileSync(path.join(homeA, "config.toml"), "utf8")).toBe(tomlA);
+		expect(fs.readFileSync(path.join(homeB, "config.toml"), "utf8")).toBe(tomlB);
+	});
+
+	test("add without reset leaves mcpBlock empty even when config.toml declares servers", () => {
+		fs.writeFileSync(path.join(tmpDir, "config.toml"), "[mcp_servers.beta]\n");
+		const result = prepareMcpEntities(
+			{ mcp: { add: addAlpha } },
+			[{ name: "a", command: "codex exec" }],
+			councilConfig,
+			"/tmp/config.yaml",
+			tmpDir,
+		);
+		expect(result[0].mcpReset).toBe(false);
+		expect(result[0].mcpBlock).toEqual([]);
+		expect(result[0].mcpAdd).toEqual({ alpha: { command: "alpha-bin", args: ["serve"] } });
+	});
+
+	test("add 서버의 args가 없으면 빈 배열로 채워진다", () => {
+		const result = prepareMcpEntities(
+			{ mcp: { add: { bare: { command: "bare-bin" } } } },
+			[{ name: "a", command: "claude -p" }],
+			councilConfig,
+			"/tmp/config.yaml",
+			tmpDir,
+		);
+		expect(result[0].mcpAdd).toEqual({ bare: { command: "bare-bin", args: [] } });
 	});
 
 	test("uses conductor fallback for codex members without CODEX_HOME", () => {
 		fs.writeFileSync(path.join(tmpDir, "config.toml"), "[mcp_servers.alpha]\n");
 		const result = prepareMcpEntities(
-			{ mcps: { allow: [] } },
+			{ mcp: { reset: true } },
 			[{ name: "a", command: "codex exec" }],
 			councilConfig,
 			"/tmp/config.yaml",
 			tmpDir,
 		);
 		expect(result[0].mcpBlock).toEqual(["alpha"]);
+	});
+
+	test("settings.mcp가 있는데 CLI가 codex/claude가 아닌 멤버가 있으면 exit 1이다 (조용한 no-op 없음)", () => {
+		for (const command of ["gemini", "opencode run", "mycli run"]) {
+			stderrOutput = "";
+			expect(() =>
+				prepareMcpEntities(
+					{ mcp: { reset: true } },
+					[{ name: "odd-member", command }],
+					councilConfig,
+					"/tmp/config.yaml",
+					tmpDir,
+				),
+			).toThrow("process.exit(1)");
+			expect(stderrOutput).toContain("council.settings.mcp");
+			expect(stderrOutput).toContain("odd-member");
+			expect(stderrOutput).toContain("codex and claude");
+		}
 	});
 });
 

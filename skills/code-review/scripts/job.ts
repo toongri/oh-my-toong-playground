@@ -32,7 +32,7 @@ import {
 	assertMembersOrExit,
 	assertDenyEnforceable,
 	assertDenyShape,
-	assertMcpAllowShape,
+	assertMcpShape,
 	extractDenySkills,
 	extractDenySubagents,
 	prepareMcpEntities,
@@ -397,7 +397,7 @@ function parseChunkReviewConfig(configPath: string): ChunkReviewConfig {
 	}
 
 	assertDenyShape(merged["chunk-review"].settings, CHUNK_REVIEW_JOB_CONFIG, configPath);
-	assertMcpAllowShape(merged["chunk-review"].settings, CHUNK_REVIEW_JOB_CONFIG, configPath);
+	assertMcpShape(merged["chunk-review"].settings, CHUNK_REVIEW_JOB_CONFIG, configPath);
 
 	return merged;
 }
@@ -1085,6 +1085,8 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 				effort_level: r.effort_level || null,
 				output_format: r.output_format || null,
 				env: r.env ?? {},
+				mcpReset: preparedMembers[i].mcpReset,
+				mcpAdd: preparedMembers[i].mcpAdd,
 				mcpBlock: preparedMembers[i].mcpBlock,
 				workerPgid: unsetWorkerPgid(),
 				workerPgidStartedAt: unsetWorkerPgidStartedAt(),
