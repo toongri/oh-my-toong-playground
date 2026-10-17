@@ -109,6 +109,7 @@ export async function preCompact(
 	const result = await writeLedger({
 		log,
 		previousLedger,
+		fallbackPreviousLedger: previous,
 		runModel: options.runModel ?? codexRunner(),
 		// An injected model (tests, replays) gets no real fallback unless one is injected too.
 		fallbackModel: options.runModel ? options.fallbackModel : claudeRunner(),

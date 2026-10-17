@@ -42,7 +42,7 @@ function clean(text: string): string {
 	return text.replace(REMINDER, "").replace(HOOK_CONTEXT, "").trim();
 }
 
-function utf8Head(text: string, bytes: number): string {
+export function utf8Head(text: string, bytes: number): string {
 	return Buffer.from(text).subarray(0, bytes).toString("utf8").replace(/�+$/, "");
 }
 

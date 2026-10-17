@@ -12,7 +12,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { Message, WorkLog } from "./extract.ts";
+import { type Message, utf8Head, type WorkLog } from "./extract.ts";
 
 export const SCHEMA_PATH = join(import.meta.dir, "schema.json");
 const PROMPT_PATH = join(import.meta.dir, "prompt.md");
@@ -94,6 +94,12 @@ export interface LedgerInput {
 	log: WorkLog;
 	/** Ledger written at the previous compaction, when the log covers only the part after it. */
 	previousLedger?: string;
+	/**
+	 * The ledger currently on disk, used only when writing the mechanical fallback and never sent to the
+	 * model. In full mode `previousLedger` is absent (the model reads the whole transcript), so without
+	 * this field a fallback would drop the on-disk ledger's decisions.
+	 */
+	fallbackPreviousLedger?: string;
 	runModel: ModelRunner;
 	/** Used when `runModel` still returns no output after its retry, for that attempt and every later one. */
 	fallbackModel?: ModelRunner;
@@ -122,6 +128,11 @@ export interface LedgerResult {
 // ─── Previous ledger carry-over ──────────────────────────────────────────────
 
 const USERS_HEADING = "## All user messages (verbatim)";
+const FALLBACK_TITLE = "# Session ledger (fallback)";
+const FILES_HEADING = "## Files edited in this part of the session";
+const PREVIOUS_HEADING = "## Previous ledger (written at the previous compaction)";
+/** Largest "Last assistant message" a fallback keeps, in UTF-8 bytes. */
+const LAST_ASSISTANT_LIMIT = 3000;
 const UNVERIFIED_HEADING = "## Unverified points";
 
 /** Ledgers written before the latest release put this section after the user messages. */
@@ -449,24 +460,38 @@ export function buildPrompt(log: WorkLog, previousLedger: string | undefined, bu
  * compaction still carries all of them forward.
  */
 export function fallbackLedger(log: WorkLog, users: Message[], reason: string, previousLedger?: string): string {
-	const lastAssistant = log.assistants.at(-1)?.text ?? "(none)";
+	const assistant = log.assistants.at(-1)?.text;
+	const lastAssistant =
+		assistant === undefined
+			? "(none)"
+			: Buffer.byteLength(assistant) > LAST_ASSISTANT_LIMIT
+				? `${utf8Head(assistant, LAST_ASSISTANT_LIMIT)} …[${Buffer.byteLength(assistant) - LAST_ASSISTANT_LIMIT} bytes cut]`
+				: assistant;
 	// Its user messages are re-listed below; its title would be a second top-level heading.
-	const previousFields = previousLedger
+	let previousFields = previousLedger
 		?.split(`\n${USERS_HEADING}`)[0]
 		.replace(/^# Session ledger.*\n/, "")
 		.trim();
+	let editedFiles = log.editedFiles;
+	if (previousLedger?.startsWith(FALLBACK_TITLE) && previousFields !== undefined) {
+		// A fallback built on a fallback keeps only the real ledger it carried, so layers do not stack.
+		const [top, ...nested] = previousFields.split(`${PREVIOUS_HEADING}\n`);
+		previousFields = nested.join(`${PREVIOUS_HEADING}\n`).trim();
+		const carriedFiles = [...(top.split(`${FILES_HEADING}\n`)[1] ?? "").matchAll(/^- `(.+)`$/gm)].map((m) => m[1]);
+		editedFiles = [...new Set([...carriedFiles, ...log.editedFiles])];
+	}
 	return [
-		"# Session ledger (fallback)",
+		FALLBACK_TITLE,
 		"",
 		`The summarizer produced no ledger this time (${reason}). This fallback holds mechanically extracted facts and the previous ledger, which stays true unless a later user message below changes it.`,
 		"",
 		"## Last assistant message",
 		lastAssistant,
 		"",
-		"## Files edited in this part of the session",
-		...(log.editedFiles.length > 0 ? log.editedFiles.map((f) => `- \`${f}\``) : ["- (none)"]),
+		FILES_HEADING,
+		...(editedFiles.length > 0 ? editedFiles.map((f) => `- \`${f}\``) : ["- (none)"]),
 		"",
-		...(previousFields ? ["## Previous ledger (written at the previous compaction)", previousFields, ""] : []),
+		...(previousFields ? [PREVIOUS_HEADING, previousFields, ""] : []),
 		USERS_HEADING,
 		...users.map((u) => `- [${u.id}] ${u.text}`),
 		"",
@@ -572,7 +597,7 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 	// A summary with a few unverified identifiers keeps every decision; the fallback keeps none of this window's.
 	if (best) return { markdown: renderLedger(best.d, allUsers, best.warnings), status: "accepted-with-warnings", attempts };
 	const reason = attempts.at(-1)?.error ?? "deadline reached before the first attempt";
-	return { markdown: fallbackLedger(input.log, allUsers, reason, input.previousLedger), status: "fallback", attempts };
+	return { markdown: fallbackLedger(input.log, allUsers, reason, input.fallbackPreviousLedger ?? input.previousLedger), status: "fallback", attempts };
 }
 
 // ─── Model runner: headless Codex ───────────────────────────────────────────
