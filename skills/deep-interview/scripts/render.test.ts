@@ -361,3 +361,37 @@ describe("라벨 클리핑 방지 — mmdc htmlLabels:false", () => {
 		MMDC_TEST_TIMEOUT_MS,
 	);
 });
+
+// ---------------------------------------------------------------------------
+// 인라인 마크다운 — 제목·접힘 제목이 본문과 같은 서식으로 나오고, 코드 안 `\`` 실수를 알린다
+
+import { findBackslashEndedCodeSpans } from "./render";
+
+describe("제목의 인라인 마크다운", () => {
+	const html = renderToHtml("# T\n\n## `foo` 와 **굵게** & 끝\n", "t");
+
+	test("코드·굵게가 태그로 바뀌고 & 는 이스케이프된다", () => {
+		expect(html).toContain('<h2 id="foo-와-굵게-끝"><code>foo</code> 와 <strong>굵게</strong> &amp; 끝</h2>');
+	});
+
+	test("목차 항목도 같은 서식으로 나온다 — 백틱·별표가 글자로 남지 않는다", () => {
+		expect(html).toContain('<a href="#foo-와-굵게-끝"><code>foo</code> 와 <strong>굵게</strong> &amp; 끝</a>');
+	});
+});
+
+describe("접힘 제목(summary)의 인라인 마크다운", () => {
+	test("<summary> 안의 백틱이 <code> 로 바뀐다", () => {
+		const html = renderToHtml("<details><summary>TODO 2 — `findBy` 거르기</summary>\n\n- 본문\n\n</details>\n", "t");
+		expect(html).toContain("<summary>TODO 2 — <code>findBy</code> 거르기</summary>");
+	});
+});
+
+describe("findBackslashEndedCodeSpans", () => {
+	test("`\\`` 로 코드를 닫아 버린 인라인 코드를 찾는다", () => {
+		expect(findBackslashEndedCodeSpans("참조: `check(sql\\`…\\`)` 문법.")).toEqual(["`check(sql\\`"]);
+	});
+
+	test("백틱 두 개로 감싼 올바른 코드는 찾지 않는다", () => {
+		expect(findBackslashEndedCodeSpans("참조: ``check(sql`…`)`` 문법.")).toEqual([]);
+	});
+});

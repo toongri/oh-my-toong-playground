@@ -21,12 +21,13 @@ import { execFileSync } from "child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { marked } from "marked";
+import { marked, type Tokens } from "marked";
 
 /** Heading rows the table of contents is built from. */
 interface TocEntry {
 	level: number;
-	text: string;
+	/** The heading's rendered inline HTML, so the entry keeps the heading's code/bold formatting. */
+	html: string;
 	id: string;
 }
 
@@ -242,21 +243,31 @@ export function renderToHtml(markdown: string, title: string): string {
 	const seen = new Map<string, number>();
 
 	const renderer = new marked.Renderer();
-	renderer.heading = ({ text, depth }: { text: string; depth: number }) => {
+	renderer.heading = function ({ tokens, text, depth }: Tokens.Heading) {
+		// The id still comes from the raw source text, so anchors stay what they were.
 		const base = slugify(text);
 		const n = seen.get(base) ?? 0;
 		seen.set(base, n + 1);
 		const id = n === 0 ? base : `${base}-${n + 1}`;
+		const html = this.parser.parseInline(tokens);
 		// h2/h3 only: h1 is the document's title, not one of its sections, and
 		// listing it as the first table-of-contents entry just points at the top.
-		if (depth >= 2 && depth <= 3) toc.push({ level: depth, text, id });
-		return `<h${depth} id="${id}">${text}</h${depth}>\n`;
+		if (depth >= 2 && depth <= 3) toc.push({ level: depth, html, id });
+		return `<h${depth} id="${id}">${html}</h${depth}>\n`;
 	};
+	// A `<details><summary>…</summary>` line is a raw HTML block, so markdown
+	// would not touch the summary text; render it inline like any other line.
+	renderer.html = ({ text }: Tokens.HTML | Tokens.Tag) =>
+		text.replace(
+			/(<summary\b[^>]*>)([\s\S]*?)(<\/summary>)/gi,
+			(_m, open: string, inner: string, close: string) =>
+				`${open}${marked.parseInline(inner, { async: false })}${close}`,
+		);
 
 	const bodyHtml = String(marked.parse(markdown, { renderer, async: false }));
 
 	const tocHtml = toc
-		.map((e) => `<li class="lv${e.level}"><a href="#${e.id}">${escapeHtml(e.text)}</a></li>`)
+		.map((e) => `<li class="lv${e.level}"><a href="#${e.id}">${e.html}</a></li>`)
 		.join("\n");
 
 	return `<!doctype html>
@@ -276,6 +287,21 @@ ${ZOOM_SCRIPT}
 </body>
 </html>
 `;
+}
+
+/**
+ * Returns the raw source of every inline code span whose content ends with a
+ * backslash. Inside a code span a backslash is not an escape, so `` `sql\`…\`` ``
+ * closes the code at `\`` and flips every later code span on the line. A
+ * legitimate span can also end with `\` (`` `C:\` ``), so the caller warns and
+ * never fails the render.
+ */
+export function findBackslashEndedCodeSpans(markdown: string): string[] {
+	const found: string[] = [];
+	marked.walkTokens(marked.lexer(markdown), (token) => {
+		if (token.type === "codespan" && token.text.endsWith("\\")) found.push(token.raw);
+	});
+	return found;
 }
 
 function escapeHtml(s: string): string {
@@ -560,6 +586,11 @@ function main(): void {
 		process.exit(1);
 	}
 	const markdown = preRenderMermaid(readFileSync(input, "utf8"), mmdcRenderSvg);
+	for (const raw of findBackslashEndedCodeSpans(markdown)) {
+		process.stderr.write(
+			`경고: 인라인 코드 ${raw} 가 \\ 로 끝납니다. 코드 안의 \\\` 는 이스케이프가 아니라 코드를 닫습니다. 백틱이 든 코드는 백틱 두 개로 감싸세요 (예: \`\` sql\`…\` \`\`).\n`,
+		);
+	}
 	const title = (markdown.match(/^#\s+(.+)$/m)?.[1] ?? "explain-diff").trim();
 	writeFileSync(output, renderToHtml(markdown, title), "utf8");
 	process.stdout.write(`${output}\n`);
