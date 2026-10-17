@@ -1,4 +1,7 @@
-import { execFileSync } from "child_process";
+import { execFileSync, spawnSync } from "child_process";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { describe, expect, test } from "bun:test";
 import { mmdcRenderSvg, normalizeSvgWidth, renderToHtml, slugify, zoomableFigure } from "./render";
 import { extractTitle, stripControlChars } from "./render";
@@ -733,5 +736,34 @@ describe("preRenderMermaid — 줄 단위 펜스 스캔", () => {
 				throw new Error("boom");
 			}),
 		).toThrow(/^1번째 mermaid 블록 렌더 실패: Error: boom\n--- 블록 원문 ---\nbad\n$/);
+	});
+});
+
+describe("render.ts CLI", () => {
+	test("프론트매터 안의 mermaid 블록과 백슬래시 코드는 mmdc 호출·경고를 일으키지 않는다", () => {
+		const dir = mkdtempSync(join(tmpdir(), "render-cli-"));
+		try {
+			mkdirSync(join(dir, "bin"));
+			const log = join(dir, "mmdc.log");
+			const fake = join(dir, "bin", "mmdc");
+			writeFileSync(fake, `#!/bin/sh\necho called >> "${log}"\nexit 1\n`);
+			chmodSync(fake, 0o755);
+			const doc = join(dir, "doc.md");
+			const out = join(dir, "doc.html");
+			writeFileSync(
+				doc,
+				"---\nexample: |\n  ```mermaid\n  graph TD\n  A-->B\n  ```\nnote: `a\\`\n---\n# 제목\n\n본문\n",
+			);
+			const r = spawnSync("bun", [join(import.meta.dir, "render.ts"), "--in", doc, "--out", out], {
+				env: { ...process.env, PATH: `${join(dir, "bin")}:${process.env.PATH}` },
+				encoding: "utf8",
+			});
+			expect(r.status).toBe(0);
+			expect(existsSync(log)).toBe(false);
+			expect(r.stderr).not.toContain("경고");
+			expect(readFileSync(out, "utf8")).toContain("제목");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 });

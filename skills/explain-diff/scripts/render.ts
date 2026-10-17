@@ -721,8 +721,12 @@ function main(): void {
 		process.stderr.write("Usage: render.ts --in <doc.md> --out <doc.html>\n");
 		process.exit(1);
 	}
-	const markdown = preRenderMermaid(readFileSync(input, "utf8"), mmdcRenderSvg);
-	for (const raw of findBackslashEndedCodeSpans(markdown)) {
+	const source = readFileSync(input, "utf8");
+	const body = stripFrontmatter(source);
+	const front = source.slice(0, source.length - body.length);
+	const rendered = preRenderMermaid(body, mmdcRenderSvg);
+	const markdown = front + rendered;
+	for (const raw of findBackslashEndedCodeSpans(rendered)) {
 		process.stderr.write(
 			`경고: 인라인 코드 ${stripControlChars(raw)} 가 \\ 로 끝납니다. 코드 안의 \\\` 는 이스케이프가 아니라 코드를 닫습니다. 백틱이 든 코드는 백틱 두 개로 감싸세요 (예: \`\` sql\`…\` \`\`).\n`,
 		);
