@@ -7,14 +7,23 @@
  * (2) Graph semantics — a non-empty `## TODOs` section contains at least one
  *     canonical checkbox TODO; IDs are unique and either numeric or F1-F4;
  *     Blocked By references resolve with no self-dependency/cycles; `Wave: FINAL`
- *     is reserved for F1-F4 audit TODOs and required for them; numeric
- *     implementation TODOs satisfy `Wave = max(blocker waves) + 1` (no blockers
- *     means Wave 1).
+ *     is reserved for F1-F4 audit TODOs and required for them; a numeric
+ *     implementation TODO's Wave is at least `max(blocker waves) + 1` (no
+ *     blockers means at least 1). A later Wave is the planner's call and passes.
+ *     A TODO whose Blocked By has an unparseable entry skips the Wave check (the
+ *     parse violation is already reported).
  *
- * `Blocks:` is parsed like `Blocked By:`; every id it lists must be defined and
- * must list the declaring TODO in its own `Blocked By:`. The reverse is not
- * required: `Blocks:` may omit TODOs that list it in `Blocked By:` (plans
- * conventionally leave F1-F4 out), and the field may be absent altogether.
+ * `Blocked By:` and `Blocks:` share one id-list parser: one pair of surrounding
+ * brackets is stripped; "no ids" tokens (empty, none, —, –, -, n/a, 없음, or a
+ * parenthesized none such as `(none — first task)`) give an empty list; ids may
+ * carry a `T` or `TODO ` prefix; ranges with a shared prefix and numeric ends
+ * (`1-6`, `T1-T10`, `F1-F4`, hyphen or en dash) expand to each id. Reversed or
+ * mixed-prefix ranges and anything else are unparseable.
+ *
+ * `Blocks:` entries must be defined and not the declaring TODO itself. A numeric
+ * target must reach the declaring TODO through `Blocked By` edges (a transitive
+ * predecessor counts). F1-F4 targets are exempt from that path check. The reverse
+ * is not required: `Blocks:` may omit dependents, and the field may be absent.
  *
  * Usage: bun skills/prometheus/scripts/validate-plan.ts <plan_path>
  * Exit 0 = all sections present and non-empty, and no graph violations.
@@ -134,9 +143,49 @@ export function validatePlan(content: string): string[] {
 interface TodoNode {
 	id: string;
 	blockedBy: string[]; // resolved blocker ids (self included if self-referenced)
+	blockedByUnparseable: boolean; // true when any Blocked By entry could not be parsed
 	blocks: string[] | null; // resolved ids from `Blocks:`; null when the line is absent
 	wave: string | null; // raw Wave value ("2", "FINAL", …) or null when absent
 	violations: string[]; // parse-level violations local to this TODO
+}
+
+const NO_IDS = /^(?:none|—|–|-|n\/a|없음|\(\s*none\b.*\))$/i;
+
+/**
+ * Parse a `Blocked By:` / `Blocks:` value into TODO ids. See the file header for
+ * the accepted forms; entries that match none of them are returned in `bad`.
+ */
+function parseIdList(raw: string): { ids: string[]; bad: string[] } {
+	let value = raw.trim();
+	const bracketed = /^\[(.*)\]$/.exec(value);
+	if (bracketed !== null) value = bracketed[1].trim();
+	const ids: string[] = [];
+	const bad: string[] = [];
+	if (value === "" || NO_IDS.test(value)) return { ids, bad };
+
+	const norm = (prefix: string, digits: string): string =>
+		prefix === "F" ? `F${digits}` : digits;
+	for (const part of value.split(",")) {
+		const entry = part.trim();
+		if (entry === "") continue;
+		const single = /^(?:TODO\s+|T)?(F)?(\d+)$/.exec(entry);
+		if (single !== null) {
+			ids.push(norm(single[1] ?? "", single[2]));
+			continue;
+		}
+		const range = /^(F|T|TODO\s+)?(\d+)\s*[-–]\s*\1(\d+)$/.exec(entry);
+		if (range !== null) {
+			const prefix = range[1] ?? "";
+			const from = Number(range[2]);
+			const to = Number(range[3]);
+			if (from <= to) {
+				for (let n = from; n <= to; n++) ids.push(norm(prefix, String(n)));
+				continue;
+			}
+		}
+		bad.push(entry);
+	}
+	return { ids, bad };
 }
 
 /**
@@ -164,7 +213,14 @@ function parseTodos(content: string): TodoNode[] {
 	for (const line of body.split("\n")) {
 		const todoMatch = /^\s*- \[[ xX]\] (F?\d+)\.\s/.exec(line);
 		if (todoMatch !== null) {
-			current = { id: todoMatch[1], blockedBy: [], blocks: null, wave: null, violations: [] };
+			current = {
+				id: todoMatch[1],
+				blockedBy: [],
+				blockedByUnparseable: false,
+				blocks: null,
+				wave: null,
+				violations: [],
+			};
 			todos.push(current);
 			continue;
 		}
@@ -172,39 +228,21 @@ function parseTodos(content: string): TodoNode[] {
 
 		const blockedMatch = /^\s*-?\s*Blocked By:\s*(.*)$/.exec(line);
 		if (blockedMatch !== null) {
-			const value = blockedMatch[1].trim();
-			if (value !== "" && !/^none$/i.test(value)) {
-				for (const raw of value.split(",")) {
-					const entry = raw.trim();
-					if (entry === "") continue;
-					const ref = /^(?:TODO\s+)?(F?\d+)$/.exec(entry);
-					if (ref === null) {
-						current.violations.push(
-							`TODO ${current.id}: unparseable Blocked By entry "${entry}"`,
-						);
-					} else {
-						current.blockedBy.push(ref[1]);
-					}
-				}
+			const { ids, bad } = parseIdList(blockedMatch[1]);
+			current.blockedBy.push(...ids);
+			for (const entry of bad) {
+				current.violations.push(`TODO ${current.id}: unparseable Blocked By entry "${entry}"`);
 			}
+			if (bad.length > 0) current.blockedByUnparseable = true;
 			continue;
 		}
 
 		const blocksMatch = /^\s*-?\s*Blocks:\s*(.*)$/.exec(line);
 		if (blocksMatch !== null) {
-			current.blocks = [];
-			const value = blocksMatch[1].trim();
-			if (value !== "" && !/^none$/i.test(value)) {
-				for (const raw of value.split(",")) {
-					const entry = raw.trim();
-					if (entry === "") continue;
-					const ref = /^(?:TODO\s+)?(F?\d+)$/.exec(entry);
-					if (ref === null) {
-						current.violations.push(`TODO ${current.id}: unparseable Blocks entry "${entry}"`);
-					} else {
-						current.blocks.push(ref[1]);
-					}
-				}
+			const { ids, bad } = parseIdList(blocksMatch[1]);
+			current.blocks = ids;
+			for (const entry of bad) {
+				current.violations.push(`TODO ${current.id}: unparseable Blocks entry "${entry}"`);
 			}
 			continue;
 		}
@@ -239,11 +277,11 @@ function hasNonEmptyTodosSection(content: string): boolean {
  * (a) a non-empty TODOs section contains at least one canonical checkbox TODO
  * (b) TODO IDs are unique and either numeric or F1-F4
  * (c) every Blocked By / Blocks reference resolves to a defined TODO
- *     (a listed `Blocks:` target must list the declaring TODO in `Blocked By:`)
+ *     (a numeric `Blocks:` target must reach the declaring TODO via Blocked By)
  * (d) no self-dependency, no dependency cycles
  * (e) `Wave: FINAL` is reserved for F1-F4 audit TODOs and required for them
- * (f) numeric implementation TODOs satisfy `Wave = max(blocker waves) + 1`
- *     (no blockers → Wave 1); a numeric task blocked by a FINAL task is invalid
+ * (f) numeric implementation TODOs have `Wave >= max(blocker waves) + 1`
+ *     (no blockers → at least Wave 1); a numeric task blocked by a FINAL task is invalid
  *
  * @returns Array of human-readable violation messages (empty = OK).
  */
@@ -276,20 +314,34 @@ export function validatePlanGraph(content: string): string[] {
 		}
 	}
 
-	// (b2) Blocks: resolution, self-reference, and forward mirror (A Blocks B → B Blocked By A)
+	// (b2) Blocks: resolution, self-reference, and path check. A numeric target must
+	// reach the declaring TODO by following Blocked By edges (transitive predecessors
+	// count); F1-F4 targets are exempt.
+	function reachesViaBlockedBy(from: string, goal: string): boolean {
+		const seen = new Set<string>();
+		const queue = [from];
+		for (let id = queue.pop(); id !== undefined; id = queue.pop()) {
+			if (seen.has(id)) continue;
+			seen.add(id);
+			for (const ref of byId.get(id)?.blockedBy ?? []) {
+				if (ref === goal) return true;
+				queue.push(ref);
+			}
+		}
+		return false;
+	}
 	for (const todo of byId.values()) {
-		if (todo.blocks !== null) {
-			for (const ref of todo.blocks) {
-				const target = byId.get(ref);
-				if (ref === todo.id) {
-					violations.push(`TODO ${todo.id}: blocks itself`);
-				} else if (target === undefined) {
-					violations.push(`TODO ${todo.id}: Blocks references undefined TODO ${ref}`);
-				} else if (!target.blockedBy.includes(todo.id)) {
-					violations.push(
-						`TODO ${todo.id}: Blocks ${ref} but TODO ${ref} does not list ${todo.id} in Blocked By`,
-					);
-				}
+		if (todo.blocks === null) continue;
+		for (const ref of todo.blocks) {
+			const target = byId.get(ref);
+			if (ref === todo.id) {
+				violations.push(`TODO ${todo.id}: blocks itself`);
+			} else if (target === undefined) {
+				violations.push(`TODO ${todo.id}: Blocks references undefined TODO ${ref}`);
+			} else if (!/^F[1-4]$/.test(ref) && !reachesViaBlockedBy(ref, todo.id)) {
+				violations.push(
+					`TODO ${todo.id}: Blocks ${ref} but TODO ${ref} has no Blocked By path to ${todo.id}`,
+				);
 			}
 		}
 	}
@@ -350,6 +402,7 @@ export function validatePlanGraph(content: string): string[] {
 			continue;
 		}
 		if (inCycle.has(todo.id)) continue; // expected wave undefined inside a cycle
+		if (todo.blockedByUnparseable) continue; // parse violation already reported
 
 		let expected = 1;
 		let computable = true;
@@ -366,9 +419,9 @@ export function validatePlanGraph(content: string): string[] {
 				expected = Math.max(expected, Number(blocker.wave) + 1);
 			}
 		}
-		if (computable && Number(todo.wave) !== expected) {
+		if (computable && Number(todo.wave) < expected) {
 			violations.push(
-				`TODO ${todo.id}: Wave ${todo.wave} but expected ${expected} (= max(blocker waves) + 1)`,
+				`TODO ${todo.id}: Wave ${todo.wave} but must be at least ${expected} (= max(blocker waves) + 1)`,
 			);
 		}
 	}

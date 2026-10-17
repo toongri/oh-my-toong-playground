@@ -204,21 +204,40 @@ describe("graph semantics", () => {
 		expect(violations.some((v: string) => v.startsWith("dependency cycle:"))).toBe(true);
 	});
 
-	test("Wave mismatch against max(blocker)+1 detected", () => {
+	test("Wave lower than max(blocker)+1 detected", () => {
 		const plan = buildGraphPlan([
 			todoBlock("1", { wave: "1" }),
-			todoBlock("2", { blockedBy: "TODO 1", wave: "3" }),
+			todoBlock("2", { blockedBy: "TODO 1", wave: "1" }),
 		]);
 		expect(validatePlanGraph(plan)).toContain(
-			"TODO 2: Wave 3 but expected 2 (= max(blocker waves) + 1)",
+			"TODO 2: Wave 1 but must be at least 2 (= max(blocker waves) + 1)",
 		);
 	});
 
-	test("empty Blocked By expects Wave 1", () => {
-		const plan = buildGraphPlan([todoBlock("1", { wave: "2" })]);
-		expect(validatePlanGraph(plan)).toContain(
-			"TODO 1: Wave 2 but expected 1 (= max(blocker waves) + 1)",
+	test("Wave later than max(blocker)+1 is allowed", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { wave: "1" }),
+			todoBlock("2", { blockedBy: "TODO 1", wave: "3" }),
+			todoBlock("3", { wave: "2" }),
+		]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("empty Blocked By allows any Wave of 1 or more", () => {
+		expect(validatePlanGraph(buildGraphPlan([todoBlock("1", { wave: "2" })]))).toEqual([]);
+		expect(validatePlanGraph(buildGraphPlan([todoBlock("1", { wave: "0" })]))).toContain(
+			"TODO 1: Wave 0 but must be at least 1 (= max(blocker waves) + 1)",
 		);
+	});
+
+	test("unparseable Blocked By entry suppresses the Wave formula check for that TODO", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { wave: "1" }),
+			todoBlock("2", { blockedBy: "TODO 1, bogus", wave: "1" }),
+		]);
+		expect(validatePlanGraph(plan)).toEqual([
+			'TODO 2: unparseable Blocked By entry "bogus"',
+		]);
 	});
 
 	test("Blocked By: None treated as no blockers", () => {
@@ -560,12 +579,12 @@ describe("Blocks 필드", () => {
 		expect(validatePlanGraph(plan)).toEqual([]);
 	});
 
-	test("대괄호가 든 Blocks 항목은 거부한다", () => {
+	test("쓸 수 없는 Blocks 항목은 거부한다", () => {
 		const plan = buildGraphPlan([
-			todoBlock("1", { blocks: "[2]", wave: "1" }),
+			todoBlock("1", { blocks: "2, soon", wave: "1" }),
 			todoBlock("2", { blockedBy: "1", wave: "2" }),
 		]);
-		expect(validatePlanGraph(plan)).toContain('TODO 1: unparseable Blocks entry "[2]"');
+		expect(validatePlanGraph(plan)).toContain('TODO 1: unparseable Blocks entry "soon"');
 	});
 
 	test("정의되지 않은 TODO를 가리키는 Blocks를 보고한다", () => {
@@ -578,13 +597,13 @@ describe("Blocks 필드", () => {
 		expect(validatePlanGraph(plan)).toContain("TODO 1: blocks itself");
 	});
 
-	test("A가 Blocks: B인데 B의 Blocked By에 A가 없으면 보고한다", () => {
+	test("A가 Blocks: B인데 B에서 A로 가는 Blocked By 경로가 없으면 보고한다", () => {
 		const plan = buildGraphPlan([
 			todoBlock("1", { blocks: "2", wave: "1" }),
 			todoBlock("2", { wave: "1" }),
 		]);
 		expect(validatePlanGraph(plan)).toContain(
-			"TODO 1: Blocks 2 but TODO 2 does not list 1 in Blocked By",
+			"TODO 1: Blocks 2 but TODO 2 has no Blocked By path to 1",
 		);
 	});
 
@@ -604,11 +623,6 @@ describe("Blocks 필드", () => {
 			]);
 			expect(validatePlanGraph(plan)).toEqual([]);
 		}
-		const plan = buildGraphPlan([todoBlock("1", { blocks: "(none)", blockedBy: "(none)", wave: "1" })]);
-		expect(validatePlanGraph(plan)).toEqual([
-			'TODO 1: unparseable Blocked By entry "(none)"',
-			'TODO 1: unparseable Blocks entry "(none)"',
-		]);
 	});
 });
 
@@ -695,4 +709,116 @@ describe("CLI", () => {
 			expect({ status: r.status, stdout: r.stdout }).toEqual({ status: 0, stdout: "" });
 		});
 	}
+});
+
+// ---------------------------------------------------------------------------
+// 공유 id 목록 파서 / Blocks 추이 검사 / Wave 하한
+// ---------------------------------------------------------------------------
+
+/** One-task graph with the given Blocked By value; returns the graph violations. */
+function blockedByViolations(value: string): string[] {
+	return validatePlanGraph(
+		buildGraphPlan([
+			todoBlock("1", { wave: "1" }),
+			todoBlock("2", { wave: "1" }),
+			todoBlock("3", { wave: "1" }),
+			todoBlock("4", { blockedBy: value, wave: "9" }),
+		]),
+	);
+}
+
+describe("id 목록 파서", () => {
+	test("대괄호 한 쌍을 벗긴다", () => {
+		expect(blockedByViolations("[1, 3]")).toEqual([]);
+		expect(blockedByViolations("[1, 9]")).toContain(
+			"TODO 4: Blocked By references undefined TODO 9",
+		);
+	});
+
+	test("없음 표기는 빈 목록이다", () => {
+		for (const none of ["", "none", "NONE", "—", "–", "-", "n/a", "N/A", "없음", "(none)", "(none — first task)", "[none]"]) {
+			const plan = buildGraphPlan([
+				todoBlock("1", { blockedBy: none, blocks: none, wave: "1" }),
+			]);
+			expect(validatePlanGraph(plan)).toEqual([]);
+		}
+	});
+
+	test("T와 TODO 접두를 받는다", () => {
+		expect(blockedByViolations("T1, TODO 2, T3")).toEqual([]);
+		expect(blockedByViolations("T7")).toContain("TODO 4: Blocked By references undefined TODO 7");
+	});
+
+	test("같은 접두의 숫자 범위를 펼친다", () => {
+		expect(blockedByViolations("1-3")).toEqual([]);
+		expect(blockedByViolations("1–3")).toEqual([]);
+		expect(blockedByViolations("T1-T3")).toEqual([]);
+		expect(blockedByViolations("1-5")).toContain("TODO 4: Blocked By references undefined TODO 5");
+	});
+
+	test("F 범위는 F 접두 id로 펼친다", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { blocks: "F1-F4", wave: "1" }),
+			todoBlock("F1", { blockedBy: "1", wave: "FINAL" }),
+			todoBlock("F2", { blockedBy: "1", wave: "FINAL" }),
+			todoBlock("F3", { blockedBy: "1", wave: "FINAL" }),
+			todoBlock("F4", { blockedBy: "1", wave: "FINAL" }),
+		]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("뒤집힌 범위와 접두가 섞인 범위는 해석 불가다", () => {
+		expect(blockedByViolations("3-1")).toContain('TODO 4: unparseable Blocked By entry "3-1"');
+		expect(blockedByViolations("F1-4")).toContain('TODO 4: unparseable Blocked By entry "F1-4"');
+		expect(blockedByViolations("T1-F2")).toContain('TODO 4: unparseable Blocked By entry "T1-F2"');
+	});
+
+	test("그 밖의 항목은 해석 불가로 남는다", () => {
+		expect(blockedByViolations("see above")).toContain(
+			'TODO 4: unparseable Blocked By entry "see above"',
+		);
+	});
+});
+
+describe("Blocks 추이 검사", () => {
+	test("Blocked By 그래프로 도달 가능하면 통과한다", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { blocks: "3", wave: "1" }),
+			todoBlock("2", { blockedBy: "1", wave: "2" }),
+			todoBlock("3", { blockedBy: "2", wave: "3" }),
+		]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("경로가 없으면 보고한다", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { blocks: "3", wave: "1" }),
+			todoBlock("2", { wave: "1" }),
+			todoBlock("3", { blockedBy: "2", wave: "2" }),
+		]);
+		expect(validatePlanGraph(plan)).toContain(
+			"TODO 1: Blocks 3 but TODO 3 has no Blocked By path to 1",
+		);
+	});
+
+	test("FINAL 대상은 대칭 검사에서 면제된다", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { blocks: "F1-F4", wave: "1" }),
+			todoBlock("F1", { wave: "FINAL" }),
+			todoBlock("F2", { wave: "FINAL" }),
+			todoBlock("F3", { wave: "FINAL" }),
+			todoBlock("F4", { wave: "FINAL" }),
+		]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("정의되지 않은 대상과 자기 참조는 FINAL 면제와 무관하게 보고된다", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { blocks: "F2", wave: "1" }),
+			todoBlock("F1", { blocks: "F1", wave: "FINAL" }),
+		]);
+		const v = validatePlanGraph(plan);
+		expect(v).toContain("TODO 1: Blocks references undefined TODO F2");
+		expect(v).toContain("TODO F1: blocks itself");
+	});
 });
