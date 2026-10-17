@@ -24,6 +24,7 @@ import {
 	adopt,
 	writeFileNoCreate,
 	ensureSeed,
+	adoptedAwayTo,
 	stageAPresentationPath,
 	stageAPresentationStatus,
 	createPresentationSubmission,
@@ -31,6 +32,7 @@ import {
 	type PresentationSubmission,
 	type SourceCompatibilityPredicate,
 } from "@lib/state-core";
+import { withStateLock } from "@lib/persistent-mode-core/state-lock";
 import { renderHelp, type CliCommand } from "@lib/cli-help";
 
 export interface PrometheusState {
@@ -64,6 +66,12 @@ export interface PrometheusState {
 		plan: { done: boolean };
 	};
 }
+
+/**
+ * A deliberate CLI refusal (gate or precondition not met). Thrown, not process.exit()ed,
+ * so `set`'s state lock is released by its `finally`; main() prints it as one line.
+ */
+class PrometheusRefusal extends Error {}
 
 /** The fresh default for `steps` — used when prior state has no steps field. */
 const FRESH_STEPS: PrometheusState["steps"] = {
@@ -226,7 +234,21 @@ export function setPrometheusState(
 	// writeFileNoCreate below is unchanged (ADR-7 mid-flight guard preserved).
 	ensureSeed("prometheus", sessionId);
 	const path = resolveStatePath(sessionId);
+	// Same mkdir lock ultragoal uses for its read-modify-write: two concurrent `set`s
+	// must not lose each other's step flags.
+	withStateLock(path, () => writePrometheusState(sessionId, path, opts));
+}
+
+function writePrometheusState(
+	sessionId: string,
+	path: string,
+	opts: Parameters<typeof setPrometheusState>[1],
+): void {
 	const existing = readFileOrNull(path);
+	if (existing === null) {
+		const adopter = adoptedAwayTo("prometheus", sessionId);
+		if (adopter !== null) throw adoptedAwayRefusal(sessionId, adopter);
+	}
 	let prior: Partial<PrometheusState> = {};
 	if (existing) {
 		try {
@@ -258,11 +280,9 @@ export function setPrometheusState(
 	// resume then treats design as complete but has no ADR pointer. Loud error
 	// instead of a silent ordering hazard.
 	if (opts.mark_design_done && resolvedPlanPath === "") {
-		process.stderr.write(
-			"prometheus-state: --mark-design-done requires plan_path to be set " +
-			"(write the draft first, then pass --plan-path)\n",
+		throw new PrometheusRefusal(
+			"--mark-design-done requires plan_path to be set (write the draft first, then pass --plan-path)",
 		);
-		process.exit(1);
 	}
 
 	// F7: S6 and later are reachable only after Stage A renders the presentation, so a
@@ -276,8 +296,7 @@ export function setPrometheusState(
 		// Typed on the binding, not just the arrow: TS narrows control flow through a
 		// never-returning call only when the const carries the annotation.
 		const refuse: (reason: string) => never = (reason) => {
-			process.stderr.write(`prometheus-state: cannot advance to ${opts.phase} — ${reason}\n`);
-			process.exit(1);
+			throw new PrometheusRefusal(`cannot advance to ${opts.phase} — ${reason}`);
 		};
 
 		// plan_path is set when the interview draft is written and preserved by later writes, so an empty one here
@@ -332,7 +351,7 @@ export function setPrometheusState(
 	const steps: PrometheusState["steps"] = {
 		acceptance_criteria:
 			opts.record_ac !== undefined
-				? { done: true, content: opts.record_ac, recorded_at: opts.phase }
+				? { done: true, content: opts.record_ac, recorded_at: resolvedPhase }
 				: priorSteps.acceptance_criteria,
 		design_decisions: opts.mark_design_done
 			? { done: true, ref: resolvedPlanPath }
@@ -376,6 +395,15 @@ export function setPrometheusState(
 		}
 		throw err;
 	}
+}
+
+/** Refusal for a session whose state adoption.log shows another session took over. */
+function adoptedAwayRefusal(sessionId: string, adopter: string, cause?: unknown): PrometheusRefusal {
+	return new PrometheusRefusal(
+		`state for session "${sessionId}" was adopted by session "${adopter}", so it cannot be written here. ` +
+			`Continue the work in session "${adopter}" or in a new session.`,
+		{ cause },
+	);
 }
 
 export function clearPrometheusState(sessionId: string): void {
@@ -594,7 +622,7 @@ function main(): void {
 			process.exit(1);
 		}
 	} catch (e) {
-		process.stderr.write(`prometheus-state: ${String(e)}\n`);
+		process.stderr.write(`prometheus-state: ${e instanceof Error ? e.message : String(e)}\n`);
 		process.exit(1);
 	}
 }

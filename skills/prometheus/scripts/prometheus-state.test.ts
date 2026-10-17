@@ -604,6 +604,25 @@ describe("adoption: list-others + adopt (prometheus CLI)", () => {
 		expect(() => runPromCli("set --phase S2", { OMT_SESSION_ID: "A" })).toThrow();
 		expect(existsSync(`${tmpDir}/prometheus-state-A.json`)).toBe(false);
 	});
+
+	// The refusal message must be true: re-invoking the skill in session A can never
+	// re-seed it (adoption.log blocks it), so the message names the adopter instead.
+	test("adopted-away: refusal names the adopting session and has a single prefix", () => {
+		writeLivePromState("srcA", `${tmpDir}/plans/plan.md`);
+		writePristinePromState("dstB");
+		runPromCli("adopt --src srcA", { OMT_SESSION_ID: "dstB" });
+		// non-goals supplied so the adoption check, not the S2 non-goals gate, is what refuses
+		const { code, out } = runPromCliMerged(
+			`set --phase S2 --record-non-goals '${canonicalNonGoals}'`,
+			{ OMT_SESSION_ID: "srcA", OMT_DIR: tmpDir },
+		);
+		expect(code).toBe(1);
+		expect(out).toContain('state for session "srcA" was adopted by session "dstB"');
+		expect(out).toContain('Continue the work in session "dstB" or in a new session');
+		expect(out).not.toContain("re-seed");
+		expect(out).not.toContain("Error:");
+		expect(out.match(/prometheus-state:/g)?.length).toBe(1);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -664,6 +683,16 @@ describe("steps persistence", () => {
 			"AC-2: steps preserved",
 		]);
 		expect(state!.steps.acceptance_criteria.recorded_at).toBe("S1");
+	});
+
+	// --record-ac without --phase records the resolved (preserved) phase, not ""
+	test("record-ac: omitted phase records the preserved phase in recorded_at", () => {
+		process.env.OMT_SESSION_ID = "ac-nophase";
+		seedFile("ac-nophase"); // phase S0
+		setPrometheusState("ac-nophase", { phase: "", record_ac: ["AC-1: x"] });
+		const state = readPrometheusState("ac-nophase");
+		expect(state!.phase).toBe("S0");
+		expect(state!.steps.acceptance_criteria.recorded_at).toBe("S0");
 	});
 
 	// (b) --mark-design-done sets done=true, ref=current plan_path
@@ -995,7 +1024,7 @@ describe("Stage A presentation gate (F7)", () => {
 			OMT_DIR: tmpDir,
 		});
 		expect(code).not.toBe(0);
-		expect(out).toMatch(/html|render/i);
+		expect(out).toContain(`the Stage A presentation is absent at ${presentationHtmlPath()}`);
 		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-gateHtmlMissing.json`, "utf8"));
 		expect(state.phase).toBe("S0");
 	});
@@ -1003,20 +1032,25 @@ describe("Stage A presentation gate (F7)", () => {
 	test("S6 with derived HTML older than authored presentation Markdown exits non-zero", () => {
 		const planPath = seedPlan("gateHtmlStale");
 		writePresentation();
-		const planBeforePresentation = new Date(Date.now() - 120_000);
-		utimesSync(planPath, planBeforePresentation, planBeforePresentation);
+		// plan T-120s < rendered HTML T-60s < authored Markdown T: only the renderer-input
+		// comparison is stale; the HTML is newer than the plan itself.
+		const planTime = new Date(Date.now() - 120_000);
+		const rendered = new Date(Date.now() - 60_000);
 		const authored = new Date();
-		const rendered = new Date(authored.getTime() - 60_000);
+		utimesSync(planPath, planTime, planTime);
 		utimesSync(presentationHtmlPath(), rendered, rendered);
 		utimesSync(presentationMarkdownPath(), authored, authored);
-		const { code, out } = runPromCliMerged(`set --phase S6 --plan-path ${planPath}`, {
-			OMT_SESSION_ID: "gateHtmlStale",
-			OMT_DIR: tmpDir,
-		});
+		const env = { OMT_SESSION_ID: "gateHtmlStale", OMT_DIR: tmpDir };
+		// Submit first so the generic "submission missing or stale" check cannot be the cause.
+		const submit = runPromCliMerged(`set --phase S5 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()}`, env);
+		expect(submit.out).toBe("");
+		expect(submit.code).toBe(0);
+		const { code, out } = runPromCliMerged("set --phase S6", env);
 		expect(code).not.toBe(0);
-		expect(out).toMatch(/stale|older|re-render|재렌더/i);
+		expect(out).toContain(`cannot advance to S6 — the Stage A presentation at ${presentationHtmlPath()} predates the plan it renders`);
+		expect(out).not.toContain("submission missing or stale");
 		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-gateHtmlStale.json`, "utf8"));
-		expect(state.phase).toBe("S0");
+		expect(state.phase).toBe("S5");
 	});
 
 	test("S6 succeeds when authored presentation Markdown and derived HTML are fresh", () => {
@@ -1057,7 +1091,8 @@ describe("Stage A presentation gate (F7)", () => {
 			OMT_DIR: tmpDir,
 		});
 		expect(code).not.toBe(0);
-		expect(out).toMatch(/stale|older|re-render|재렌더/i);
+		expect(out).toContain(`cannot advance to S6 — the Stage A presentation at ${presentationHtmlPath()} predates the plan it renders`);
+		expect(out).not.toContain("submission missing or stale");
 		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-gateRendererInputStale.json`, "utf8"));
 		expect(state.phase).toBe("S5");
 	});
@@ -1070,7 +1105,7 @@ describe("Stage A presentation gate (F7)", () => {
 			OMT_DIR: tmpDir,
 		});
 		expect(code).not.toBe(0);
-		expect(out).toMatch(/presentation|Stage A/i);
+		expect(out).toContain(`cannot advance to S6 — the Stage A presentation is absent at ${presentationHtmlPath()}`);
 		// The phase must not have advanced past S5
 		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-gateMissing.json`, "utf8"));
 		expect(state.phase).toBe("S0");
@@ -1098,7 +1133,7 @@ describe("Stage A presentation gate (F7)", () => {
 			OMT_DIR: tmpDir,
 		});
 		expect(code).not.toBe(0);
-		expect(out).toMatch(/presentation|Stage A/i);
+		expect(out).toContain(`cannot advance to ${phase} — the Stage A presentation is absent at ${presentationHtmlPath()}`);
 	});
 
 	// (F7-upstream) S0-S5 precede the render — gating them would deadlock the pipeline
@@ -1122,7 +1157,7 @@ describe("Stage A presentation gate (F7)", () => {
 			OMT_DIR: tmpDir,
 		});
 		expect(code).not.toBe(0);
-		expect(out).toMatch(/plan_path|plan-path/i);
+		expect(out).toContain("plan_path is empty");
 		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-gateNoPath.json`, "utf8"));
 		expect(state.phase).toBe("S0");
 	});
@@ -1136,19 +1171,25 @@ describe("Stage A presentation gate (F7)", () => {
 	test("S6 with a presentation older than the plan exits non-zero", () => {
 		const planPath = seedPlan("gateStale");
 		writePresentation();
-		// presentation rendered at T, plan revised at T+60s
+		const env = { OMT_SESSION_ID: "gateStale", OMT_DIR: tmpDir };
+		// Submit while the render is fresh (submission refuses HTML older than its source),
+		// so the generic "submission missing or stale" check cannot be the cause below.
+		const submit = runPromCliMerged(`set --phase S5 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()}`, env);
+		expect(submit.out).toBe("");
+		expect(submit.code).toBe(0);
+		// Then the plan is revised: Markdown and HTML rendered at T-60s, plan at T. Only the
+		// plan-mtime comparison is stale (the renderer input is not newer than the HTML).
 		const rendered = new Date(Date.now() - 60_000);
 		utimesSync(presentationMarkdownPath(), rendered, rendered);
+		utimesSync(presentationHtmlPath(), rendered, rendered);
 		const revised = new Date();
 		utimesSync(planPath, revised, revised);
-		const { code, out } = runPromCliMerged(`set --phase S6 --plan-path ${planPath}`, {
-			OMT_SESSION_ID: "gateStale",
-			OMT_DIR: tmpDir,
-		});
+		const { code, out } = runPromCliMerged("set --phase S6", env);
 		expect(code).not.toBe(0);
-		expect(out).toMatch(/stale|older|re-render|재렌더/i);
+		expect(out).toContain(`cannot advance to S6 — the Stage A presentation at ${presentationHtmlPath()} predates the plan it renders`);
+		expect(out).not.toContain("submission missing or stale");
 		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-gateStale.json`, "utf8"));
-		expect(state.phase).toBe("S0");
+		expect(state.phase).toBe("S5");
 	});
 
 	// (F7-rerendered) the same plan passes once Stage A actually re-rendered
@@ -1179,7 +1220,7 @@ describe("Stage A presentation gate (F7)", () => {
 			OMT_DIR: tmpDir,
 		});
 		expect(code).not.toBe(0);
-		expect(out).toMatch(/plan|resolve|absent/i);
+		expect(out).toContain(`plan_path is set to ${tmpDir}/plans/ghost.md but no file resolves there`);
 	});
 
 	// (F7-derive) the presentation path is derived from the plan's own directory, not
@@ -1197,6 +1238,41 @@ describe("Stage A presentation gate (F7)", () => {
 		});
 		rmSync(altDir, { recursive: true, force: true });
 		expect(code).toBe(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// state lock: set's read-modify-write is serialized like ultragoal's
+// ---------------------------------------------------------------------------
+
+describe("set state lock", () => {
+	test("다른 쓰기가 잠금을 쥐고 있으면 잠금 없이 쓰지 않고 실패함", () => {
+		writePristinePromState("lockHeld");
+		const lockPath = `${tmpDir}/prometheus-state-lockHeld.json.lock`;
+		mkdirSync(lockPath);
+		writeFileSync(
+			`${lockPath}/owner.json`,
+			JSON.stringify({ ownerPid: process.pid, token: "other-writer", startedAt: Date.now() }),
+		);
+		const env = { OMT_SESSION_ID: "lockHeld", OMT_DIR: tmpDir };
+		const held = runPromCliMerged("set --phase S1 --resume-summary held", env);
+		expect(held.code).not.toBe(0);
+		expect(held.out).toContain("state lock contended");
+		expect(JSON.parse(readFileSync(`${tmpDir}/prometheus-state-lockHeld.json`, "utf8")).resume_summary).toBe("");
+
+		rmSync(lockPath, { recursive: true });
+		const free = runPromCliMerged("set --phase S1 --resume-summary free", env);
+		expect(free.code).toBe(0);
+		expect(JSON.parse(readFileSync(`${tmpDir}/prometheus-state-lockHeld.json`, "utf8")).resume_summary).toBe("free");
+		expect(existsSync(lockPath)).toBe(false);
+	});
+
+	test("검증 거부로 끝난 set도 잠금을 남기지 않음", () => {
+		writePristinePromState("lockRefused");
+		const env = { OMT_SESSION_ID: "lockRefused", OMT_DIR: tmpDir };
+		const { code } = runPromCliMerged("set --phase S6", env);
+		expect(code).not.toBe(0);
+		expect(existsSync(`${tmpDir}/prometheus-state-lockRefused.json.lock`)).toBe(false);
 	});
 });
 

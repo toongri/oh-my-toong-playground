@@ -28,6 +28,7 @@ import {
 	readExplainDiffStateRaw,
 	stageAPresentationPath,
 	stageAPresentationStatus,
+	planFileHasTodos,
 	presentationSubmissionCurrent,
 } from "@lib/state-core";
 import { computeDerived, type ExplainDiffState } from "@lib/explain-diff-core";
@@ -205,7 +206,10 @@ ${continuationContract("preferred", "run `prometheus-state.ts set --await-user` 
  */
 function prometheusStageAGateReason(state: PrometheusState): string | null {
 	const planPath = state.plan_path ?? "";
-	if (planPath === "" || state.steps?.plan?.done !== true) return null;
+	// Written = the S3 flag was set OR the plan file itself carries TODO lines. The flag
+	// alone is skippable (a session that omits the S3 `--mark-plan-done` write would
+	// otherwise escape with a full plan and no presentation); the S0 draft has no TODOs.
+	if (planPath === "" || (state.steps?.plan?.done !== true && !planFileHasTodos(planPath))) return null;
 	const status = stageAPresentationStatus(planPath);
 	if ((status === "ok" || status === "plan-missing") && !presentationSubmissionCurrent(state.presentation, planPath, stageAPresentationPath(planPath))) {
 		return "<prometheus-stage-a-gate>Prometheus presentation submission missing or stale. Read review-pipeline.md Stage A, render HTML, then run prometheus-state.ts set --phase S5 --submit-presentation <html> before completion.</prometheus-stage-a-gate>";
@@ -749,17 +753,21 @@ export function makeDecision(context: DecisionContext): HookOutput {
 	const prometheusState = readPrometheusState(sessionId);
 	if (prometheusState && prometheusState.active) {
 		const prometheusAttemptId = `prometheus-${attemptId}`;
+		// Own counter for done-token refusals: token-less continuation blocks (above key)
+		// must not consume the Stage A gate's walk-away budget.
+		const prometheusStageAAttemptId = `prometheus-stage-a-${attemptId}`;
 		if (detectPrometheusDone(lastAssistantMessage)) {
 			// Stage A gate before honoring the token. The block-count cap keeps this
 			// walk-away safe: a wedged session escapes (and tears down) after
 			// MAX_BLOCK_COUNT refusals, same bound as the token-less branch.
 			const gateReason = prometheusStageAGateReason(prometheusState);
-			if (gateReason !== null && getBlockCount(stateDir, prometheusAttemptId) < MAX_BLOCK_COUNT) {
-				incrementBlockCount(stateDir, prometheusAttemptId);
+			if (gateReason !== null && getBlockCount(stateDir, prometheusStageAAttemptId) < MAX_BLOCK_COUNT) {
+				incrementBlockCount(stateDir, prometheusStageAAttemptId);
 				return formatBlockOutput(gateReason);
 			}
 			cleanupPrometheusState(sessionId);
 			cleanupBlockCountFiles(stateDir, prometheusAttemptId);
+			cleanupBlockCountFiles(stateDir, prometheusStageAAttemptId);
 		} else if (prometheusState.awaiting_user === true && isProgressLive(prometheusState, nowEpoch)) {
 			// Stop-allowed pause for THIS family only: the model posed a plain-text question at
 			// a human gate (S2/design gate/S7) and set awaiting_user via `prometheus-state.ts

@@ -1086,7 +1086,7 @@ describe("makeDecision", () => {
 				JSON.stringify(prometheusState),
 			);
 
-			const context = createContext({ lastAssistantMessage: "Plan complete. <prometheus-done/>" });
+			const context = createContext({ lastAssistantMessage: "Plan complete.\n<prometheus-done/>" });
 
 			const result = makeDecision(context);
 
@@ -1186,7 +1186,7 @@ describe("makeDecision", () => {
 				JSON.stringify(prometheusState),
 			);
 
-			const context = createContext({ lastAssistantMessage: "All done. <prometheus-done/>" });
+			const context = createContext({ lastAssistantMessage: "All done.\n<prometheus-done/>" });
 
 			makeDecision(context);
 
@@ -1255,7 +1255,7 @@ describe("makeDecision", () => {
 			await writePlanOnDisk();
 			await writeStateWithPlanDone();
 
-			const context = createContext({ lastAssistantMessage: "Plan complete. <prometheus-done/>" });
+			const context = createContext({ lastAssistantMessage: "Plan complete.\n<prometheus-done/>" });
 
 			const result = makeDecision(context);
 
@@ -1276,7 +1276,7 @@ describe("makeDecision", () => {
 			fs.utimesSync(presentationPathFor(), past, past);
 			await writeStateWithPlanDone();
 
-			const context = createContext({ lastAssistantMessage: "Done. <prometheus-done/>" });
+			const context = createContext({ lastAssistantMessage: "Done.\n<prometheus-done/>" });
 
 			const result = makeDecision(context);
 
@@ -1292,7 +1292,7 @@ describe("makeDecision", () => {
 			await writeFile(presentationPathFor(), "<html><body>presentation</body></html>\n");
 			await writeStateWithPlanDone(createPresentationSubmission(planPathFor(), presentationPathFor()));
 
-			const context = createContext({ lastAssistantMessage: "Done. <prometheus-done/>" });
+			const context = createContext({ lastAssistantMessage: "Done.\n<prometheus-done/>" });
 
 			const result = makeDecision(context);
 
@@ -1313,7 +1313,7 @@ describe("makeDecision", () => {
 				}),
 			);
 
-			const context = createContext({ lastAssistantMessage: "Aborted. <prometheus-done/>" });
+			const context = createContext({ lastAssistantMessage: "Aborted.\n<prometheus-done/>" });
 
 			const result = makeDecision(context);
 
@@ -1324,9 +1324,104 @@ describe("makeDecision", () => {
 		it("완료된 플랜의 원본이 없으면 제출 검증 불가로 종료를 거부함", async () => {
 			await writeStateWithPlanDone(); // state claims a plan, but nothing on disk
 
-			const context = createContext({ lastAssistantMessage: "Done. <prometheus-done/>" });
+			const context = createContext({ lastAssistantMessage: "Done.\n<prometheus-done/>" });
 
 			const result = makeDecision(context);
+
+			expect(result.decision).toBe("block");
+			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(true);
+		});
+
+		it("steps.plan.done 없이도 plan_path 파일에 TODO 줄이 있으면 완성 플랜으로 보고 종료를 거부함", async () => {
+			await mkdir(planDirFor(), { recursive: true });
+			await writeFile(planPathFor(), "# plan\n\n## TODOs\n\n- [ ] 1. 작업\n");
+			await writeFile(
+				join(omtDir, "prometheus-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: new Date().toISOString(),
+					last_touched_at: new Date().toISOString(),
+					plan_path: planPathFor(),
+				}),
+			);
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "Done.\n<prometheus-done/>" }));
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("Stage A");
+			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(true);
+		});
+
+		it("S0 초안(TODO 없음, plan.done 없음)은 사전 중단 종료를 허용함", async () => {
+			await mkdir(planDirFor(), { recursive: true });
+			await writeFile(planPathFor(), "# draft\n\n## Decision Register\n\n- D-1 선택\n");
+			await writeFile(
+				join(omtDir, "prometheus-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: new Date().toISOString(),
+					last_touched_at: new Date().toISOString(),
+					plan_path: planPathFor(),
+				}),
+			);
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "Aborted.\n<prometheus-done/>" }));
+
+			expect(result.decision).not.toBe("block");
+			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(false);
+		});
+
+		it("토큰 없는 연속 차단이 쌓여도 Stage A 게이트 예산을 소모하지 않음", async () => {
+			await writePlanOnDisk();
+			await writeStateWithPlanDone();
+			// 4 prior token-less continuation blocks (cap is 5)
+			await writeFile(join(stateDir, "block-count-prometheus-test-session"), "4");
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "Done.\n<prometheus-done/>" }));
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("Stage A");
+			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(true);
+			expect(fs.readFileSync(join(stateDir, "block-count-prometheus-stage-a-test-session"), "utf8").trim()).toBe("1");
+		});
+
+		it("토큰 없는 차단은 Stage A 게이트 카운터를 올리지 않음", async () => {
+			await writePlanOnDisk();
+			await writeStateWithPlanDone();
+
+			makeDecision(createContext({ lastAssistantMessage: "still working" }));
+
+			expect(fs.existsSync(join(stateDir, "block-count-prometheus-stage-a-test-session"))).toBe(false);
+			expect(fs.existsSync(join(stateDir, "block-count-prometheus-test-session"))).toBe(true);
+		});
+
+		it("게이트 예산 소진 후 종료하면 두 카운터를 모두 정리함", async () => {
+			await writePlanOnDisk();
+			await writeStateWithPlanDone();
+			await writeFile(join(stateDir, "block-count-prometheus-stage-a-test-session"), "5");
+			await writeFile(join(stateDir, "block-count-prometheus-test-session"), "2");
+
+			makeDecision(createContext({ lastAssistantMessage: "Done.\n<prometheus-done/>" }));
+
+			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(false);
+			expect(fs.existsSync(join(stateDir, "block-count-prometheus-stage-a-test-session"))).toBe(false);
+			expect(fs.existsSync(join(stateDir, "block-count-prometheus-test-session"))).toBe(false);
+		});
+
+		it("문장 중간에 토큰을 언급한 메시지는 세션을 종료하지 않음", async () => {
+			await writeFile(
+				join(omtDir, "prometheus-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: new Date().toISOString(),
+					last_touched_at: new Date().toISOString(),
+				}),
+			);
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "나중에 <prometheus-done/> 를 출력하겠습니다" }));
 
 			expect(result.decision).toBe("block");
 			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(true);
@@ -1335,9 +1430,9 @@ describe("makeDecision", () => {
 		it("escapes at MAX_BLOCK_COUNT — a wedged session can still walk away", async () => {
 			await writePlanOnDisk();
 			await writeStateWithPlanDone();
-			await writeFile(join(stateDir, "block-count-prometheus-test-session"), "5");
+			await writeFile(join(stateDir, "block-count-prometheus-stage-a-test-session"), "5");
 
-			const context = createContext({ lastAssistantMessage: "Done. <prometheus-done/>" });
+			const context = createContext({ lastAssistantMessage: "Done.\n<prometheus-done/>" });
 
 			const result = makeDecision(context);
 
