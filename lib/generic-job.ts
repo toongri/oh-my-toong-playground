@@ -287,6 +287,7 @@ export function extractDenySubagents(settings: Record<string, unknown>): boolean
 //           because `-c` merges into that entry and codex then refuses to boot. A stdio entry of that name that sets env, env_vars, cwd or a
 //           timeout also fails job start (`-c` cannot clear them). `disabled_tools=[]` is emitted for every add server; an inherited
 //           `enabled_tools` allowlist is invisible in the listing and cannot be cleared through `-c`.
+//           A codex member command that itself sets `-c mcp_servers…` fails job start while `settings.mcp` is set: the listing never sees it, so reset could not turn it off; define it under `add`.
 // ---------------------------------------------------------------------------
 
 export type McpAddServers = Record<string, { command: string; args: string[] }>;
@@ -447,6 +448,24 @@ export function listConfiguredMcpServers(
 }
 
 /**
+ * The first `-c`/`--config` override in a codex member command whose key is
+ * `mcp_servers…` (as `-c kv`, `-c=kv`, `-ckv`, `--config kv`, `--config=kv`),
+ * or undefined. Other overrides such as `service_tier=fast` are not MCP-related.
+ */
+function findMcpServersConfigOverride(command: string): string | undefined {
+	const tokens = splitCommand(command) ?? [];
+	for (let i = 0; i < tokens.length; i++) {
+		const token = tokens[i];
+		let kv: string | undefined;
+		if (token === "-c" || token === "--config") kv = tokens[i + 1];
+		else if (token.startsWith("--config=")) kv = token.slice("--config=".length);
+		else if (token.startsWith("-c") && !token.startsWith("--")) kv = token.slice(2).replace(/^=/, "");
+		if (kv?.trim().startsWith("mcp_servers")) return kv;
+	}
+	return undefined;
+}
+
+/**
  * Attach the explicit MCP fields (`mcpReset`, `mcpAdd`, `mcpBlock`) to job
  * entities without mutating the source list. `mcpBlock` (codex-listed
  * server names to disable) is computed only when `reset` is true, minus the
@@ -472,6 +491,14 @@ export function prepareMcpEntities(
 			exitWithError(
 				`Invalid config in ${configPath}: '${config.configTopLevelKey}.settings.mcp' is set but member ${JSON.stringify(String(entity.name))} runs CLI '${cliType}'; MCP control is supported only for codex and claude members`,
 			);
+		}
+		if (cliType === "codex" && mcp.isSet) {
+			const override = findMcpServersConfigOverride(String(entity.command));
+			if (override !== undefined) {
+				exitWithError(
+					`Invalid config in ${configPath}: member ${JSON.stringify(String(entity.name))} command sets '-c ${override}' while '${config.configTopLevelKey}.settings.mcp' is set; the MCP server listing does not see command-line overrides, so reset could not turn it off. Define the server under '${config.configTopLevelKey}.settings.mcp.add' instead.`,
+				);
+			}
 		}
 		let mcpBlock: string[] = [];
 		if (cliType === "codex" && (mcp.reset || Object.keys(mcp.add).length > 0)) {

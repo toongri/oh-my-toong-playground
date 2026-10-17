@@ -1248,6 +1248,47 @@ describe("prepareMcpEntities", () => {
 		expect(stderrOutput).toContain("alpha");
 	});
 
+	test("settings.mcp가 있는데 codex 멤버 명령에 mcp_servers -c 오버라이드가 있으면 exit 1이다", () => {
+		installFakeCodex(binDir, logPath, { entries: [stdioEntry("shared")] });
+		const cases: [Record<string, unknown>, string, string][] = [
+			[{ reset: true }, 'codex exec -c mcp_servers.extra.command="tool"', "mcp_servers.extra.command"],
+			[{ add: addAlpha }, "codex exec --config mcp_servers.x.enabled=true", "mcp_servers.x.enabled"],
+			[{ reset: true }, "codex exec -c=mcp_servers.y.enabled=true", "mcp_servers.y.enabled"],
+			[{ reset: true }, "codex exec --config=mcp_servers.z.enabled=true", "mcp_servers.z.enabled"],
+		];
+		for (const [mcp, command, override] of cases) {
+			stderrOutput = "";
+			expect(() =>
+				prepareMcpEntities({ mcp }, [{ name: "odd-member", command }], councilConfig, "/tmp/config.yaml", tmpDir),
+			).toThrow("process.exit(1)");
+			expect(stderrOutput).toContain("odd-member");
+			expect(stderrOutput).toContain(override);
+			expect(stderrOutput).toContain("settings.mcp.add");
+		}
+	});
+
+	test("다른 -c 오버라이드는 허용하고, settings.mcp가 없으면 mcp_servers -c도 검사하지 않는다", () => {
+		installFakeCodex(binDir, logPath, { entries: [stdioEntry("shared")] });
+		expect(() =>
+			prepareMcpEntities(
+				{ mcp: { reset: true } },
+				[{ name: "a", command: "codex exec -c service_tier=fast" }],
+				councilConfig,
+				"/tmp/config.yaml",
+				tmpDir,
+			),
+		).not.toThrow();
+		expect(() =>
+			prepareMcpEntities(
+				{},
+				[{ name: "a", command: 'codex exec -c mcp_servers.extra.command="tool"' }],
+				councilConfig,
+				"/tmp/config.yaml",
+				tmpDir,
+			),
+		).not.toThrow();
+	});
+
 	test("add 서버의 args가 없으면 빈 배열로 채워진다", () => {
 		const result = prepareMcpEntities(
 			{ mcp: { add: { bare: { command: "bare-bin" } } } },
