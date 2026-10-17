@@ -4544,12 +4544,29 @@ describe("job.ts MCP preparation architecture", () => {
 	});
 });
 
+// Fake `codex` for `codex --disable plugins mcp list --json`: prints the JSON
+// file `<CODEX_HOME>/mcp-list.json`, so each home decides its own server list
+// and the tests never depend on the host's codex.
+function installHomeDrivenFakeCodex(binDir: string): void {
+	fs.mkdirSync(binDir, { recursive: true });
+	const bin = path.join(binDir, "codex");
+	fs.writeFileSync(bin, '#!/bin/sh\ncat "$CODEX_HOME/mcp-list.json"\n');
+	fs.chmodSync(bin, 0o755);
+}
+
+function writeFakeMcpList(codexHome: string, names: string[]): void {
+	fs.writeFileSync(
+		path.join(codexHome, "mcp-list.json"),
+		JSON.stringify(names.map((name) => ({ name, enabled: true, transport: { type: "stdio" } }))),
+	);
+}
+
 // ---------------------------------------------------------------------------
 // start: settings.mcp → job.json members[].{mcpReset,mcpAdd,mcpBlock}. Uses
 // cmdStart directly (not via subprocess) so CODEX_HOME can be pointed at a
-// hermetic config.toml fixture (invented server names) instead of the real
-// host's. The block list is recorded per member because a member's own
-// `env.CODEX_HOME` changes which config.toml its worker actually reads.
+// hermetic fake `codex` (invented server names) instead of the real host's.
+// The block list is recorded per member because a member's own
+// `env.CODEX_HOME` changes which server list its worker actually sees.
 // ---------------------------------------------------------------------------
 
 describe("start: settings.mcp recorded in job.json members", () => {
@@ -4557,6 +4574,7 @@ describe("start: settings.mcp recorded in job.json members", () => {
 	let jobsDir: string;
 	let codexHomeDir: string;
 	let prevCodexHome: string | undefined;
+	let prevPath: string | undefined;
 
 	const mcpYaml = [
 		"    mcp:",
@@ -4572,19 +4590,10 @@ describe("start: settings.mcp recorded in job.json members", () => {
 		jobsDir = path.join(tmpDir, "jobs");
 		fs.mkdirSync(jobsDir, { recursive: true });
 		codexHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-test-"));
-		fs.writeFileSync(
-			path.join(codexHomeDir, "config.toml"),
-			[
-				"[mcp_servers.codegraph]",
-				'command = "stub"',
-				"",
-				"[mcp_servers.srv-a]",
-				'command = "stub"',
-				"",
-				"[mcp_servers.srv-b]",
-				'command = "stub"',
-			].join("\n"),
-		);
+		writeFakeMcpList(codexHomeDir, ["codegraph", "srv-a", "srv-b"]);
+		installHomeDrivenFakeCodex(path.join(tmpDir, "bin"));
+		prevPath = process.env.PATH;
+		process.env.PATH = `${path.join(tmpDir, "bin")}:${prevPath}`;
 		prevCodexHome = process.env.CODEX_HOME;
 		process.env.CODEX_HOME = codexHomeDir;
 	});
@@ -4592,6 +4601,7 @@ describe("start: settings.mcp recorded in job.json members", () => {
 	afterEach(() => {
 		if (prevCodexHome === undefined) delete process.env.CODEX_HOME;
 		else process.env.CODEX_HOME = prevCodexHome;
+		process.env.PATH = prevPath;
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 		fs.rmSync(codexHomeDir, { recursive: true, force: true });
 	});
@@ -4603,7 +4613,7 @@ describe("start: settings.mcp recorded in job.json members", () => {
 			.members;
 	}
 
-	test("reset + add: job.json records mcpReset, mcpAdd and the config.toml servers to disable (minus the added name)", async () => {
+	test("reset + add: job.json records mcpReset, mcpAdd and the listed servers to disable (minus the added name)", async () => {
 		const configPath = path.join(tmpDir, "config.yaml");
 		fs.writeFileSync(
 			configPath,
@@ -4638,18 +4648,13 @@ describe("start: settings.mcp recorded in job.json members", () => {
 		expect(byName.dave.mcpBlock).toEqual([]);
 	});
 
-	test("a member's own env.CODEX_HOME decides which config.toml its block list is computed against", async () => {
+	test("a member's own env.CODEX_HOME decides which server list its block list is computed against", async () => {
 		// The member home declares a DISJOINT server set from the conductor home
 		// (see beforeEach: codegraph/srv-a/srv-b). "srv-c" (member-only) must be
 		// blocked, and "srv-a"/"srv-b" (conductor-only) must NOT appear — passing a
-		// name the member's own config.toml never declares makes codex fail to boot.
+		// name the member's own server list never contains makes codex fail to boot.
 		const memberCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-member-"));
-		fs.writeFileSync(
-			path.join(memberCodexHome, "config.toml"),
-			["[mcp_servers.codegraph]", 'command = "stub"', "", "[mcp_servers.srv-c]", 'command = "stub"'].join(
-				"\n",
-			),
-		);
+		writeFakeMcpList(memberCodexHome, ["codegraph", "srv-c"]);
 
 		const configPath = path.join(tmpDir, "config.yaml");
 		fs.writeFileSync(
@@ -5210,25 +5215,17 @@ describe("start: MCP fields reach spawnWorkers entities", () => {
 	let jobsDir: string;
 	let codexHomeDir: string;
 	let prevCodexHome: string | undefined;
+	let prevPath: string | undefined;
 
 	beforeEach(() => {
 		tmpDir = makeTmpDir();
 		jobsDir = path.join(tmpDir, "jobs");
 		fs.mkdirSync(jobsDir, { recursive: true });
 		codexHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-test-"));
-		fs.writeFileSync(
-			path.join(codexHomeDir, "config.toml"),
-			[
-				"[mcp_servers.codegraph]",
-				'command = "stub"',
-				"",
-				"[mcp_servers.srv-a]",
-				'command = "stub"',
-				"",
-				"[mcp_servers.srv-b]",
-				'command = "stub"',
-			].join("\n"),
-		);
+		writeFakeMcpList(codexHomeDir, ["codegraph", "srv-a", "srv-b"]);
+		installHomeDrivenFakeCodex(path.join(tmpDir, "bin"));
+		prevPath = process.env.PATH;
+		process.env.PATH = `${path.join(tmpDir, "bin")}:${prevPath}`;
 		prevCodexHome = process.env.CODEX_HOME;
 		process.env.CODEX_HOME = codexHomeDir;
 	});
@@ -5236,6 +5233,7 @@ describe("start: MCP fields reach spawnWorkers entities", () => {
 	afterEach(() => {
 		if (prevCodexHome === undefined) delete process.env.CODEX_HOME;
 		else process.env.CODEX_HOME = prevCodexHome;
+		process.env.PATH = prevPath;
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 		fs.rmSync(codexHomeDir, { recursive: true, force: true });
 		mock.restore();
@@ -5660,6 +5658,10 @@ describe("start durable review identity", () => {
 		if (deadPid === undefined) throw new Error("expected owner process PID");
 		await new Promise<void>((resolve) => owner.once("close", () => resolve()));
 		fs.writeFileSync(lockPath(jobsDir), JSON.stringify({ pid: deadPid, createdAt: Date.now() }));
+		const fakeCodexHome = path.join(tmpDir, "fake-codex-home");
+		fs.mkdirSync(fakeCodexHome);
+		writeFakeMcpList(fakeCodexHome, []);
+		installHomeDrivenFakeCodex(path.join(tmpDir, "fake-codex-bin"));
 		const result = spawnSync(
 			process.execPath,
 			[
@@ -5686,7 +5688,13 @@ describe("start durable review identity", () => {
 			{
 				encoding: "utf8",
 				timeout: 60_000,
-				env: { ...process.env, CHUNK_REVIEW_IDENTITY_LOCK_DEADLINE_MS: "500" },
+				env: {
+					...process.env,
+					CHUNK_REVIEW_IDENTITY_LOCK_DEADLINE_MS: "500",
+					// The default config resets MCP, so start lists servers through `codex`; keep that hermetic.
+					CODEX_HOME: fakeCodexHome,
+					PATH: `${path.join(tmpDir, "fake-codex-bin")}:${process.env.PATH}`,
+				},
 			},
 		);
 		expect(result.status).toBe(0);

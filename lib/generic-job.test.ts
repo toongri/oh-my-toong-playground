@@ -45,7 +45,7 @@ import {
 	extractDenySkills,
 	extractDenySubagents,
 	assertMcpShape,
-	enumerateConfiguredMcpServers,
+	listConfiguredMcpServers,
 	prepareMcpEntities,
 	findOrphanJobs,
 	reapOrphanJobs,
@@ -863,89 +863,52 @@ describe("assertMcpShape", () => {
 });
 
 // ---------------------------------------------------------------------------
-// enumerateConfiguredMcpServers — parse [mcp_servers.<name>] headers from
-// codexHome/config.toml
+// listConfiguredMcpServers / prepareMcpEntities — server list comes from
+// `codex --disable plugins mcp list --json`, run through a fake `codex` that
+// the test puts first on PATH (no dependency on the host's codex or config).
 // ---------------------------------------------------------------------------
 
-describe("enumerateConfiguredMcpServers", () => {
+type FakeMcpEntry = { name: string; enabled?: boolean; transport?: { type: string } };
+
+/** Write a fake `codex` into `binDir`. It logs one line per call (CODEX_HOME, cwd, argv) to `logPath`. */
+function installFakeCodex(
+	binDir: string,
+	logPath: string,
+	opts: { entries?: FakeMcpEntry[]; stdout?: string; exitCode?: number; stderr?: string } = {},
+): void {
+	fs.mkdirSync(binDir, { recursive: true });
+	const stdout = opts.stdout ?? JSON.stringify(opts.entries ?? []);
+	fs.writeFileSync(path.join(binDir, "fake-codex-stdout.txt"), stdout);
+	const script = [
+		"#!/bin/sh",
+		`printf 'CODEX_HOME=%s|CWD=%s|ARGV=%s\\n' "$CODEX_HOME" "$(pwd -P)" "$*" >> ${JSON.stringify(logPath)}`,
+		opts.stderr ? `printf '%s' ${JSON.stringify(opts.stderr)} >&2` : "",
+		opts.exitCode ? `exit ${opts.exitCode}` : "",
+		`cat ${JSON.stringify(path.join(binDir, "fake-codex-stdout.txt"))}`,
+		"",
+	].join("\n");
+	const bin = path.join(binDir, "codex");
+	fs.writeFileSync(bin, script);
+	fs.chmodSync(bin, 0o755);
+}
+
+function stdioEntry(name: string): FakeMcpEntry {
+	return { name, enabled: true, transport: { type: "stdio" } };
+}
+
+describe("listConfiguredMcpServers", () => {
 	let tmpDir: string;
-
-	beforeEach(() => {
-		tmpDir = makeTmpDir();
-	});
-
-	afterEach(() => {
-		fs.rmSync(tmpDir, { recursive: true, force: true });
-	});
-
-	// Regression test for the sub-table trap: a config may contain
-	// [mcp_servers.nutrition-tools] followed by [mcp_servers.nutrition-tools.env]
-	// — the .env suffix is a nested table (env vars for the nutrition-tools
-	// server), not a second server named "nutrition-tools.env". A looser
-	// `^\[mcp_servers\.(.+)\]$` regex would capture "nutrition-tools.env" as its
-	// own server name.
-	test("하위 테이블([mcp_servers.nutrition-tools.env])을 서버로 오인하지 않는다", () => {
-		fs.writeFileSync(
-			path.join(tmpDir, "config.toml"),
-			[
-				"[mcp_servers.nutrition-tools]",
-				'command = "npx"',
-				"",
-				"[mcp_servers.nutrition-tools.env]",
-				'FOO = "bar"',
-				"",
-			].join("\n"),
-		);
-
-		const result = enumerateConfiguredMcpServers(tmpDir);
-
-		expect(result).toEqual(["nutrition-tools"]);
-		expect(result).not.toContain("nutrition-tools.env");
-	});
-
-	test("여러 서버를 정렬된 중복없는 배열로 열거한다", () => {
-		fs.writeFileSync(
-			path.join(tmpDir, "config.toml"),
-			[
-				"[mcp_servers.slack]",
-				'command = "npx"',
-				"",
-				"[mcp_servers.codegraph]",
-				'command = "npx"',
-				"",
-				"[mcp_servers.linear]",
-				'command = "npx"',
-				"",
-			].join("\n"),
-		);
-
-		expect(enumerateConfiguredMcpServers(tmpDir)).toEqual(["codegraph", "linear", "slack"]);
-	});
-
-	test("따옴표 붙은 헤더는 열거하지 않는다", () => {
-		fs.writeFileSync(
-			path.join(tmpDir, "config.toml"),
-			['[mcp_servers."weird name"]', 'command = "npx"', "", "[mcp_servers.codegraph]", ""].join(
-				"\n",
-			),
-		);
-
-		expect(enumerateConfiguredMcpServers(tmpDir)).toEqual(["codegraph"]);
-	});
-
-	test("config.toml이 없으면 빈 배열을 반환한다 (fail-open)", () => {
-		expect(enumerateConfiguredMcpServers(path.join(tmpDir, "does-not-exist"))).toEqual([]);
-	});
-});
-
-describe("prepareMcpEntities", () => {
-	let tmpDir: string;
+	let originalPath: string | undefined;
 	let originalExit: typeof process.exit;
 	let originalStderrWrite: typeof process.stderr.write;
 	let stderrOutput: string;
+	let logPath: string;
 
 	beforeEach(() => {
 		tmpDir = makeTmpDir();
+		logPath = path.join(tmpDir, "calls.log");
+		originalPath = process.env.PATH;
+		process.env.PATH = `${path.join(tmpDir, "bin")}:${originalPath}`;
 		originalExit = process.exit;
 		originalStderrWrite = process.stderr.write;
 		stderrOutput = "";
@@ -958,12 +921,94 @@ describe("prepareMcpEntities", () => {
 		};
 	});
 	afterEach(() => {
+		process.env.PATH = originalPath;
+		process.exit = originalExit;
+		process.stderr.write = originalStderrWrite;
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("runs `codex --disable plugins mcp list --json` with CODEX_HOME and cwd, and returns the parsed entries", () => {
+		const entries = [stdioEntry("alpha"), { name: "remote", enabled: true, transport: { type: "streamable_http" } }];
+		installFakeCodex(path.join(tmpDir, "bin"), logPath, { entries });
+		const home = path.join(tmpDir, "home");
+		const cwd = path.join(tmpDir, "work");
+		fs.mkdirSync(cwd);
+
+		const result = listConfiguredMcpServers("codex exec --json", home, cwd);
+
+		expect(result).toEqual(entries);
+		const log = fs.readFileSync(logPath, "utf8").trim().split("\n");
+		expect(log).toEqual([
+			`CODEX_HOME=${home}|CWD=${fs.realpathSync(cwd)}|ARGV=--disable plugins mcp list --json`,
+		]);
+	});
+
+	test("uses the first token of the member's command as the executable (pinned path keeps working)", () => {
+		installFakeCodex(path.join(tmpDir, "pinned"), logPath, { entries: [stdioEntry("pinned-srv")] });
+		const pinned = path.join(tmpDir, "pinned", "codex");
+
+		const result = listConfiguredMcpServers(`${pinned} exec`, tmpDir, tmpDir);
+
+		expect(result.map((e) => e.name)).toEqual(["pinned-srv"]);
+	});
+
+	for (const [label, opts, expected] of [
+		["a non-zero exit", { exitCode: 3, stderr: "boom from codex" }, "boom from codex"],
+		["unparseable output", { stdout: "not json" }, "mcp list --json"],
+		["output that is not an array", { stdout: '{"a":1}' }, "mcp list --json"],
+	] as const) {
+		test(`stops job start when the list command fails: ${label}`, () => {
+			installFakeCodex(path.join(tmpDir, "bin"), logPath, opts);
+			expect(() => listConfiguredMcpServers("codex exec", tmpDir, tmpDir)).toThrow("process.exit(1)");
+			expect(stderrOutput).toContain("codex --disable plugins mcp list --json");
+			expect(stderrOutput).toContain(expected);
+		});
+	}
+
+	test("stops job start when the executable does not exist", () => {
+		expect(() =>
+			listConfiguredMcpServers(`${path.join(tmpDir, "missing", "codex")} exec`, tmpDir, tmpDir),
+		).toThrow("process.exit(1)");
+		expect(stderrOutput).toContain("mcp list --json");
+	});
+});
+
+describe("prepareMcpEntities", () => {
+	let tmpDir: string;
+	let binDir: string;
+	let logPath: string;
+	let originalPath: string | undefined;
+	let originalExit: typeof process.exit;
+	let originalStderrWrite: typeof process.stderr.write;
+	let stderrOutput: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		binDir = path.join(tmpDir, "bin");
+		logPath = path.join(tmpDir, "calls.log");
+		originalPath = process.env.PATH;
+		process.env.PATH = `${binDir}:${originalPath}`;
+		originalExit = process.exit;
+		originalStderrWrite = process.stderr.write;
+		stderrOutput = "";
+		(process as any).exit = (code?: number) => {
+			throw new Error(`process.exit(${code})`);
+		};
+		(process.stderr.write as any) = (chunk: string) => {
+			stderrOutput += chunk;
+			return true;
+		};
+	});
+	afterEach(() => {
+		process.env.PATH = originalPath;
 		process.exit = originalExit;
 		process.stderr.write = originalStderrWrite;
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
 	const addAlpha = { alpha: { command: "alpha-bin", args: ["serve"] } };
+	const callCount = () =>
+		fs.existsSync(logPath) ? fs.readFileSync(logPath, "utf8").trim().split("\n").length : 0;
 
 	test("settings.mcp 미지정이면 모든 멤버가 reset=false, add={}, block=[]이다 (CLI 종류와 무관)", () => {
 		const entities = [
@@ -973,6 +1018,7 @@ describe("prepareMcpEntities", () => {
 		];
 		const result = prepareMcpEntities({}, entities, councilConfig, "/tmp/config.yaml", tmpDir);
 		expect(result).toEqual(entities.map((e) => ({ ...e, mcpReset: false, mcpAdd: {}, mcpBlock: [] })));
+		expect(callCount()).toBe(0);
 	});
 
 	test("malformed settings.mcp is rejected through assertMcpShape", () => {
@@ -982,37 +1028,133 @@ describe("prepareMcpEntities", () => {
 		expect(stderrOutput).toContain("council.settings.mcp.reset");
 	});
 
-	test("reset: codex 멤버별 CODEX_HOME의 config.toml 서버에서 add 이름을 뺀 목록이 mcpBlock이고 입력은 변하지 않는다", () => {
-		const homeA = path.join(tmpDir, "a");
-		const homeB = path.join(tmpDir, "b");
-		fs.mkdirSync(homeA);
-		fs.mkdirSync(homeB);
-		const tomlA = "[mcp_servers.alpha]\n[mcp_servers.shared]\n";
-		const tomlB = "[mcp_servers.beta]\n[mcp_servers.shared]\n";
-		fs.writeFileSync(path.join(homeA, "config.toml"), tomlA);
-		fs.writeFileSync(path.join(homeB, "config.toml"), tomlB);
-		const settings = { mcp: { reset: true, add: addAlpha } };
+	test("reset: mcpBlock is the listed names minus the add names, sorted as listed; non-codex members get []", () => {
+		installFakeCodex(binDir, logPath, {
+			entries: [stdioEntry("shared"), stdioEntry("alpha"), stdioEntry("beta")],
+		});
 		const entities = [
-			{ name: "a", command: "codex exec", env: { CODEX_HOME: homeA } },
-			{ name: "b", command: "codex exec", env: { CODEX_HOME: homeB } },
+			{ name: "a", command: "codex exec" },
 			{ name: "c", command: "claude -p" },
 		];
 		const snapshot = structuredClone(entities);
-		const result = prepareMcpEntities(settings, entities, councilConfig, "/tmp/config.yaml", tmpDir);
+		const result = prepareMcpEntities(
+			{ mcp: { reset: true, add: addAlpha } },
+			entities,
+			councilConfig,
+			"/tmp/config.yaml",
+			tmpDir,
+		);
 		const mcpAdd = { alpha: { command: "alpha-bin", args: ["serve"] } };
 		expect(result).toEqual([
-			{ ...entities[0], mcpReset: true, mcpAdd, mcpBlock: ["shared"] },
-			{ ...entities[1], mcpReset: true, mcpAdd, mcpBlock: ["beta", "shared"] },
-			{ ...entities[2], mcpReset: true, mcpAdd, mcpBlock: [] },
+			{ ...entities[0], mcpReset: true, mcpAdd, mcpBlock: ["shared", "beta"] },
+			{ ...entities[1], mcpReset: true, mcpAdd, mcpBlock: [] },
 		]);
 		expect(entities).toEqual(snapshot);
-		// config.toml is read only.
-		expect(fs.readFileSync(path.join(homeA, "config.toml"), "utf8")).toBe(tomlA);
-		expect(fs.readFileSync(path.join(homeB, "config.toml"), "utf8")).toBe(tomlB);
 	});
 
-	test("add without reset leaves mcpBlock empty even when config.toml declares servers", () => {
-		fs.writeFileSync(path.join(tmpDir, "config.toml"), "[mcp_servers.beta]\n");
+	test("a server from the trusted project layer (listed by codex) is blocked like a user-config server", () => {
+		// The fake lists whatever `codex mcp list` would print for home + cwd, project layer included.
+		installFakeCodex(binDir, logPath, { entries: [stdioEntry("from-user"), stdioEntry("from-project")] });
+		const result = prepareMcpEntities(
+			{ mcp: { reset: true } },
+			[{ name: "a", command: "codex exec" }],
+			councilConfig,
+			"/tmp/config.yaml",
+			tmpDir,
+		);
+		expect(result[0].mcpBlock).toEqual(["from-user", "from-project"]);
+	});
+
+	test("listed names that -c cannot address are skipped with a warning, not disabled", () => {
+		installFakeCodex(binDir, logPath, {
+			entries: [stdioEntry("weird name"), stdioEntry("a.b"), stdioEntry("plain")],
+		});
+		const result = prepareMcpEntities(
+			{ mcp: { reset: true } },
+			[{ name: "a", command: "codex exec" }],
+			councilConfig,
+			"/tmp/config.yaml",
+			tmpDir,
+		);
+		expect(result[0].mcpBlock).toEqual(["plain"]);
+		expect(stderrOutput).toContain('"weird name"');
+		expect(stderrOutput).toContain('"a.b"');
+		expect(stderrOutput).not.toContain('"plain"');
+		expect(stderrOutput).toContain("cannot be disabled through -c");
+	});
+
+	test("an add name that the user config defines as a non-stdio server stops job start", () => {
+		installFakeCodex(binDir, logPath, {
+			entries: [{ name: "alpha", enabled: true, transport: { type: "streamable_http" } }, stdioEntry("beta")],
+		});
+		expect(() =>
+			prepareMcpEntities(
+				{ mcp: { reset: true, add: addAlpha } },
+				[{ name: "a", command: "codex exec" }],
+				councilConfig,
+				"/tmp/config.yaml",
+				tmpDir,
+			),
+		).toThrow("process.exit(1)");
+		expect(stderrOutput).toContain("alpha");
+		expect(stderrOutput).toContain("streamable_http");
+		expect(stderrOutput).toContain("Rename the add key");
+	});
+
+	test("an add name that matches a listed stdio server is allowed and not blocked", () => {
+		installFakeCodex(binDir, logPath, { entries: [stdioEntry("alpha")] });
+		const result = prepareMcpEntities(
+			{ mcp: { reset: true, add: addAlpha } },
+			[{ name: "a", command: "codex exec" }],
+			councilConfig,
+			"/tmp/config.yaml",
+			tmpDir,
+		);
+		expect(result[0].mcpBlock).toEqual([]);
+	});
+
+	test("a failing list command stops job start with the command and its stderr", () => {
+		installFakeCodex(binDir, logPath, { exitCode: 2, stderr: "config is broken" });
+		expect(() =>
+			prepareMcpEntities(
+				{ mcp: { reset: true } },
+				[{ name: "a", command: "codex exec" }],
+				councilConfig,
+				"/tmp/config.yaml",
+				tmpDir,
+			),
+		).toThrow("process.exit(1)");
+		expect(stderrOutput).toContain("codex --disable plugins mcp list --json");
+		expect(stderrOutput).toContain("config is broken");
+	});
+
+	test("one list call per distinct (CODEX_HOME, cwd); the member env.CODEX_HOME and the process cwd are used", () => {
+		installFakeCodex(binDir, logPath, { entries: [stdioEntry("beta")] });
+		const homeA = path.join(tmpDir, "a");
+		const homeB = path.join(tmpDir, "b");
+		const entities = [
+			{ name: "a1", command: "codex exec", env: { CODEX_HOME: homeA } },
+			{ name: "a2", command: "codex exec -m x", env: { CODEX_HOME: homeA } },
+			{ name: "b", command: "codex exec", env: { CODEX_HOME: homeB } },
+			{ name: "fb1", command: "codex exec" },
+			{ name: "fb2", command: "codex exec" },
+		];
+		prepareMcpEntities({ mcp: { reset: true } }, entities, councilConfig, "/tmp/config.yaml", tmpDir);
+		const homes = fs
+			.readFileSync(logPath, "utf8")
+			.trim()
+			.split("\n")
+			.map((line) => line.split("|"));
+		expect(homes.map((cols) => cols[0])).toEqual([
+			`CODEX_HOME=${homeA}`,
+			`CODEX_HOME=${homeB}`,
+			`CODEX_HOME=${tmpDir}`,
+		]);
+		for (const cols of homes) expect(cols[1]).toBe(`CWD=${fs.realpathSync(process.cwd())}`);
+	});
+
+	test("add without reset leaves mcpBlock empty (the list is still read to check add collisions)", () => {
+		installFakeCodex(binDir, logPath, { entries: [stdioEntry("beta")] });
 		const result = prepareMcpEntities(
 			{ mcp: { add: addAlpha } },
 			[{ name: "a", command: "codex exec" }],
@@ -1023,6 +1165,23 @@ describe("prepareMcpEntities", () => {
 		expect(result[0].mcpReset).toBe(false);
 		expect(result[0].mcpBlock).toEqual([]);
 		expect(result[0].mcpAdd).toEqual({ alpha: { command: "alpha-bin", args: ["serve"] } });
+		expect(callCount()).toBe(1);
+	});
+
+	test("an add name colliding with a non-stdio server fails job start even without reset", () => {
+		installFakeCodex(binDir, logPath, {
+			entries: [{ name: "alpha", enabled: true, transport: { type: "streamable_http" } }],
+		});
+		expect(() =>
+			prepareMcpEntities(
+				{ mcp: { add: addAlpha } },
+				[{ name: "a", command: "codex exec" }],
+				councilConfig,
+				"/tmp/config.yaml",
+				tmpDir,
+			),
+		).toThrow("process.exit(1)");
+		expect(stderrOutput).toContain("alpha");
 	});
 
 	test("add 서버의 args가 없으면 빈 배열로 채워진다", () => {
@@ -1034,18 +1193,6 @@ describe("prepareMcpEntities", () => {
 			tmpDir,
 		);
 		expect(result[0].mcpAdd).toEqual({ bare: { command: "bare-bin", args: [] } });
-	});
-
-	test("uses conductor fallback for codex members without CODEX_HOME", () => {
-		fs.writeFileSync(path.join(tmpDir, "config.toml"), "[mcp_servers.alpha]\n");
-		const result = prepareMcpEntities(
-			{ mcp: { reset: true } },
-			[{ name: "a", command: "codex exec" }],
-			councilConfig,
-			"/tmp/config.yaml",
-			tmpDir,
-		);
-		expect(result[0].mcpBlock).toEqual(["alpha"]);
 	});
 
 	test("settings.mcp가 있는데 CLI가 codex/claude가 아닌 멤버가 있으면 exit 1이다 (조용한 no-op 없음)", () => {
