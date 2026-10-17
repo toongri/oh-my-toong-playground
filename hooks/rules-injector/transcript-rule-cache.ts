@@ -17,6 +17,14 @@ export interface TranscriptRuleQuery {
 }
 
 export interface TranscriptRuleCacheOptions {
+	/**
+	 * Once the transcript has a compaction, every query is answered from the
+	 * latest compacted replacement history and the lines after it: the older
+	 * lines are no longer in the model's context, whatever this option says.
+	 * This option only decides the case with no compaction seen: `true` means
+	 * nothing counts as present, `false` or omitted means the whole transcript
+	 * counts.
+	 */
 	readonly latestCompactedReplacementOnly?: boolean;
 }
 
@@ -93,7 +101,7 @@ export function queryTranscriptRuleCache(
 
 	const latest = options.latestCompactedReplacementOnly === true;
 	const view = withPending(state);
-	const evidence = latest ? (view.compactSeen ? view.latest : null) : view.all;
+	const evidence = view.compactSeen ? view.latest : latest ? null : view.all;
 	return input.map((query) => evidence !== null && hasBlock(evidence, query));
 }
 

@@ -1599,3 +1599,68 @@ test("압축 뒤 복구는 시작 규칙 전부와 가장 최근 lazy 주입 단
 	const touchedAgain = runHook("post-tool-use", postToolUsePayload(sessionId, projectRoot, "cat src/a.ts"), env);
 	expect(additionalContext(touchedAgain.stdout)).toContain("OLDER LAZY TS RULE BODY");
 });
+
+test("압축 뒤 무관한 도구 호출이 한 번 지나가도 예전 lazy 규칙은 다시 만지면 재주입된다", () => {
+	const sessionId = "older-lazy-after-unrelated-tool-session";
+	const env = { PI_RULES_DISABLE_BUNDLED: "1" };
+	const { projectRoot } = makeProjectWithStaticRule(
+		"start-rule.md",
+		"START RULE BODY: loaded when the session starts.",
+	);
+	const rulesDir = join(projectRoot, ".codex", "rules");
+	writeFileSync(join(rulesDir, "ts-lazy.md"), '---\nglobs: ["**/*.ts"]\n---\nOLDER LAZY TS RULE BODY\n');
+	writeFileSync(join(rulesDir, "md-lazy.md"), '---\nglobs: ["**/*.md"]\n---\nLATEST LAZY MD RULE BODY\n');
+	mkdirSync(join(projectRoot, "src"), { recursive: true });
+	mkdirSync(join(projectRoot, "docs"), { recursive: true });
+	writeFileSync(join(projectRoot, "src", "a.ts"), "export const a = 1;\n");
+	writeFileSync(join(projectRoot, "docs", "b.md"), "# b\n");
+	writeFileSync(join(projectRoot, "c.txt"), "c\n");
+
+	// A real transcript: the model's context holds every injected block until a compaction replaces it.
+	const transcriptPath = join(projectRoot, "transcript.jsonl");
+	writeFileSync(transcriptPath, "");
+	const record = (entry: unknown): void => {
+		writeFileSync(transcriptPath, `${JSON.stringify(entry)}\n`, { flag: "a" });
+	};
+	const withTranscript = (payload: Record<string, unknown>): Record<string, unknown> => ({
+		...payload,
+		transcript_path: transcriptPath,
+	});
+
+	const start = runHook("session-start", withTranscript(sessionStartPayload(sessionId, projectRoot)), env);
+	record({ type: "response_item", payload: { text: additionalContext(start.stdout) } });
+	const olderUnit = runHook(
+		"post-tool-use",
+		withTranscript(postToolUsePayload(sessionId, projectRoot, "cat src/a.ts")),
+		env,
+	);
+	expect(additionalContext(olderUnit.stdout)).toContain("OLDER LAZY TS RULE BODY");
+	record({ type: "response_item", payload: { text: additionalContext(olderUnit.stdout) } });
+	const latestUnit = runHook(
+		"post-tool-use",
+		withTranscript(postToolUsePayload(sessionId, projectRoot, "cat docs/b.md")),
+		env,
+	);
+	expect(additionalContext(latestUnit.stdout)).toContain("LATEST LAZY MD RULE BODY");
+	record({ type: "response_item", payload: { text: additionalContext(latestUnit.stdout) } });
+
+	// Compaction replaces the history with a summary that carries no rule block.
+	record({ type: "compacted", payload: { replacement_history: [{ text: "summary only, no rules" }] } });
+	runHook("post-compact", withTranscript(postCompactPayload(sessionId, projectRoot)), env);
+	runHook("session-start", withTranscript(sessionStartPayload(sessionId, projectRoot, { source: "compact" })), env);
+
+	// One tool call that matches no rule must not mark the pre-compaction block as still present.
+	const unrelated = runHook(
+		"post-tool-use",
+		withTranscript(postToolUsePayload(sessionId, projectRoot, "cat c.txt")),
+		env,
+	);
+	expect(additionalContext(unrelated.stdout)).not.toContain("OLDER LAZY TS RULE BODY");
+
+	const touchedAgain = runHook(
+		"post-tool-use",
+		withTranscript(postToolUsePayload(sessionId, projectRoot, "cat src/a.ts")),
+		env,
+	);
+	expect(additionalContext(touchedAgain.stdout)).toContain("OLDER LAZY TS RULE BODY");
+});
