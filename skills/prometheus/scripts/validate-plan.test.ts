@@ -769,6 +769,14 @@ describe("id 목록 파서", () => {
 		expect(validatePlanGraph(plan)).toEqual([]);
 	});
 
+	test("1000개를 넘는 id를 펼치는 범위는 펼치지 않고 해석 불가로 둔다", () => {
+		expect(blockedByViolations("1-1001")).toEqual(['TODO 4: unparseable Blocked By entry "1-1001"']);
+		expect(blockedByViolations("1-99999999999999999999")).toEqual([
+			'TODO 4: unparseable Blocked By entry "1-99999999999999999999"',
+		]);
+		expect(blockedByViolations("1-1000")).not.toContainEqual(expect.stringContaining("unparseable"));
+	});
+
 	test("뒤집힌 범위와 접두가 섞인 범위는 해석 불가다", () => {
 		expect(blockedByViolations("3-1")).toContain('TODO 4: unparseable Blocked By entry "3-1"');
 		expect(blockedByViolations("F1-4")).toContain('TODO 4: unparseable Blocked By entry "F1-4"');

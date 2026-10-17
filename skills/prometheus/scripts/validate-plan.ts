@@ -18,7 +18,8 @@
  * parenthesized none such as `(none — first task)`) give an empty list; ids may
  * carry a `T` or `TODO ` prefix; ranges with a shared prefix and numeric ends
  * (`1-6`, `T1-T10`, `F1-F4`, hyphen or en dash) expand to each id. Reversed or
- * mixed-prefix ranges and anything else are unparseable.
+ * mixed-prefix ranges, ranges spanning more than 1000 ids, and anything else are
+ * unparseable.
  *
  * `Blocks:` entries must be defined and not the declaring TODO itself. A numeric
  * target must reach the declaring TODO through `Blocked By` edges (a transitive
@@ -150,6 +151,9 @@ interface TodoNode {
 }
 
 const NO_IDS = /^(?:none|—|–|-|n\/a|없음|\(\s*none\b.*\))$/i;
+// Ranges are expanded id by id, so one typo such as `1-99999999999999999999` would
+// exhaust memory. No real plan has this many TODOs.
+const MAX_RANGE_IDS = 1000;
 
 /**
  * Parse a `Blocked By:` / `Blocks:` value into TODO ids. See the file header for
@@ -178,7 +182,7 @@ function parseIdList(raw: string): { ids: string[]; bad: string[] } {
 			const prefix = range[1] ?? "";
 			const from = Number(range[2]);
 			const to = Number(range[3]);
-			if (from <= to) {
+			if (from <= to && to - from < MAX_RANGE_IDS) {
 				for (let n = from; n <= to; n++) ids.push(norm(prefix, String(n)));
 				continue;
 			}
