@@ -388,11 +388,13 @@ const MCP_LIST_TIMEOUT_MS = 30_000;
  * `<codex> --disable plugins mcp list --json` (user config plus trusted project
  * layer, plugins excluded; no server is started). `command` is the member's
  * command: its codex executable, with any package-runner prefix, is reused so a
- * pinned path keeps working. Any failure stops job start, since the member could
- * not boot codex either.
+ * pinned path keeps working. `memberEnv` overlays the conductor env, as in the
+ * worker. Any failure stops job start, since the member could not boot codex
+ * either.
  */
 export function listConfiguredMcpServers(
 	command: string,
+	memberEnv: Record<string, string>,
 	codexHome: string,
 	cwd: string,
 ): McpListEntry[] {
@@ -406,7 +408,7 @@ export function listConfiguredMcpServers(
 	const shown = [program, ...args].join(" ");
 	const result = spawnSync(program ?? "codex", args, {
 		cwd,
-		env: { ...process.env, CODEX_HOME: codexHome },
+		env: { ...process.env, ...memberEnv, CODEX_HOME: codexHome },
 		encoding: "utf8",
 		timeout: MCP_LIST_TIMEOUT_MS,
 	});
@@ -484,7 +486,7 @@ export function prepareMcpEntities(
 	const fallbackHome =
 		conductorCodexHome ?? (process.env.CODEX_HOME || path.join(os.homedir(), ".codex"));
 	const workerCwd = process.cwd(); // workers are spawned without a cwd option, so they inherit this
-	const listedByHomeAndCwd = new Map<string, McpListEntry[]>();
+	const listedByProbe = new Map<string, McpListEntry[]>();
 	return entities.map((entity) => {
 		const cliType = detectCliType(entity.command);
 		if (mcp.isSet && cliType !== "codex" && cliType !== "claude") {
@@ -503,12 +505,13 @@ export function prepareMcpEntities(
 		let mcpBlock: string[] = [];
 		if (cliType === "codex" && (mcp.reset || Object.keys(mcp.add).length > 0)) {
 			const env = isRecord(entity.env) ? entity.env : {};
+			const memberEnv = Object.fromEntries(Object.entries(env).map(([k, v]) => [k, String(v)]));
 			const codexHome = env.CODEX_HOME ? String(env.CODEX_HOME) : fallbackHome;
-			const key = JSON.stringify([codexHome, workerCwd]);
-			let listed = listedByHomeAndCwd.get(key);
+			const key = JSON.stringify([String(entity.command), memberEnv, codexHome, workerCwd]);
+			let listed = listedByProbe.get(key);
 			if (listed === undefined) {
-				listed = listConfiguredMcpServers(String(entity.command), codexHome, workerCwd);
-				listedByHomeAndCwd.set(key, listed);
+				listed = listConfiguredMcpServers(String(entity.command), memberEnv, codexHome, workerCwd);
+				listedByProbe.set(key, listed);
 				if (mcp.reset) {
 					for (const { name } of listed) {
 						if (MCP_SERVER_NAME_RE.test(name)) continue;

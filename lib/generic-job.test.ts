@@ -953,7 +953,7 @@ describe("listConfiguredMcpServers", () => {
 		const cwd = path.join(tmpDir, "work");
 		fs.mkdirSync(cwd);
 
-		const result = listConfiguredMcpServers("codex exec --json", home, cwd);
+		const result = listConfiguredMcpServers("codex exec --json", {}, home, cwd);
 
 		expect(result).toEqual(entries);
 		const log = fs.readFileSync(logPath, "utf8").trim().split("\n");
@@ -966,9 +966,19 @@ describe("listConfiguredMcpServers", () => {
 		installFakeCodex(path.join(tmpDir, "pinned"), logPath, { entries: [stdioEntry("pinned-srv")] });
 		const pinned = path.join(tmpDir, "pinned", "codex");
 
-		const result = listConfiguredMcpServers(`${pinned} exec`, tmpDir, tmpDir);
+		const result = listConfiguredMcpServers(`${pinned} exec`, {}, tmpDir, tmpDir);
 
 		expect(result.map((e) => e.name)).toEqual(["pinned-srv"]);
+	});
+
+	test("멤버 env의 PATH가 고른 codex로 목록을 구한다", () => {
+		installFakeCodex(path.join(tmpDir, "bin"), logPath, { entries: [stdioEntry("from-conductor")] });
+		installFakeCodex(path.join(tmpDir, "member-bin"), logPath, { entries: [stdioEntry("from-member")] });
+		const memberPath = `${path.join(tmpDir, "member-bin")}:${process.env.PATH}`;
+
+		const result = listConfiguredMcpServers("codex exec", { PATH: memberPath }, tmpDir, tmpDir);
+
+		expect(result.map((e) => e.name)).toEqual(["from-member"]);
 	});
 
 	for (const [label, opts, expected] of [
@@ -978,7 +988,7 @@ describe("listConfiguredMcpServers", () => {
 	] as const) {
 		test(`stops job start when the list command fails: ${label}`, () => {
 			installFakeCodex(path.join(tmpDir, "bin"), logPath, opts);
-			expect(() => listConfiguredMcpServers("codex exec", tmpDir, tmpDir)).toThrow("process.exit(1)");
+			expect(() => listConfiguredMcpServers("codex exec", {}, tmpDir, tmpDir)).toThrow("process.exit(1)");
 			expect(stderrOutput).toContain("codex --disable plugins mcp list --json");
 			expect(stderrOutput).toContain(expected);
 		});
@@ -986,7 +996,7 @@ describe("listConfiguredMcpServers", () => {
 
 	test("stops job start when the executable does not exist", () => {
 		expect(() =>
-			listConfiguredMcpServers(`${path.join(tmpDir, "missing", "codex")} exec`, tmpDir, tmpDir),
+			listConfiguredMcpServers(`${path.join(tmpDir, "missing", "codex")} exec`, {}, tmpDir, tmpDir),
 		).toThrow("process.exit(1)");
 		expect(stderrOutput).toContain("mcp list --json");
 	});
@@ -1192,13 +1202,29 @@ describe("prepareMcpEntities", () => {
 		expect(stderrOutput).toContain("config is broken");
 	});
 
-	test("one list call per distinct (CODEX_HOME, cwd); the member env.CODEX_HOME and the process cwd are used", () => {
+	test("홈과 cwd가 같아도 명령이 다른 멤버는 각자 목록을 구하고, 같은 명령은 캐시를 공유한다", () => {
+		installFakeCodex(binDir, logPath, { entries: [stdioEntry("beta")] });
+		prepareMcpEntities(
+			{ mcp: { reset: true } },
+			[
+				{ name: "a", command: "codex exec" },
+				{ name: "b", command: "codex exec -m x" },
+				{ name: "c", command: "codex exec" },
+			],
+			councilConfig,
+			"/tmp/config.yaml",
+			tmpDir,
+		);
+		expect(callCount()).toBe(2);
+	});
+
+	test("one list call per distinct (command, env, CODEX_HOME, cwd); the member env.CODEX_HOME and the process cwd are used", () => {
 		installFakeCodex(binDir, logPath, { entries: [stdioEntry("beta")] });
 		const homeA = path.join(tmpDir, "a");
 		const homeB = path.join(tmpDir, "b");
 		const entities = [
 			{ name: "a1", command: "codex exec", env: { CODEX_HOME: homeA } },
-			{ name: "a2", command: "codex exec -m x", env: { CODEX_HOME: homeA } },
+			{ name: "a2", command: "codex exec", env: { CODEX_HOME: homeA } },
 			{ name: "b", command: "codex exec", env: { CODEX_HOME: homeB } },
 			{ name: "fb1", command: "codex exec" },
 			{ name: "fb2", command: "codex exec" },
