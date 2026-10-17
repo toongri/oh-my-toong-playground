@@ -22,6 +22,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { basename, extname, join } from "path";
 import { Marked, marked, type Token, type Tokens } from "marked";
+import { findFenceBlocks } from "@lib/markdown-fence";
 
 /** Heading rows the table of contents is built from. */
 interface TocEntry {
@@ -141,41 +142,6 @@ export function softWrapLabels(source: string): string {
 	});
 }
 
-/** Width of leading whitespace, a tab advancing to the next multiple of 4 (CommonMark). */
-function indentWidth(ws: string): number {
-	let w = 0;
-	for (const ch of ws) w = ch === "\t" ? w + 4 - (w % 4) : w + 1;
-	return w;
-}
-
-const LIST_ITEM_LINE = /^([ \t]*)([-*+]|\d{1,9}[.)])([ \t]+)\S/;
-
-/**
- * Content column of the list item holding `lines[i]` (indented `indent` columns),
- * or 0 at top level. Walks back over earlier lines: the first list item whose
- * content column is at or left of the bound holds the line; any other non-blank
- * line narrows the bound to its own indent, and one at column 0 means top level.
- */
-function containerColumn(lines: string[], i: number, indent: number): number {
-	let bound = indent;
-	for (let j = i - 1; j >= 0; j--) {
-		const line = lines[j];
-		if (line.trim() === "") continue;
-		const item = LIST_ITEM_LINE.exec(line);
-		if (item !== null) {
-			const markerEnd = indentWidth(item[1]) + item[2].length;
-			const gap = indentWidth(item[1] + item[2] + item[3]) - indentWidth(item[1] + item[2]);
-			// CommonMark: 5+ spaces after the marker means content starts one column past it.
-			const content = markerEnd + (gap > 4 ? 1 : gap);
-			if (content <= bound) return content;
-		}
-		const lead = indentWidth(line.slice(0, line.length - line.trimStart().length));
-		if (lead === 0) return 0;
-		bound = Math.min(bound, lead);
-	}
-	return 0;
-}
-
 /**
  * Replaces every ```mermaid fence with an inline SVG before markdown parsing.
  *
@@ -192,42 +158,20 @@ export function preRenderMermaid(
 	const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
 	const out: string[] = [];
 	let index = 0;
-	let i = 0;
-	while (i < lines.length) {
-		// Only a line that starts (after whitespace) with the fence opens one: a `> ` blockquote prefix
-		// never matches, so a quoted fence stays code with no `> ` leaking into the diagram source.
-		const open = /^([ \t]*)(`{3,}|~{3,})(.*)$/.exec(lines[i]);
-		const fenceChar = open?.[2][0];
-		if (!open || !fenceChar || (fenceChar === "`" && open[3].includes("`"))) {
-			out.push(lines[i]);
-			i += 1;
-			continue;
-		}
-		const [, indent, fence, info] = open;
-		// 4+ columns past its container's content column, the line is indented code, not a fence.
-		const width = indentWidth(indent);
-		if (width - containerColumn(lines, i, width) >= 4) {
-			out.push(lines[i]);
-			i += 1;
-			continue;
-		}
-		const closer = new RegExp(`^[ \\t]*${fenceChar}{${fence.length},}[ \\t]*$`);
-		let close = -1;
-		for (let j = i + 1; j < lines.length; j++) {
-			if (closer.test(lines[j])) {
-				close = j;
-				break;
-			}
-		}
-		// Every fence is consumed whole, so a mermaid fence nested in another fenced block stays code.
-		// An unclosed fence runs to the end of the document, as in CommonMark.
-		const end = close === -1 ? lines.length - 1 : close;
+	let next = 0;
+	// Fences follow lib/markdown-fence.ts. Only a line that starts (after whitespace) with the
+	// fence opens one: a `> ` blockquote prefix never matches, so a quoted fence stays code with
+	// no `> ` leaking into the diagram source. Every fence is consumed whole, so a mermaid fence
+	// nested in another fenced block stays code, and an unclosed fence runs to the end as code.
+	for (const block of findFenceBlocks(lines)) {
+		out.push(...lines.slice(next, block.open));
+		const { open, close, indent, info } = block;
 		if (close === -1 || info.trim().split(/\s+/)[0].toLowerCase() !== "mermaid") {
-			out.push(...lines.slice(i, end + 1));
-			i = end + 1;
+			next = close === -1 ? lines.length : close + 1;
+			out.push(...lines.slice(open, next));
 			continue;
 		}
-		const body = lines.slice(i + 1, close).map((l) => {
+		const body = lines.slice(open + 1, close).map((l) => {
 			let k = 0;
 			while (k < indent.length && k < l.length && (l[k] === " " || l[k] === "\t")) k += 1;
 			return l.slice(k);
@@ -244,8 +188,9 @@ export function preRenderMermaid(
 			});
 		}
 		out.push(indent + zoomableFigure(normalizeSvgWidth(svg), n));
-		i = close + 1;
+		next = close + 1;
 	}
+	out.push(...lines.slice(next));
 	return out.join("\n");
 }
 

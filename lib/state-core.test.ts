@@ -2058,6 +2058,10 @@ describe("planFileHasTodos", () => {
 		expect(planFileHasTodos(planWith("## TODOs\n\n````md\n```\n````\n- [ ] 1. 실제 작업\n"))).toBe(true);
 	});
 
+	test("목록 항목 아래 들여쓴 펜스 안의 TODO 줄은 세지 않음", () => {
+		expect(planFileHasTodos(planWith("## TODOs\n\n10. 예시\n\n    ```\n    - [ ] 1. 예시\n    ```\n"))).toBe(false);
+	});
+
 	test("TODO 번호 없는 체크박스 줄은 세지 않음", () => {
 		expect(planFileHasTodos(planWith("## TODOs\n- [ ] 설명만 있는 줄\n"))).toBe(false);
 	});

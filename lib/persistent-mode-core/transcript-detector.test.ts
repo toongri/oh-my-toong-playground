@@ -65,6 +65,16 @@ describe("transcript-detector", () => {
 			expect(detectPrometheusDone("```\n```ts\n<prometheus-done/>\n```")).toBe(false);
 		});
 
+		it("목록 항목 내용 열 기준으로 들여쓴 펜스 안의 토큰은 감지하지 않음", () => {
+			expect(detectPrometheusDone("10. 예시\n\n    ```\n    <prometheus-done/>\n    ```")).toBe(false);
+			expect(detectPrometheusDone("- 상위\n  - 하위\n\n    ```\n    <prometheus-done/>\n    ```")).toBe(false);
+			expect(detectPrometheusDone("10. 예시\n\n    ```\n    x\n    ```\n\n<prometheus-done/>")).toBe(true);
+		});
+
+		it("최상위에서 4칸 들여쓴 펜스 줄은 들여쓴 코드라 펜스를 열지 않음", () => {
+			expect(detectPrometheusDone("예시:\n\n    ```\n\n<prometheus-done/>")).toBe(true);
+		});
+
 		it("닫히지 않은 펜스 뒤의 토큰은 감지하지 않음", () => {
 			expect(detectPrometheusDone("```\ncode\n<prometheus-done/>")).toBe(false);
 		});
