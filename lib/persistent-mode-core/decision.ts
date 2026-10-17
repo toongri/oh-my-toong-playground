@@ -184,7 +184,7 @@ INSTRUCTIONS:
 3. When the pipeline is fully complete or explicitly aborted, output: <prometheus-done/>
 4. Do NOT stop until <prometheus-done/> is emitted
 
-${continuationContract("preferred", "run `prometheus-state.ts set --await-user` to mark the human gate (S2/design gate/S7), then end your turn (the next progress write clears the pause).")}
+${continuationContract("preferred", "when your turn ends on a question to the user (an S0 interview question or a human gate such as S2/design gate/S7), run `prometheus-state.ts set --await-user`, then end your turn (the next progress write clears the pause).")}
 
 </prometheus-continuation>
 
@@ -769,8 +769,8 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			cleanupBlockCountFiles(stateDir, prometheusAttemptId);
 			cleanupBlockCountFiles(stateDir, prometheusStageAAttemptId);
 		} else if (prometheusState.awaiting_user === true && isProgressLive(prometheusState, nowEpoch)) {
-			// Stop-allowed pause for THIS family only: the model posed a plain-text question at
-			// a human gate (S2/design gate/S7) and set awaiting_user via `prometheus-state.ts
+			// Stop-allowed pause for THIS family only: the model posed a plain-text question to
+			// the user (an S0 interview question or a human gate such as S2/design gate/S7) and set awaiting_user via `prometheus-state.ts
 			// set --await-user`. An intentional yield, NOT completion — the state stays active
 			// and is resumed (awaiting_user auto-cleared) on the next progress write. Reset
 			// this family's block count: a legitimate pause is not a failure.

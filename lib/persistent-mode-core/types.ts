@@ -89,7 +89,7 @@ export interface PrometheusState {
 	active: boolean;
 	/**
 	 * Set by `prometheus-state.ts set --await-user` when a plain-text question is
-	 * posed at a human gate (S2/S7). The Stop gate reads it as a legitimate pause
+	 * posed to the user at any phase (an S0 interview question or a human gate such as S2/S7). The Stop gate reads it as a legitimate pause
 	 * and allows the turn to end without completing. Absent on legacy/foreign
 	 * states — fail closed to "not paused" (blocks, as before).
 	 */

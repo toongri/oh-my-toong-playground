@@ -39,8 +39,8 @@ export interface PrometheusState {
 	presentation?: PresentationSubmission;
 	active: boolean;
 	/**
-	 * Set true by `set --await-user` when a plain-text question is posed at a
-	 * human-decision gate (S2 co-design, S7 execution bridge); cleared to false by
+	 * Set true by `set --await-user` when a plain-text question is posed to the
+	 * user at any phase (an S0 interview question, or a human-decision gate such as S2 co-design, S7 execution bridge); cleared to false by
 	 * any later `set` that does not repeat the flag (i.e. the next progress write).
 	 * The persistent-mode Stop gate reads it as a legitimate pause and allows the
 	 * turn to end WITHOUT completing — the session resumes on the user's reply.
