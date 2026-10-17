@@ -124,17 +124,31 @@ export interface LedgerResult {
 const USERS_HEADING = "## All user messages (verbatim)";
 const UNVERIFIED_HEADING = "## Unverified points";
 
-/** User messages recorded in an earlier ledger, so a windowed log keeps every U-id resolvable. */
+/** Ledgers written before the latest release put this section after the user messages. */
+const OLD_APPENDIX_HEADING = "## Appendix: original text of approved proposals";
+
+/**
+ * User messages recorded in an earlier ledger, so a windowed log keeps every U-id resolvable.
+ * The section runs to the next known heading or the end of the file: a message may itself contain
+ * `## ` lines or a quoted `- [U<n>] ` line. U-ids only increase, so a line is a new entry only when
+ * its number exceeds the previous entry's.
+ */
 export function previousUsers(ledger: string | undefined): Message[] {
 	if (!ledger) return [];
-	const start = ledger.indexOf(USERS_HEADING);
-	if (start < 0) return [];
+	const marker = `\n${USERS_HEADING}\n`;
+	let start = ledger.lastIndexOf(marker);
+	if (start >= 0) start += marker.length;
+	else if (ledger.startsWith(`${USERS_HEADING}\n`)) start = USERS_HEADING.length + 1;
+	else return [];
 	const users: Message[] = [];
-	for (const line of ledger.slice(start + USERS_HEADING.length).split("\n")) {
-		if (line.startsWith("## ")) break;
-		const match = line.match(/^- \[(U\d+)\] ([\s\S]*)$/);
-		if (match) users.push({ id: match[1], text: match[2] });
-		else if (users.length > 0) users[users.length - 1].text += `\n${line}`;
+	let lastNumber = 0;
+	for (const line of ledger.slice(start).split("\n")) {
+		if (line === UNVERIFIED_HEADING || line === OLD_APPENDIX_HEADING) break;
+		const match = line.match(/^- \[U(\d+)\] ([\s\S]*)$/);
+		if (match && Number(match[1]) > lastNumber) {
+			lastNumber = Number(match[1]);
+			users.push({ id: `U${match[1]}`, text: match[2] });
+		} else if (users.length > 0) users[users.length - 1].text += `\n${line}`;
 	}
 	for (const user of users) user.text = user.text.replace(/\n+$/, "");
 	return users;

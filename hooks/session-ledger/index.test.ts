@@ -465,10 +465,41 @@ describe("재시도와 대체 경로", () => {
 	});
 
 	test("이전 ledger의 여러 줄 사용자 메시지를 이어받는다", () => {
-		const previous = "## All user messages (verbatim)\n- [U1] 첫 줄\n둘째 줄\n- [U2] 좋아\n\n## Appendix: x\n";
+		const previous = "## All user messages (verbatim)\n- [U1] 첫 줄\n둘째 줄\n- [U2] 좋아\n\n## Appendix: original text of approved proposals\n- [U9] 부록\n";
 		expect(previousUsers(previous)).toEqual([
 			{ id: "U1", text: "첫 줄\n둘째 줄" },
 			{ id: "U2", text: "좋아" },
+		]);
+	});
+
+	test("사용자 메시지 안의 마크다운 제목에서 파싱을 멈추지 않는다", () => {
+		const previous = "## All user messages (verbatim)\n- [U1] 첫 요청\n- [U2] 이 문서 봐\n## Plan\nstep one\n- [U3] never push --force\n";
+		expect(previousUsers(previous)).toEqual([
+			{ id: "U1", text: "첫 요청" },
+			{ id: "U2", text: "이 문서 봐\n## Plan\nstep one" },
+			{ id: "U3", text: "never push --force" },
+		]);
+	});
+
+	test("본문에 제목 문자열이 있어도 마지막 실제 사용자 섹션을 읽는다", () => {
+		const previous =
+			'# Session ledger\n\n## Files\n```ts\nconst USERS_HEADING = "## All user messages (verbatim)";\n```\nnote: ## All user messages (verbatim)\n\n## All user messages (verbatim)\n- [U1] 진짜 하나\n- [U2] 진짜 둘\n';
+		expect(previousUsers(previous)).toEqual([
+			{ id: "U1", text: "진짜 하나" },
+			{ id: "U2", text: "진짜 둘" },
+		]);
+	});
+
+	test("파일 맨 앞의 사용자 섹션 제목도 읽는다", () => {
+		expect(previousUsers("## All user messages (verbatim)\n- [U1] 하나\n")).toEqual([{ id: "U1", text: "하나" }]);
+	});
+
+	test("번호가 커지지 않는 인용 줄은 새 사용자 메시지로 세지 않는다", () => {
+		const previous = "## All user messages (verbatim)\n- [U1] 첫째\n- [U2] 이렇게 적혀 있었어:\n- [U1] 인용된 줄\n- [U2] 또 인용\n- [U3] 셋째\n";
+		expect(previousUsers(previous)).toEqual([
+			{ id: "U1", text: "첫째" },
+			{ id: "U2", text: "이렇게 적혀 있었어:\n- [U1] 인용된 줄\n- [U2] 또 인용" },
+			{ id: "U3", text: "셋째" },
 		]);
 	});
 });
