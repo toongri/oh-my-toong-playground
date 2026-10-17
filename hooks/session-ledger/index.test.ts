@@ -71,6 +71,18 @@ describe("Claude 대화 기록 추출", () => {
 		expect(log.lines).toEqual(["[U2 user] 두 번째 요청"]);
 	});
 
+	test("창 밖의 질문 답변도 세어, 창만 읽은 추출과 전체 추출의 사용자 id가 같다", () => {
+		const records = [
+			user("첫 요청"),
+			assistant({ type: "tool_use", id: "ask1", name: "AskUserQuestion", input: { questions: [{ question: "A?" }] } }),
+			{ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "ask1", content: "A로 하자" }] } },
+			{ type: "system", subtype: "compact_boundary" },
+			user("다음 요청"),
+		];
+		expect(extractClaude(records, 4).users).toEqual([{ id: "U3", text: "다음 요청" }]);
+		expect(extractClaude(records).users.at(-1)).toEqual({ id: "U3", text: "다음 요청" });
+	});
+
 	test("스킬 본문은 meta 레코드로 와도 로그에 남고, 다른 meta 레코드는 버린다", () => {
 		const records = [
 			user("Base directory for this skill: /skills/sisyphus\n\ncommits by mnemosyne", { isMeta: true }),
