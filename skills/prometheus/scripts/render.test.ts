@@ -400,3 +400,110 @@ describe("findBackslashEndedCodeSpans", () => {
 		expect(findBackslashEndedCodeSpans("참조: ``check(sql`…`)`` 문법.")).toEqual([]);
 	});
 });
+
+describe("물결표(~) 범위 표기 — 한 개짜리는 취소선이 아니다", () => {
+	test("문단의 1~3 와 4~6 은 물결표를 그대로 남긴다", () => {
+		const html = renderToHtml("# T\n\n범위 1~3 와 4~6 입니다.\n", "t");
+		expect(html).toContain("<p>범위 1~3 와 4~6 입니다.</p>");
+		expect(html).not.toContain("<del>");
+	});
+
+	test("제목과 목차 항목도 물결표를 남긴다", () => {
+		const html = renderToHtml("# T\n\n## Wave 1~3 와 4~6\n", "t");
+		expect(html).not.toContain("<del>");
+		expect(html).toContain(">Wave 1~3 와 4~6</h2>");
+		expect(html).toMatch(/<a href="#[^"]*">Wave 1~3 와 4~6<\/a>/);
+	});
+
+	test("<summary> 안에서도 물결표를 남긴다", () => {
+		const html = renderToHtml("<details><summary>태스크 1~3 와 4~6</summary>\n\n- 본문\n\n</details>\n", "t");
+		expect(html).toContain("<summary>태스크 1~3 와 4~6</summary>");
+		expect(html).not.toContain("<del>");
+	});
+
+	test("물결표 두 개짜리는 여전히 취소선이다", () => {
+		expect(renderToHtml("# T\n\n~~취소~~\n", "t")).toContain("<del>취소</del>");
+		expect(renderToHtml("<details><summary>~~취소~~</summary>\n\n- a\n\n</details>\n", "t")).toContain(
+			"<summary><del>취소</del></summary>",
+		);
+	});
+});
+
+describe("HTML 블록 바로 아래에 쓴 마크다운", () => {
+	test("<summary> 줄 바로 아래의 목록이 목록으로 렌더된다", () => {
+		const html = renderToHtml("# T\n\n<details>\n<summary>T</summary>\n- item **two**\n\n</details>\n", "t");
+		expect(html).toContain("<li>item <strong>two</strong></li>");
+		expect(html).toContain("</details>");
+		expect(html).not.toContain("- item");
+	});
+
+	test("<div> 안의 마크다운 줄이 렌더된다", () => {
+		const html = renderToHtml('# T\n\n<div class="callout">\n**bold** text\n</div>\n', "t");
+		expect(html).toContain("<strong>bold</strong> text");
+		expect(html).toContain('<div class="callout">');
+		expect(html).toContain("</div>");
+	});
+
+	test("mermaid 그림 바로 아래의 범례 줄이 렌더된다", () => {
+		const md = "# T\n\n```mermaid\ngraph TD\n  A --> B\n```\n**범례** `x`\n";
+		const pre = preRenderMermaid(md, () => '<svg viewBox="0 0 10 10"></svg>');
+		const html = renderToHtml(pre, "t");
+		expect(html).toContain("<strong>범례</strong> <code>x</code>");
+		expect(html).toContain('<figure class="diagram">');
+	});
+
+	test("나뉜 뒤쪽의 <summary> 와 제목도 인라인 렌더·앵커를 유지한다", () => {
+		const html = renderToHtml("# T\n\n<div>\n**a**\n<details><summary>`k` 1~2</summary>\n\n## 뒤 제목\n", "t");
+		expect(html).toContain("<strong>a</strong>");
+		expect(html).toContain("<summary><code>k</code> 1~2</summary>");
+		expect(html).toContain('<h2 id="뒤-제목">뒤 제목</h2>');
+		expect(html).toContain('<a href="#뒤-제목">뒤 제목</a>');
+	});
+
+	test("모든 줄이 <로 시작하는 블록은 그대로 둔다", () => {
+		const block = '<div class="flow">\n<div class="flow-step">a</div>\n<div class="flow-step">b</div>\n</div>';
+		const html = renderToHtml(`# T\n\n${block}\n`, "t");
+		expect(html).toContain(block);
+	});
+
+	test("여는 태그가 여러 줄이어도 쪼개지 않는다", () => {
+		const block = '<div\n  class="x">\n</div>';
+		expect(renderToHtml(`# T\n\n${block}\n`, "t")).toContain(block);
+	});
+
+	test("<pre> 원문 블록은 < 로 시작하지 않는 줄이 있어도 건드리지 않는다", () => {
+		const block = "<pre>\n**not bold**\n- not list\n</pre>";
+		const html = renderToHtml(`# T\n\n${block}\n`, "t");
+		expect(html).toContain(block);
+		expect(html).not.toContain("<strong>not bold</strong>");
+	});
+
+	test("탭으로 들여쓴 본문은 코드 블록이 되지 않고 원문 그대로 남는다", () => {
+		const html = renderToHtml('# T\n\n<callout icon="📌" color="gray_bg">\n\t**기준** `main`\n\t본문\n</callout>\n', "t");
+		expect(html).not.toContain("<pre>");
+		expect(html).not.toContain("<code>**");
+		expect(html).toContain("**기준**");
+	});
+
+	test("공백 4칸으로 들여쓴 본문도 코드 블록이 되지 않는다", () => {
+		const html = renderToHtml("# T\n\n<div>\n    **a**\n</div>\n", "t");
+		expect(html).not.toContain("<pre>");
+		expect(html).toContain("**a**");
+	});
+
+	test("공백+탭 혼합 들여쓰기도 코드 블록이 되지 않는다", () => {
+		const html = renderToHtml("# T\n\n<div>\n \t**a**\n</div>\n", "t");
+		expect(html).not.toContain("<pre>");
+	});
+
+	test("공백 1~3칸 들여쓴 마크다운 줄은 여전히 렌더된다", () => {
+		const html = renderToHtml("# T\n\n<div>\n  **a** text\n</div>\n", "t");
+		expect(html).toContain("<strong>a</strong>");
+	});
+
+	test("들여쓴 줄은 건너뛰고 뒤의 후보 줄에서 나눈다", () => {
+		const html = renderToHtml("# T\n\n<div>\n\tx\n<span>s</span>\n**b**\n</div>\n", "t");
+		expect(html).toContain("<strong>b</strong>");
+		expect(html).not.toContain("<pre>");
+	});
+});

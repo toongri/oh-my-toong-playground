@@ -21,7 +21,7 @@ import { execFileSync } from "child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { marked, type Tokens } from "marked";
+import { Marked, marked, type Tokens } from "marked";
 
 /** Heading rows the table of contents is built from. */
 interface TocEntry {
@@ -232,6 +232,41 @@ export function mmdcRenderSvg(source: string, index: number): string {
 	}
 }
 
+/**
+ * GFM reads a single-tilde pair (`1~3 와 4~6`) as strikethrough. These documents
+ * write ranges that way, so only a `~~` pair renders `<del>`; a single-tilde
+ * pair gives its tildes back as literal text around the inline content.
+ */
+function renderDel(this: { parser: { parseInline(t: Tokens.Generic[]): string } }, { tokens, raw }: Tokens.Del): string {
+	const inner = this.parser.parseInline(tokens);
+	return raw.startsWith("~~") ? `<del>${inner}</del>` : `~${inner}~`;
+}
+
+/** Inline-only parser for `<summary>` text: marked's own parser, plus the tilde rule. */
+const summaryMarked = new Marked({ renderer: { del: renderDel } });
+
+/** CommonMark HTML-block start conditions 1-5 (raw text until a closing marker) must not be split. */
+const RAW_HTML_BLOCK = /<(?:pre|script|style|textarea)\b|<!--|<\?|<![A-Za-z[]/i;
+
+/**
+ * Splits a block-level HTML token at the first line that is not itself HTML.
+ * CommonMark keeps an HTML block going until a blank line, so markdown written
+ * directly under `<summary>`, `<div>` or a pre-rendered diagram figure would
+ * stay literal. The line before the split must end with `>` so a multi-line
+ * opening tag is not cut. Returns the index of the split line, or -1.
+ */
+function htmlBlockSplitLine(text: string): number {
+	if (RAW_HTML_BLOCK.test(text)) return -1;
+	const lines = text.split("\n");
+	for (let i = 1; i < lines.length; i++) {
+		// A tab or 4+ spaces of indent would become an indented code block once the rest is re-lexed.
+		if (/^(?: {4}| {0,3}\t)/.test(lines[i])) continue;
+		const line = lines[i].trim();
+		if (line !== "" && !line.startsWith("<") && lines[i - 1].trimEnd().endsWith(">")) return i;
+	}
+	return -1;
+}
+
 export function renderToHtml(markdown: string, title: string): string {
 	const toc: TocEntry[] = [];
 	const seen = new Map<string, number>();
@@ -251,12 +286,19 @@ export function renderToHtml(markdown: string, title: string): string {
 	};
 	// A `<details><summary>…</summary>` line is a raw HTML block, so markdown
 	// would not touch the summary text; render it inline like any other line.
-	renderer.html = ({ text }: Tokens.HTML | Tokens.Tag) =>
-		text.replace(
+	renderer.del = renderDel;
+	renderer.html = function ({ text, block }: Tokens.HTML | Tokens.Tag) {
+		const split = block ? htmlBlockSplitLine(text) : -1;
+		const lines = text.split("\n");
+		const head = split === -1 ? text : lines.slice(0, split).join("\n") + "\n";
+		const withSummary = head.replace(
 			/(<summary\b[^>]*>)([\s\S]*?)(<\/summary>)/gi,
 			(_m, open: string, inner: string, close: string) =>
-				`${open}${marked.parseInline(inner, { async: false })}${close}`,
+				`${open}${summaryMarked.parseInline(inner, { async: false })}${close}`,
 		);
+		// The rest is markdown again; it may hold further HTML blocks (e.g. `</details>`).
+		return split === -1 ? withSummary : withSummary + this.parser.parse(marked.lexer(lines.slice(split).join("\n")));
+	};
 
 	const bodyHtml = String(marked.parse(markdown, { renderer, async: false }));
 
