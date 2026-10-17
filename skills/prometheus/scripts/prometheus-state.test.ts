@@ -1271,3 +1271,76 @@ describe("help subcommand", () => {
 		expect(out).toContain("prometheus-state commands:");
 	});
 });
+
+describe("set 입력 검증", () => {
+	function runSet(sid: string, args: string) {
+		writePristinePromState(sid);
+		const path = `${tmpDir}/prometheus-state-${sid}.json`;
+		const before = readFileSync(path, "utf8");
+		const result = runPromCliMerged(`set ${args}`, { OMT_SESSION_ID: sid, OMT_DIR: tmpDir });
+		return { ...result, unchanged: readFileSync(path, "utf8") === before };
+	}
+
+	test.each(["s6", "S06", "'S6 '", "bogus", "S9", "S", "''"])(
+		"허용 목록 밖 phase %s 는 거부하고 아무것도 쓰지 않음",
+		(phase) => {
+			const { code, out, unchanged } = runSet(`badPhase-${phase.replace(/\W/g, "_")}`, `--phase ${phase}`);
+			expect(code).not.toBe(0);
+			expect(out).toContain("S0");
+			expect(out).toContain("S8");
+			expect(unchanged).toBe(true);
+		},
+	);
+
+	test.each(["S0", "S1", "S5"])("허용된 phase %s 는 그대로 저장함", (phase) => {
+		const { code } = runSet(`okPhase-${phase}`, `--phase ${phase}`);
+		expect(code).toBe(0);
+	});
+
+	test("phase 생략 시 기존 phase를 보존함", () => {
+		const { code } = runSet("omitPhase", "--await-user");
+		expect(code).toBe(0);
+		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-omitPhase.json`, "utf8"));
+		expect(state.phase).toBe("S0");
+	});
+
+	test("상대 --plan-path 는 거부하고 아무것도 쓰지 않음", () => {
+		const { code, out, unchanged } = runSet("relPlan", "--phase S0 --plan-path plans/x.md");
+		expect(code).not.toBe(0);
+		expect(out).toMatch(/plan-path.*absolute|absolute.*plan-path/i);
+		expect(unchanged).toBe(true);
+	});
+
+	test("절대 --plan-path 는 허용함", () => {
+		const { code } = runSet("absPlan", `--phase S0 --plan-path ${tmpDir}/plans/x.md`);
+		expect(code).toBe(0);
+	});
+
+	test.each([
+		["--resume-summary --wip", "--resume-summary"],
+		["--phase S5 --submit-presentation", "--submit-presentation"],
+		["--phase", "--phase"],
+		["--phase S0 --plan-path", "--plan-path"],
+		["--phase S0 --resume-summary", "--resume-summary"],
+		["--phase --plan-path /x/y.md", "--phase"],
+	])("값이 필요한 플래그에 값이 없으면 거부함: set %s", (args, flag) => {
+		const { code, out, unchanged } = runSet(`noValue-${args.replace(/\W/g, "_")}`, args);
+		expect(code).not.toBe(0);
+		expect(out).toContain(`${flag} requires a value`);
+		expect(unchanged).toBe(true);
+	});
+
+	test("adopt --src 값이 없으면 거부함", () => {
+		const { code, out } = runPromCliMerged("adopt --src", { OMT_SESSION_ID: "noSrc", OMT_DIR: tmpDir });
+		expect(code).not.toBe(0);
+		expect(out).toContain("--src requires a value");
+	});
+
+	test("불리언 플래그는 값 없이 계속 동작함", () => {
+		const { code } = runSet("boolFlags", "--phase S3 --mark-plan-done --await-user");
+		expect(code).toBe(0);
+		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-boolFlags.json`, "utf8"));
+		expect(state.awaiting_user).toBe(true);
+		expect(state.steps.plan.done).toBe(true);
+	});
+});

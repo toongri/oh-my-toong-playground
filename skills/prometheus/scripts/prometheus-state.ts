@@ -14,6 +14,7 @@
  */
 
 import { existsSync, readFileSync, unlinkSync, statSync } from "fs";
+import { isAbsolute } from "path";
 import { execSync } from "child_process";
 import { getOmtDir } from "@lib/omt-dir";
 import {
@@ -405,6 +406,26 @@ function parseArgs(args: string[]): Record<string, string | boolean> {
 	return result;
 }
 
+/** Pipeline tokens accepted by `set --phase`. */
+const PHASES = ["S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"];
+
+function fail(message: string): never {
+	process.stderr.write(`prometheus-state: ${message}\n`);
+	process.exit(1);
+}
+
+/**
+ * Value of a string-valued flag, or undefined when absent. parseArgs stores boolean
+ * `true` when no value follows (or the next token starts with `--`); that is a
+ * missing value, not a string, so refuse it instead of coercing to "true".
+ */
+function stringFlag(args: Record<string, string | boolean>, name: string): string | undefined {
+	const value = args[name];
+	if (value === undefined) return undefined;
+	if (typeof value !== "string") fail(`--${name} requires a value`);
+	return value;
+}
+
 /**
  * Single source of truth for this CLI's command roster: every subcommand `main()`
  * dispatches, tagged with who may run it. `help` prints this via renderHelp() so the
@@ -440,10 +461,17 @@ function main(): void {
 
 	try {
 		if (subcommand === "set") {
-			const phase = String(args["phase"] ?? "");
-			const planPath = args["plan-path"] !== undefined ? String(args["plan-path"]) : undefined;
-			const resumeSummary =
-				args["resume-summary"] !== undefined ? String(args["resume-summary"]) : undefined;
+			const phaseArg = stringFlag(args, "phase");
+			if (phaseArg !== undefined && !PHASES.includes(phaseArg)) {
+				fail(`--phase must be one of ${PHASES.join(", ")} (exact, case-sensitive), got: ${JSON.stringify(phaseArg)}`);
+			}
+			const phase = phaseArg ?? "";
+			const planPath = stringFlag(args, "plan-path");
+			if (planPath !== undefined && !isAbsolute(planPath)) {
+				fail(`--plan-path must be an absolute path, got: ${JSON.stringify(planPath)}`);
+			}
+			const resumeSummary = stringFlag(args, "resume-summary");
+			const submitPresentation = stringFlag(args, "submit-presentation");
 
 			// --record-ac '<json-array>'  |  --record-ac -  (read JSON array from stdin)
 			let recordAc: string[] | undefined;
@@ -507,7 +535,7 @@ function main(): void {
 				non_goals: nonGoals,
 				mark_design_done: markDesignDone || undefined,
 				mark_plan_done: markPlanDone || undefined,
-				submit_presentation: typeof args["submit-presentation"] === "string" ? args["submit-presentation"] : undefined,
+				submit_presentation: submitPresentation,
 				await_user: awaitUser || undefined,
 			});
 		} else if (subcommand === "clear") {
@@ -531,7 +559,7 @@ function main(): void {
 			}
 			process.stdout.write(JSON.stringify(state, null, 2) + "\n");
 		} else if (subcommand === "adopt") {
-			const srcSid = args["src"] !== undefined ? String(args["src"]) : undefined;
+			const srcSid = stringFlag(args, "src");
 			if (!srcSid) {
 				process.stderr.write("adopt: --src <sid> is required\n");
 				process.exit(1);
