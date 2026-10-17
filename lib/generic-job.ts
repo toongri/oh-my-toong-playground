@@ -280,7 +280,7 @@ export function extractDenySubagents(settings: Record<string, unknown>): boolean
 //           (plugin-provided servers) + `-c mcp_servers.<name>.enabled=false`
 //           for every [mcp_servers.<name>] header read from <CODEX_HOME>/config.toml
 //           (`mcpBlock`, computed at job start; the file is never written).
-//           add -> `-c mcp_servers.<name>.command=...` / `.args=[...]`.
+//           add -> `-c mcp_servers.<name>.command=...` / `.args=[...]` / `.enabled=true`.
 // ---------------------------------------------------------------------------
 
 export type McpAddServers = Record<string, { command: string; args: string[] }>;
@@ -590,6 +590,9 @@ export function buildAugmentedCommand(
 				escapeForSplitCommand(`mcp_servers.${name}.command=${JSON.stringify(String(server.command))}`),
 				"-c",
 				escapeForSplitCommand(`mcp_servers.${name}.args=[${args.join(",")}]`),
+				// `-c` merges into an inherited [mcp_servers.<name>] entry, so its `enabled = false` would survive.
+				"-c",
+				`mcp_servers.${name}.enabled=true`,
 			);
 		}
 	} else if (cliType === "claude") {

@@ -691,6 +691,8 @@ describe("buildAugmentedCommand", () => {
 				'mcp_servers.codegraph.command="codegraph"',
 				"-c",
 				'mcp_servers.codegraph.args=["serve","--mcp"]',
+				"-c",
+				"mcp_servers.codegraph.enabled=true",
 			]);
 		});
 
@@ -704,9 +706,18 @@ describe("buildAugmentedCommand", () => {
 				'mcp_servers.codegraph.command="codegraph"',
 				"-c",
 				'mcp_servers.codegraph.args=["serve","--mcp"]',
+				"-c",
+				"mcp_servers.codegraph.enabled=true",
 			]);
 			expect(result.command).not.toContain("--disable");
 			expect(result.command).not.toContain("enabled=false");
+		});
+
+		test("codex: add turns its server on even when the inherited config.toml disables it", () => {
+			// `-c` overrides merge into an inherited [mcp_servers.<name>] entry, so an inherited
+			// `enabled = false` would survive command/args alone.
+			const tokens = splitCommand(buildAugmentedCommand({ command: "codex exec", mcpAdd: codegraphAdd }, "codex").command);
+			expect(tokens).toContain("mcp_servers.codegraph.enabled=true");
 		});
 
 		test("claude: reset + add translates to --strict-mcp-config and --mcp-config JSON", () => {
@@ -749,6 +760,8 @@ describe("buildAugmentedCommand", () => {
 				`mcp_servers.odd.command=${JSON.stringify(command)}`,
 				"-c",
 				`mcp_servers.odd.args=${JSON.stringify(args)}`,
+				"-c",
+				"mcp_servers.odd.enabled=true",
 			]);
 
 			const claude = splitCommand(
