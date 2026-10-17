@@ -261,6 +261,24 @@ describe("prometheus state", () => {
 		})).toThrow(/non-goals|decider|format/i);
 	});
 
+	test("prometheus refusal hints how to add a decider to a '- ' line", () => {
+		seedFile("hintDecider");
+		expect(() => setPrometheusState("hintDecider", {
+			phase: "S1",
+			non_goals: "- 인증 리팩터는 이번에 안 함",
+		})).toThrow(
+			'add a membership test: "- 인증 리팩터는 이번에 안 함 | decider: <what change would make a finding out of scope, e.g. a file path or function>"',
+		);
+	});
+
+	test("prometheus refusal hints that each line must start with '- '", () => {
+		seedFile("hintDash");
+		expect(() => setPrometheusState("hintDash", {
+			phase: "S1",
+			non_goals: "인증 리팩터는 이번에 안 함",
+		})).toThrow('each line must start with "- "');
+	});
+
 	test("prometheus allows blank non_goals at the S1 requirements gate", () => {
 		seedFile("blankNonGoals");
 		setPrometheusState("blankNonGoals", { phase: "S1", non_goals: "" });

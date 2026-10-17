@@ -184,13 +184,19 @@ function validatedNonGoals(value: unknown, phase: unknown): string | null {
 	return nonGoals;
 }
 
+const nonGoalFixHint = (line: string): string =>
+	line.startsWith("- ")
+		? ` — add a membership test: "${line.trimEnd()} | decider: <what change would make a finding out of scope, e.g. a file path or function>"`
+		: ' — each line must start with "- "';
+
 function assertValidNonGoals(value: string, phase: string): void {
 	if (validatedNonGoals(value, phase) !== null) return;
 	if (value.trim() === "" && phase !== "S0" && phase !== "S1") {
 		throw new Error(`non-goals are required for ${phase} and must contain a canonical decider line`);
 	}
+	const offending = value.split("\n").find((l) => l.trim() !== "" && !NON_GOAL_LINE_PATTERN.test(l)) ?? value;
 	throw new Error(
-		`non-goals refused — line does not match "- {excluded item} | decider: {membership test}" format: "${value}"`,
+		`non-goals refused — line does not match "- {excluded item} | decider: {membership test}" format: "${offending}"${nonGoalFixHint(offending)}`,
 	);
 }
 
