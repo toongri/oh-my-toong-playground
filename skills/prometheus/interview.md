@@ -126,8 +126,8 @@ How the collect lanes are falsified splits by intent (see SKILL.md `#### Collect
 
 **On Architecture intent**, dispatch one **falsifying verifier** subagent per non-empty lane —
 foreground, parallel, all non-empty lanes in ONE response — using the template below. Each verifier
-returns the per-finding verdict schema (`confidence` included); verdict semantics and the
-vocabulary-divergence rule live in SKILL.md.
+returns the per-finding verdict schema (`confidence` included); the schema and the Exclusion rule
+live in SKILL.md `#### Collect→verify contract`.
 
 **On Complex intent**, do NOT dispatch verifiers for the codebase (explore aspect) lanes — the
 planner falsifies those lanes inline, using the template below as its rubric: **re-read or re-grep

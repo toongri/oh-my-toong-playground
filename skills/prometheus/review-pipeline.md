@@ -101,41 +101,41 @@ no-invention Fidelity Bounds still hold.
   bun ${CLAUDE_SKILL_DIR}/scripts/render.ts --in $OMT_DIR/plans/presentation/{name}.md --out $OMT_DIR/plans/presentation/{name}.html
   bun ${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts set --phase S5 --submit-presentation "$OMT_DIR/plans/presentation/{name}.html"
   ```
-- **Presentation review (required, after render/submit, before `prometheus-done`)**: dispatch the `presentation-reviewer` agent to contrast the presentation against the plan it was rendered from, for its reader. It is skill-agnostic, so assemble the bundle:
+- **Presentation review (required, after render/submit, before Stage C and `prometheus-done`)**: dispatch the `presentation-reviewer` agent to contrast the presentation against the plan it was rendered from, for its reader. It is skill-agnostic, so assemble the bundle:
   - **presentation**: the presentation `.md` (renderer input) and its `.html`.
-  - **sources**: the durable plan `plan.md` (the SSOT the presentation re-surfaces — its decision log, AC, verification, boundary map), plus the **Stage B recommendation and Pipeline State session-state artifacts** that produced the two session-derived boxes (reviewer verdict records, the Stage B signal/recommendation record, and the pipeline-state journal). Do not copy those artifacts into `plan.md`; it remains the plan SSOT.
+  - **sources**: the durable plan `plan.md` (the SSOT the presentation re-surfaces — its decision log, AC, verification, boundary map), plus the **Stage B recommendation and Pipeline State session-state artifacts** that produced the two session-derived boxes (reviewer verdict records, the Stage B signal/recommendation record, and the pipeline-state journal). These come from the conversation record plus `prometheus-state.ts get` output; the state CLI has no Stage B field. Do not copy those artifacts into `plan.md`; it remains the plan SSOT.
   - **reader_persona**: "a colleague or team-lead with no prior context on this work — understands what the plan does, why it is designed this way, and what to watch, from this page alone".
   Its verdict is `APPROVE` / `COMMENT` / `REQUEST_CHANGES` / `INCONCLUSIVE`. `APPROVE/COMMENT` may proceed. `REQUEST_CHANGES` requires repairs and re-reviews: repair the presentation or its source bundle, re-render, re-submit, and re-review. `INCONCLUSIVE` or a missing/malformed verdict blocks completion until the reviewer input bundle is repaired and a valid result is returned. This is a required review step, not a new gate; run it every time. It never rewrites `plan.md` — a fidelity finding means the presentation drifted from the plan (Fidelity Bounds), so fix the presentation, not the plan.
 
 ### Presentation Components
 
-The Stage A markdown presentation is composed of 5 distinct components:
+The Stage A markdown presentation is composed of 6 distinct components (the second bullet carries two boxes):
 
-- **H1 + meta table** — plan title as an H1 heading, followed by a meta table (plan file path, TODO count, AC count, wave label)
-- **Stage B + Pipeline State** — two blockquote boxes authored from session state, in this order: (a) Stage B · Execution Recommendation (reviewer verdicts, recommendation output), (b) Pipeline State (S0 → S_current transitions)
+- **H1 + meta table** — plan title as an H1 heading, followed by a meta table (plan file path, TODO count, AC count, Wave — the distinct `Wave:` values the plan's TODOs use, e.g. `1, 2, FINAL`)
+- **Stage B + Pipeline State** — two blockquote boxes authored from session state, in this order: (a) Stage B · Execution Recommendation (reviewer verdicts, and the recommendation computed under Stage B before this render), (b) Pipeline State (S0 → S_current transitions as of the render at S5, so it does not show later phases)
 - **Bird's-Eye View** — the `## Bird's-Eye View` section, governed by these sub-rules (each independently editable):
   - **Source authority**: the ownership table + flow mermaid are generated FROM the decided D-items in the plan's decision log. The decision log is the single render authority — no node, edge, or ownership absent from the decided log.
   - **Existence / trigger**: the System topology diagram is REQUIRED when the plan has >= 2 components — a single existence trigger, not a discretionary diagram test. This is the same fact `diagram-guide.md` states for the System topology lens.
   - **Content source**: existence and content source are distinct (the general Tier-2 rule — see the Render-source invariant under Readability Enrichment). A triggered lens diagram sources from content decided in plan.md, whether that content is a structural D-item OR decided plan prose. For System topology specifically: the Tier-1 richest form — the decision-log-derived ownership table plus its flow mermaid — is sourced from structural enumeration (Complex/Architecture flag). When the plan has >= 2 components but carries NO structural enumeration (e.g. a Scoped plan), the System topology diagram still exists, drawn from the plan-decided component interactions, while the decision-log ownership table is omitted.
   - **Edges: none**: when every structural (solo) D-item in the log declares `Edges: none` — contested items carry no Edges field and are excluded from this check — the section renders the ownership table only (the flow mermaid is omitted).
   - **Gating exemption**: `diagram-guide.md` governs type selection, guardrails, and presentation for all diagrams including this one, but does not gate its existence — existence is the ">= 2 components" trigger above.
-  - **Coverage table + rendering order**: the section opens with a 6-row coverage table, one row per lens, canonical header `| Lens | Trigger FACT | Status |`, each row's Status either `drawn` or `trigger FALSE: <reason>` — silence is not allowed, every lens row must resolve to one of the two. Below the table, every lens whose trigger FACT holds is rendered in full, ordered macro → micro (System topology / Module-API → User-Actor / Domain state → Domain-Service object / Business logic), each with its own Why → Diagram → Interpretation — never scattered through the plan body. Every mermaid fence in the presentation file lives inside this section.
+  - **Coverage table + rendering order**: the section opens with a 6-row coverage table, one row per lens, canonical header `| Lens | Trigger FACT | Status |`, each row's Status either `drawn (N)`, where N is that lens's diagram count, or `trigger FALSE: <reason>` — silence is not allowed, every lens row must resolve to one of the two. The N values of all `drawn` rows sum to the number of mermaid fences in the presentation; every fence counts under the one lens it depicts, and the decision-log mermaid counts in the System topology row (see `diagram-guide.md` Coverage Table). Below the table, every lens whose trigger FACT holds is rendered in full, ordered macro → micro (System topology / Module-API → User-Actor / Domain state → Domain-Service object / Business logic), each with its own Why → Diagram → Interpretation — never scattered through the plan body. Every mermaid fence in the presentation file lives inside this section, the decision-log mermaid included.
   - **Empty-section edge case**: when the plan carries no structural enumeration, the decision-log-derived ownership table is omitted — but this does NOT flip the System topology row to `trigger FALSE`. Once `>= 2 components` holds, that lens's diagram still exists, drawn from the plan-decided component interactions (the Content source rule above), so its coverage-table row reads `drawn`. `trigger FALSE: <reason>` is reserved for a lens whose own trigger FACT is genuinely false — never for a triggered lens that merely lost its structural (decision-log) source. The section is still authored to host whatever other lens triggers hold.
-- **Review Digest** — a `## Review Digest` section, immediately after the Bird's-Eye View when that section is generated, otherwise first in the presentation markdown. Contains the plan's acceptance criteria, each paired with its verification method (command / check) re-surfaced verbatim from the plan's AC and Verification sections. This is the collaborator's primary review surface — what will be true and how it is proven. Re-surfacing only; no new facts.
+- **Review Digest** — a `## Review Digest` section, immediately after the Bird's-Eye View when that section is generated, otherwise immediately after the Pipeline State box. Contains the plan's acceptance criteria, each paired with its verification method (command / check) re-surfaced from the plan's AC and Verification sections: verification commands, file paths, identifiers and AC numbers stay verbatim, AC prose is rendered in the session language without changing its meaning. This is the collaborator's primary review surface — what will be true and how it is proven. Re-surfacing only; no new facts.
 - **plan body** — the full plan markdown rewritten for readability into the presentation file; sourced faithfully from plan.md (readability rewrite + enrichment callouts allowed per Readability Enrichment — no omission, no contradiction, no invented facts). **Reading order serves the design reviewer**: execution-detail sections (the TODO breakdown) are wrapped in collapsed `<details><summary>` blocks so design-review content leads and execution detail is opt-in reading — collapse, never omit: content fidelity still requires the full plan present.
 
 ### Presentation Section Order
 
 The presentation markdown is authored in exactly this order, top to bottom:
 
-1. **H1 + meta table** — the plan title as an H1, followed by the meta table (plan file path, TODO count, AC count, wave label).
-2. **Stage B · Execution Recommendation box** — a blockquote surfacing the reviewer verdicts and recommendation output from session state.
-3. **Pipeline State box** — a blockquote surfacing the S0 → S_current pipeline-state journal from session state, immediately after the Execution Recommendation box.
+1. **H1 + meta table** — the plan title as an H1, followed by the meta table (plan file path, TODO count, AC count, Wave).
+2. **Stage B · Execution Recommendation box** — a blockquote surfacing the reviewer verdicts and the recommendation already computed under Stage B (computed before this render, because this box carries it).
+3. **Pipeline State box** — a blockquote surfacing the S0 → S_current pipeline-state journal from session state as of the render (S5), so it does not show later phases, immediately after the Execution Recommendation box.
 4. **Bird's-Eye View** — the `## Bird's-Eye View` section (coverage table + triggered lens diagrams), generated when ANY lens trigger holds (see `diagram-guide.md` Lens Taxonomy) — NOT only the System topology `>= 2 components` trigger. A single-component plan that triggers Domain state or Business logic still generates the section to host that diagram and its coverage-table row; `>= 2 components` gates only the System topology row inside the table, never the section's existence.
-5. **Review Digest** — the `## Review Digest` section (AC paired with verification method), immediately after Bird's-Eye View when generated, otherwise first.
+5. **Review Digest** — the `## Review Digest` section (AC paired with verification method), immediately after Bird's-Eye View when generated, otherwise immediately after the Pipeline State box.
 6. **plan body** — the full plan markdown, rewritten for readability, with the TODO breakdown wrapped in collapsed `<details><summary>` blocks so execution detail is opt-in reading.
 
-Every mermaid fence in the presentation file lives inside the Bird's-Eye View section — fence-locality is absolute, no diagram is drawn anywhere else in the document.
+Every mermaid fence in the presentation file lives inside the Bird's-Eye View section — fence-locality is absolute, no diagram is drawn anywhere else in the document, the decision-log mermaid included.
 
 ### Source Classification
 
@@ -161,11 +161,12 @@ Three invariants govern language translation applied during Stage A rendering.
 - `code block` — all fenced and inline code
 - `file path` — absolute and relative paths
 - `CLI` — command-line tool names and commands
-- `WI-N` — work-item identifiers (e.g. `WI-1`, `WI-2`)
-- `AC#M` — acceptance criteria labels (e.g. `AC#1`)
+- work item numbers — the plan's `TODO 1`, `TODO 2` labels
+- acceptance criterion numbers — as the plan numbers them
 - `S0-S8` — pipeline state identifiers
 - `grep` — tool names used as identifiers in verification commands
 - `drawn` / `trigger FALSE:` — coverage-table status literals
+- `| Lens | Trigger FACT | Status |` — coverage-table header literal
 
 Translating any item is a rule violation.
 
@@ -184,7 +185,7 @@ Translating any item is a rule violation.
 
   **Render-source invariant (two tiers of render authority)**: Render authority is explicitly TWO tiers, and the two tiers source content differently.
 
-  - **Tier 1 — decision-log-bound (the two log-rooted artifacts).** The derived Bird's-Eye View (the decision-log-derived ownership table + flow mermaid) AND the in-band decision-log mermaid are rooted IN the decision log; the decision log in plan.md is their single render authority. They re-visualize the decided D-items as recorded in plan.md — no diagram may introduce ownership or edges absent from the decided log. The bound is bidirectional: such a diagram also may not say LESS than the decided log within its scope — no erasing decided ownership by aggregation, no renaming decided components, no omitting the return edge of a drawn synchronous call. This strict log-binding is what guarantees these two artifacts invent nothing; do not weaken it.
+  - **Tier 1 — decision-log-bound (the two log-rooted artifacts).** The derived Bird's-Eye View (the decision-log-derived ownership table + flow mermaid) AND the decision-log mermaid (which lives inside the Bird's-Eye View section) are rooted IN the decision log; the decision log in plan.md is their single render authority. They re-visualize the decided D-items as recorded in plan.md — no diagram may introduce ownership or edges absent from the decided log. The bound is bidirectional: such a diagram also may not say LESS than the decided log within its scope — no erasing decided ownership by aggregation, no renaming decided components, no omitting the return edge of a drawn synchronous call. This strict log-binding is what guarantees these two artifacts invent nothing; do not weaken it.
   - **Tier 2 — the grouped Bird's-Eye lens diagrams (the 6-lens set).** Each may re-visualize content already decided in plan.md — whether that content is recorded as a structural D-item OR as decided plan prose. The no-invention bound still holds in full: the diagram still cannot draw an edge, ownership, or relationship the plan never decided, and still cannot be vaguer than the plan it visualizes. The only difference from Tier 1 is the source of a decided edge: a lens diagram may source a decided edge from plan prose, not only from a structural D-item. A triggered lens (REQUIRED when its trigger FACT holds — see `diagram-guide.md`) is therefore never forced to skip just because the plan carries no structural D-item; it sources from the decided prose instead.
 
   Authoring rules and the post-draw self-audit live in `diagram-guide.md`.
@@ -201,7 +202,7 @@ Translating any item is a rule violation.
 
 ## Stage B: Re-keyed Signal Table
 
-Before asking the user to choose an execution option, compute a recommendation:
+Compute the recommendation right after Momus returns APPROVE or COMMENT, BEFORE the Stage A render, because the Stage A presentation's Execution Recommendation box carries it. S6 then delivers this already-computed recommendation; it is not recomputed. Inputs come from the conversation record plus `prometheus-state.ts get` output (the state CLI has no Stage B field), so keep the computed result in the conversation record for the render and for S6:
 
 | Signal | Weight toward Finish | Weight toward Continue to ultragoal |
 |--------|----------------------|--------------------------------------|
@@ -212,7 +213,7 @@ Before asking the user to choose an execution option, compute a recommendation:
 
 **Conflict resolution**: When signals split evenly, default to Finish (human review first).
 
-**Recommendation Output Template** (present before Stage C):
+**Recommendation Output Template** (computed before the Stage A render; delivered at S6, before Stage C):
 
 ```
 **Recommendation**: [Continue to ultragoal | Finish]

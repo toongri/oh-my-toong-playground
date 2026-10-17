@@ -155,8 +155,8 @@ Decompose by concern. Each finding type becomes its own AC with its own Verifica
 
 | User Response | Your Action |
 |---------------|-------------|
-| "Looks good" / "Approved" | Proceed to Metis consultation with these criteria (see `review-pipeline.md`) |
+| "Looks good" / "Approved" | Proceed to Metis consultation with these criteria (see `review-pipeline.md`); on Trivial, record the AC and proceed to Co-Design (Trivial skips Metis only) |
 | Modifications requested | Update criteria, re-propose if significant changes |
-| "Just do it" / Skips review | Use your draft as-is, note in plan that criteria were AI-generated |
+| "Just do it" / Skips review | Explicit delegation (`SKILL.md > ### User Deferral Handling`): use your draft as-is, record the delegation in the Decision Register (who, verbatim quote, choice, evidence, consequence) and note in plan that criteria were AI-generated. Risk-domain items still need the S2 human gate |
 
 **NEVER proceed to plan generation without acceptance criteria.**
