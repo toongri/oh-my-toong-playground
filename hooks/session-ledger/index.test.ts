@@ -193,6 +193,16 @@ describe("검증기", () => {
 		expect(stray).toEqual([expect.stringContaining('["U7"]')]);
 	});
 
+	test("사용자 몫으로 적은 결정은 그 결정을 내리거나 받아들인 사용자 메시지를 출처로 든다", () => {
+		const decision = (made_by: string, source: string) => ({ decision: "Keep the cache", rationale: "faster", made_by, source });
+		const check = (made_by: string, source: string) =>
+			validateLedger(ledgerJson({ decisions: [decision(made_by, source)] as LedgerJson["decisions"] }), ctx());
+		expect(check("user", "A3")).toEqual([expect.stringContaining('"Keep the cache"')]);
+		expect(check("agreed", "A1")).toEqual([expect.stringContaining('"Keep the cache"')]);
+		expect(check("agreed", "A1, U1")).toEqual([]);
+		expect(check("agent", "")).toEqual([]);
+	});
+
 	test("요약기 출력에는 승인·인용 필드가 없다", () => {
 		expect(isLedgerJson({ ...ledgerJson(), approved_proposals: [] })).toBe(false);
 		const step = { step: "Run the tests", authorized_by: "U1", authorization_quote: "고쳐줘", needs_user_confirmation: false };

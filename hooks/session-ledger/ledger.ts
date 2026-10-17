@@ -388,6 +388,13 @@ export function validateLedger(d: LedgerJson, ctx: ValidationContext): string[] 
 	if (strayIds.length > 0) {
 		v.push(`decision sources cite ${JSON.stringify(strayIds)}, which are not user messages in the log or the user-message list; cite the U-id where the decision was made`);
 	}
+	// A decision credited to the user binds the agent as the user's word, so it must point at that word.
+	const uncited = d.decisions.filter((x) => x.made_by !== "agent" && !/\bU\d+\b/.test(x.source)).map((x) => x.decision);
+	if (uncited.length > 0) {
+		v.push(
+			`these decisions are credited to the user (made_by user or agreed) but cite no user message: ${JSON.stringify(uncited)}; cite the U-id of the message that made or accepted each, or set made_by to agent`,
+		);
+	}
 	const unknown = unknownIdentifiers(d, ctx.sourceText);
 	if (unknown.length > 0) {
 		v.push(
