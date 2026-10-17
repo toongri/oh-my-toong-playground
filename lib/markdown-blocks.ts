@@ -74,13 +74,13 @@ export function findMarkdownBlocks(text: string): MarkdownBlock[] {
 	return blocks;
 }
 
-/** Lines of `text` outside code blocks, in order. */
-export function linesOutsideCode(text: string): string[] {
+/** Lines of `text` outside every block whose kind is in `kinds`, in order. */
+export function linesOutsideBlocks(text: string, kinds: readonly MarkdownBlock["kind"][]): string[] {
 	const lines = text.split(/\r\n?|\n/);
-	const inCode = new Set<number>();
+	const covered = new Set<number>();
 	for (const block of findMarkdownBlocks(text)) {
-		if (block.kind !== "code") continue;
-		for (let k = block.start; k <= block.end; k++) inCode.add(k);
+		if (!kinds.includes(block.kind)) continue;
+		for (let k = block.start; k <= block.end; k++) covered.add(k);
 	}
-	return lines.filter((_, k) => !inCode.has(k));
+	return lines.filter((_, k) => !covered.has(k));
 }

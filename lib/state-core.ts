@@ -53,7 +53,7 @@ import { createHash } from "crypto";
 // (the sync alias-rewriter skips lib/** files). Relative imports let `make sync`'s dep collector
 // follow the path and deploy omt-dir alongside this module.
 import { getOmtDir, resolveOmtDir } from "./omt-dir";
-import { linesOutsideCode } from "./markdown-blocks";
+import { linesOutsideBlocks } from "./markdown-blocks";
 import { withStateLock } from "./persistent-mode-core/state-lock";
 import { chainComplete, commentOk, approveOk, driverGateArmed, recordComplete } from "./qa-chain-core";
 import type { QaChainState } from "./qa-chain-core";
@@ -1180,7 +1180,8 @@ const PLAN_TODO_LINE = /^\s*- \[[ xX]\] (F?\d+)\.\s/;
 /**
  * True iff the plan file at `planPath` has a `## TODOs` heading followed, before the
  * next `##` heading, by at least one TODO line (`- [ ] 3. ...`, `- [x] F1. ...`).
- * Lines inside fenced code blocks never count, as heading or as TODO. This is the
+ * Lines inside code blocks or HTML comments never count, as heading or as TODO, the
+ * same text the plan validator ignores. This is the
  * file-level proof that S3 wrote the TODO plan (the S0 interview draft holds a
  * Decision Register and no TODOs), independent of the `steps.plan.done` flag that a
  * session can forget to set. A missing or unreadable file is "not written".
@@ -1193,7 +1194,7 @@ export function planFileHasTodos(planPath: string): boolean {
 		return false;
 	}
 	let inTodos = false;
-	for (const line of linesOutsideCode(content)) {
+	for (const line of linesOutsideBlocks(content, ["code", "comment"])) {
 		if (PLAN_TODOS_HEADING.test(line)) {
 			inTodos = true;
 		} else if (PLAN_NEXT_H2_HEADING.test(line)) {

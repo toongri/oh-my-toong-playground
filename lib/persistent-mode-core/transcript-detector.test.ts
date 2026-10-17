@@ -80,6 +80,10 @@ describe("transcript-detector", () => {
 			expect(detectPrometheusDone("-\n\n    ```\n\n<prometheus-done/>")).toBe(true);
 		});
 
+		it("목록 항목 안 펜스를 내어쓴 펜스 줄은 닫지 않고 새 펜스를 연다", () => {
+			expect(detectPrometheusDone("- 항목\n  ```\n  x\n```\n<prometheus-done/>")).toBe(false);
+		});
+
 		it("목록 마커와 같은 줄에서 연 펜스 안의 토큰은 감지하지 않음", () => {
 			expect(detectPrometheusDone("- ```\n  <prometheus-done/>\n  ```")).toBe(false);
 		});

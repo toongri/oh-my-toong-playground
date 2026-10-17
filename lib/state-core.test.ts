@@ -2062,6 +2062,12 @@ describe("planFileHasTodos", () => {
 		expect(planFileHasTodos(planWith("## TODOs\n\n10. 예시\n\n    ```\n    - [ ] 1. 예시\n    ```\n"))).toBe(false);
 	});
 
+	test("HTML 주석 안의 TODO 줄은 세지 않음", () => {
+		expect(planFileHasTodos(planWith("## TODOs\n\n<!--\n- [ ] 1. 예시\n-->\n"))).toBe(false);
+		expect(planFileHasTodos(planWith("## TODOs\n\n<!--\n- [ ] 1. 닫히지 않은 주석\n"))).toBe(false);
+		expect(planFileHasTodos(planWith("## TODOs\n\n<!-- 메모 -->\n- [ ] 1. 실제 작업\n"))).toBe(true);
+	});
+
 	test("TODO 번호 없는 체크박스 줄은 세지 않음", () => {
 		expect(planFileHasTodos(planWith("## TODOs\n- [ ] 설명만 있는 줄\n"))).toBe(false);
 	});

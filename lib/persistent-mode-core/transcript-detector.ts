@@ -1,5 +1,5 @@
 import { logDebug } from "@lib/logging";
-import { linesOutsideCode } from "@lib/markdown-blocks";
+import { linesOutsideBlocks } from "@lib/markdown-blocks";
 
 // Pattern matchers
 const DEEP_INTERVIEW_DONE_PATTERN = /<deep-interview-done\s*\/>/i;
@@ -9,7 +9,7 @@ const DEEP_INTERVIEW_DONE_PATTERN = /<deep-interview-done\s*\/>/i;
 const PROMETHEUS_DONE_LINE_PATTERN = /^\s*<prometheus-done\s*\/>\s*$/i;
 
 function hasPrometheusDoneLineOutsideCode(message: string): boolean {
-	return linesOutsideCode(message).some((line) => PROMETHEUS_DONE_LINE_PATTERN.test(line));
+	return linesOutsideBlocks(message, ["code"]).some((line) => PROMETHEUS_DONE_LINE_PATTERN.test(line));
 }
 
 export function detectDeepInterviewDone(lastAssistantMessage: string | null): boolean {
