@@ -324,7 +324,7 @@ export function unknownIdentifiers(d: LedgerJson, sourceText: string): string[] 
 		}
 	}
 	for (const raw of rendered.split(/\s+/)) {
-		if (hasForeignLetter(raw, sourceText)) bad.add(raw.replace(/^[`'"(]+|[`'",;:.)]+$/g, ""));
+		if (isGarbledPathToken(raw, sourceText)) bad.add(raw.replace(/^[`'"(]+|[`'",;:.)]+$/g, ""));
 	}
 	return [...bad].sort();
 }
@@ -338,6 +338,14 @@ function hasForeignLetter(text: string, sourceText: string): boolean {
 	return [...text].some(
 		(c) => /\p{L}/u.test(c) && !/[\p{Script=Latin}\p{Script=Hangul}\p{Script=Han}]/u.test(c) && !sourceText.includes(c),
 	);
+}
+
+/**
+ * Only a path (has `/`) or a token with Korean letters can be a garbled Korean path; a foreign letter in
+ * plain prose ("120 μs", "λ-calculus") is ordinary writing, neither a violation nor something to respell.
+ */
+function isGarbledPathToken(token: string, sourceText: string): boolean {
+	return /[/\p{Script=Hangul}\p{Script=Han}]/u.test(token) && hasForeignLetter(token, sourceText);
 }
 
 const TOKEN_DELIMITERS = /([\s`'"(),;:]+)/;
@@ -370,6 +378,7 @@ export function repairForeignLetters(d: LedgerJson, sourceText: string): LedgerJ
 		return best && best.distance <= Math.ceil(part.length / 2) ? best.segment : undefined;
 	};
 	const repairToken = (token: string) => {
+		if (!isGarbledPathToken(token, sourceText)) return token;
 		const segments = token.split("/");
 		return segments
 			.map((segment, i) => {

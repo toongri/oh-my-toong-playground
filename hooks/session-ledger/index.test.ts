@@ -274,6 +274,22 @@ describe("검증기", () => {
 		const translated = repairForeignLetters(ledgerJson({ current_work: "Open `/repo/կ_existing-프로그램-문제/apps`." }), source);
 		expect(translated.current_work).toBe("Open `/repo/기존-프로그램-문제/apps`.");
 	});
+
+	test("경로나 한글이 없는 산문의 외국 문자는 위반이나 복원 대상이 아니다", () => {
+		const source = "latency measured with the naming guide";
+		for (const text of ["latency 120 μs measured", "Use λ-calculus naming"]) {
+			expect(unknownIdentifiers(ledgerJson({ current_work: text }), source)).toEqual([]);
+			expect(repairForeignLetters(ledgerJson({ current_work: text }), source).current_work).toBe(text);
+		}
+	});
+
+	test("한글이 섞인 토큰의 깨진 구간은 슬래시가 없어도 위반으로 잡는다", () => {
+		const source = "cd algocare-home/기존-프로그램-문제/apps";
+		expect(unknownIdentifiers(ledgerJson({ current_work: "Open algocare-home/기존-프로그램-խնդիր/apps now." }), source)).toEqual([
+			"algocare-home/기존-프로그램-խնդիր/apps",
+		]);
+		expect(unknownIdentifiers(ledgerJson({ current_work: "Open 기존-프로그램-խնդիր now." }), source)).toEqual(["기존-프로그램-խնդիր"]);
+	});
 });
 
 describe("재시도와 대체 경로", () => {
