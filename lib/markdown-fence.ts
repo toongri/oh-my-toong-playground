@@ -33,13 +33,15 @@ function indentWidth(ws: string): number {
 	return w;
 }
 
-const LIST_ITEM_LINE = /^([ \t]*)([-*+]|\d{1,9}[.)])([ \t]+)\S/;
+const LIST_ITEM_LINE = /^([ \t]*)([-*+]|\d{1,9}[.)])(?:([ \t]+)\S|[ \t]*$)/;
 
 /**
  * Content column of the list item holding `lines[i]` (indented `indent` columns),
  * or 0 at top level. Walks back over earlier lines: the first list item whose
  * content column is at or left of the bound holds the line; any other non-blank
  * line narrows the bound to its own indent, and one at column 0 means top level.
+ * An item with nothing after its marker holds only lines that follow it directly
+ * (CommonMark: an item may start with at most one blank line, which ends it).
  */
 function containerColumn(lines: string[], i: number, indent: number): number {
 	let bound = indent;
@@ -49,10 +51,15 @@ function containerColumn(lines: string[], i: number, indent: number): number {
 		const item = LIST_ITEM_LINE.exec(line);
 		if (item !== null) {
 			const markerEnd = indentWidth(item[1]) + item[2].length;
-			const gap = indentWidth(item[1] + item[2] + item[3]) - indentWidth(item[1] + item[2]);
-			// 5+ spaces after the marker means content starts one column past it.
-			const content = markerEnd + (gap > 4 ? 1 : gap);
-			if (content <= bound) return content;
+			let content: number | null;
+			if (item[3] === undefined) {
+				content = lines[j + 1].trim() === "" ? null : markerEnd + 1;
+			} else {
+				const gap = indentWidth(item[1] + item[2] + item[3]) - indentWidth(item[1] + item[2]);
+				// 5+ spaces after the marker means content starts one column past it.
+				content = markerEnd + (gap > 4 ? 1 : gap);
+			}
+			if (content !== null && content <= bound) return content;
 		}
 		const lead = indentWidth(line.slice(0, line.length - line.trimStart().length));
 		if (lead === 0) return 0;
