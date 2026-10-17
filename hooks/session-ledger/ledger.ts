@@ -133,6 +133,9 @@ const FILES_HEADING = "## Files edited in this part of the session";
 const PREVIOUS_HEADING = "## Previous ledger (written at the previous compaction)";
 /** Largest "Last assistant message" a fallback keeps, in UTF-8 bytes. */
 const LAST_ASSISTANT_LIMIT = 3000;
+const EARLIER_ASSISTANTS_HEADING = "## Earlier fallbacks' last assistant messages (oldest first)";
+/** lazy: keeps the 3 newest earlier messages (<= 3 x 3000 bytes); raise if one outage hides more work. */
+const EARLIER_ASSISTANTS_KEEP = 3;
 const UNVERIFIED_HEADING = "## Unverified points";
 
 /** Ledgers written before the latest release put this section after the user messages. */
@@ -179,7 +182,19 @@ export function previousUsers(ledger: string | undefined): Message[] {
  * (`previousUsers`) finds the real section even when the message contains a pasted ledger.
  */
 function userEntry(u: Message): string {
-	return `- [${u.id}] ${u.text.split("\n").join("\n  ")}`;
+	return `- [${u.id}] ${indentContinuation(u.text)}`;
+}
+
+/** Every line after the first gets two spaces, so no payload line can equal a heading or start an entry. */
+function indentContinuation(text: string): string {
+	return text.split("\n").join("\n  ");
+}
+
+function outdentContinuation(text: string): string {
+	return text
+		.split("\n")
+		.map((line) => (line.startsWith("  ") ? line.slice(2) : line))
+		.join("\n");
 }
 
 const MADE_BY: Record<LedgerJson["decisions"][number]["made_by"], string> = {
@@ -498,11 +513,28 @@ export function fallbackLedger(log: WorkLog, users: Message[], reason: string, p
 		.replace(/^# Session ledger.*\n/, "")
 		.trim();
 	let editedFiles = log.editedFiles;
+	let earlier: string[] = [];
 	if (previousLedger?.startsWith(FALLBACK_TITLE) && previousFields !== undefined) {
 		// A fallback built on a fallback keeps only the real ledger it carried, so layers do not stack.
-		const [top, ...nested] = previousFields.split(`${PREVIOUS_HEADING}\n`);
-		previousFields = nested.join(`${PREVIOUS_HEADING}\n`).trim();
-		const carriedFiles = [...(top.split(`${FILES_HEADING}\n`)[1] ?? "").matchAll(/^- `(.+)`$/gm)].map((m) => m[1]);
+		// Split on a whole line: an indented payload line may contain the heading text mid-line.
+		const [top, ...nested] = `\n${previousFields}`.split(`\n${PREVIOUS_HEADING}\n`);
+		previousFields = nested.join(`\n${PREVIOUS_HEADING}\n`).trim();
+		// Entries are `- ` + first line, later lines indented two spaces (as `userEntry`), so they cannot form a heading.
+		const earlierAt = top.lastIndexOf(`\n${EARLIER_ASSISTANTS_HEADING}\n`);
+		const head = earlierAt >= 0 ? top.slice(0, earlierAt) : top;
+		const carriedEntries: string[] = [];
+		if (earlierAt >= 0) {
+			for (const line of top.slice(earlierAt + EARLIER_ASSISTANTS_HEADING.length + 2).split("\n")) {
+				if (line.startsWith("- ")) carriedEntries.push(line.slice(2));
+				else if (line.startsWith("  ") && carriedEntries.length > 0) carriedEntries[carriedEntries.length - 1] += `\n${line.slice(2)}`;
+			}
+		}
+		const lastHeading = "## Last assistant message\n";
+		const filesAt = head.lastIndexOf(`\n\n${FILES_HEADING}\n`);
+		const lastAt = head.indexOf(`\n${lastHeading}`);
+		const prevLast = lastAt >= 0 && filesAt >= 0 ? outdentContinuation(head.slice(lastAt + lastHeading.length + 1, filesAt)) : "";
+		earlier = [...carriedEntries.map((e) => e.replace(/\n+$/, "")), ...(prevLast && prevLast !== "(none)" ? [prevLast] : [])].slice(-EARLIER_ASSISTANTS_KEEP);
+		const carriedFiles = [...(head.split(`\n${FILES_HEADING}\n`)[1] ?? "").matchAll(/^- `(.+)`$/gm)].map((m) => m[1]);
 		editedFiles = [...new Set([...carriedFiles, ...log.editedFiles])];
 	}
 	return [
@@ -511,11 +543,12 @@ export function fallbackLedger(log: WorkLog, users: Message[], reason: string, p
 		`The summarizer produced no ledger this time (${reason}). This fallback holds mechanically extracted facts and the previous ledger, which stays true unless a later user message below changes it.`,
 		"",
 		"## Last assistant message",
-		lastAssistant,
+		indentContinuation(lastAssistant),
 		"",
 		FILES_HEADING,
 		...(editedFiles.length > 0 ? editedFiles.map((f) => `- \`${f}\``) : ["- (none)"]),
 		"",
+		...(earlier.length > 0 ? [EARLIER_ASSISTANTS_HEADING, ...earlier.map((e) => `- ${indentContinuation(e)}`), ""] : []),
 		...(previousFields ? [PREVIOUS_HEADING, previousFields, ""] : []),
 		USERS_HEADING,
 		...users.map(userEntry),

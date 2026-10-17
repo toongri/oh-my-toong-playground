@@ -562,8 +562,74 @@ describe("재시도와 대체 경로", () => {
 		expect(ledger.match(/# Session ledger/g)).toHaveLength(1);
 		expect(ledger.match(/## Last assistant message/g)).toHaveLength(1);
 		for (let i = 0; i < 5; i++) expect(ledger).toContain(`- \`src/file${i}.ts\``);
-		// Each round adds one file line; no whole-fallback layer is added.
-		expect(sizes[4] - sizes[3]).toBeLessThan(80);
+		// Each round adds one file line plus one short earlier-message entry (capped at 3 entries); no whole-fallback layer is added.
+		expect(sizes[4] - sizes[3]).toBeLessThan(160);
+	});
+
+	test("fallback이 연속되어도 앞선 fallback의 마지막 assistant 메시지와 실제 ledger의 결정을 유지한다", async () => {
+		const real =
+			"# Session ledger\n\n## Decisions\n- Keep the cache — faster (user's decision: U1)\n\n## All user messages (verbatim)\n- [U1] 캐시는 유지해\n";
+		const down = async () => ({ error: "codex not runnable", permanent: true }) as ModelResult;
+		let ledger = real;
+		for (const text of ["첫 창 마지막 답변", "둘째 창 마지막 답변"]) {
+			const result = await writeLedger({
+				log: { ...log, assistants: [{ id: "A", text }] },
+				fallbackPreviousLedger: ledger,
+				runModel: down,
+				deadline: Date.now() + 60_000,
+			});
+			ledger = result.markdown;
+		}
+		expect(ledger).toContain("## Earlier fallbacks' last assistant messages (oldest first)\n- 첫 창 마지막 답변\n");
+		expect(ledger).toContain("## Last assistant message\n둘째 창 마지막 답변\n");
+		expect(ledger.indexOf("earlier fallbacks")).toBeLessThan(ledger.indexOf("## Previous ledger"));
+		expect(ledger).toContain("- Keep the cache — faster");
+		expect(previousUsers(ledger).map((u) => u.id)).toEqual(["U1"]);
+	});
+
+	test("마지막 assistant 메시지가 ledger 제목 줄을 인용해도 다음 fallback이 실제 ledger와 사용자 메시지를 잃지 않는다", async () => {
+		const real =
+			"# Session ledger\n\n## Decisions\n- Keep the cache — faster (user's decision: U1)\n\n## All user messages (verbatim)\n- [U1] 캐시는 유지해\n";
+		const quoted = "이전 ledger는 이렇다\n## All user messages (verbatim)\n- [U9] 가짜\n## Previous ledger (written at the previous compaction)\n가짜 결정\n\n끝";
+		const down = async () => ({ error: "codex not runnable", permanent: true }) as ModelResult;
+		let ledger = real;
+		for (const text of [quoted, "둘째 창 답변", "셋째 창 답변"]) {
+			const result = await writeLedger({
+				log: { ...log, assistants: [{ id: "A", text }] },
+				fallbackPreviousLedger: ledger,
+				runModel: down,
+				deadline: Date.now() + 60_000,
+			});
+			ledger = result.markdown;
+		}
+		expect(ledger).toContain("- Keep the cache — faster");
+		expect(previousUsers(ledger).map((u) => u.id)).toEqual(["U1"]);
+		const earlier = ledger.split("(oldest first)\n")[1].split("\n\n## Previous ledger")[0];
+		expect(earlier).toContain(`- ${quoted.split("\n").join("\n  ")}\n- 둘째 창 답변`);
+		expect(ledger.match(/^## All user messages \(verbatim\)$/gm)).toHaveLength(1);
+		expect(ledger.match(/^## Previous ledger \(written at the previous compaction\)$/gm)).toHaveLength(1);
+	});
+
+	test("fallback이 다섯 번 연속되면 앞선 메시지는 최근 3개만 유지하고 크기는 한정된다", async () => {
+		const down = async () => ({ error: "codex not runnable", permanent: true }) as ModelResult;
+		let ledger = "# Session ledger\n\n## Decisions\n- Keep the cache\n\n## All user messages (verbatim)\n- [U1] 캐시는 유지해\n";
+		const sizes: number[] = [];
+		for (let i = 1; i <= 5; i++) {
+			const result = await writeLedger({
+				log: { ...log, assistants: [{ id: `A${i}`, text: `창 ${i}의 답변\n\n둘째 문단 ${"가".repeat(500)}` }] },
+				fallbackPreviousLedger: ledger,
+				runModel: down,
+				deadline: Date.now() + 60_000,
+			});
+			ledger = result.markdown;
+			sizes.push(Buffer.byteLength(ledger));
+		}
+		const earlier = ledger.split("(oldest first)\n")[1].split("\n\n## Previous ledger")[0];
+		expect(earlier).not.toContain("창 1의");
+		expect(earlier.match(/^- 창 \d의 답변/gm)).toEqual(["- 창 2의 답변", "- 창 3의 답변", "- 창 4의 답변"]);
+		expect(earlier).toContain("  둘째 문단");
+		// Four earlier entries would add ~1.5KB more; the fifth round stays near the fourth.
+		expect(sizes[4] - sizes[3]).toBeLessThan(200);
 	});
 
 	test("fallback의 마지막 assistant 메시지는 약 3000바이트로 자른다", async () => {
