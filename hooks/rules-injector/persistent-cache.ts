@@ -50,6 +50,16 @@ interface SerializedSessionState {
 	compacted?: boolean;
 }
 
+// What an engine read from the session file, so persistEngineState can write back only what
+// the run added. A hook run only adds dedup marks; writing its whole snapshot back would undo a
+// compaction's pruning or drop another run's marks made between this run's read and write.
+interface HydratedState {
+	staticDedup: ReadonlySet<string>;
+	dynamicDedup: ReadonlyMap<string, ReadonlySet<string>>;
+	latestDynamicInjectionKeys: readonly string[];
+}
+const hydratedStates = new WeakMap<Engine, HydratedState>();
+
 export function hydrateEngineState(engine: Engine, cachePath: string): void {
 	const state = readSessionState(cachePath);
 	engine.state.staticDedup.clear();
@@ -62,6 +72,20 @@ export function hydrateEngineState(engine: Engine, cachePath: string): void {
 		engine.state.dynamicDedup.set(scope, new Set(keys));
 	}
 	engine.state.latestDynamicInjectionKeys = [...(state.latestDynamicInjectionKeys ?? [])];
+	hydratedStates.set(engine, {
+		staticDedup: new Set(state.staticDedup),
+		dynamicDedup: new Map(Object.entries(state.dynamicDedup).map(([scope, keys]) => [scope, new Set(keys)])),
+		// Same array the engine holds: the run replaces it only when it injects a new lazy unit.
+		latestDynamicInjectionKeys: engine.state.latestDynamicInjectionKeys,
+	});
+}
+
+function addedSince(current: readonly string[], keys: Iterable<string>, hydrated?: ReadonlySet<string>): string[] {
+	const merged = new Set(current);
+	for (const key of keys) {
+		if (!hydrated?.has(key)) merged.add(key);
+	}
+	return [...merged];
 }
 
 export function persistEngineState(
@@ -74,18 +98,23 @@ export function persistEngineState(
 	// read-then-write here loses cross-event updates in BOTH directions (a dropped
 	// postCompactPending recovery marker AND a dropped dynamic dedup key). Atomic
 	// temp-rename would only prevent torn writes, not lost updates — only the lock does.
+	// The merge below keeps the marks the file gained after this engine hydrated.
+	const hydrated = hydratedStates.get(engine);
 	updateSessionState(cachePath, (currentState) => {
-		const dynamicDedup: Record<string, string[]> = {};
+		const dynamicDedup: Record<string, string[]> = { ...currentState.dynamicDedup };
 		for (const [scope, keys] of engine.state.dynamicDedup.entries()) {
-			dynamicDedup[scope] = [...keys];
+			dynamicDedup[scope] = addedSince(currentState.dynamicDedup[scope] ?? [], keys, hydrated?.dynamicDedup.get(scope));
 		}
 
 		const postCompactPending = nextPostCompactPending(currentState, completedPostCompactKind);
 		const postCompactRecovering = nextPostCompactRecovering(currentState, completedPostCompactKind);
 		const recoveryLease = nextRecoveryLease(currentState, completedPostCompactKind);
-		const latestDynamicInjectionKeys = engine.state.latestDynamicInjectionKeys;
+		const latestDynamicInjectionKeys =
+			engine.state.latestDynamicInjectionKeys === hydrated?.latestDynamicInjectionKeys
+				? (currentState.latestDynamicInjectionKeys ?? [])
+				: engine.state.latestDynamicInjectionKeys;
 		return {
-			staticDedup: [...engine.state.staticDedup],
+			staticDedup: addedSince(currentState.staticDedup, engine.state.staticDedup, hydrated?.staticDedup),
 			dynamicDedup,
 			...(latestDynamicInjectionKeys.length === 0 ? {} : { latestDynamicInjectionKeys }),
 			...(postCompactPending === undefined ? {} : { postCompactPending }),
