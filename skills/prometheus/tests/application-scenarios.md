@@ -453,7 +453,7 @@ auth.ts, payment.ts, user.ts 3개 파일에서 에러 메시지 한글화해줘
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | Dependency accuracy | Blocked By/Blocks correctly reflect actual task dependencies — e.g., "API endpoint creation" blocks "integration test" but is NOT blocked by "DB schema" if the endpoint can be stubbed. Dependencies are causal, not sequential by convention |
-| V2 | Wave assignment correctness | Tasks sharing no dependencies are in the same wave. No task is assigned to a wave later than (blocker's wave + 1). Independent tasks are NOT artificially serialized into separate waves |
+| V2 | Wave assignment correctness | Tasks sharing no dependencies are in the same wave. No task is assigned to a wave lower than (max blocker wave + 1). Independent tasks are NOT artificially serialized into separate waves |
 | V3 | Critical Path is longest chain | Critical Path follows the longest dependency chain through the task graph — not the first path found or an arbitrary selection. If Task A→C→E and Task B→D→E, and path A→C→E is longer, it is the Critical Path |
 | V4 | Rule compliance | Minimum 2 tasks per wave (except final wave), max 3-4 waves for a 3-6 task plan, no circular dependencies. If plan has 4 independent tasks, they should be in 1-2 waves, NOT spread across 4 |
 
