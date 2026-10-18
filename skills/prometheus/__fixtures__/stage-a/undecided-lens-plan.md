@@ -206,7 +206,7 @@ per admin endpoint path; one cross-component integration test for the redelivery
 
 Agent-Executed QA Scenarios are declared per TODO under each TODO's Acceptance Criteria.
 
-## Risk-Domain Pre-Mortem
+### Risk-Domain Pre-Mortem
 
 - **Scenario name** — Retry storm against a degraded subscriber
   - **Trigger condition**: A subscriber returns 503 for every delivery during an outage.
@@ -230,7 +230,7 @@ Agent-Executed QA Scenarios are declared per TODO under each TODO's Acceptance C
   - **Detection signal**: A subscriber-reported duplicate; two `SENDING` transitions on one row id
     with no intervening terminal state in the transition log.
 
-## Expanded Test Plan
+### Expanded Test Plan
 
 - **unit** — The scheduler's three-way branch (TODO 3 criteria) and the policy shape (TODO 2
   criterion). Backoff bounds are asserted here.
@@ -385,3 +385,17 @@ Must NOT own: The retry decision itself.
 Edges: (operator→admin-api.replay, passes webhook id; admin-api→delivery-queue.enqueue, side
 effect: re-enqueues immediately with no delay; failure path: state is not `DEAD` → admin-api
 responds 409 and enqueues nothing)
+
+---
+
+### Boundary Map
+
+| Part | Layer (vertical domain · horizontal use-case) | Responsibility | Collaborators | affected · modified |
+|------|-----------------------------------------------|----------------|---------------|---------------------|
+| webhook-dispatcher | horizontal use-case (delivery) | post the payload and hand a non-2xx result to the scheduler | retry-scheduler, delivery-store, delivery-queue | modified |
+| retry-scheduler | vertical domain (retry policy) | the three-way retry decision and backoff computation | delivery-store, delivery-queue | modified |
+| delivery-store | vertical domain (delivery) | `DeliveryAttempt` row persistence and lifecycle state | none | modified |
+| admin-api | horizontal use-case (operator replay) | gate and trigger a replay | delivery-store, delivery-queue | modified |
+| delivery-queue | infrastructure (existing queue) | carry scheduled and redelivered messages | none | affected, unchanged |
+
+**Dependency direction:** the use-cases (webhook-dispatcher, admin-api) call the domains (retry-scheduler, delivery-store) and the queue; the domains never call a use-case. One way on both axes. No domain-to-domain back-reference and no cycle: retry-scheduler reads delivery-store, delivery-store depends on nothing in this plan.

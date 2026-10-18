@@ -81,6 +81,10 @@ flowchart TD
         TaskPlan -->|예| Prometheus
         Prometheus --> Metis[metis<br/>갭 분석]
         Metis --> Prometheus
+        Prometheus --> Daedalus[daedalus<br/>설계 검토]
+        Daedalus --> Prometheus
+        Prometheus --> Momus[momus<br/>계획 검토]
+        Momus --> Prometheus
         Prometheus --> PlanFile["~/.omt/{OMT_PROJECT}/plans/*.md"]
     end
 
@@ -123,7 +127,7 @@ flowchart TD
 - **역할**: 전략적 기획, 요구사항 인터뷰
 - **제약**: **READ-ONLY**. 절대 코드 작성 안 함.
 - **출력**: `~/.omt/{OMT_PROJECT}/plans/{name}.md` (`$OMT_DIR` 경유)
-- **워크플로우**: 범위 분할 판정 -> 인터뷰 -> 조사 -> Metis 상담 -> 계획 작성 -> `/ultragoal`에 전달
+- **워크플로우**: 범위 분할 판정 -> 인터뷰 -> 조사 -> Metis 상담 -> 공동 설계(Daedalus 자문, 사람 설계 승인) -> 계획 작성 -> Momus 검토 -> 설명 자료(Stage A)·권장안(Stage B)·실행 선택(Stage C) -> `/ultragoal`에 전달
 - **사용 시점**: 팀 task 티켓이 필요 없는 AI 실행 경로에서 사용하거나, `craft-tasks`가 만든 각 task에 별도 AI 실행 계획이 필요할 때만 선택합니다.
 - **범위 분할**: Complex·Architecture 요청은 인터뷰 전에 "혼자 머지해도 시스템이 도는 부분집합이 있나"를 먼저 묻고, 있으면 첫 덩어리만 이번 실행의 범위로 삼습니다. 나머지는 각자 별도 prometheus 실행이 됩니다.
 
@@ -198,7 +202,10 @@ Consumer는 먼저 scope를 판정합니다. `OUT_OF_SCOPE`는 비차단 NOTE로
 2. **인터뷰 모드**: 질문을 통해 컨텍스트 수집
 3. **조사**: explore/librarian 에이전트로 코드베이스 조사
 4. **Metis 상담**: 계획 작성 전 필수 갭 분석
-5. **계획 생성**: `~/.omt/{OMT_PROJECT}/plans/*.md`에 구조화된 계획 작성
+5. **공동 설계**: Daedalus 자문을 받아 설계를 다듬고 사람의 설계 승인을 받음
+6. **계획 생성**: `~/.omt/{OMT_PROJECT}/plans/*.md`에 구조화된 계획 작성
+7. **Momus 검토**: 계획 검토. REQUEST_CHANGES면 계획을 고쳐 다시 검토
+8. **설명 자료와 실행 선택**: HTML 설명 자료(Stage A), 권장안(Stage B), 실행 선택지(Stage C)를 제시
 
 ### 2단계: 스토리 실행
 

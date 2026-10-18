@@ -111,9 +111,9 @@ digraph prometheus_flow {
     "Momus verdict?" -> "Momus review" [label="REQUEST_CHANGES (default: scoped re-review)\nrevise plan → re-run only Momus (fresh instance), upstream preserved"];
     "Momus verdict?" -> "Requirements Interview" [label="REQUEST_CHANGES (exception)\nrequirements root cause → re-Metis → … → re-Momus"];
     "Momus verdict?" -> "Co-Design Interview\n(in-phase Daedalus advisory folded in)" [label="REQUEST_CHANGES (exception)\ndesign root cause → human gate → re-plan → re-Momus"];
-    "Momus verdict?" -> "Stage A: Presentation Render" [label="APPROVE/COMMENT"];
-    "Stage A: Presentation Render" -> "Stage B: Execution Recommendation";
-    "Stage B: Execution Recommendation" -> "Stage C: Execution Bridge";
+    "Momus verdict?" -> "Stage B: Execution Recommendation" [label="APPROVE/COMMENT\n(compute the recommendation first)"];
+    "Stage B: Execution Recommendation" -> "Stage A: Presentation Render" [label="the presentation carries the recommendation box"];
+    "Stage A: Presentation Render" -> "Stage C: Execution Bridge";
     "Stage C: Execution Bridge" -> "User's choice?";
     "User's choice?" -> "S8: Execution Dispatch\n(invoke ultragoal with the plan path)" [label="(1) Continue to ultragoal\n(fresh S4 APPROVE/COMMENT)"];
     "User's choice?" -> "Finish (emit prometheus-done)" [label="(2) Finish"];
@@ -123,11 +123,11 @@ digraph prometheus_flow {
 
 **Flowchart Enforcement Rule**: The verdict review loops on REQUEST_CHANGES are MANDATORY loops, not advisory paths — a Metis REQUEST_CHANGES re-walks from the requirements phase; a Momus REQUEST_CHANGES is scoped re-review by default (re-run only Momus on the revised plan), with an earliest-affected re-walk only on an upstream root cause. Both loops are bounded by the per-reviewer round cap — Metis 2 rounds, Momus 10 (`### State Lifecycle Directives`).
 Proceeding past a Metis/Momus REQUEST_CHANGES without resolution violates the planning contract — except the cap's sanctioned carried-forward transition, which advances by recording the residual as unresolved, not by asserting it resolved.
-Skipping any stage — including the in-phase Co-Design Daedalus advisory pass and the human design gate — is likewise a violation.
+Skipping any stage — including the in-phase Co-Design Daedalus advisory pass and the human design gate — is likewise a violation (Trivial skips Metis only, as decided in the Metis row of the reviewer table below).
 
 **Two distinct loop-back triggers** — reviewer-triggered scoped re-review vs the user-initiated S7→S0 "Revise plan" edge; see `### Pipeline State Machine`.
 
-The Co-Design Daedalus advisory pass is on the mandatory path but is purely advisory: it emits no gating signal and never bounces the plan back on its own. Its design input is folded into the design phase per `## Design Consensus` before the human design gate and the plan write.
+The Co-Design Daedalus advisory pass is on the mandatory path but is purely advisory: it emits no gating signal and never bounces the plan back on its own. Its design input is folded into the design phase per `### Design Consensus` before the human design gate and the plan write.
 
 **S8 reachability invariant** — S8 is reachable only per the invariant in `### Pipeline State Machine` (fresh S4 pass or the S4 carried-forward terminal).
 
@@ -140,7 +140,7 @@ The Co-Design Daedalus advisory pass is on the mandatory path but is purely advi
 | Codebase verification (pipeline) | momus | **MANDATORY** — auto-invoked after the plan is written; verifies codebase feasibility + document quality |
 | Design review with antithesis | daedalus | **MANDATORY (advisory)** — invoked in-phase during the Co-Design state; steelman + tradeoff tension on design soundness; advisory only, never gates |
 | External documentation research | librarian | Official docs, library specs, API references, best practices |
-| Gap analysis | metis | **MANDATORY** — auto-invoked when Clearance + AC complete |
+| Gap analysis | metis | **MANDATORY** — auto-invoked when Clearance + AC complete (Trivial skips Metis only) |
 | Plan review | momus | **MANDATORY** — after the plan is written (post Co-Design design phase) |
 
 ### Do vs Delegate Decision Matrix
@@ -245,7 +245,7 @@ Single 6-dimension weighted formula — no greenfield/brownfield branch; every c
 
 Before conducting interviews → follow `## Interview Mode (Mandatory Contract)` below.
 **All YES + Ambiguity ≤ 0.2 + requirements decision closure audit passed** → Proceed to Acceptance Criteria Drafting per `## Acceptance Criteria (Mandatory Contract)` below.
-After AC is confirmed → Metis consultation automatically per `## Review Pipeline (Mandatory Contract)` below.
+After AC is confirmed → Metis consultation automatically (Trivial: no Metis — after the AC is recorded, go to S2) per `## Review Pipeline (Mandatory Contract)` below.
 After Metis APPROVE/COMMENT → S2 Co-Design (in-phase Daedalus advisory → human design gate) per `## Review Pipeline (Mandatory Contract)` below.
 After the human design gate → write plan per `## Plan Structure (Mandatory Contract)` below.
 
@@ -299,7 +299,7 @@ Anti-Patterns describe *what* goes wrong. This table targets the *reasoning* you
 
 If any of these signals are present in YOUR own behavior, halt and reset:
 
-- STOP — Proceeding to Phase 2 without `explore` (and `librarian` for Architecture) dispatched **in this session** with results assimilated
+- STOP — Proceeding to Phase 2 without `explore` (and `librarian` for Architecture) dispatched **in this session** with results assimilated (Trivial: explore optional — see the Phase 1 Evidence block)
 - STOP — About to type `grep` / `find` / Bash search yourself for codebase facts not covered by loaded `context/` files **or by the Complex inline verify lane, codebase aspects only (`#### Collect→verify contract`) — the external lane is never re-read inline**
 - STOP — Clearance Checklist 6 items not written out one-by-one with YES/NO this turn
 - STOP — About to write plan without `Decomposition Self-Check` output (MECE / Atomicity 3-conditions / Anti-pattern) for Complex/Architecture intent
@@ -321,10 +321,12 @@ Every planning session MUST define and track per-phase tasks from the moment int
 
 Each intent class maps to a fixed set of phases. Create tasks for each phase at planning start.
 
-**Trivial**
+**Trivial** (skips Metis only)
 - Phase 1: Clarify + scope
-- Phase 2: Co-Design interview (in-phase Daedalus advisory) → human design gate
-- Phase 3: Write plan
+- Phase 2: AC drafting + user confirmation
+- Phase 3: Co-Design interview (in-phase Daedalus advisory) → human design gate
+- Phase 4: Write plan → Momus review
+- Phase 5: Present plan (S5) + recommendation (S6) + S7 execution mode choice
 
 **Scoped**
 - Phase 1: Requirements interview + Clearance
@@ -332,7 +334,7 @@ Each intent class maps to a fixed set of phases. Create tasks for each phase at 
 - Phase 3: Metis consultation
 - Phase 4: Co-Design interview (in-phase Daedalus advisory) → human design gate
 - Phase 5: Write plan → Momus review
-- Phase 6: Present plan (S5) + S7 execution mode choice
+- Phase 6: Present plan (S5) + recommendation (S6) + S7 execution mode choice
 
 **Complex**
 - Phase 1: Context loading + explore delegation
@@ -341,7 +343,7 @@ Each intent class maps to a fixed set of phases. Create tasks for each phase at 
 - Phase 4: Metis consultation
 - Phase 5: Co-Design interview (in-phase Daedalus advisory) → human design gate
 - Phase 6: Write plan → Momus review
-- Phase 7: Present plan (S5) + S7 execution mode choice
+- Phase 7: Present plan (S5) + recommendation (S6) + S7 execution mode choice
 
 **Architecture**
 - Phase 1: Context loading + explore + librarian (parallel)
@@ -351,7 +353,7 @@ Each intent class maps to a fixed set of phases. Create tasks for each phase at 
 - Phase 5: Metis consultation
 - Phase 6: Co-Design interview (in-phase Daedalus advisory) → human design gate
 - Phase 7: Write plan → Momus review
-- Phase 8: Present plan (S5) + S7 execution mode choice
+- Phase 8: Present plan (S5) + recommendation (S6) + S7 execution mode choice
 
 ### Phase 1 Evidence Output (mandatory before Phase 2)
 
@@ -361,7 +363,7 @@ Mandate: before transitioning to Phase 2 (Oracle feasibility for Architecture, I
 ## Phase 1 Evidence
 - Context files loaded: <list each Read path, or "missing — skipped per Graceful skip rule">
 - explore dispatched THIS session: <Agent invocation reference, or "N/A — intent is Trivial/Scoped without explore need">
-- librarian dispatched THIS session: <Agent invocation reference, or "N/A — Architecture, or Complex with design surface, not present; intent is Trivial/Scoped, or a purely mechanical refactor">
+- librarian dispatched THIS session: <Agent invocation reference, or "N/A — intent is Trivial/Scoped, or Complex that is a purely mechanical refactor">
 - verify lane: <inline (codebase) + dispatched (external) (Complex with external lane) | inline (Complex, no external lane) | dispatched (Architecture)> / N lanes / M excluded <or "no-op / 0 lanes / 0 excluded" when all collect lanes are empty | "N/A — intent is Trivial/Scoped (verify lane is Complex/Architecture only)">
 - Results received and assimilated: <Y/N — Y requires both summary read and key findings noted>
 ```
@@ -482,14 +484,14 @@ A phase task is complete only when its reviewer signal is received:
 | Reviewer | Completion Condition |
 |----------|---------------------|
 | Metis | Verdict = APPROVE or COMMENT (proceed to Co-Design) |
-| Daedalus | Advisory design input received and folded into the design phase per `## Design Consensus` (advisory only — proceed to the human design gate, then plan write) |
+| Daedalus | Advisory design input received and folded into the design phase per `### Design Consensus` (advisory only — proceed to the human design gate, then plan write) |
 | Momus | Verdict = APPROVE or COMMENT (proceed to user presentation) |
 
 REQUEST_CHANGES from a verdict-emitting reviewer (Metis or Momus) means the current phase task remains in incomplete state. The downstream phase task is prohibited from starting until the REQUEST_CHANGES is resolved and a new APPROVE/COMMENT verdict is received — bounded only by the per-reviewer round cap (`### State Lifecycle Directives`). Routing on a Momus REQUEST_CHANGES (scoped re-review by default vs earliest-affected re-walk) is defined at the S4 row of `### Pipeline State Machine`.
 
 Starting a downstream phase task while a prior verdict phase remains in REQUEST_CHANGES state is a planning contract violation — save for the cap's carried-forward exception above.
 
-The Daedalus phase is advisory rather than gated: it completes once its design input is received and reconciled into the design phase (genuine conflicts escalate per `## Design Consensus`). The Co-Design state's own gate is the **human design gate**, not Daedalus — the human approves the design before the plan is written.
+The Daedalus phase is advisory rather than gated: it completes once its design input is received and reconciled into the design phase (genuine conflicts escalate per `### Design Consensus`). The Co-Design state's own gate is the **human design gate**, not Daedalus — the human approves the design before the plan is written.
 
 ### Tracking Vehicle
 
@@ -602,7 +604,7 @@ Show the planner's own six-item YES/NO evaluation as required by the Clearance C
 |---|---|
 | **explore** | ANY codebase fact-finding (file paths, patterns, current implementation) |
 | **oracle** | Feasibility check, risk assessment, alternative evaluation, dependency mapping spanning 3+ modules, design decisions affecting performance/security/scalability |
-| **librarian** | **librarian default lane** — Complex fires librarian by default for best-practice / prior-art research on the design problem (external authoritative documentation, production patterns, open-source implementations); skip it **only** for a `purely mechanical refactor` (rename / extract / move with zero design or external surface). Architecture fires librarian unconditionally (see the `Architecture` row above). |
+| **librarian** | **librarian default lane** — Complex fires librarian by default for best-practice / prior-art research on the design problem (external authoritative documentation, production patterns, open-source implementations); skip it **only** for a `purely mechanical refactor` (rename / extract / move with zero design or external surface). Architecture fires librarian unconditionally (Architecture intent in the Intent Classification table). |
 
 Briefly announce "Consulting Oracle for [reason]" before invocation.
 
@@ -630,7 +632,7 @@ Briefly announce "Consulting Oracle for [reason]" before invocation.
 
 ### When to Draft
 
-If user does not provide AC, you MUST draft them. Propose → user confirms → finalize. NEVER proceed to Metis without confirmed AC.
+If user does not provide AC, you MUST draft them. Propose → user confirms → finalize. NEVER proceed to Metis (on Trivial, to Co-Design) without confirmed AC. A "just do it" on the AC and non-goals draft is explicit delegation per `### User Deferral Handling`: record it in the Decision Register (who, verbatim quote, choice, evidence, consequence). Risk-domain items still need the S2 human gate.
 
 ### Non-Goals (co-confirmed with the user)
 
@@ -641,7 +643,7 @@ Each non-goal is one line in the `{excluded item} | decider: {how to tell whethe
 The canonical persisted value is newline-delimited and includes the leading `-` on every line: `- {excluded item} | decider: {membership test}`. After the user confirms the AC and non-goals, S1 persists that exact value as `state.non_goals` before creating any downstream artifact; Scoped+ then invokes Metis with that state value, and S3 plan generation copies the same stored lines verbatim for every intent.
 
 - **Scoped / Complex / Architecture**: **≥1 decider-bearing non-goal is REQUIRED for Scoped+** and flows verbatim into the Metis SCOPE `OUT of Scope` list (`review-pipeline.md`). The Metis B2 gate rejects a brief whose OUT-of-scope list is empty (Metis runs only for Scoped+, so the tier falls out of the pipeline). **Existence is mandatory; precision is not gated** — a mechanical existence check, never an interpretation dispute.
-- **Trivial**: skip the Metis invocation and any separate decider review ceremony, but record the **one-line boundary** of what the fix does NOT touch in the canonical `- {excluded item} | decider: {membership test}` format.
+- **Trivial**: skip the Metis invocation (Trivial skips Metis only — AC drafting with user confirmation, Momus, and Stage A–C still run) and any separate decider review ceremony, but record the **one-line boundary** of what the fix does NOT touch in the canonical `- {excluded item} | decider: {membership test}` format.
 
 A deliberately-excluded risk domain is a non-goal like any other (see `### Risk-Domain Assessment`) and populates `Must NOT Have / Guardrails`. Absence is not an entry.
 
@@ -725,7 +727,7 @@ AC may reference ambient variables exported by the QA executor (the qa skill, or
 | `$API_BASE_URL` | HTTP API ACs | QA executor (server boot) |
 | `$IOS_UDID` | iOS mobile ACs | QA executor (simulator boot) |
 | `$ANDROID_SERIAL` | Android mobile ACs | QA executor (emulator boot) |
-| `$evidence_xml` | Tool ACs emitting a report file | Stage 3, per-AC (resolved before each verification) |
+| `$evidence_xml` | Tool ACs emitting a report file | QA executor, per-AC (resolved before each verification) |
 
 Adding a new variable requires (1) updating this table and (2) ensuring executor exports it. Introduce only when ≥2 AC kinds reference.
 
@@ -908,11 +910,11 @@ Each TODO is a checkbox line `- [ ] N. Title` with body containing:
    - **External**: official docs, RFCs + WHY
    - Every implementation TODO needs ≥1 Pattern or API/Type reference. Greenfield → "Greenfield — no existing pattern" explicitly.
    - **FINAL wave exemption**: F1-F4 audit tasks (Wave: FINAL) do NOT require Pattern/API/Type/Test/External references — their target IS the plan itself + the executed work. References field is optional for FINAL wave.
-5. **Parallelization** — `Blocked By: <comma-separated TODO ids, or none>`, `Blocks: <comma-separated TODO ids, or none>`, `Wave: N` (1-based, OR `Wave: FINAL` for F1-F4). Write ids bare (`Blocked By: 1, 3` / `Blocks: none`) — NOT bracketed (`[1, 3]`); the validator splits on commas and rejects bracket characters.
+5. **Parallelization** — `Blocked By: <comma-separated TODO ids, or none>`, `Blocks: <comma-separated TODO ids, or none>`, `Wave: N` (1-based, OR `Wave: FINAL` for F1-F4). Write ids as `Blocked By: 1, 3` / `Blocks: none`. The validator also accepts brackets (`[1, 3]`), none-like tokens (`—`, `n/a`, `없음`), `T`/`TODO ` prefixes, and ranges (`1-6`, `F1-F4`). `Blocks: M` on TODO N is valid when N is a direct or transitive predecessor of M through `Blocked By`; F1-F4 targets are exempt from that path check. Undefined targets and self-reference fail.
 6. **Acceptance Criteria** — Follow `## Acceptance Criteria (Mandatory Contract)` above.
 7. **QA Scenarios** — Minimum 2 per TODO (happy path + failure/edge case), 7-field structured block (see below)
 
-**Wave Assignment Rule**: `Wave = max(wave of each blocker) + 1`. Empty Blocked By = Wave 1. MANDATORY — no manual override. Anti-pattern: assigning Wave 2 to independent task because "it makes sense." If no dependency, Wave 1.
+**Wave Assignment Rule**: a TODO's Wave must be at least `max(wave of each blocker) + 1`; with no blockers, at least 1. A lower Wave fails the validator. A later Wave is allowed when the planner has a reason, but default to the minimum. Anti-pattern: assigning Wave 2 to an independent task because "it makes sense."
 
 ### QA Scenario 7-Field Structure
 
@@ -994,7 +996,7 @@ Three-agent pipeline + Plan Presentation. All mandatory contracts inline below. 
 
 ### Common Gate Pattern (verdict-emitting reviewers: Metis + Momus)
 
-Only Metis and Momus emit verdicts and gate the pipeline. Daedalus surfaces design tradeoffs and never gates — its input is folded in per `## Design Consensus`.
+Only Metis and Momus emit verdicts and gate the pipeline. Daedalus surfaces design tradeoffs and never gates — its input is folded in per `### Design Consensus`.
 
 ```
 MANDATORY: Reviewer MUST pass (APPROVE or COMMENT) before proceeding.
@@ -1002,14 +1004,14 @@ MANDATORY: Reviewer MUST pass (APPROVE or COMMENT) before proceeding.
 - On REQUEST_CHANGES: revise and re-invoke
 - On missing or ambiguous verdict: treat as REQUEST_CHANGES
 - Loop repeats until pass, bounded by the per-reviewer round cap (see State Lifecycle Directives)
-- Skipping is NEVER permitted
+- Skipping is NEVER permitted (Trivial skips Metis only)
 ```
 
 A REQUEST_CHANGES verdict blocks downstream progression until the blocking reviewer re-issues APPROVE or COMMENT after a proper Revise cycle — bounded only by the per-reviewer round cap, including its Interview-first re-review step (`### State Lifecycle Directives`).
 
 ### Common Verdict Handling (Metis + Momus only)
 
-Daedalus does NOT appear in this table — its advisory output is handled per `## Design Consensus`.
+Daedalus does NOT appear in this table — its advisory output is handled per `### Design Consensus`.
 
 | Verdict | Action |
 |---------|--------|
@@ -1049,12 +1051,12 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 | State | Description | Transitions |
 |-------|-------------|-------------|
 | **S0: Requirements** | Open requirements interview + AC co-decide | → S1 on Metis-ready clearance |
-| **S1: Metis Invocation** | Persist confirmed `state.non_goals` before any downstream artifact; for Scoped+, send the 3-Section prompt using that state value (requirements gate) | → S2 on APPROVE/COMMENT; → S0 on REQUEST_CHANGES until the Metis round cap (2) fires, then → S2 with the residual carried forward (`### State Lifecycle Directives`) |
-| **S2: Co-Design** | Open co-design interview + in-phase Daedalus advisory + HUMAN design gate; produces the design-brief / co-authored decision log, including the structural enumeration of D-items per `## Plan Structure > ADR` | → S3 on human design-gate approval; advisory Daedalus input folded in per `## Design Consensus` (no gating signal — the human gate gates this state) |
+| **S1: Metis Invocation** | Persist confirmed `state.non_goals` before any downstream artifact; for Scoped+, send the 3-Section prompt using that state value (requirements gate) | → S2 on APPROVE/COMMENT (Trivial: no Metis — go to S2 once the AC is recorded); → S0 on REQUEST_CHANGES until the Metis round cap (2) fires, then → S2 with the residual carried forward (`### State Lifecycle Directives`) |
+| **S2: Co-Design** | Open co-design interview + in-phase Daedalus advisory + HUMAN design gate; produces the design-brief / co-authored decision log, including the structural enumeration of D-items per `## Plan Structure > ADR` | → S3 on human design-gate approval; advisory Daedalus input folded in per `### Design Consensus` (no gating signal — the human gate gates this state) |
 | **S3: Plan Generation** | Writing the TODO plan to `$OMT_DIR/plans/{name}.md` from the approved design and copying the same stored `state.non_goals` value for every intent into `## Work Objectives > ### Non-Goals` | → S4 on self-review pass |
 | **S4: Momus Invocation** | Plan path to Momus | → S5 on APPROVE/COMMENT or on the Momus round-cap (10) carried-forward terminal (a never-downgrade-class residual cannot take this terminal — it escalates to the user via Interview); on REQUEST_CHANGES → **scoped re-review by default**: revise the plan and re-run only S4 (fresh Momus), upstream preserved. Earliest-affected re-walk is the exception, taken only on an upstream root cause: → S0 on a requirements root cause (re-Metis → … → re-Momus), → S2 on a design root cause (human gate → re-plan → re-Momus) |
-| **S5: Plan Presentation** | Stage A render + present to user | → S6 on user views plan |
-| **S6: Execution Recommendation** | Compute Stage B recommendation | → S7 on user receives |
+| **S5: Plan Presentation** | Stage A render + present to user. The Stage B recommendation is already computed (right after S4 APPROVE/COMMENT, before the render) because the presentation carries the recommendation box. `presentation-reviewer` is dispatched after this render and submit, before Stage C | → S6 on user views plan |
+| **S6: Execution Recommendation** | Deliver the Stage B recommendation computed before the Stage A render | → S7 on user receives |
 | **S7: Execution Bridge** | Stage C mode choice ONLY — present the 3 execution options (Continue to ultragoal / Finish / Revise plan) and capture the user's selection | → S8 on "Continue to ultragoal" (option 1), valid ONLY against the fresh S4 APPROVE/COMMENT on the current artifact or the S4 carried-forward terminal (residual disclosed); → terminal on "Finish" (option 2, emit `<prometheus-done/>`); → S0 on "Revise plan" (user-initiated) |
 | **S8: Execution Dispatch** | Invoke `Skill(skill: "ultragoal")` with the plan path and pass the stored canonical non-goals value to Ultragoal's existing `--non-goals` slot, without a presence-based alternate path that can omit ordinary exclusions. | (terminal) |
 
@@ -1086,8 +1088,8 @@ If no candidates exist, say so and proceed fresh. The branch never renames on it
 These directives govern how prometheus records its own pipeline state via the state CLI.
 
 - **Per each S-transition**: run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase <S>` immediately after entering the new state. Pass `--plan-path <p>` at S0 when the Decision Register draft is first written; enrich the same artifact with the design-brief / ADR at S2 and the TODO plan body at S3; later transitions may omit it and the stored value is preserved automatically — omitting does NOT clear it. Pass `--resume-summary "<one line>"` whenever you want to refresh the pause bookmark; omitting it likewise preserves the previous bookmark.
-- **Pausing for the user at a human gate (S2, S7)**: when you end your turn with a plain-text question that only the user can answer, first run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --await-user`, then end the turn. This records a pause, not completion — the session state is kept and the work stays unmarked as done. The next progress write (any later `set` that omits `--await-user`) clears it automatically. A question asked through the runtime's question tool needs no pause, since a tool call does not end the turn.
-- **S1 AC recording**: immediately after Metis APPROVE/COMMENT confirms the acceptance criteria, record the confirmed AC content into state. AC strings routinely contain apostrophes (e.g. "user can't delete another user's data"), so the JSON array MUST be passed via the quoted-heredoc stdin form (`--record-ac -`), never embedded in single quotes on the argv (POSIX/zsh single quotes cannot escape an apostrophe):
+- **Pausing for the user**: usable at any phase, including S0 interview questions. Whenever you end your turn with a plain-text question that only the user can answer, first run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --await-user`, then end the turn. This records a pause, not completion — the session state is kept and the work stays unmarked as done. The next progress write (any later `set` that omits `--await-user`) clears it automatically. A question asked through the runtime's question tool needs no pause, since a tool call does not end the turn.
+- **S1 AC recording**: immediately after Metis APPROVE/COMMENT confirms the acceptance criteria (on the Trivial no-Metis path: immediately after the user confirms them), record the confirmed AC content into state. AC strings routinely contain apostrophes (e.g. "user can't delete another user's data"), so the JSON array MUST be passed via the quoted-heredoc stdin form (`--record-ac -`), never embedded in single quotes on the argv (POSIX/zsh single quotes cannot escape an apostrophe):
   ```
   bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase S1 --record-ac - <<'EOF'
   ["AC1: ...", "AC2: user can't delete another user's data"]
@@ -1104,12 +1106,13 @@ These directives govern how prometheus records its own pipeline state via the st
   bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase S2 --mark-design-done
   ```
   The ADR is the durable design artifact pointed to by `plan_path`; state records only a done-flag plus the pointer, never a copy of the ADR.
-- **S3 plan step**: after the TODO plan body is written, mark the plan step done:
+- **S3 plan step**: after the TODO plan body is written, mark the plan step done (the workflow requires it; the Stop hook also treats a plan file with a `## TODOs` section holding at least one TODO line as written):
   ```
   bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase S3 --mark-plan-done
   ```
-- **Teardown**: At S8 dispatch, on the Stage C Finish selection, and on abort, emit `<prometheus-done/>` as a standalone output token. The persistent-mode hook detects this token and performs the actual state-file deletion — the model does not call `clear` directly. The hook refuses the token while the plan step is done but the Stage A presentation is missing or stale — render the presentation first, then re-emit. Only a pre-plan abort tears down without one.
-- **Session key**: state is keyed by the exported `$OMT_SESSION_ID` environment variable. The CLI hard-fails with a non-zero exit when `OMT_SESSION_ID` is absent or unsafe — there is no fallback.
+- **Teardown**: At S8 dispatch, on the Stage C Finish selection, and on abort, emit `<prometheus-done/>` as a standalone output token. The persistent-mode hook detects this token and performs the actual state-file deletion — the model does not call `clear` directly. The token counts only when it stands alone on its own line outside a fenced code block. While the plan counts as written (the plan step is done, or the plan file has a `## TODOs` section with at least one TODO line; fenced code ignored) and the Stage A presentation is missing or stale, the hook refuses the token — render the presentation first, then re-emit. Refusals have their own counter capped at 5; after the cap, teardown proceeds anyway. Only a pre-plan abort tears down without a presentation.
+  When the user abandons the work, run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --abort --reason "<the user's words>"` (any phase), then emit the done token; with the abort recorded the hook skips the Stage A gate. Any later `set` clears the abort. This is not a way to skip Stage A for a plan the user wants — Finish and plan-only still render Stage A first.
+- **Session key**: state is keyed by the exported `$OMT_SESSION_ID` environment variable. When `OMT_SESSION_ID` is absent, the CLI falls back to `$CODEX_THREAD_ID` (Codex). `OMT_SESSION_ID` is authoritative when present: an unsafe value hard-fails with a non-zero exit and never falls through to `CODEX_THREAD_ID`. The CLI also hard-fails when both are absent or the value in use is unsafe.
 - **Command roster**: run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" help` to see every subcommand. `set`, `get`, `list-others`, and `adopt` are AI-usable; `clear` is internal-only and the model MUST NOT call it directly. The persistent-mode hook performs cleanup through its own cleanup path after `<prometheus-done/>`, which preserves the Stage A gate.
 - **Restore**: on restore, you MUST:
   1. Run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" get` and read `steps.acceptance_criteria.content` from its output to recover the prior confirmed AC (do not re-derive AC that was already confirmed — use the stored content directly).
@@ -1131,7 +1134,7 @@ Time pressure, user override ("just proceed"), self-assessment of fix correctnes
 | 2 | File references exist | All file paths and line references resolve |
 | 3 | Guardrails from Metis incorporated | Every Metis-flagged constraint reflected |
 | 4 | Zero human-intervention criteria | No TODO requires manual mid-execution action |
-| 5 | Plan validator passes | Run `bun "${CLAUDE_SKILL_DIR}/scripts/validate-plan.ts" <plan_path>` (invoked ONLY here, pre-S4, full plan). It checks section presence, TODO graph semantics (id uniqueness, Blocked By resolution, self-dependency/cycle ban, `Wave = max(blocker waves) + 1`), AND — when the plan carries structural enumeration — the Boundary Map block's required slots (`Collaborators`, `affected`/`modified`, `Dependency direction`). If it reports violations, fix the plan and re-run before submitting to Momus. |
+| 5 | Plan validator passes | Run `bun "${CLAUDE_SKILL_DIR}/scripts/validate-plan.ts" <plan_path>` (invoked ONLY here, pre-S4, full plan). It checks section presence, unclosed code fences and line-start HTML comments (everything after one renders as code or is hidden, so it is not counted as plan structure), TODO graph semantics (id uniqueness, Blocked By resolution, self-dependency/cycle ban, Wave at least `max(blocker waves) + 1`), `Blocks:` entries (brackets, none-like tokens, prefixes and ranges accepted; each id exists, no self-reference, each numeric target reaches the declaring TODO through `Blocked By` edges, F1-F4 targets exempt; the reverse is not required), AND — when the plan carries structural enumeration, or a `Must NOT own` label appears (line-start, or mid-line `Must NOT own:` / `**Must NOT own.**` / `**Must NOT own:**`; prose mentions do not count) — the Boundary Map block's required slots (`Collaborators`, `affected`/`modified`, `Dependency direction`). If it reports violations, fix the plan and re-run before submitting to Momus. |
 | 6 | design forks resolved | Every open design fork affecting implementation is resolved with a recorded decision carried through the S2 Co-Design human gate; an unresolved fork reopens the co-design interview (`### Next-Gate Readiness Rule`) rather than reaching the plan. No fork is silently absorbed. |
 | 7 | structural enumeration present (Complex/Arch) | For a Complex or Architecture plan, the artifact carries the decision log with structural enumeration OR the anti-ceremony escape with a named, specific consequence recorded. Presence only; fork resolution stays with item 6. |
 
@@ -1161,7 +1164,7 @@ After reconciliation, the design passes through the human design gate, then S3 p
 
 ### Plan Presentation (S5/S6/S7 — MANDATORY after Momus APPROVE)
 
-This step CANNOT be skipped. After Momus APPROVE/COMMENT, prometheus MUST execute Stages A → B → C before any user-facing handoff. **Past sessions have skipped Stage A entirely; do NOT.**
+This step CANNOT be skipped. After Momus APPROVE/COMMENT, prometheus MUST execute Stages B → A → C before any user-facing handoff: compute the Stage B recommendation right after Momus APPROVE/COMMENT, because the Stage A presentation carries the recommendation box; render and submit Stage A; dispatch `presentation-reviewer` after that submit and before Stage C; then present Stage C. **Past sessions have skipped Stage A entirely; do NOT.**
 
 **Required submission.** Read [review-pipeline.md](review-pipeline.md) Stage A before authoring; it owns the reader, section order, fidelity checks, render command, and HTML submission command. `prometheus-state.ts set --phase S5 --submit-presentation <html>` records the plan/HTML paths and content hashes in `presentation`. S6 or later refuses to advance unless:
 
@@ -1173,15 +1176,15 @@ The sole presentation deliverable is HTML. Intermediate presentation Markdown is
 
 After a scoped re-review or an S7→S0 revise, the plan is rewritten at the same path while the previous render stays on disk. **Re-run Stage A on every pass through S5, not just the first.**
 
-The state CLI is only half the enforcement — a session that skips the S5+ state writes never triggers it. The Stop hook closes that path: while the plan step is done and no fresh presentation exists, `<prometheus-done/>` is refused (the same freshness predicate, shared via `lib/state-core.ts`) and the session cannot tear down. A "Finish"/"플랜만 마무리" selection defers **execution** only — it never skips Stage A; the presentation must be rendered before the done token is honored. A pre-plan abort (no plan written) is exempt.
+The state CLI is only half the enforcement — a session that skips the S5+ state writes never triggers it. The Stop hook closes that path: while the plan counts as written (the plan step is done, or the plan file has a `## TODOs` section with at least one TODO line) and no fresh presentation exists, a standalone `<prometheus-done/>` on its own line outside code blocks is refused (the same freshness predicate, shared via `lib/state-core.ts`). Refusals are bounded at 5; after the cap, teardown proceeds anyway. A "Finish"/"플랜만 마무리" selection defers **execution** only — it never skips Stage A; the presentation must be rendered before the done token is honored. A pre-plan abort (no plan written) is exempt, and so is an abort the user chose: `set --abort --reason "<the user's words>"` records it and the token then tears down without the presentation. Never use it for Finish.
 
 | Stage | Mandate | Detail location |
 |---|---|---|
-| **Stage A** | Render and submit the single-file HTML presentation at `$OMT_DIR/plans/presentation/{name}.html` — one file per plan, so plans never overwrite each other. Faithful content (no omission/contradiction/invented facts) + readability rewrite in the communication language + context callouts. The Bird's-Eye section opens with the six-lens coverage table, then every triggered diagram: a bird's-eye System topology diagram REQUIRED when the plan has >= 2 components (governed by `review-pipeline.md`), plus each of the six lens diagrams (System topology / Module-API / User-Actor / Domain state / Domain-Service object / Business logic, defined in `diagram-guide.md`) REQUIRED when its trigger FACT holds in `plan.md` (trigger-based, not optional; the only reason to omit a lens is that its trigger FACT is false). Trigger FACTs are evaluated **per system** the topology draws — a plan spanning client + server renders each triggered lens for every side where the FACT holds (a server-only state/class/logic diagram with matching client-side decisions undrawn is an incomplete lens; see diagram-guide.md Per-system evaluation). Every diagram shows the runtime behavior the implemented plan would produce — flows, sequences, state transitions, object structures. Diagram count scales with plan size; there is no cap. Re-visualize decided content only, never inventing edges. Diagrams run macro → micro within the Bird's-Eye section, which precedes a Review Digest (AC + per-AC verification, re-surfaced verbatim), which precedes the plan body; TODO execution detail collapsed in `<details>` (never omitted) + session-derived boxes (Stage B recommendation, Pipeline State) rendered as blockquote callouts. Directly authored per the Presentation Section Order (no template, no substitution); when the plan is approved, the presentation gets made. | Presentation Section Order, translation invariants, readability enrichment in `review-pipeline.md`; diagram type-selection + authoring rules + guardrails + presentation protocol + post-draw self-audit in `diagram-guide.md` |
-| **Stage B** | Compute the handoff recommendation from the re-keyed signal table (carried-forward residuals, unresolved questions/open forks, feasibility-concern comments, machine-verifiability of the plan). Output: Recommendation (Continue to ultragoal / Finish) + Rationale + What-tips-the-balance. | Signal table details in `review-pipeline.md` |
+| **Stage A** | Render and submit the single-file HTML presentation at `$OMT_DIR/plans/presentation/{name}.html` — one file per plan, so plans never overwrite each other. Faithful content (no omission/contradiction/invented facts) + readability rewrite in the communication language + context callouts. The Bird's-Eye section exists when at least one lens trigger holds (otherwise the Review Digest follows the Pipeline State box); it opens with the six-lens coverage table, then every triggered diagram: each of the six lens diagrams (System topology / Module-API / User-Actor / Domain state / Domain-Service object / Business logic, defined in `diagram-guide.md`) REQUIRED when its trigger FACT holds in `plan.md` — the bird's-eye System topology diagram (REQUIRED when the plan has >= 2 components, governed by `review-pipeline.md`) IS the System topology lens diagram, one diagram, not two (trigger-based, not optional; the only reason to omit a lens is that its trigger FACT is false). Trigger FACTs are evaluated **per system** the topology draws — a plan spanning client + server renders each triggered lens for every side where the FACT holds (a server-only state/class/logic diagram with matching client-side decisions undrawn is an incomplete lens; see diagram-guide.md Per-system evaluation). Every diagram shows the runtime behavior the implemented plan would produce — flows, sequences, state transitions, object structures. Diagram count scales with plan size; there is no cap. Re-visualize decided content only, never inventing edges. Diagrams run macro → micro within the Bird's-Eye section, which precedes a Review Digest (AC + per-AC verification; commands, file paths, identifiers and AC numbers verbatim, AC prose in the session language with its meaning unchanged), which precedes the plan body; TODO execution detail collapsed in `<details>` (never omitted) + session-derived boxes (Stage B recommendation, Pipeline State) rendered as blockquote callouts. Directly authored per the Presentation Section Order (no template, no substitution); when the plan is approved, the presentation gets made. | Presentation Section Order, translation invariants, readability enrichment in `review-pipeline.md`; diagram type-selection + authoring rules + guardrails + presentation protocol + post-draw self-audit in `diagram-guide.md` |
+| **Stage B** | Compute (right after Momus APPROVE/COMMENT, before the Stage A render) the handoff recommendation from the re-keyed signal table (carried-forward residuals, unresolved questions/open forks, feasibility-concern comments, machine-verifiability of the plan). Output: Recommendation (Continue to ultragoal / Finish) + Rationale + What-tips-the-balance. | Signal table details in `review-pipeline.md` |
 | **Stage C** | Execution Bridge (S7) via platform's user-prompt primitive — mode choice ONLY: 3 options (Continue to ultragoal / Finish / Revise plan). `(Recommended)` label computed from the re-keyed signal table, NOT hardcoded. Execution selection is valid only against a fresh S4 pass on the current artifact (see the S8 reachability invariant in the Pipeline State Machine). | Option formatting in `review-pipeline.md` |
 
-**Stage A language gate — execute BEFORE rendering any prose:** First state the session's conversation language out loud, then render every prose string in the presentation markdown in that language — hero text, headings, body, callouts alike. Detection is render-time, never hard-coded. Only the preservation list stays verbatim (code blocks, file paths, CLI, `WI-N`, `AC#M`, `S0-S8`, `drawn`, `trigger FALSE:`); `plan.md` on disk is never rewritten. This gate is binding on its own; the full Translation Rule (3 invariants) in `review-pipeline.md` adds detail but is not a precondition for honoring it.
+**Stage A language gate — execute BEFORE rendering any prose:** First state the session's conversation language out loud, then render every prose string in the presentation markdown in that language — hero text, headings, body, callouts alike. Detection is render-time, never hard-coded. Only the preservation list stays verbatim (code blocks, file paths, CLI, work item numbers, acceptance criterion numbers, `S0-S8`, `drawn`, `trigger FALSE:`, the coverage-table header `| Lens | Trigger FACT | Status |`); `plan.md` on disk is never rewritten. This gate is binding on its own; the full Translation Rule (3 invariants) in `review-pipeline.md` adds detail but is not a precondition for honoring it.
 
 On selection: Option 1 → `Skill(skill: "ultragoal")` with the plan path and the stored `state.non_goals` value in Ultragoal's existing `--non-goals` slot. Option 2 → emit `<prometheus-done/>`; the plan file AND its Stage A presentation are the deliverables — the Stop hook refuses the done token while a written plan lacks a fresh presentation, so Stage A must already be rendered when Finish is selected. Option 3 → return to the S0 Requirements interview (user-initiated revise).
 
@@ -1217,7 +1220,7 @@ Reference files are **trigger-conditional MANDATORY full-read**. They are not "a
 | Entering Acceptance Criteria drafting (Clearance all-YES, about to propose AC) | [acceptance-criteria.md](acceptance-criteria.md) | Full file, single Read call |
 | About to invoke `Write` on the plan file (`$OMT_DIR/plans/*.md`) | [plan-template.md](plan-template.md) | Full file, single Read call |
 | About to invoke a reviewer (Metis/Daedalus/Momus) OR execute Stage A/B/C | [review-pipeline.md](review-pipeline.md) | Full file, single Read call |
-| About to insert any diagram into the Stage A presentation (whether the required bird's-eye topology diagram or any triggered lens diagram) | [diagram-guide.md](diagram-guide.md) | Full file, single Read call |
+| About to evaluate lens triggers or insert any diagram for the Stage A presentation (whether the required bird's-eye topology diagram or any triggered lens diagram) | [diagram-guide.md](diagram-guide.md) | Full file, single Read call |
 
 **Per-reference cache**: One full-read per session per reference is sufficient. If you have already full-read `interview.md` earlier in this session, you do not need to re-read on every subsequent interview turn — but if you did partial-read or have not read it at all, the trigger still demands full-read NOW.
 

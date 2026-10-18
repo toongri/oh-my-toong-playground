@@ -1,11 +1,13 @@
 import { describe, test, expect } from "bun:test";
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
+import { spawnSync } from "child_process";
 import {
 	REQUIRED_HEADINGS,
 	validatePlan,
 	validatePlanGraph,
 	validateBoundaryMap,
+	validateUnclosedBlocks,
 } from "./validate-plan.ts";
 
 // ---------------------------------------------------------------------------
@@ -148,10 +150,14 @@ function buildGraphPlan(todoBlocks: string[]): string {
 }
 
 /** One TODO block in the plan-template checkbox shape. */
-function todoBlock(id: string, opts: { blockedBy?: string; wave?: string } = {}): string {
+function todoBlock(
+	id: string,
+	opts: { blockedBy?: string; blocks?: string; wave?: string } = {},
+): string {
 	const lines = [`- [ ] ${id}. Task ${id}`];
 	lines.push(`  - What to do: work for task ${id}`);
 	if (opts.blockedBy !== undefined) lines.push(`  - Blocked By: ${opts.blockedBy}`);
+	if (opts.blocks !== undefined) lines.push(`  - Blocks: ${opts.blocks}`);
 	if (opts.wave !== undefined) lines.push(`  - Wave: ${opts.wave}`);
 	return lines.join("\n");
 }
@@ -199,21 +205,40 @@ describe("graph semantics", () => {
 		expect(violations.some((v: string) => v.startsWith("dependency cycle:"))).toBe(true);
 	});
 
-	test("Wave mismatch against max(blocker)+1 detected", () => {
+	test("Wave lower than max(blocker)+1 detected", () => {
 		const plan = buildGraphPlan([
 			todoBlock("1", { wave: "1" }),
-			todoBlock("2", { blockedBy: "TODO 1", wave: "3" }),
+			todoBlock("2", { blockedBy: "TODO 1", wave: "1" }),
 		]);
 		expect(validatePlanGraph(plan)).toContain(
-			"TODO 2: Wave 3 but expected 2 (= max(blocker waves) + 1)",
+			"TODO 2: Wave 1 but must be at least 2 (= max(blocker waves) + 1)",
 		);
 	});
 
-	test("empty Blocked By expects Wave 1", () => {
-		const plan = buildGraphPlan([todoBlock("1", { wave: "2" })]);
-		expect(validatePlanGraph(plan)).toContain(
-			"TODO 1: Wave 2 but expected 1 (= max(blocker waves) + 1)",
+	test("Wave later than max(blocker)+1 is allowed", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { wave: "1" }),
+			todoBlock("2", { blockedBy: "TODO 1", wave: "3" }),
+			todoBlock("3", { wave: "2" }),
+		]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("empty Blocked By allows any Wave of 1 or more", () => {
+		expect(validatePlanGraph(buildGraphPlan([todoBlock("1", { wave: "2" })]))).toEqual([]);
+		expect(validatePlanGraph(buildGraphPlan([todoBlock("1", { wave: "0" })]))).toContain(
+			"TODO 1: Wave 0 but must be at least 1 (= max(blocker waves) + 1)",
 		);
+	});
+
+	test("unparseable Blocked By entry suppresses the Wave formula check for that TODO", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { wave: "1" }),
+			todoBlock("2", { blockedBy: "TODO 1, bogus", wave: "1" }),
+		]);
+		expect(validatePlanGraph(plan)).toEqual([
+			'TODO 2: unparseable Blocked By entry "bogus"',
+		]);
 	});
 
 	test("Blocked By: None treated as no blockers", () => {
@@ -340,7 +365,7 @@ const BOUNDARY_MAP_OK = `## ADR
 ### D-2 — RenewSubscriptionUseCase (new, structural)
 
 Owns the renewal sequence.
-Must NOT own the charge mechanics.
+Must NOT own: the charge mechanics.
 Edges: (RenewalScheduler → RenewSubscriptionUseCase, trigger)
 
 ### Boundary Map
@@ -365,7 +390,7 @@ describe("Boundary Map — structural plans", () => {
 	});
 
 	test("structural enumeration with NO Boundary Map block fails", () => {
-		const plan = `## ADR\n\n### D-2 — X (structural)\n\nOwns the thing.\nMust NOT own the other.\nEdges: none\n`;
+		const plan = `## ADR\n\n### D-2 — X (structural)\n\nOwns the thing.\nMust NOT own: the other.\nEdges: none\n`;
 		const out = validateBoundaryMap(plan);
 		expect(out.length).toBe(1);
 		expect(out[0]).toContain("block is missing");
@@ -389,7 +414,7 @@ describe("Boundary Map — structural plans", () => {
 ### D-2 — X (structural)
 
 Owns the thing.
-Must NOT own the other.
+Must NOT own: the other.
 
 ### Boundary Map
 
@@ -400,5 +425,474 @@ Dependency direction: use-case → domains
 `;
 		const out = validateBoundaryMap(plan);
 		expect(out.length).toBeGreaterThan(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Parsing robustness — CRLF, indented fences, fence-only sections
+// ---------------------------------------------------------------------------
+
+describe("파싱 견고성", () => {
+	const passingTodos = [
+		todoBlock("1", { wave: "1" }),
+		todoBlock("2", { blockedBy: "1", wave: "2" }),
+		todoBlock("F1", { blockedBy: "2", wave: "FINAL" }),
+	];
+
+	test("CRLF 줄바꿈 계획도 LF 계획과 같은 결과로 통과한다", () => {
+		const lf = buildGraphPlan(passingTodos);
+		expect(validatePlanGraph(lf)).toEqual([]);
+		for (const crlf of [lf.replace(/\n/g, "\r\n"), lf.replace(/\n/g, "\r")]) {
+			expect(validatePlanGraph(crlf)).toEqual(validatePlanGraph(lf));
+			expect(validatePlan(crlf)).toEqual(validatePlan(lf));
+			expect(validateBoundaryMap(crlf)).toEqual(validateBoundaryMap(lf));
+		}
+	});
+
+	test("들여쓴 펜스 안의 예시 TODO는 유령 TODO를 만들지 않는다", () => {
+		const real = [
+			"- [ ] 1. Real task",
+			"  - Run:",
+			"    ```bash",
+			"    - [ ] 9. Example task",
+			"    Blocked By: 77",
+			"    Wave: 5",
+			"    ```",
+			"  - Wave: 1",
+		].join("\n");
+		const plan = buildGraphPlan([real, todoBlock("F1", { blockedBy: "1", wave: "FINAL" })]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("들여쓴 ~~~ 펜스도 제거한다", () => {
+		const real = [
+			"- [ ] 1. Real task",
+			"  ~~~",
+			"  Blocked By: 77",
+			"  ~~~",
+			"  - Wave: 1",
+		].join("\n");
+		const plan = buildGraphPlan([real, todoBlock("F1", { blockedBy: "1", wave: "FINAL" })]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("~~~ 펜스 안의 ## Success Criteria는 제목으로 세지 않는다", () => {
+		const plan = buildPlan({ "Success Criteria": "" }).replace(
+			"## Success Criteria\n\n\n",
+			"~~~\n## Success Criteria\nInside a fence.\n~~~\n",
+		);
+		expect(validatePlan(plan)).toContain("Success Criteria");
+	});
+
+	test("펜스 밖 텍스트는 제거하지 않는다", () => {
+		const plan = buildPlan({
+			Context: "before\n```\ncode\n```\nafter ~~~ not a fence",
+		});
+		expect(validatePlan(plan)).toEqual([]);
+	});
+
+	test("펜스 블록만 있는 섹션은 비어 있지 않다", () => {
+		const plan = buildPlan({
+			"Execution Strategy": "```\nWave 1: 1\nWave 2: 2\n```",
+			"Verification Strategy": "  ```bash\n  bun test\n  ```",
+		});
+		expect(validatePlan(plan)).toEqual([]);
+	});
+
+	test("펜스 안의 제목은 섹션 경계가 되지 않는다", () => {
+		const plan = buildPlan({
+			"Execution Strategy": "```\n## Verification Strategy\n```",
+			"Verification Strategy": "",
+		});
+		expect(validatePlan(plan)).toContain("Verification Strategy");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// HTML 주석 — 펜스와 같은 방식으로 모든 검사에서 제거
+// ---------------------------------------------------------------------------
+
+describe("HTML 주석", () => {
+	test("한 줄 주석 안의 ## Success Criteria는 제목으로 세지 않는다", () => {
+		const plan = buildPlan({ "Success Criteria": "" }).replace(
+			"## Success Criteria\n\n\n",
+			"<!-- ## Success Criteria x -->\n",
+		);
+		expect(validatePlan(plan)).toContain("Success Criteria");
+	});
+
+	test("여러 줄 주석 안의 제목은 제목으로 세지 않는다", () => {
+		const plan = `${buildPlan({ "Success Criteria": "" }).replace(
+			"## Success Criteria\n\n\n",
+			"",
+		)}\n<!--\n## Success Criteria\nhidden body\n-->\n`;
+		expect(validatePlan(plan)).toContain("Success Criteria");
+	});
+
+	test("주석만 있는 섹션은 비어 있다", () => {
+		const plan = buildPlan({ Context: "<!-- todo: write context -->" });
+		expect(validatePlan(plan)).toContain("Context");
+	});
+
+	test("주석 안의 TODO와 Blocked By는 그래프에 반영되지 않는다", () => {
+		const real = [
+			"- [ ] 1. Real task",
+			"  <!--",
+			"  Blocked By: 77",
+			"  - [ ] 9. Ghost task",
+			"  -->",
+			"  - Wave: 1",
+		].join("\n");
+		const plan = buildGraphPlan([real, todoBlock("F1", { blockedBy: "1", wave: "FINAL" })]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("주석 안의 Must NOT own은 Boundary Map을 요구하지 않는다", () => {
+		expect(validateBoundaryMap("## ADR\n\n<!-- Must NOT own: x -->\n")).toEqual([]);
+	});
+
+	test("줄 중간의 닫히지 않은 주석과 주석 밖 텍스트는 그대로 둔다", () => {
+		const plan = buildPlan({ Context: "before <!-- note --> after\ntext <!-- never closed" });
+		expect(validatePlan(plan)).toEqual([]);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Blocks: 파싱과 Blocked By 대칭 검사
+// ---------------------------------------------------------------------------
+
+describe("Blocks 필드", () => {
+	test("Blocked By와 대칭인 Blocks는 통과한다", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { blocks: "TODO 2", wave: "1" }),
+			todoBlock("2", { blockedBy: "1", blocks: "F1", wave: "2" }),
+			todoBlock("F1", { blockedBy: "2", blocks: "none", wave: "FINAL" }),
+		]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("Blocks 줄이 없는 TODO는 불일치가 아니다", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { wave: "1" }),
+			todoBlock("2", { blockedBy: "1", wave: "2" }),
+			todoBlock("F1", { blockedBy: "2", wave: "FINAL" }),
+		]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("쓸 수 없는 Blocks 항목은 거부한다", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { blocks: "2, soon", wave: "1" }),
+			todoBlock("2", { blockedBy: "1", wave: "2" }),
+		]);
+		expect(validatePlanGraph(plan)).toContain('TODO 1: unparseable Blocks entry "soon"');
+	});
+
+	test("정의되지 않은 TODO를 가리키는 Blocks를 보고한다", () => {
+		const plan = buildGraphPlan([todoBlock("1", { blocks: "9", wave: "1" })]);
+		expect(validatePlanGraph(plan)).toContain("TODO 1: Blocks references undefined TODO 9");
+	});
+
+	test("자기 자신을 막는 Blocks를 보고한다", () => {
+		const plan = buildGraphPlan([todoBlock("1", { blocks: "1", wave: "1" })]);
+		expect(validatePlanGraph(plan)).toContain("TODO 1: blocks itself");
+	});
+
+	test("A가 Blocks: B인데 B에서 A로 가는 Blocked By 경로가 없으면 보고한다", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { blocks: "2", wave: "1" }),
+			todoBlock("2", { wave: "1" }),
+		]);
+		expect(validatePlanGraph(plan)).toContain(
+			"TODO 1: Blocks 2 but TODO 2 has no Blocked By path to 1",
+		);
+	});
+
+	test("Blocks 줄이 F1을 빼도 F1이 Blocked By로 나열하면 통과한다", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { blocks: "none", wave: "1" }),
+			todoBlock("2", { blockedBy: "1", blocks: "none", wave: "2" }),
+			todoBlock("F1", { blockedBy: "1, 2", wave: "FINAL" }),
+		]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("Blocks의 빈 값 표기는 Blocked By와 같다(none만, 대소문자 무시)", () => {
+		for (const empty of ["none", "None", ""]) {
+			const plan = buildGraphPlan([
+				todoBlock("1", { blocks: empty, blockedBy: empty, wave: "1" }),
+			]);
+			expect(validatePlanGraph(plan)).toEqual([]);
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Boundary Map 트리거 — 필드 형태만
+// ---------------------------------------------------------------------------
+
+describe("Boundary Map 트리거", () => {
+	test("산문 속 Must NOT own 언급은 트리거하지 않는다", () => {
+		const plan = buildPlan({ "TL;DR": "Each D-item states what it Must NOT own, see ADR." });
+		expect(validateBoundaryMap(plan)).toEqual([]);
+	});
+
+	test("문장 중간·문장 앞머리의 Must NOT own 언급은 트리거하지 않는다", () => {
+		for (const line of [
+			"The D-items say Must NOT own is required",
+			"Each item declares what it Must NOT own.",
+			"Must NOT owner list is below",
+			"Must NOT own is discussed here",
+			"- Must NOT own lists are optional",
+		]) {
+			expect(validateBoundaryMap(`## ADR\n\n${line}\n`)).toEqual([]);
+		}
+	});
+
+	test("줄 중간의 라벨 형태도 트리거한다", () => {
+		for (const line of [
+			"- **Owns**: flag read for the domain. **Must NOT own**: flag persistence.",
+			"Owns: the counter. Must NOT own: progress judgment.",
+			"- **Owns**: x. **Must NOT own.** y",
+			"Owns: x. **Must NOT own:** y",
+			"Owns: x. must not own : y",
+		]) {
+			const out = validateBoundaryMap(`## ADR\n\n${line}\n`);
+			expect(out.length).toBe(1);
+			expect(out[0]).toContain("block is missing");
+		}
+	});
+
+	test("소문자 필드 Must not own:도 트리거한다", () => {
+		const out = validateBoundaryMap("## ADR\n\nMust not own: the other.\n");
+		expect(out.length).toBe(1);
+		expect(out[0]).toContain("block is missing");
+	});
+
+	test("목록 표시와 굵게 표시가 붙은 필드도 트리거한다", () => {
+		for (const line of [
+			"- Must NOT own: x",
+			"* **Must NOT own:** x",
+			"1. **Must NOT own**: x",
+			"**Must NOT own.** x",
+			"- **Must NOT own** x",
+			"- **Must NOT own**",
+			"Must NOT own",
+			"  Must not own: x",
+		]) {
+			expect(validateBoundaryMap(`## ADR\n\n${line}\n`).length).toBe(1);
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// CLI 종료 코드와 fixture 정합성
+// ---------------------------------------------------------------------------
+
+describe("코드 펜스", () => {
+	const F = "```";
+
+	test("닫히지 않은 펜스는 연 줄을 알리고, 그 뒤는 코드로 보아 섹션을 세지 않는다", () => {
+		const plan = `# P\n\n${F}md\n\n${buildPlan()}`;
+		const out = validateUnclosedBlocks(plan);
+		expect(out.length).toBe(1);
+		expect(out[0]).toContain("line 3");
+		expect(validatePlan(plan)).toEqual(REQUIRED_HEADINGS);
+	});
+
+	test("닫히지 않은 HTML 주석은 연 줄을 알리고, 그 뒤는 주석으로 보아 섹션을 세지 않는다", () => {
+		const plan = `# P\n\n<!--\n\n${buildPlan()}`;
+		const out = validateUnclosedBlocks(plan);
+		expect(out.length).toBe(1);
+		expect(out[0]).toContain("line 3");
+		expect(out[0]).toContain("HTML comment");
+		expect(validatePlan(plan)).toEqual(REQUIRED_HEADINGS);
+	});
+
+	test("줄 중간의 닫히지 않은 <!--는 글자 그대로라 보고하지 않는다", () => {
+		const plan = buildPlan({ Context: "화살표 <!-- 표기는 그대로 둔다." });
+		expect(validateUnclosedBlocks(plan)).toEqual([]);
+		expect(validatePlan(plan)).toEqual([]);
+	});
+
+	test("TODOs 섹션에 펜스 예시만 있으면 정식 TODO가 없다고 보고한다", () => {
+		const plan = buildPlan({ TODOs: `${F}md\n- [ ] 1. 예시\n${F}` });
+		expect(validatePlanGraph(plan)).toContain("TODOs section contains no canonical checkbox TODOs");
+	});
+
+	test("목록 마커와 같은 줄에서 연 펜스가 뒤의 섹션을 삼키지 않는다", () => {
+		const plan = buildPlan({ Context: "- 실행:\n  - ```bash\n    make test\n    ```\n\n뒤 문단" });
+		expect(validateUnclosedBlocks(plan)).toEqual([]);
+		expect(validatePlan(plan)).toEqual([]);
+	});
+
+	test("닫힌 펜스만 있으면 펜스 위반이 없다", () => {
+		expect(validateUnclosedBlocks(`${buildPlan()}\n${F}ts\nx\n${F}\n~~~\ny\n~~~\n`)).toEqual([]);
+	});
+
+	test("최상위에서 4칸 들여쓴 펜스 줄은 들여쓴 코드라 펜스를 열지 않는다", () => {
+		const plan = buildPlan({ Context: `예시:\n\n    ${F}\n` });
+		expect(validateUnclosedBlocks(plan)).toEqual([]);
+		expect(validatePlan(plan)).toEqual([]);
+	});
+
+	test("목록 항목 내용 열 기준으로 들여쓴 펜스 안의 예시 TODO는 세지 않는다", () => {
+		const real = [
+			"- [ ] 1. Real task",
+			"  10. 예시",
+			"",
+			"      " + F,
+			"      - [ ] 9. Example task",
+			"      Blocked By: 77",
+			"      " + F,
+			"  - Wave: 1",
+		].join("\n");
+		const plan = buildGraphPlan([real, todoBlock("F1", { blockedBy: "1", wave: "FINAL" })]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+});
+
+describe("CLI", () => {
+	const script = join(import.meta.dir, "validate-plan.ts");
+	const run = (...args: string[]) =>
+		spawnSync("bun", [script, ...args], { encoding: "utf8" });
+
+	test("읽을 수 없는 파일은 stderr 메시지와 종료 코드 2를 낸다", () => {
+		const r = run("/nonexistent/dir/plan.md");
+		expect(r.status).toBe(2);
+		expect(r.stdout).toBe("");
+		expect(r.stderr).toContain("validate-plan: cannot read /nonexistent/dir/plan.md:");
+	});
+
+	test("인자가 없으면 종료 코드 2를 낸다", () => {
+		expect(run().status).toBe(2);
+	});
+
+	const fixtureDir = join(import.meta.dir, "..", "__fixtures__", "stage-a");
+	for (const name of readdirSync(fixtureDir).filter((f) => f.endsWith(".md"))) {
+		test(`stage-a fixture ${name}는 종료 코드 0으로 통과한다`, () => {
+			const r = run(join(fixtureDir, name));
+			expect({ status: r.status, stdout: r.stdout }).toEqual({ status: 0, stdout: "" });
+		});
+	}
+});
+
+// ---------------------------------------------------------------------------
+// 공유 id 목록 파서 / Blocks 추이 검사 / Wave 하한
+// ---------------------------------------------------------------------------
+
+/** One-task graph with the given Blocked By value; returns the graph violations. */
+function blockedByViolations(value: string): string[] {
+	return validatePlanGraph(
+		buildGraphPlan([
+			todoBlock("1", { wave: "1" }),
+			todoBlock("2", { wave: "1" }),
+			todoBlock("3", { wave: "1" }),
+			todoBlock("4", { blockedBy: value, wave: "9" }),
+		]),
+	);
+}
+
+describe("id 목록 파서", () => {
+	test("대괄호 한 쌍을 벗긴다", () => {
+		expect(blockedByViolations("[1, 3]")).toEqual([]);
+		expect(blockedByViolations("[1, 9]")).toContain(
+			"TODO 4: Blocked By references undefined TODO 9",
+		);
+	});
+
+	test("없음 표기는 빈 목록이다", () => {
+		for (const none of ["", "none", "NONE", "—", "–", "-", "n/a", "N/A", "없음", "(none)", "(none — first task)", "[none]"]) {
+			const plan = buildGraphPlan([
+				todoBlock("1", { blockedBy: none, blocks: none, wave: "1" }),
+			]);
+			expect(validatePlanGraph(plan)).toEqual([]);
+		}
+	});
+
+	test("T와 TODO 접두를 받는다", () => {
+		expect(blockedByViolations("T1, TODO 2, T3")).toEqual([]);
+		expect(blockedByViolations("T7")).toContain("TODO 4: Blocked By references undefined TODO 7");
+	});
+
+	test("같은 접두의 숫자 범위를 펼친다", () => {
+		expect(blockedByViolations("1-3")).toEqual([]);
+		expect(blockedByViolations("1–3")).toEqual([]);
+		expect(blockedByViolations("T1-T3")).toEqual([]);
+		expect(blockedByViolations("1-5")).toContain("TODO 4: Blocked By references undefined TODO 5");
+	});
+
+	test("F 범위는 F 접두 id로 펼친다", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { blocks: "F1-F4", wave: "1" }),
+			todoBlock("F1", { blockedBy: "1", wave: "FINAL" }),
+			todoBlock("F2", { blockedBy: "1", wave: "FINAL" }),
+			todoBlock("F3", { blockedBy: "1", wave: "FINAL" }),
+			todoBlock("F4", { blockedBy: "1", wave: "FINAL" }),
+		]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("1000개를 넘는 id를 펼치는 범위는 펼치지 않고 해석 불가로 둔다", () => {
+		expect(blockedByViolations("1-1001")).toEqual(['TODO 4: unparseable Blocked By entry "1-1001"']);
+		expect(blockedByViolations("1-99999999999999999999")).toEqual([
+			'TODO 4: unparseable Blocked By entry "1-99999999999999999999"',
+		]);
+		expect(blockedByViolations("1-1000")).not.toContainEqual(expect.stringContaining("unparseable"));
+	});
+
+	test("뒤집힌 범위와 접두가 섞인 범위는 해석 불가다", () => {
+		expect(blockedByViolations("3-1")).toContain('TODO 4: unparseable Blocked By entry "3-1"');
+		expect(blockedByViolations("F1-4")).toContain('TODO 4: unparseable Blocked By entry "F1-4"');
+		expect(blockedByViolations("T1-F2")).toContain('TODO 4: unparseable Blocked By entry "T1-F2"');
+	});
+
+	test("그 밖의 항목은 해석 불가로 남는다", () => {
+		expect(blockedByViolations("see above")).toContain(
+			'TODO 4: unparseable Blocked By entry "see above"',
+		);
+	});
+});
+
+describe("Blocks 추이 검사", () => {
+	test("Blocked By 그래프로 도달 가능하면 통과한다", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { blocks: "3", wave: "1" }),
+			todoBlock("2", { blockedBy: "1", wave: "2" }),
+			todoBlock("3", { blockedBy: "2", wave: "3" }),
+		]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("경로가 없으면 보고한다", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { blocks: "3", wave: "1" }),
+			todoBlock("2", { wave: "1" }),
+			todoBlock("3", { blockedBy: "2", wave: "2" }),
+		]);
+		expect(validatePlanGraph(plan)).toContain(
+			"TODO 1: Blocks 3 but TODO 3 has no Blocked By path to 1",
+		);
+	});
+
+	test("FINAL 대상은 대칭 검사에서 면제된다", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { blocks: "F1-F4", wave: "1" }),
+			todoBlock("F1", { wave: "FINAL" }),
+			todoBlock("F2", { wave: "FINAL" }),
+			todoBlock("F3", { wave: "FINAL" }),
+			todoBlock("F4", { wave: "FINAL" }),
+		]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("정의되지 않은 대상과 자기 참조는 FINAL 면제와 무관하게 보고된다", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { blocks: "F2", wave: "1" }),
+			todoBlock("F1", { blocks: "F1", wave: "FINAL" }),
+		]);
+		const v = validatePlanGraph(plan);
+		expect(v).toContain("TODO 1: Blocks references undefined TODO F2");
+		expect(v).toContain("TODO F1: blocks itself");
 	});
 });

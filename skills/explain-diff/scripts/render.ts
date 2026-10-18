@@ -20,13 +20,15 @@
 import { execFileSync } from "child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
-import { marked } from "marked";
+import { basename, extname, join } from "path";
+import { Marked, marked, type Token, type Tokens } from "marked";
+import { findMarkdownBlocks } from "@lib/markdown-blocks";
 
 /** Heading rows the table of contents is built from. */
 interface TocEntry {
 	level: number;
-	text: string;
+	/** The heading's rendered inline HTML, so the entry keeps the heading's code/bold formatting. */
+	html: string;
 	id: string;
 }
 
@@ -42,8 +44,6 @@ export function slugify(text: string): string {
 			.replace(/^-+|-+$/g, "") || "section"
 	);
 }
-
-const MERMAID_FENCE = /```mermaid\n([\s\S]*?)```/g;
 
 /**
  * Rewrites a mermaid SVG's root width to its viewBox pixel width so a wide
@@ -75,7 +75,7 @@ export function normalizeSvgWidth(svg: string): string {
 		: rootTag.replace(/^<svg\b/, `<svg width="${width}"`);
 	return (
 		svg
-			.replace(/^<svg\b[^>]*>/, normalizedRoot)
+			.replace(/^<svg\b[^>]*>/, () => normalizedRoot)
 			// mmdc bakes an inline `max-width:<px>` on the root <svg>. An inline style beats a
 			// stylesheet rule, so both `.dz-scroll svg{max-width:100%}` (fit) and `.dz-view …
 			// svg{max-width:none}` (zoom) are overridden and the SVG renders at natural width,
@@ -149,20 +149,50 @@ export function preRenderMermaid(
 	markdown: string,
 	renderSvg: (source: string, index: number) => string,
 ): string {
+	const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+	const out: string[] = [];
 	let index = 0;
-	return markdown.replace(MERMAID_FENCE, (_m, source: string) => {
-		const i = index;
+	let next = 0;
+	// Code blocks come from lib/markdown-blocks.ts (marked's lexer, the parser that renders the
+	// page), so a mermaid fence nested in another code block or left unclosed stays code. Only a
+	// closed fence whose line starts (after whitespace) with the fence becomes a figure: one inside
+	// a `> ` blockquote stays code with no `> ` leaking into the diagram source, and so does one
+	// opened on a list marker line.
+	for (const block of findMarkdownBlocks(lines.join("\n"))) {
+		const { start, end, info } = block;
+		const opener = /^([ \t]*)(`{3,}|~{3,})/.exec(lines[start]);
+		if (
+			block.kind !== "code" ||
+			!block.fenced ||
+			!block.closed ||
+			opener === null ||
+			info.trim().split(/\s+/)[0].toLowerCase() !== "mermaid"
+		) {
+			continue;
+		}
+		out.push(...lines.slice(next, start));
+		const indent = opener[1];
+		const body = lines.slice(start + 1, end).map((l) => {
+			let k = 0;
+			while (k < indent.length && k < l.length && (l[k] === " " || l[k] === "\t")) k += 1;
+			return l.slice(k);
+		});
+		const source = body.length === 0 ? "" : `${body.join("\n")}\n`;
+		const n = index;
 		index += 1;
 		let svg: string;
 		try {
-			svg = renderSvg(source, i);
+			svg = renderSvg(source, n);
 		} catch (e) {
-			throw new Error(`${i + 1}번째 mermaid 블록 렌더 실패: ${String(e)}\n--- 블록 원문 ---\n${source}`, {
+			throw new Error(`${n + 1}번째 mermaid 블록 렌더 실패: ${String(e)}\n--- 블록 원문 ---\n${source}`, {
 				cause: e,
 			});
 		}
-		return zoomableFigure(normalizeSvgWidth(svg), i);
-	});
+		out.push(indent + zoomableFigure(normalizeSvgWidth(svg), n));
+		next = end + 1;
+	}
+	out.push(...lines.slice(next));
+	return out.join("\n");
 }
 
 /**
@@ -231,27 +261,132 @@ export function mmdcRenderSvg(source: string, index: number): string {
 	}
 }
 
+/**
+ * GFM reads a single-tilde pair (`1~3 와 4~6`) as strikethrough. These documents
+ * write ranges that way, so only a `~~` pair renders `<del>`; a single-tilde
+ * pair gives its tildes back as literal text around the inline content.
+ */
+function renderDel(this: { parser: { parseInline(t: Tokens.Generic[]): string } }, { tokens, raw }: Tokens.Del): string {
+	const inner = this.parser.parseInline(tokens);
+	return raw.startsWith("~~") ? `<del>${inner}</del>` : `~${inner}~`;
+}
+
+/** Inline-only parser for `<summary>` text: marked's own parser, plus the tilde rule. */
+const summaryMarked = new Marked({ renderer: { del: renderDel } });
+
+/** CommonMark HTML-block start conditions 1-5 (raw text until a closing marker) must not be split. */
+const RAW_HTML_BLOCK = /<(?:pre|script|style|textarea)\b|<!--|<\?|<![A-Za-z[]/i;
+
+/**
+ * Splits a block-level HTML token at the first line that is not itself HTML.
+ * CommonMark keeps an HTML block going until a blank line, so markdown written
+ * directly under `<summary>`, `<div>` or a pre-rendered diagram figure would
+ * stay literal. The line before the split must end with `>` so a multi-line
+ * opening tag is not cut. Returns the index of the split line, or -1.
+ */
+function htmlBlockSplitLine(text: string): number {
+	if (RAW_HTML_BLOCK.test(text)) return -1;
+	const lines = text.split("\n");
+	for (let i = 1; i < lines.length; i++) {
+		// A tab or 4+ spaces of indent would become an indented code block once the rest is re-lexed.
+		if (/^(?: {4}| {0,3}\t)/.test(lines[i])) continue;
+		const line = lines[i].trim();
+		if (line !== "" && !line.startsWith("<") && lines[i - 1].trimEnd().endsWith(">")) return i;
+	}
+	return -1;
+}
+
+/** Ids the diagram figures own (`dz-N` checkbox, `mmd-N` svg); a heading must never take one. */
+const RESERVED_ID = /^(?:dz|mmd)-\d+$/;
+
+/**
+ * Rewrites inline tokens for a heading. Raw inline HTML (`Promise<void>`) becomes
+ * literal text so it is shown, not swallowed as a tag. With `flattenLinks` (the
+ * TOC entry, which is itself a link) a link keeps only its inner content, because
+ * an `<a>` inside an `<a>` is invalid HTML.
+ */
+function headingInlineTokens(tokens: Token[], flattenLinks: boolean): Token[] {
+	return tokens.flatMap((t): Token[] => {
+		if (t.type === "html") {
+			const text: Tokens.Text = { type: "text", raw: t.raw, text: t.raw };
+			return [text];
+		}
+		const inner = "tokens" in t && Array.isArray(t.tokens) ? headingInlineTokens(t.tokens, flattenLinks) : undefined;
+		if (flattenLinks && t.type === "link") return inner ?? [];
+		return [inner ? Object.assign({}, t, { tokens: inner }) : t];
+	});
+}
+
+/** The inline tokens as plain text — no markdown syntax, no tags. */
+function inlinePlainText(tokens: Token[]): string {
+	return tokens
+		.map((t) => ("tokens" in t && Array.isArray(t.tokens) ? inlinePlainText(t.tokens) : t.type === "br" ? "" : "text" in t ? String(t.text) : t.raw))
+		.join("");
+}
+
+/** Removes a YAML frontmatter block, only when it opens at byte 0 and a `---` line closes it. */
+export function stripFrontmatter(markdown: string): string {
+	return markdown.replace(/^---[ \t]*\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/, "");
+}
+
+/** The first level-1 heading as plain text (code fences are not headings); `fallback` when there is none. */
+export function extractTitle(markdown: string, fallback: string): string {
+	const h1 = marked.lexer(stripFrontmatter(markdown)).find((t): t is Tokens.Heading => t.type === "heading" && t.depth === 1);
+	return (h1 ? inlinePlainText(h1.tokens) : "").trim() || fallback;
+}
+
 export function renderToHtml(markdown: string, title: string): string {
+	markdown = stripFrontmatter(markdown);
 	const toc: TocEntry[] = [];
 	const seen = new Map<string, number>();
+	const used = new Set<string>();
 
 	const renderer = new marked.Renderer();
-	renderer.heading = ({ text, depth }: { text: string; depth: number }) => {
+	renderer.heading = function ({ tokens, text, depth }: Tokens.Heading) {
+		// The id still comes from the raw source text, so anchors stay what they were.
 		const base = slugify(text);
-		const n = seen.get(base) ?? 0;
-		seen.set(base, n + 1);
-		const id = n === 0 ? base : `${base}-${n + 1}`;
+		const taken = (c: string) => used.has(c) || RESERVED_ID.test(c);
+		let id = base;
+		if (taken(base)) {
+			let n = seen.get(base) ?? 1;
+			do {
+				n += 1;
+				id = `${base}-${n}`;
+			} while (taken(id));
+			seen.set(base, n);
+		}
+		used.add(id);
+		const html = this.parser.parseInline(headingInlineTokens(tokens, false));
 		// h2/h3 only: h1 is the document's title, not one of its sections, and
 		// listing it as the first table-of-contents entry just points at the top.
-		if (depth >= 2 && depth <= 3) toc.push({ level: depth, text, id });
-		return `<h${depth} id="${id}">${text}</h${depth}>\n`;
+		if (depth >= 2 && depth <= 3) toc.push({ level: depth, html: this.parser.parseInline(headingInlineTokens(tokens, true)), id });
+		return `<h${depth} id="${id}">${html}</h${depth}>\n`;
+	};
+	// A `<details><summary>…</summary>` line is a raw HTML block, so markdown
+	// would not touch the summary text; render it inline like any other line.
+	renderer.del = renderDel;
+	renderer.html = function ({ text, block }: Tokens.HTML | Tokens.Tag) {
+		const split = block ? htmlBlockSplitLine(text) : -1;
+		// Inside a raw block (script, pre, comment…) `<summary>` is just text; leave it alone.
+		if (RAW_HTML_BLOCK.test(text)) return text;
+		const lines = text.split("\n");
+		const head = split === -1 ? text : lines.slice(0, split).join("\n") + "\n";
+		const withSummary = head.replace(
+			/(<summary\b[^>]*>)([\s\S]*?)(<\/summary>)/gi,
+			(_m, open: string, inner: string, close: string) =>
+				`${open}${summaryMarked.parseInline(inner, { async: false })}${close}`,
+		);
+		// The rest is markdown again; it may hold further HTML blocks (e.g. `</details>`).
+		return split === -1 ? withSummary : withSummary + this.parser.parse(marked.lexer(lines.slice(split).join("\n")));
 	};
 
 	const bodyHtml = String(marked.parse(markdown, { renderer, async: false }));
 
 	const tocHtml = toc
-		.map((e) => `<li class="lv${e.level}"><a href="#${e.id}">${escapeHtml(e.text)}</a></li>`)
+		.map((e) => `<li class="lv${e.level}"><a href="#${e.id}">${e.html}</a></li>`)
 		.join("\n");
+
+	const tocNav = toc.length === 0 ? "" : `<nav class="toc" aria-label="목차"><h2>목차</h2><ul>${tocHtml}</ul></nav>\n`;
 
 	return `<!doctype html>
 <html lang="ko">
@@ -263,13 +398,41 @@ export function renderToHtml(markdown: string, title: string): string {
 </head>
 <body>
 <main>
-<nav class="toc" aria-label="목차"><h2>목차</h2><ul>${tocHtml}</ul></nav>
-${bodyHtml}
+${tocNav}${bodyHtml}
 </main>
 ${ZOOM_SCRIPT}
 </body>
 </html>
 `;
+}
+
+/**
+ * Returns the raw source of every inline code span whose content ends with a
+ * backslash. Inside a code span a backslash is not an escape, so `` `sql\`…\`` ``
+ * closes the code at `\`` and flips every later code span on the line. A
+ * legitimate span can also end with `\` (`` `C:\` ``), so the caller warns and
+ * never fails the render.
+ */
+export function findBackslashEndedCodeSpans(markdown: string): string[] {
+	const found: string[] = [];
+	marked.walkTokens(marked.lexer(markdown), (token) => {
+		if (token.type === "codespan" && token.text.endsWith("\\")) found.push(token.raw);
+		// An HTML block is not inline-lexed, so the spans inside its <summary> text are lexed here.
+		if (token.type === "html" && !RAW_HTML_BLOCK.test(token.text)) {
+			for (const m of token.text.matchAll(/<summary\b[^>]*>([\s\S]*?)<\/summary>/gi)) {
+				marked.walkTokens(marked.Lexer.lexInline(m[1]), (t) => {
+					if (t.type === "codespan" && t.text.endsWith("\\")) found.push(t.raw);
+				});
+			}
+		}
+	});
+	return found;
+}
+
+/** Drops control characters from text echoed to the terminal, so a document cannot drive the cursor or the screen. */
+export function stripControlChars(text: string): string {
+	// eslint-disable-next-line no-control-regex -- intentional: strips literal control chars from terminal-echoed text
+	return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "");
 }
 
 function escapeHtml(s: string): string {
@@ -340,6 +503,7 @@ img, svg { max-width: 100%; height: auto; }
 .toc .lv2 { margin-left: 0; }
 .toc .lv3 { margin-left: 1.1rem; color: var(--muted); }
 h1, h2, h3, h4, p, li, blockquote, th, td { word-break: keep-all; }
+h1, h2, h3, h4, summary, th, td { overflow-wrap: anywhere; }
 
 /* --- 승인된 컴포넌트: 저자는 클래스만 쓰고, 시각 언어는 여기 한 곳이 소유한다 --- */
 .doc-meta {
@@ -426,6 +590,10 @@ h1, h2, h3, h4, p, li, blockquote, th, td { word-break: keep-all; }
 .arch-entity[data-change="mod"]::before { content: "변경"; background: var(--ae-mod); }
 .arch-entity[data-change="del"] { border-left-color: var(--ae-del); }
 .arch-entity[data-change="del"]::before { content: "삭제"; background: var(--ae-del); }
+/* 다크 모드의 배지 배경(--ae-*)은 밝아서 흰 글자 대비가 낮다(≈2.5:1) — 어두운 글자로 바꾼다. */
+@media (prefers-color-scheme: dark) {
+  .cf[data-change]::before, .arch-entity[data-change]::before { color: #16181c; }
+}
 
 /* ae-members — 도메인 카드의 핵심 멤버/메소드 칩 행. 산문 나열 대신 스캔 가능한
    칩으로 구조화하고, 이번 diff가 추가/변경한 멤버는 class="chg"로 변경색을 입힌다. */
@@ -553,8 +721,17 @@ function main(): void {
 		process.stderr.write("Usage: render.ts --in <doc.md> --out <doc.html>\n");
 		process.exit(1);
 	}
-	const markdown = preRenderMermaid(readFileSync(input, "utf8"), mmdcRenderSvg);
-	const title = (markdown.match(/^#\s+(.+)$/m)?.[1] ?? "explain-diff").trim();
+	const source = readFileSync(input, "utf8");
+	const body = stripFrontmatter(source);
+	const front = source.slice(0, source.length - body.length);
+	const rendered = preRenderMermaid(body, mmdcRenderSvg);
+	const markdown = front + rendered;
+	for (const raw of findBackslashEndedCodeSpans(rendered)) {
+		process.stderr.write(
+			`경고: 인라인 코드 ${stripControlChars(raw)} 가 \\ 로 끝납니다. 코드 안의 \\\` 는 이스케이프가 아니라 코드를 닫습니다. 백틱이 든 코드는 백틱 두 개로 감싸세요 (예: \`\` sql\`…\` \`\`).\n`,
+		);
+	}
+	const title = extractTitle(markdown, basename(input, extname(input)));
 	writeFileSync(output, renderToHtml(markdown, title), "utf8");
 	process.stdout.write(`${output}\n`);
 }

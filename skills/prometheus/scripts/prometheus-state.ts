@@ -13,16 +13,19 @@
  *   clear (system-only internal teardown)
  */
 
-import { existsSync, readFileSync, unlinkSync, statSync } from "fs";
+import { appendFileSync, existsSync, readFileSync, unlinkSync, statSync } from "fs";
+import { isAbsolute } from "path";
 import { execSync } from "child_process";
 import { getOmtDir } from "@lib/omt-dir";
 import {
 	mergeWithHeartbeat,
+	nowStamp,
 	resolveSessionIdOrThrow,
 	listOthers,
 	adopt,
 	writeFileNoCreate,
 	ensureSeed,
+	adoptedAwayTo,
 	stageAPresentationPath,
 	stageAPresentationStatus,
 	createPresentationSubmission,
@@ -30,20 +33,28 @@ import {
 	type PresentationSubmission,
 	type SourceCompatibilityPredicate,
 } from "@lib/state-core";
+import { withStateLock } from "@lib/persistent-mode-core/state-lock";
 import { renderHelp, type CliCommand } from "@lib/cli-help";
 
 export interface PrometheusState {
 	presentation?: PresentationSubmission;
 	active: boolean;
 	/**
-	 * Set true by `set --await-user` when a plain-text question is posed at a
-	 * human-decision gate (S2 co-design, S7 execution bridge); cleared to false by
+	 * Set true by `set --await-user` when a plain-text question is posed to the
+	 * user at any phase (an S0 interview question, or a human-decision gate such as S2 co-design, S7 execution bridge); cleared to false by
 	 * any later `set` that does not repeat the flag (i.e. the next progress write).
 	 * The persistent-mode Stop gate reads it as a legitimate pause and allows the
 	 * turn to end WITHOUT completing — the session resumes on the user's reply.
 	 * It never marks completion; only <prometheus-done/> + the Stage A gate does.
 	 */
 	awaiting_user: boolean;
+	/**
+	 * Set by `set --abort --reason "<the user's words>"` when the user abandons the
+	 * plan. The persistent-mode Stop gate lets <prometheus-done/> tear the session
+	 * down without a Stage A presentation while this is present. Cleared by any
+	 * later `set` without --abort, so a resumed session keeps no stale abort.
+	 */
+	aborted?: { reason: string; phase: string; at: string };
 	/** Pipeline token: S0-S8 */
 	phase: string;
 	/** Absolute path under $OMT_DIR/plans/, empty string until plan written */
@@ -63,6 +74,12 @@ export interface PrometheusState {
 		plan: { done: boolean };
 	};
 }
+
+/**
+ * A deliberate CLI refusal (gate or precondition not met). Thrown, not process.exit()ed,
+ * so `set`'s state lock is released by its `finally`; main() prints it as one line.
+ */
+class PrometheusRefusal extends Error {}
 
 /** The fresh default for `steps` — used when prior state has no steps field. */
 const FRESH_STEPS: PrometheusState["steps"] = {
@@ -167,13 +184,19 @@ function validatedNonGoals(value: unknown, phase: unknown): string | null {
 	return nonGoals;
 }
 
+const nonGoalFixHint = (line: string): string =>
+	line.startsWith("- ")
+		? ` — add a membership test: "${line.trimEnd()} | decider: <what change would make a finding out of scope, e.g. a file path or function>"`
+		: ' — each line must start with "- "';
+
 function assertValidNonGoals(value: string, phase: string): void {
 	if (validatedNonGoals(value, phase) !== null) return;
 	if (value.trim() === "" && phase !== "S0" && phase !== "S1") {
 		throw new Error(`non-goals are required for ${phase} and must contain a canonical decider line`);
 	}
+	const offending = value.split("\n").find((l) => l.trim() !== "" && !NON_GOAL_LINE_PATTERN.test(l)) ?? value;
 	throw new Error(
-		`non-goals refused — line does not match "- {excluded item} | decider: {membership test}" format: "${value}"`,
+		`non-goals refused — line does not match "- {excluded item} | decider: {membership test}" format: "${offending}"${nonGoalFixHint(offending)}`,
 	);
 }
 
@@ -218,6 +241,8 @@ export function setPrometheusState(
 		submit_presentation?: string;
 		/** Sets awaiting_user=true (legitimate pause at a human gate). Omitting it on any set clears the flag. */
 		await_user?: boolean;
+		/** Records `aborted` with this reason (the user's words). Omitting it on any set clears `aborted`. */
+		abort_reason?: string;
 	},
 ): void {
 	// Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
@@ -225,7 +250,21 @@ export function setPrometheusState(
 	// writeFileNoCreate below is unchanged (ADR-7 mid-flight guard preserved).
 	ensureSeed("prometheus", sessionId);
 	const path = resolveStatePath(sessionId);
+	// Same mkdir lock ultragoal uses for its read-modify-write: two concurrent `set`s
+	// must not lose each other's step flags.
+	withStateLock(path, () => writePrometheusState(sessionId, path, opts));
+}
+
+function writePrometheusState(
+	sessionId: string,
+	path: string,
+	opts: Parameters<typeof setPrometheusState>[1],
+): void {
 	const existing = readFileOrNull(path);
+	if (existing === null) {
+		const adopter = adoptedAwayTo("prometheus", sessionId);
+		if (adopter !== null) throw adoptedAwayRefusal(sessionId, adopter);
+	}
 	let prior: Partial<PrometheusState> = {};
 	if (existing) {
 		try {
@@ -257,11 +296,9 @@ export function setPrometheusState(
 	// resume then treats design as complete but has no ADR pointer. Loud error
 	// instead of a silent ordering hazard.
 	if (opts.mark_design_done && resolvedPlanPath === "") {
-		process.stderr.write(
-			"prometheus-state: --mark-design-done requires plan_path to be set " +
-			"(write the draft first, then pass --plan-path)\n",
+		throw new PrometheusRefusal(
+			"--mark-design-done requires plan_path to be set (write the draft first, then pass --plan-path)",
 		);
-		process.exit(1);
 	}
 
 	// F7: S6 and later are reachable only after Stage A renders the presentation, so a
@@ -275,8 +312,7 @@ export function setPrometheusState(
 		// Typed on the binding, not just the arrow: TS narrows control flow through a
 		// never-returning call only when the const carries the annotation.
 		const refuse: (reason: string) => never = (reason) => {
-			process.stderr.write(`prometheus-state: cannot advance to ${opts.phase} — ${reason}\n`);
-			process.exit(1);
+			throw new PrometheusRefusal(`cannot advance to ${opts.phase} — ${reason}`);
 		};
 
 		// plan_path is set when the interview draft is written and preserved by later writes, so an empty one here
@@ -325,13 +361,21 @@ export function setPrometheusState(
 		}
 	}
 
+	if (opts.abort_reason !== undefined && opts.abort_reason.trim() === "") {
+		throw new PrometheusRefusal("--abort requires a non-empty --reason (quote the user's words)");
+	}
+	const aborted =
+		opts.abort_reason !== undefined
+			? { reason: normalizeResumeSummary(opts.abort_reason).trim(), phase: resolvedPhase, at: nowStamp() }
+			: undefined;
+
 	const priorSteps = prior.steps ?? FRESH_STEPS;
 
 	// Merge each step sub-object — only update the sub-object whose flag was passed.
 	const steps: PrometheusState["steps"] = {
 		acceptance_criteria:
 			opts.record_ac !== undefined
-				? { done: true, content: opts.record_ac, recorded_at: opts.phase }
+				? { done: true, content: opts.record_ac, recorded_at: resolvedPhase }
 				: priorSteps.acceptance_criteria,
 		design_decisions: opts.mark_design_done
 			? { done: true, ref: resolvedPlanPath }
@@ -345,6 +389,8 @@ export function setPrometheusState(
 		// Recomputed every write: true only when THIS set passed --await-user, so any
 		// later progress write auto-clears the pause (mirrors explain-diff's grade clearing awaiting_answer).
 		awaiting_user: opts.await_user === true,
+		// Recomputed every write: present only when THIS set passed --abort.
+		...(aborted ? { aborted } : {}),
 		phase: resolvedPhase,
 		plan_path: resolvedPlanPath,
 		resume_summary: normalizeResumeSummary(opts.resume_summary ?? prior.resume_summary ?? ""),
@@ -375,6 +421,23 @@ export function setPrometheusState(
 		}
 		throw err;
 	}
+	if (aborted) {
+		// Teardown deletes the state file; this append-only line is the surviving record.
+		appendFileSync(
+			`${getOmtDir()}/prometheus-abort.log`,
+			`${aborted.at} prometheus-abort ${sessionId} ${aborted.phase} ${aborted.reason}\n`,
+			"utf8",
+		);
+	}
+}
+
+/** Refusal for a session whose state adoption.log shows another session took over. */
+function adoptedAwayRefusal(sessionId: string, adopter: string, cause?: unknown): PrometheusRefusal {
+	return new PrometheusRefusal(
+		`state for session "${sessionId}" was adopted by session "${adopter}", so it cannot be written here. ` +
+			`Continue the work in session "${adopter}" or in a new session.`,
+		{ cause },
+	);
 }
 
 export function clearPrometheusState(sessionId: string): void {
@@ -405,6 +468,26 @@ function parseArgs(args: string[]): Record<string, string | boolean> {
 	return result;
 }
 
+/** Pipeline tokens accepted by `set --phase`. */
+const PHASES = ["S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"];
+
+function fail(message: string): never {
+	process.stderr.write(`prometheus-state: ${message}\n`);
+	process.exit(1);
+}
+
+/**
+ * Value of a string-valued flag, or undefined when absent. parseArgs stores boolean
+ * `true` when no value follows (or the next token starts with `--`); that is a
+ * missing value, not a string, so refuse it instead of coercing to "true".
+ */
+function stringFlag(args: Record<string, string | boolean>, name: string): string | undefined {
+	const value = args[name];
+	if (value === undefined) return undefined;
+	if (typeof value !== "string") fail(`--${name} requires a value`);
+	return value;
+}
+
 /**
  * Single source of truth for this CLI's command roster: every subcommand `main()`
  * dispatches, tagged with who may run it. `help` prints this via renderHelp() so the
@@ -413,7 +496,12 @@ function parseArgs(args: string[]): Record<string, string | boolean> {
  * <prometheus-done/>; `clear` is retained as an internal system-only subcommand.
  */
 const ROSTER: CliCommand[] = [
-	{ name: "set", authority: "ai", effect: "writes phase/plan/AC state fields" },
+	{
+		name: "set",
+		authority: "ai",
+		effect:
+			"writes phase/plan/AC state fields; `set --abort --reason \"<the user's words>\"` records that the user abandoned the plan (the done token then skips the Stage A gate)",
+	},
 	{ name: "get", authority: "ai", effect: "reads the full state" },
 	{ name: "clear", authority: "system", effect: "internal session-state teardown" },
 	{ name: "list-others", authority: "ai", effect: "lists other live sessions eligible for adoption" },
@@ -440,10 +528,17 @@ function main(): void {
 
 	try {
 		if (subcommand === "set") {
-			const phase = String(args["phase"] ?? "");
-			const planPath = args["plan-path"] !== undefined ? String(args["plan-path"]) : undefined;
-			const resumeSummary =
-				args["resume-summary"] !== undefined ? String(args["resume-summary"]) : undefined;
+			const phaseArg = stringFlag(args, "phase");
+			if (phaseArg !== undefined && !PHASES.includes(phaseArg)) {
+				fail(`--phase must be one of ${PHASES.join(", ")} (exact, case-sensitive), got: ${JSON.stringify(phaseArg)}`);
+			}
+			const phase = phaseArg ?? "";
+			const planPath = stringFlag(args, "plan-path");
+			if (planPath !== undefined && !isAbsolute(planPath)) {
+				fail(`--plan-path must be an absolute path, got: ${JSON.stringify(planPath)}`);
+			}
+			const resumeSummary = stringFlag(args, "resume-summary");
+			const submitPresentation = stringFlag(args, "submit-presentation");
 
 			// --record-ac '<json-array>'  |  --record-ac -  (read JSON array from stdin)
 			let recordAc: string[] | undefined;
@@ -498,6 +593,12 @@ function main(): void {
 			const markDesignDone = args["mark-design-done"] === true;
 			const markPlanDone = args["mark-plan-done"] === true;
 			const awaitUser = args["await-user"] === true;
+			const reason = stringFlag(args, "reason");
+			const abort = args["abort"] === true;
+			if (reason !== undefined && !abort) fail("--reason is only valid with --abort");
+			if (abort && (reason === undefined || reason.trim() === "")) {
+				fail("--abort requires a non-empty --reason (quote the user's words)");
+			}
 
 			setPrometheusState(sessionId, {
 				phase,
@@ -507,8 +608,9 @@ function main(): void {
 				non_goals: nonGoals,
 				mark_design_done: markDesignDone || undefined,
 				mark_plan_done: markPlanDone || undefined,
-				submit_presentation: typeof args["submit-presentation"] === "string" ? args["submit-presentation"] : undefined,
+				submit_presentation: submitPresentation,
 				await_user: awaitUser || undefined,
+				abort_reason: abort ? reason : undefined,
 			});
 		} else if (subcommand === "clear") {
 			clearPrometheusState(sessionId);
@@ -531,7 +633,7 @@ function main(): void {
 			}
 			process.stdout.write(JSON.stringify(state, null, 2) + "\n");
 		} else if (subcommand === "adopt") {
-			const srcSid = args["src"] !== undefined ? String(args["src"]) : undefined;
+			const srcSid = stringFlag(args, "src");
 			if (!srcSid) {
 				process.stderr.write("adopt: --src <sid> is required\n");
 				process.exit(1);
@@ -566,7 +668,7 @@ function main(): void {
 			process.exit(1);
 		}
 	} catch (e) {
-		process.stderr.write(`prometheus-state: ${String(e)}\n`);
+		process.stderr.write(`prometheus-state: ${e instanceof Error ? e.message : String(e)}\n`);
 		process.exit(1);
 	}
 }

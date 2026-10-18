@@ -31,6 +31,7 @@ import {
 	restampAfterAdopt,
 	ensureSeed,
 	touchSessionStates,
+	planFileHasTodos,
 } from "./state-core.ts";
 
 // ---------------------------------------------------------------------------
@@ -1586,6 +1587,24 @@ describe("touchSessionStates", () => {
 		rmSync(omtDir, { recursive: true, force: true });
 	});
 
+	test("다른 쓰기가 상태 잠금을 쥐고 있으면 그 파일의 하트비트를 건너뜀", () => {
+		const sid = "heartbeat-locked";
+		const old = "2020-01-01T00:00:00";
+		const filename = `prometheus-state-${sid}.json`;
+		writeState(omtDir, filename, { active: true, phase: "S2", plan_path: "p.md", started_at: old, last_touched_at: old });
+		const lockPath = join(omtDir, `${filename}.lock`);
+		fs.mkdirSync(lockPath);
+		writeFileSync(join(lockPath, "owner.json"), JSON.stringify({ ownerPid: process.pid, token: "other-writer", startedAt: Date.now() }));
+
+		touchSessionStates(sid);
+		expect((readState(omtDir, filename) as Record<string, unknown>)["last_touched_at"]).toBe(old);
+
+		rmSync(lockPath, { recursive: true });
+		touchSessionStates(sid);
+		expectStampedDuringThisTest((readState(omtDir, filename) as Record<string, unknown>)["last_touched_at"] as string);
+		expect(existsSync(lockPath)).toBe(false);
+	});
+
 	// Extracts touchSessionStates' own source, from its `export function` line to
 	// its matching closing brace (depth-counted — a plain regex would stop at the
 	// first nested `}`), so the literal-free assertion below inspects only this
@@ -1983,5 +2002,78 @@ describe("readQaStateRaw", () => {
 		writeFileSync(join(omtDir, "qa-state-session.json"), "not-json");
 		expect(readQaStateRaw("session")).toBeNull();
 		expect(readQaStateRaw("../escape")).toBeNull();
+	});
+});
+
+describe("planFileHasTodos", () => {
+	let dir: string;
+
+	beforeEach(() => {
+		dir = mkdtempSync(join(tmpdir(), "plan-todos-"));
+	});
+
+	afterEach(() => {
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	const planWith = (body: string): string => {
+		const path = join(dir, "plan.md");
+		writeFileSync(path, body, "utf8");
+		return path;
+	};
+
+	test("TODOs 제목 아래 TODO 줄이 있으면 true", () => {
+		expect(planFileHasTodos(planWith("# Plan\n\n## TODOs\n\n- [ ] 1. 첫 작업\n"))).toBe(true);
+	});
+
+	test("완료 표시와 F 접두 번호 TODO 줄도 인정함", () => {
+		expect(planFileHasTodos(planWith("## TODOs\n- [x] F1. 최종 검증\n"))).toBe(true);
+		expect(planFileHasTodos(planWith("## TODOs\n  - [X] 12. 들여쓴 작업\n"))).toBe(true);
+	});
+
+	test("S0 초안(Decision Register만, TODOs 없음)은 false", () => {
+		expect(planFileHasTodos(planWith("# Draft\n\n## Decision Register\n\n- D-1 선택\n"))).toBe(false);
+	});
+
+	test("TODOs 제목만 있고 TODO 줄이 없으면 false", () => {
+		expect(planFileHasTodos(planWith("## TODOs\n\n(작성 예정)\n\n## Execution Strategy\n"))).toBe(false);
+	});
+
+	test("다음 ## 제목 뒤의 TODO 형태 줄은 세지 않음", () => {
+		expect(planFileHasTodos(planWith("## TODOs\n\n## Success Criteria\n- [ ] 3. 뒤쪽 줄\n"))).toBe(false);
+	});
+
+	test("### 하위 제목은 TODOs 구역을 끊지 않음", () => {
+		expect(planFileHasTodos(planWith("## TODOs\n### Wave 1\n- [ ] 1. 작업\n"))).toBe(true);
+	});
+
+	test("코드 펜스 안의 TODO 줄과 제목은 무시함", () => {
+		expect(planFileHasTodos(planWith("## TODOs\n\n```md\n- [ ] 1. 예시\n```\n"))).toBe(false);
+		expect(planFileHasTodos(planWith("```md\n## TODOs\n```\n- [ ] 1. 예시\n"))).toBe(false);
+	});
+
+	test("여는 펜스와 문자·길이가 맞지 않는 펜스 줄은 블록을 닫지 않음", () => {
+		expect(planFileHasTodos(planWith("## TODOs\n\n````md\n```\n- [ ] 1. 예시\n````\n"))).toBe(false);
+		expect(planFileHasTodos(planWith("## TODOs\n\n~~~md\n```\n- [ ] 1. 예시\n~~~\n"))).toBe(false);
+		expect(planFileHasTodos(planWith("## TODOs\n\n````md\n```\n````\n- [ ] 1. 실제 작업\n"))).toBe(true);
+	});
+
+	test("목록 항목 아래 들여쓴 펜스 안의 TODO 줄은 세지 않음", () => {
+		expect(planFileHasTodos(planWith("## TODOs\n\n10. 예시\n\n    ```\n    - [ ] 1. 예시\n    ```\n"))).toBe(false);
+	});
+
+	test("HTML 주석 안의 TODO 줄은 세지 않음", () => {
+		expect(planFileHasTodos(planWith("## TODOs\n\n<!--\n- [ ] 1. 예시\n-->\n"))).toBe(false);
+		expect(planFileHasTodos(planWith("## TODOs\n\n<!--\n- [ ] 1. 닫히지 않은 주석\n"))).toBe(false);
+		expect(planFileHasTodos(planWith("## TODOs\n\n<!-- 메모 -->\n- [ ] 1. 실제 작업\n"))).toBe(true);
+	});
+
+	test("TODO 번호 없는 체크박스 줄은 세지 않음", () => {
+		expect(planFileHasTodos(planWith("## TODOs\n- [ ] 설명만 있는 줄\n"))).toBe(false);
+	});
+
+	test("파일이 없거나 읽을 수 없으면 false", () => {
+		expect(planFileHasTodos(join(dir, "missing.md"))).toBe(false);
+		expect(planFileHasTodos(dir)).toBe(false);
 	});
 });

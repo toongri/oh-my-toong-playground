@@ -28,6 +28,7 @@ import {
 	readExplainDiffStateRaw,
 	stageAPresentationPath,
 	stageAPresentationStatus,
+	planFileHasTodos,
 	presentationSubmissionCurrent,
 } from "@lib/state-core";
 import { computeDerived, type ExplainDiffState } from "@lib/explain-diff-core";
@@ -182,8 +183,9 @@ INSTRUCTIONS:
 2. Never interpret a user "continue" reply as permission to bypass a human gate (S2, design gate, S7)
 3. When the pipeline is fully complete or explicitly aborted, output: <prometheus-done/>
 4. Do NOT stop until <prometheus-done/> is emitted
+5. If the user wants to stop for now and continue later, ask/confirm in plain text after \`prometheus-state.ts set --await-user\`. If the user abandoned the work, run \`prometheus-state.ts set --abort --reason "<the user's words>"\`, then output <prometheus-done/>.
 
-${continuationContract("preferred", "run `prometheus-state.ts set --await-user` to mark the human gate (S2/design gate/S7), then end your turn (the next progress write clears the pause).")}
+${continuationContract("preferred", "when your turn ends on a question to the user (an S0 interview question or a human gate such as S2/design gate/S7), run `prometheus-state.ts set --await-user`, then end your turn (the next progress write clears the pause).")}
 
 </prometheus-continuation>
 
@@ -205,7 +207,10 @@ ${continuationContract("preferred", "run `prometheus-state.ts set --await-user` 
  */
 function prometheusStageAGateReason(state: PrometheusState): string | null {
 	const planPath = state.plan_path ?? "";
-	if (planPath === "" || state.steps?.plan?.done !== true) return null;
+	// Written = the S3 flag was set OR the plan file itself carries TODO lines. The flag
+	// alone is skippable (a session that omits the S3 `--mark-plan-done` write would
+	// otherwise escape with a full plan and no presentation); the S0 draft has no TODOs.
+	if (planPath === "" || (state.steps?.plan?.done !== true && !planFileHasTodos(planPath))) return null;
 	const status = stageAPresentationStatus(planPath);
 	if ((status === "ok" || status === "plan-missing") && !presentationSubmissionCurrent(state.presentation, planPath, stageAPresentationPath(planPath))) {
 		return "<prometheus-stage-a-gate>Prometheus presentation submission missing or stale. Read review-pipeline.md Stage A, render HTML, then run prometheus-state.ts set --phase S5 --submit-presentation <html> before completion.</prometheus-stage-a-gate>";
@@ -223,6 +228,8 @@ function prometheusStageAGateReason(state: PrometheusState): string | null {
 <prometheus-done/> was refused: the plan at ${planPath} is written, but ${problem}.
 
 "Finish" defers execution only — it never skips S5. Render the plan to ${presentationPath} now (review-pipeline.md Stage A: faithful render, Bird's-Eye coverage table + triggered diagrams, Review Digest, collapsed plan body), then emit <prometheus-done/> again.
+
+If the user abandoned the plan instead, run \`prometheus-state.ts set --abort --reason "<the user's words>"\`, then emit <prometheus-done/> again.
 
 </prometheus-stage-a-gate>
 
@@ -749,20 +756,26 @@ export function makeDecision(context: DecisionContext): HookOutput {
 	const prometheusState = readPrometheusState(sessionId);
 	if (prometheusState && prometheusState.active) {
 		const prometheusAttemptId = `prometheus-${attemptId}`;
+		// Own counter for done-token refusals: token-less continuation blocks (above key)
+		// must not consume the Stage A gate's walk-away budget.
+		const prometheusStageAAttemptId = `prometheus-stage-a-${attemptId}`;
 		if (detectPrometheusDone(lastAssistantMessage)) {
 			// Stage A gate before honoring the token. The block-count cap keeps this
 			// walk-away safe: a wedged session escapes (and tears down) after
 			// MAX_BLOCK_COUNT refusals, same bound as the token-less branch.
-			const gateReason = prometheusStageAGateReason(prometheusState);
-			if (gateReason !== null && getBlockCount(stateDir, prometheusAttemptId) < MAX_BLOCK_COUNT) {
-				incrementBlockCount(stateDir, prometheusAttemptId);
+			// A recorded abort (`set --abort --reason`) means the user abandoned the plan:
+			// there is nothing to present, so the gate stays closed to that exit.
+			const gateReason = prometheusState.aborted ? null : prometheusStageAGateReason(prometheusState);
+			if (gateReason !== null && getBlockCount(stateDir, prometheusStageAAttemptId) < MAX_BLOCK_COUNT) {
+				incrementBlockCount(stateDir, prometheusStageAAttemptId);
 				return formatBlockOutput(gateReason);
 			}
 			cleanupPrometheusState(sessionId);
 			cleanupBlockCountFiles(stateDir, prometheusAttemptId);
+			cleanupBlockCountFiles(stateDir, prometheusStageAAttemptId);
 		} else if (prometheusState.awaiting_user === true && isProgressLive(prometheusState, nowEpoch)) {
-			// Stop-allowed pause for THIS family only: the model posed a plain-text question at
-			// a human gate (S2/design gate/S7) and set awaiting_user via `prometheus-state.ts
+			// Stop-allowed pause for THIS family only: the model posed a plain-text question to
+			// the user (an S0 interview question or a human gate such as S2/design gate/S7) and set awaiting_user via `prometheus-state.ts
 			// set --await-user`. An intentional yield, NOT completion — the state stays active
 			// and is resumed (awaiting_user auto-cleared) on the next progress write. Reset
 			// this family's block count: a legitimate pause is not a failure.
