@@ -2026,6 +2026,18 @@ describe("planFileHasTodos", () => {
 		expect(planFileHasTodos(planWith("# Plan\n\n## TODOs\n\n- [ ] 1. 첫 작업\n"))).toBe(true);
 	});
 
+	test("같은 줄에서 열고 닫힌 HTML 주석은 제거한 뒤 제목·TODO·다음 H2를 판정함", () => {
+		expect(planFileHasTodos(planWith("# Plan\n\n## TODOs <!-- generated -->\n\n- [ ] 1. 작업\n"))).toBe(true);
+		expect(planFileHasTodos(planWith("## TODOs\n- [ ] 1. 작업 <!-- 메모 -->\n"))).toBe(true);
+		expect(planFileHasTodos(planWith("## TODOs\n\n## Execution Strategy <!-- x -->\n- [ ] 1. 뒤쪽 줄\n"))).toBe(false);
+		expect(planFileHasTodos(planWith("<!-- x --> ## TODOs\n- [ ] 1. 작업\n"))).toBe(false);
+	});
+
+	test("주석 제거로 새로 생기는 제목은 제목으로 보지 않음(제목 여부는 원본 줄로 판정)", () => {
+		expect(planFileHasTodos(planWith("# Plan\n\n## TODOs\n\n##<!-- marker --> Notes\n\n- [ ] 1. 작업\n"))).toBe(true);
+		expect(planFileHasTodos(planWith("##<!-- x --> TODOs\n- [ ] 1. 작업\n"))).toBe(false);
+	});
+
 	test("완료 표시와 F 접두 번호 TODO 줄도 인정함", () => {
 		expect(planFileHasTodos(planWith("## TODOs\n- [x] F1. 최종 검증\n"))).toBe(true);
 		expect(planFileHasTodos(planWith("## TODOs\n  - [X] 12. 들여쓴 작업\n"))).toBe(true);
