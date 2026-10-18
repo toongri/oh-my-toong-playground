@@ -1195,11 +1195,12 @@ export function planFileHasTodos(planPath: string): boolean {
 	}
 	let inTodos = false;
 	for (const line of linesOutsideBlocks(content, ["code", "comment"])) {
-		if (PLAN_TODOS_HEADING.test(line)) {
+		const visible = line.replace(/<!--.*?-->/g, "");
+		if (PLAN_TODOS_HEADING.test(visible)) {
 			inTodos = true;
-		} else if (PLAN_NEXT_H2_HEADING.test(line)) {
+		} else if (PLAN_NEXT_H2_HEADING.test(visible)) {
 			inTodos = false;
-		} else if (inTodos && PLAN_TODO_LINE.test(line)) {
+		} else if (inTodos && PLAN_TODO_LINE.test(visible)) {
 			return true;
 		}
 	}
