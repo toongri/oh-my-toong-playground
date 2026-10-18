@@ -1196,10 +1196,9 @@ export function planFileHasTodos(planPath: string): boolean {
 	let inTodos = false;
 	for (const line of linesOutsideBlocks(content, ["code", "comment"])) {
 		const visible = line.replace(/<!--.*?-->/g, "");
-		if (PLAN_TODOS_HEADING.test(visible)) {
-			inTodos = true;
-		} else if (PLAN_NEXT_H2_HEADING.test(visible)) {
-			inTodos = false;
+		// 제목 여부는 원본 줄로 판정: 주석 제거가 제목을 새로 만들면 안 됨
+		if (PLAN_NEXT_H2_HEADING.test(line)) {
+			inTodos = PLAN_TODOS_HEADING.test(visible);
 		} else if (inTodos && PLAN_TODO_LINE.test(visible)) {
 			return true;
 		}
