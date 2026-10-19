@@ -3,6 +3,7 @@
 // Returns { viewport, theme, scrollWidth, innerWidth, totals: { check: { severity: n } }, findings: [...] }.
 // findings lists at most 100 per check per run; totals counts all of them.
 // Each finding: { check, severity: "error"|"warn"|"info", viewport, theme, where, text, detail }.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- lint.sh가 이 파일 뒤에 호출문을 이어붙여 평가하므로 파일 안에서는 호출되지 않는다
 async function __hrLint(opts) {
   opts = opts || {};
   const checks = new Set(opts.checks || ["overflow", "svg", "clip", "contrast"]); // also "svgsize", "graph", "prose", "source"
@@ -257,8 +258,8 @@ async function __hrLint(opts) {
           cand.push(i);
         });
         if (!cand.length) continue;
-        let len = 0;
-        try { len = g.getTotalLength(); } catch (e) { continue; }
+        let len;
+        try { len = g.getTotalLength(); } catch { continue; }
         const m = g.getScreenCTM();
         if (!m || !len) continue;
         const step = Math.max(1.5, len / 1500);
@@ -405,7 +406,7 @@ async function __hrLint(opts) {
         return " ";
       });
       s = s.replace(/(?<!\d)(\d{1,2})\s*월\s*(\d{1,2})\s*일/g, (m, mo, d) => { out.push({ k: "md", v: `${+mo}-${+d}`, raw: m.trim() }); return " "; });
-      s = s.replace(/(?<![\d:])(\d{1,2}):(\d{2})(?::(\d{2}))?(?![\d:])/g, (m, h, mi, se) => {
+      s = s.replace(/(?<![\d:])(\d{1,2}):(\d{2})(?::(\d{2}))?(?![\d:])/g, (m, h, mi) => {
         out.push({ k: "t", v: `${+h}:${mi}`, raw: m });
         return " ";
       });

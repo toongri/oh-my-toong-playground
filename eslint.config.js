@@ -102,6 +102,13 @@ export default defineConfig(
     },
   },
 
+  // html-report lint.js는 agent-browser로 페이지 안에서 통째로 평가되는 스크립트라
+  // document·window·getComputedStyle 같은 browser 전역만 쓴다(node 전역 없음).
+  {
+    files: ["skills/html-report/scripts/**/*.js"],
+    languageOptions: { globals: { ...globals.browser } },
+  },
+
   // 테스트 파일: fixture/mock은 알려진 형태의 stub을 만드는 곳이라 타입 단언이 가장 정당화된다.
   // 그래서 assertion 계열만 완화한다 — 프로덕션의 never 엄격은 그대로 유지(완화는 test 파일 국한).
   // 버그룰(eqeqeq·no-unused·prefer-const 등)은 테스트에서도 유지한다.
