@@ -1,7 +1,7 @@
 # Webhook Delivery Retry Subsystem
 
 > Fixture plan for the Stage A review-document scenario (`tests/application-scenarios.md` P-31).
-> Synthetic content. Every lens trigger FACT in `diagram-guide.md` holds in this plan on purpose,
+> Synthetic content. Every lens trigger FACT in the Diagram Content Rules of `review-pipeline.md` holds in this plan on purpose,
 > and every edge each lens needs is decided somewhere in the plan — the fixture must exercise
 > Stage A production, not the plan-defect STOP path.
 
