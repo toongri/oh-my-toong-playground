@@ -1501,13 +1501,13 @@ describe("qa-state CLI wiring", () => {
 		expect(() => run(`set-acceptance --json '[42]'`)).toThrow();
 	});
 
-	test("record-scenario round-trips driven-at, scenario fields, and 3-slot evidence", () => {
+	test("record-scenario round-trips driven-at, authored fields, and 3-slot evidence", () => {
 		startChain();
 		run(scenarioCmd("s1", "H", [1]));
 		run(
 			"record-scenario --story story-1 --scenario s1 --status pass " +
 				"--evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash " +
-				'--driven-at "app screen" --source self-authored ' +
+				'--driven-at "app screen" ' +
 				"--evidence-before skills/qa/scripts/qa-state.test.ts " +
 				"--evidence-action skills/qa/scripts/qa-state.test.ts " +
 				"--evidence-after skills/qa/scripts/qa-state.test.ts",
@@ -1515,7 +1515,6 @@ describe("qa-state CLI wiring", () => {
 		const scenario = scenarioOf("s1");
 		expect(scenario.driven_at).toBe("app screen");
 		expect(scenario.why_needed).toBe("covers s1");
-		expect(scenario.source).toBe("self-authored");
 		expect(scenario.evidence.before).toContain("qa-state.test.ts");
 		expect(scenario.evidence.action).toContain("qa-state.test.ts");
 		expect(scenario.evidence.after).toContain("qa-state.test.ts");
@@ -1538,10 +1537,11 @@ describe("qa-state CLI wiring", () => {
 		expect(scenario.evidence.after).toContain("qa-state.test.ts");
 	});
 
-	test("record-scenario rejects an invalid --source value", () => {
+	test("record-scenario refuses --source", () => {
 		startChain();
-		run(scenarioCmd("s1", "H", [1]));
-		expect(() => run("record-scenario --story story-1 --scenario s1 --status fail --source bogus")).toThrow();
+		run(scenarioCmd("s1", "H", [1], "--source caller-provided"));
+		expect(() => run("record-scenario --story story-1 --scenario s1 --status fail --source self-authored")).toThrow(/--source is set when the scenario is authored/);
+		expect(scenarioOf("s1").source).toBe("caller-provided");
 	});
 });
 

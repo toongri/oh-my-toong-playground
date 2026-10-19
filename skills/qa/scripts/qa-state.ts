@@ -283,7 +283,7 @@ function assertTestReportUsesTestSurface(absolute: string): void {
 
 const SCENARIO_SOURCES = ["self-authored", "caller-provided"] as const;
 
-/** Optional provenance fields accepted by both author-scenario and record-scenario. */
+/** Optional provenance fields set when a scenario is authored (author-scenario, amend-scenario). record-scenario accepts only drivenAt: `source` is authorship and a recorded result must not change it. */
 interface ScenarioFieldOpts {
 	drivenAt?: string;
 	source?: string;
@@ -1074,7 +1074,8 @@ export function recordBaseline(sessionId: string, opts: RecordBaselineOpts): voi
 	mergeWrite(sessionId, { stories });
 }
 
-export interface RecordScenarioOpts extends ScenarioFieldOpts, EvidenceSlotOpts {
+export interface RecordScenarioOpts extends EvidenceSlotOpts {
+	drivenAt?: string;
 	story: string;
 	scenario: string;
 	status: string;
@@ -1230,7 +1231,7 @@ function recordScenarioUnlocked(sessionId: string, opts: RecordScenarioOpts): vo
 		...record,
 		status: opts.status,
 		...(blocked ? { blocked } : {}),
-		...scenarioFieldPatch(opts),
+		...scenarioFieldPatch({ drivenAt: opts.drivenAt }),
 		...(evidence ? { evidence } : {}),
 		...(binding ? { case_run: binding } : {}),
 	};
@@ -1839,6 +1840,7 @@ function main(): void {
 				});
 			} else if (subcommand === "record-scenario") {
 				if (args["user-answer"] !== undefined) throw new Error("--user-answer is retired: the user's reply to await-user is stored by the UserPromptSubmit hook, and --obstacle-kind person records it");
+				if (args["source"] !== undefined) throw new Error("record-scenario: --source is set when the scenario is authored (author-scenario or amend-scenario); a recorded result cannot change who wrote the scenario");
 				recordScenario(sessionId, {
 					story: requiredArg(args, "story"),
 					scenario: requiredArg(args, "scenario"),
@@ -1851,7 +1853,6 @@ function main(): void {
 					evidencePath: str(args["evidence-path"]),
 					evidenceSurface: str(args["evidence-surface"]),
 					drivenAt: str(args["driven-at"]),
-					source: str(args["source"]),
 					evidenceBefore: str(args["evidence-before"]),
 					evidenceAction: str(args["evidence-action"]),
 					evidenceAfter: str(args["evidence-after"]),
