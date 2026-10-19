@@ -554,6 +554,11 @@ export class CodexAdapter implements PlatformAdapter {
 
 		if (dryRun) {
 			logDry(`Translate agent: ${sourcePath} -> ${targetFile}`);
+			for (const variant of listAgentVariants(modelMap, displayName)) {
+				logDry(
+					`Translate agent: ${sourcePath} -> ${codexDestinationPath(targetPath, "agents", variant.name)}`,
+				);
+			}
 			return;
 		}
 
@@ -625,7 +630,7 @@ export class CodexAdapter implements PlatformAdapter {
 		};
 
 		await writeRole(name, targetFile, modelFields);
-		for (const variant of listAgentVariants(modelMap, name)) {
+		for (const variant of listAgentVariants(modelMap, displayName)) {
 			await writeRole(
 				variant.name,
 				codexDestinationPath(targetPath, "agents", variant.name),

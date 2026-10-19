@@ -545,6 +545,50 @@ describe("CodexAdapter", () => {
 				expect(deep.model_reasoning_effort).toBe("high");
 			});
 
+			it("keys variants by displayName when frontmatter name differs via `syncAgentsDirect`", async () => {
+				const sourceFile = path.join(tmpDir, "source.md");
+				await fs.writeFile(
+					sourceFile,
+					"---\nname: other-name\ndescription: Focused executor\nmodel: sonnet\n---\n\nBody text.\n",
+				);
+				await adapter.syncAgentsDirect(
+					path.join(tmpDir, "target"),
+					"sisyphus-junior",
+					sourceFile,
+					[],
+					[],
+					false,
+					variantMap,
+				);
+				expect((await fs.readdir(agentsDir())).sort()).toEqual([
+					"sisyphus-junior-deep.toml",
+					"sisyphus-junior-light.toml",
+					"sisyphus-junior.toml",
+				]);
+			});
+
+			it("logs one dry-run line per variant and writes nothing via `syncAgentsDirect`", async () => {
+				const sourceFile = await writeSource();
+				const logs: string[] = [];
+				const logger = spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => { logs.push(String(chunk)); return true; });
+				const out = spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => { logs.push(String(chunk)); return true; });
+				try {
+					await adapter.syncAgentsDirect(
+						path.join(tmpDir, "target"),
+						"sisyphus-junior",
+						sourceFile,
+						[],
+						[],
+						true,
+						variantMap,
+					);
+				} finally { logger.mockRestore(); out.mockRestore(); }
+				const text = logs.join("\n");
+				expect(text).toContain("sisyphus-junior-light.toml");
+				expect(text).toContain("sisyphus-junior-deep.toml");
+				await expect(fs.stat(agentsDir())).rejects.toThrow();
+			});
+
 			it("emits only the base file when the agent has no variants via `syncAgentsDirect`", async () => {
 				const sourceFile = await writeSource();
 				await adapter.syncAgentsDirect(
