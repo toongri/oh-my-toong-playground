@@ -779,6 +779,36 @@ describe("syncCategory", () => {
 		expect(JSON.parse(await readFile(path.join(targetPath, ".omt", "sync-manifest.json")))).toEqual({ "claude/agents": ["keep"], "opencode/agents": [] });
 	});
 
+	it("codex agent variants are recorded in the manifest next to the base agent", async () => {
+		await writeFile(path.join(rootDir, "agents", "sisyphus-junior.md"), "agent\n");
+		const modelMap: ModelMap = {
+			tiers: {},
+			variants: { "sisyphus-junior": { deep: { model: "m1" }, fast: { model: "m2" } } },
+		};
+		await syncCategory(
+			makeContext({ modelMaps: new Map([["codex", modelMap]]) }), "agents",
+			{ path: targetPath, agents: { platforms: ["codex"], items: ["sisyphus-junior"] } } as SyncYaml,
+			makeAdapterMap(["codex"]), rootDir, targetPath,
+		);
+		expect(JSON.parse(await readFile(path.join(targetPath, ".omt", "sync-manifest.json")))).toEqual({
+			"codex/agents": ["sisyphus-junior", "sisyphus-junior-deep", "sisyphus-junior-fast"],
+		});
+	});
+
+	it("a codex variant no longer declared is removed as an orphan", async () => {
+		await writeFile(path.join(rootDir, "agents", "sisyphus-junior.md"), "agent\n");
+		const staleVariant = path.join(targetPath, ".codex", "agents", "sisyphus-junior-deep.toml");
+		await writeFile(staleVariant, "stale\n");
+		await writeFile(path.join(targetPath, ".omt", "sync-manifest.json"), '{"codex/agents":["sisyphus-junior","sisyphus-junior-deep"]}\n');
+		await syncCategory(
+			makeContext({ modelMaps: new Map([["codex", { tiers: {} }]]) }), "agents",
+			{ path: targetPath, agents: { platforms: ["codex"], items: ["sisyphus-junior"] } } as SyncYaml,
+			makeAdapterMap(["codex"]), rootDir, targetPath,
+		);
+		expect(await exists(staleVariant)).toBe(false);
+		expect(JSON.parse(await readFile(path.join(targetPath, ".omt", "sync-manifest.json")))).toEqual({ "codex/agents": ["sisyphus-junior"] });
+	});
+
 	it("explicit empty dry-run does not delete or rewrite", async () => {
 		const oldPath = path.join(targetPath, ".claude", "agents", "old.md");
 		const manifestPath = path.join(targetPath, ".omt", "sync-manifest.json");

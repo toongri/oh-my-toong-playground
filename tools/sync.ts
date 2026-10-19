@@ -76,6 +76,7 @@ import {
 import { opencodeAdapter } from "./adapters/opencode.ts";
 import { resolveShellDependencies } from "./adapters/hook-deps.ts";
 import { planCategoryDestinationPaths } from "./adapters/destinations.ts";
+import { listAgentVariants } from "./lib/model-map.ts";
 import type { PlatformAdapter } from "./adapters/types.ts";
 import {
 	PLATFORM_REWRITE_RULES,
@@ -388,6 +389,22 @@ type SyncCategoryOptions = {
 };
 
 /**
+ * Extra Codex agent roles generated from `modelMap.variants[displayName]`
+ * (`<agent>-<suffix>`). Empty for every other platform/category. Keyed by
+ * displayName; the codex adapter may key by the agent's frontmatter `name`
+ * (falling back to displayName), so the two must match for variants to resolve.
+ */
+export function codexAgentVariantNames(
+	platform: Platform,
+	category: Category,
+	displayName: string,
+	modelMap: ModelMap | undefined,
+): string[] {
+	if (platform !== "codex" || category !== "agents") return [];
+	return listAgentVariants(modelMap, displayName).map((variant) => variant.name);
+}
+
+/**
  * Inventory the concrete leaves a category adapter can mutate for one item.
  * Directory-backed categories use the same leaf/orphan planner as the
  * executor; a directory root is never used as a rollback entry.
@@ -398,8 +415,14 @@ async function planCategoryMutationPaths(
 	category: Category,
 	displayName: string,
 	sourcePath: string,
+	modelMap?: ModelMap,
 ): Promise<string[]> {
-	const destinations = planCategoryDestinationPaths(platform, category, displayName);
+	const destinations = [
+		...planCategoryDestinationPaths(platform, category, displayName),
+		...codexAgentVariantNames(platform, category, displayName, modelMap).flatMap((variant) =>
+			planCategoryDestinationPaths(platform, category, variant),
+		),
+	];
 	const stat = await fs.stat(sourcePath).catch((error: unknown) => {
 		if (typeof error === "object" && error !== null && Reflect.get(error, "code") === "ENOENT") return undefined;
 		throw error;
@@ -686,6 +709,10 @@ export async function syncCategory(
 				deployedNames.set(deployLocation, names);
 			}
 			names.add(displayName);
+			const agentModelMap = context.modelMaps.get(platform) ?? context.rootModelMaps.get(platform);
+			for (const variantName of codexAgentVariantNames(platform, category, displayName, agentModelMap)) {
+				names.add(variantName);
+			}
 
 			// Record SOURCE paths for lib-dependency collection (independent of dryRun:
 			// the lib scan reads source, never the deployed tree). The component itself
@@ -743,7 +770,7 @@ export async function syncCategory(
 					addSkills,
 					addHooks,
 					false,
-					context.modelMaps.get(platform) ?? context.rootModelMaps.get(platform),
+					agentModelMap,
 					transaction ?? undefined,
 				);
 			} else if (category === "commands") {
@@ -2679,6 +2706,12 @@ export async function processYaml(
 									category,
 									resolved.displayName,
 									resolved.path,
+									// modelMaps is still empty here (populated by syncPlatformConfigs
+									// after the transaction begins), so read the project's own
+									// model-map from its platform YAML, as the dispatch does later.
+									platform === "codex"
+										? (await parseAndMergePlatformYaml(yamlDir, "codex"))?.["model-map"] ?? context.rootModelMaps.get(platform)
+										: undefined,
 								)),
 							);
 						}
