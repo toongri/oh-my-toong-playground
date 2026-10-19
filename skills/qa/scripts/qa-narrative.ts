@@ -68,12 +68,35 @@ export function defaultEvidenceReader(path: string): EvidenceEmbed {
 	}
 }
 /**
+ * True when the text is an SVG document: after an optional BOM, whitespace, XML declaration, processing
+ * instructions, comments and a no-subset DOCTYPE, the root is a lowercase `<svg` start tag (XML is case-sensitive),
+ * and the document ends with `</svg>` (or the root is self-closing), ignoring trailing whitespace and comments.
+ * A DOCTYPE with an internal subset `[...]` cannot be skipped, so it is rejected. This is a shape check, not an XML parser.
+ */
+function isSvgDocument(text: string): boolean {
+	let rest = text.replace(/^\uFEFF/, "");
+	for (;;) {
+		const trimmed = rest.trimStart();
+		const prefix = /^(?:<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[^[>]*>)/.exec(trimmed);
+		if (!prefix) {
+			rest = trimmed;
+			break;
+		}
+		rest = trimmed.slice(prefix[0].length);
+	}
+	if (!/^<svg(?=[\s>/])/.test(rest)) return false;
+	let end = rest.trimEnd();
+	for (let m = /<!--[\s\S]*?-->$/.exec(end); m; m = /<!--[\s\S]*?-->$/.exec(end)) end = end.slice(0, m.index).trimEnd();
+	return end.endsWith("</svg>") || /^<svg(?:"[^"]*"|'[^']*'|[^>"'])*\/>$/.test(end);
+}
+
+/**
  * True when a base64 image data URI holds a real image: raster formats (png/jpeg/webp/gif) by magic bytes,
- * SVG by its root element (SVG is text and has no magic bytes, so the decoded text must hold an <svg> root).
+ * SVG by its document shape (SVG is text and has no magic bytes; see isSvgDocument).
  */
 export function hasValidImageSignature(dataUri: string): boolean {
 	const svg = /^data:image\/svg\+xml;base64,(.*)$/.exec(dataUri);
-	if (svg) return /<svg[\s>]/i.test(Buffer.from(svg[1], "base64").toString("utf8"));
+	if (svg) return isSvgDocument(Buffer.from(svg[1], "base64").toString("utf8"));
 	const match = /^data:image\/(png|jpeg|webp|gif);base64,(.*)$/.exec(dataUri);
 	if (!match) return false;
 	const bytes = Buffer.from(match[2], "base64");

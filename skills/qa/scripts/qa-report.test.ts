@@ -18,7 +18,7 @@ import {
 	type EvidenceReader,
 	type QaReportNarrative,
 } from "./qa-report.ts";
-import { resolveAcMapping, validateNarrative } from "./qa-narrative.ts";
+import { hasValidImageSignature, resolveAcMapping, validateNarrative } from "./qa-narrative.ts";
 import type { QaView } from "./qa-state.ts";
 
 // ---------------------------------------------------------------------------
@@ -665,6 +665,26 @@ describe("qa-report renderer", () => {
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+
+	test("SVG 데이터 URI는 문서 루트가 <svg>이고 </svg>로 끝나거나 자기 닫힘일 때만 통과한다", () => {
+		const uri = (body: string) => `data:image/svg+xml;base64,${Buffer.from(body).toString("base64")}`;
+		const ns = 'xmlns="http://www.w3.org/2000/svg"';
+		const accepted = [
+			`<svg ${ns}><rect/></svg>`,
+			`<?xml version="1.0"?>\n<!-- 캡처 -->\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n<svg ${ns}></svg>\n<!-- 끝 -->\n`,
+			`\uFEFF<svg ${ns}></svg>`,
+			`<svg ${ns} data-x="a>b"/>`,
+		];
+		const rejected = [
+			`<!DOCTYPE html><html><body><svg ${ns}></svg></body></html>`,
+			`hello <svg ${ns}></svg>`,
+			`<SVG ${ns}></SVG>`,
+			`<svg ${ns}><rect/>`,
+			`<svgfoo ${ns}></svgfoo>`,
+		];
+		for (const body of accepted) expect(hasValidImageSignature(uri(body))).toBe(true);
+		for (const body of rejected) expect(hasValidImageSignature(uri(body))).toBe(false);
 	});
 
 	test("최종 보고서는 카드에 그릴 어떤 화면 칸이든 이미지 시그니처가 깨졌으면 거부한다", () => {
