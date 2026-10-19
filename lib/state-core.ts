@@ -1140,7 +1140,7 @@ export function lintReceiptProblem(receiptPath: string, htmlPath: string, source
 	} catch {
 		return `lint receipt ${receiptPath} is missing or not JSON; ${rerun}`;
 	}
-	if (!isPlainObject(receipt) || receipt.schema_version !== 1) return `lint receipt ${receiptPath} is not a schema_version 1 receipt; ${rerun}`;
+	if (!isPlainObject(receipt) || receipt.schema_version !== 2) return `lint receipt ${receiptPath} is not a schema_version 2 receipt (older receipts do not bind the source bytes); ${rerun}`;
 	if (receipt.errors !== 0) return `lint receipt records errors=${String(receipt.errors)}; fix the lint errors, then ${rerun}`;
 	let htmlSha: string;
 	try {
@@ -1155,6 +1155,18 @@ export function lintReceiptProblem(receiptPath: string, htmlPath: string, source
 		return `lint receipt must cover exactly the runs ${LINT_RECEIPT_RUNS.join(", ")} (viewport theme); ${rerun}`;
 	}
 	if (typeof receipt.source !== "string" || receipt.source !== resolve(sourcePath)) return `lint receipt was linted against source ${String(receipt.source)}, not ${resolve(sourcePath)}; ${rerun}`;
+	let sourceStat: ReturnType<typeof statSync>;
+	try {
+		sourceStat = statSync(sourcePath);
+	} catch {
+		return `presentation source ${sourcePath} is unreadable`;
+	}
+	if (sourceStat.isFile()) {
+		if (receipt.source_sha256 !== sha256Hex(readFileSync(sourcePath))) return `source changed after linting (the lint receipt's source_sha256 differs from the current source bytes); ${rerun}`;
+	} else if (receipt.source_sha256 !== null) {
+		// lazy: a directory source is bound by path only; its contents feed warning-level checks, and explain-diff's facts are byte-checked against the doc separately
+		return `lint receipt records source_sha256 for a directory source (expected null); ${rerun}`;
+	}
 	return null;
 }
 

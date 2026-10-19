@@ -61,8 +61,8 @@ bash "$HERE/../lint.sh" "$HERE/clean.html" --source "$HERE/source" --receipt "$R
 bash "$HERE/../lint.sh" "$HERE/defects.html" --source "$HERE/source" --receipt "$RT/defects.json" >/dev/null
 SUM=$(shasum -a 256 "$HERE/clean.html" | cut -d' ' -f1)
 if jq -e --arg sha "$SUM" --arg src "$(cd "$HERE/source" && pwd)" --arg p "$HERE/clean.html" '
-    (keys | sort) == (["schema_version","html_sha256","html_path","errors","warnings","runs","source","strict","lint_js_sha256","created_at"] | sort)
-    and .schema_version == 1 and .html_sha256 == $sha and (.html_path | startswith("/")) and (.html_path | endswith("/clean.html"))
+    (keys | sort) == (["schema_version","html_sha256","html_path","errors","warnings","runs","source","source_sha256","strict","lint_js_sha256","created_at"] | sort)
+    and .schema_version == 2 and .source_sha256 == null and .html_sha256 == $sha and (.html_path | startswith("/")) and (.html_path | endswith("/clean.html"))
     and .errors == 0 and (.warnings | type == "number") and .source == $src and .strict == false
     and (.lint_js_sha256 | test("^[0-9a-f]{64}$")) and (.created_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$"))
     and .runs == [{viewport:1280,theme:"light"},{viewport:1280,theme:"dark"},{viewport:400,theme:"light"}]' "$RT/clean.json" >/dev/null; then
@@ -73,4 +73,8 @@ fi
 [ ! -e "$RT/defects.json" ] && echo "ok   receipt: none written when errors > 0" || { echo "FAIL receipt written despite errors"; fail=1; }
 bash "$HERE/../lint.sh" "$HERE/clean.html" --receipt "$RT/nosrc.json" >/dev/null
 jq -e '.source == null' "$RT/nosrc.json" >/dev/null && echo "ok   receipt: source is null without --source" || { echo "FAIL receipt source null"; fail=1; }
+bash "$HERE/../lint.sh" "$HERE/clean.html" --source "$HERE/source/incident.md" --receipt "$RT/file.json" >/dev/null
+FSUM=$(shasum -a 256 "$HERE/source/incident.md" | cut -d' ' -f1)
+jq -e --arg s "$FSUM" '.schema_version == 2 and .source_sha256 == $s' "$RT/file.json" >/dev/null && echo "ok   receipt: source_sha256 equals the sha256 of a file source" || { echo "FAIL receipt file source_sha256"; fail=1; }
+jq -e '.source_sha256 == null' "$RT/nosrc.json" >/dev/null && echo "ok   receipt: source_sha256 is null without --source" || { echo "FAIL receipt nosrc source_sha256"; fail=1; }
 exit $fail

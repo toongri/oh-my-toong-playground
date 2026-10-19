@@ -910,11 +910,13 @@ exit 2 when any error remains (the strict run is `bash <skill-dir>/scripts/lint.
 
 **Lint receipt.** `lint.sh report.html [--source ...] --receipt <path>` also writes a JSON receipt to `<path>`
 (atomic tmp + mv) when the run ends with 0 errors. The consuming skill decides the receipt path and passes it
-to its submit command. Fields: `schema_version` (1), `html_sha256` (of the linted bytes, taken at lint start),
+to its submit command. Fields: `schema_version` (2), `html_sha256` (of the linted bytes, taken at lint start),
 `html_path` (absolute), `errors`, `warnings`, `runs` (the three standard runs: 1280 light, 1280 dark, 400 light),
-`source` (absolute `--source` path or null), `strict`, `lint_js_sha256`, `created_at` (UTC). With errors above 0,
-or when the file changed during linting, no receipt is written. An old receipt at that path is never deleted;
-a gate compares `html_sha256` to the submitted file, so a receipt for older bytes fails. The receipt proves lint
+`source` (absolute `--source` path or null), `source_sha256` (sha256 of the `--source` file's bytes, taken at lint
+start; null when `--source` is a directory or absent), `strict`, `lint_js_sha256`, `created_at` (UTC). With errors above 0,
+or when the HTML or the source file changed during linting, no receipt is written. An old receipt at that path is never deleted;
+a gate compares `html_sha256` to the submitted file and `source_sha256` to the current source file, so a receipt for
+older bytes fails (a revised source needs a new lint run, because the source-aware checks ran on the old one). The receipt proves lint
 ran clean on those exact bytes. It guards against mistakes (editing after lint, skipping lint); it is not
 tamper-proof. Re-run lint with `--receipt` after every edit of the HTML. An example is in
 `scripts/selftest/receipt.example.json`.

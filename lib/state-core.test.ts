@@ -8,7 +8,7 @@
 
 import { describe, test, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import * as fs from "fs";
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync } from "fs";
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync, mkdirSync, utimesSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -2158,9 +2158,32 @@ describe("presentation 제출: lint 영수증과 원본 포함 검사", () => {
 		write("# Plan", page("<p>x</p>"));
 		expect(lintReceiptProblem(join(dir, "none.json"), html, source)).toContain("missing or not JSON");
 		writeFileSync(receipt, "[1]");
-		expect(lintReceiptProblem(receipt, html, source)).toContain("schema_version 1");
-		writeLintReceipt(receipt, html, source, { schema_version: 2 });
-		expect(lintReceiptProblem(receipt, html, source)).toContain("schema_version 1");
+		expect(lintReceiptProblem(receipt, html, source)).toContain("schema_version 2");
+		writeLintReceipt(receipt, html, source, { schema_version: 1 });
+		expect(lintReceiptProblem(receipt, html, source)).toContain("schema_version 2");
+	});
+
+	test("원본 파일을 lint 뒤에 고치면(HTML 그대로, mtime 정상) 거부하고 제출은 현재가 아님", () => {
+		write("# Plan", page("<p>x</p>"));
+		const submission = createPresentationSubmission(source, html, receipt, "plan-todos");
+		writeFileSync(source, "# Plan revised");
+		const later = new Date(Date.now() + 5000);
+		utimesSync(html, later, later);
+		expect(lintReceiptProblem(receipt, html, source)).toContain("source changed after linting");
+		expect(() => createPresentationSubmission(source, html, receipt, "plan-todos")).toThrow("source changed after linting");
+		expect(presentationSubmissionCurrent(submission, "plan-todos", source, html)).toBe(false);
+	});
+
+	test("원본이 디렉터리이면 source_sha256 null 영수증을 받아들이고 해시가 있으면 거부함", () => {
+		const srcDir = join(dir, "srcdir");
+		mkdirSync(srcDir);
+		writeFileSync(join(srcDir, "a.md"), "# A");
+		writeFileSync(html, page("<p>x</p>"));
+		writeLintReceipt(receipt, html, srcDir);
+		expect(JSON.parse(readFileSync(receipt, "utf8")).source_sha256).toBeNull();
+		expect(lintReceiptProblem(receipt, html, srcDir)).toBeNull();
+		writeLintReceipt(receipt, html, srcDir, { source_sha256: "0".repeat(64) });
+		expect(lintReceiptProblem(receipt, html, srcDir)).toContain("directory source");
 	});
 
 	test("제출 후 영수증 파일을 고치면 현재 제출이 아님", () => {
