@@ -713,6 +713,9 @@ function validatePlatformYamlData(
 const VALID_MODEL_MAP_TOP_FIELDS = new Set(["tiers", "agents", "variants"]);
 const VALID_MODEL_MAP_ENTRY_FIELDS = new Set(["model", "effort"]);
 
+/** A variant suffix becomes part of the generated file name `<agent>-<suffix>.toml`. */
+const VARIANT_SUFFIX_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
 /**
  * Reasoning-effort levels accepted in a codex model-map entry.
  *
@@ -728,9 +731,6 @@ const VALID_MODEL_MAP_ENTRY_FIELDS = new Set(["model", "effort"]);
  * gpt-5.5) still passes. The failure this catches is the typo — `hgih`,
  * `higher`, `Medium` — which previously reached the deployed TOML untouched.
  */
-/** A variant suffix becomes part of the generated file name `<agent>-<suffix>.toml`. */
-const VARIANT_SUFFIX_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-
 const VALID_CODEX_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max", "ultra"]);
 
 /**
