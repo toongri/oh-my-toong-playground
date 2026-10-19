@@ -6,6 +6,7 @@
 
 | 스킬 | 목적 | 사용 시점 |
 |------|------|-----------|
+| **html-report** | 인라인 SVG가 든 단일 HTML 리포트의 공통 작성 계약 | 리포트 스킬(qa·explain-diff·deep-interview·prometheus 등)이 참조 |
 | **create-slides** | HTML 스크롤텔링 발표자료 생성 | 기술 발표, 제안서, 피치덱 |
 | **technical-writing** | 한국어 기술 문서 리뷰/작성 | API 문서, 가이드, 기술 블로그 |
 | **technical-copywriting** | 기술 블로그 홍보 텍스트 리뷰 | SNS 공유 티저, LinkedIn 포스트 |
@@ -28,6 +29,20 @@
 ---
 
 ## 2. 스킬 상세
+
+### html-report
+
+**역할**: 사람이 읽는 리포트를 Mermaid/`mmdc` 사전 렌더 없이 자기완결 HTML 한 파일로 직접 쓰는 공통 계약입니다. 독립 호출용이 아니라 소비 스킬(deep-interview·prometheus·qa·explain-diff·ultraresearch·review-report·create-slides)이 `${CLAUDE_SKILL_DIR}/../html-report/...` 경로로 단방향 참조합니다. 소비 스킬이 무엇을 말할지(내용 규칙)를 정하고, 이 스킬은 어떻게 짓고 검사할지(형식 규칙)를 정합니다.
+
+**특징**:
+- 외부 CSS·JS·이미지 없는 단일 파일, 라이트/다크, 400–1280px, 한국어 우선
+- 노드 3개 이상 방향 그래프는 엣지가 보이는 인라인 SVG, 색상·타이포는 디자인 토큰으로 정의
+- 필수 자기 비평 루프: `capture.sh`로 캡처하고 `lint.sh`로 검사하며, lint 오류가 0이면 `lint.sh --receipt`가 HTML 바이트에 묶인 영수증을 씀
+- `make validate`가 소비 스킬과 같은 sync 스코프·플랫폼에 `html-report`가 함께 배포되는지 검사
+
+**사용 시점**: 리포트 스킬이 HTML을 쓸 때 자동 참조
+
+---
 
 ### create-slides
 

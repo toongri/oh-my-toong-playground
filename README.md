@@ -34,6 +34,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 - **멀티플랫폼 지원** — Claude / Gemini / Codex / OpenCode를 어댑터로 추상화
 - **Codex 설정 소유권 추적** — 기본 `.codex/config.toml`을 유지하고, 주석과 무관하게 `.omt/codex-config-state.json`에서 관리할 키와 마지막 적용 값을 추적합니다. 기존 키는 명시적으로 관리 대상으로 채택해야 하며, 충돌 시 사용자 설정을 보존합니다. `make sync-dry`도 실제 대상에서 채택 필요 여부와 충돌을 확인합니다([플랫폼 YAML 설정 배포](docs/platform-yaml-config-deployment.md) 참고).
 - **표면별 E2E 라우팅** — 웹/Electron은 `agent-browser`, iOS·tvOS·macOS·Android·Vega OS TV는 `agent-device`로 검증
+- **HTML 리포트 공통 계약(`html-report`)** — 사람이 읽는 리포트(qa·explain-diff·deep-interview·prometheus·ultraresearch·review-report·create-slides)는 Mermaid/`mmdc` 사전 렌더 없이, 인라인 SVG 다이어그램을 담은 자기완결 HTML 한 파일로 직접 작성합니다. 공유 스킬 `html-report`가 작성 계약(노드 3개 이상 그래프는 엣지가 보이는 SVG, 라이트/다크, 400–1280px, 한국어 우선)과 필수 자기 비평 루프(`capture.sh` + `lint.sh`)를 소유하고, `lint.sh --receipt`는 lint 오류가 0일 때 HTML 바이트에 묶인 영수증을 씁니다. 소비 스킬은 `${CLAUDE_SKILL_DIR}/../html-report/...`로 단방향 참조하며, `make validate`가 같은 sync 스코프·플랫폼에 `html-report`가 함께 배포되는지 검사합니다. deep-interview·prometheus는 모델이 발표용 HTML을 직접 쓰고 제출 시 일치하는 lint 영수증과 원본 커버리지(prometheus는 계획 TODO마다 `data-todo="<id>"`, deep-interview는 스펙 Mermaid 다이어그램마다 SVG figure 하나)를 요구합니다(deep-interview의 AI용 스펙은 의도적으로 Mermaid 유지). qa의 큰 그림은 모델이 쓴 `bigPictureSvg`(sanitize됨)이고 AC 충족 판정은 참조한 시나리오 결과에서 도출되며(작성하는 `satisfied` 필드 없음) `qa-state.ts validate-narrative`로 서사를 미리 검사합니다. review-report는 런타임 CDN 없이 모델이 이스케이프한 HTML 본문을 템플릿에 채웁니다. explain-diff는 Markdown 문서가 스텝 검사를 받는 SSOT로 남고, 렌더 스텝에서 모델이 `html-report`에 따라 최종 HTML을 작성하며 CLI가 페이지에 문서의 정확한 사실(다이어그램 SVG 바이트 동일, 코드 블록 원문, 헤딩 순서, 커밋 해시·변경 경로, lint 영수증)이 실렸는지 증명합니다.
 - **QA 강제 게이트** — qa가 액터 로스터→스토리→사용자 시나리오→기록→판정→완료 사슬을 채우기 전 단계 전환·드라이버·Stop을 강제하고(PLAN 도달성 탐색은 허용), Claude/Codex의 `qa-driver-guard.sh`·`codex-qa-driver-guard.sh`와 Codex `codex-qa-seed.sh`가 같은 상태를 집행. 화면 결과는 주장별 근거 검토와 파일 일치가 필수이며, 최종 HTML 검토를 기록해야 완료
 - **QA 스토리 계약과 선택적 재사용 케이스** — qa가 계획·이슈·스펙·PR을 직접 읽고 AC를 사용자가 관찰하는 결과로 보고서 언어로 작성함(상태 파일은 요구사항의 출처가 아님). 검증 환경은 사용자가 다른 환경을 지정하지 않는 한 로컬이고, 원천·호출자 항목 중 배포·운영 관찰·운영 데이터 대조·후속 PR은 `## Out of QA Scope`로, PR·위키 근거는 요구사항 입력으로만 다룸. 분류할 수 없는 항목은 `set-acceptance` 전에 사용자에게 물음. 액터는 `client_impact`(none|contract|render)와 사유를 갖고, 화면 렌더 액터는 프로젝트별 `~/.qa-cases/<projectKey>/device-profiles.yaml`(`qa-device-profiles.ts get|set|upsert|remove`, 미설정 시 내장 기본 목록을 보여 주고 한 번 물음, 모르면 `set --defaults`로 기본 목록 저장, 지원하지 않는 플랫폼은 `remove`, 크기 수정·전용 화면 추가는 `upsert`, 크기는 추측하지 않음)의 기기 프로필마다 화면에서 구동해 전후 스크린샷을 남긴 시나리오가 필요하고(자동 테스트로 증명하는 시나리오에는 프로필을 달지 않음), 그 근거 검토에는 잘림·겹침·가로 스크롤·줄바꿈을 점검한 layout claim이 있어야 함. 새 스토리는 목표·비어 있지 않은 Given/When/Then 배열과 0부터 시작하는 acceptance-criteria 링크를 갖춰야 하고 스토리마다 H 우선순위 시나리오가 하나 이상이며, 여섯 위험 태그는 시나리오가 다루거나 `declare-risk-na`로 사유와 함께 선언해야 함. 기존 기록은 읽을 수 있지만 새 실행 준비가 된 것으로 간주하지 않음. 기존 기록은 읽을 수 있지만 새 실행 준비가 된 것으로 간주하지 않음. 현재 사이클에 증거가 있으면 계약 변경은 거부됨. 선택적 케이스 저장소는 `qa-cases.ts`로 고정된 외부 `~/.qa-cases/<projectKey>/manifest.yaml`에 포인터·모드만 기록하고, 저장소는 기본으로 켜져 `~/.qa-cases/<projectKey>/cases`에 케이스 메타데이터와 자산을 저장하고, 사용자가 요청할 때만 `disabled`로 끔. 기능 지도(`~/.feature-maps/<project-key>/store`)도 기본으로 켜짐. 케이스는 시나리오 하나이고 기능 단위로 찾음(`feature_refs`는 기능 지도 id, `list --feature`). 화면·API를 구동해 통과한 H 시나리오는 구동하며 녹화해 케이스로 저장하고, 재실행 검사에서 재생한 뒤 `record-case`로 연결함(못 만들면 `--none` 사유). 둘 다 없으면 `complete`가 거부함. 결과가 이미 있는 시나리오 자체가 틀렸다면 `amend-scenario --reason`(필수 사유)으로 고치며, 결과가 초기화되어 다시 구동·기록해야 하고 이전 기록은 `scenario_amendments`에 남으며 저장된 verdict는 지워지고 사이클은 소모되지 않음. 프로젝트 파일은 명시적 opt-in 없이는 만들지 않으며, 네이티브 `.ad`·agent-browser 명령 스크립트·Maestro 형식은 유지함. `qa-replay.ts --help`로 확인할 수 있는 replay는 현재 세션의 완료된 actor→story→scenario 체인과 현재 story/scenario/cycle 및 해시를 확인하고 receipt를 만들지만 PASS를 기록하지 않으며, 실제 경계 증거와 함께 `qa-state.ts record-scenario --case-run`으로 선택적으로 연결함([재사용 QA 케이스](skills/qa/reusable-cases.md) 참고)
 - **Ultragoal 최종 리뷰 수렴** — 우선순위로 수렴: HIGH는 수리·검사·fresh review, MEDIUM은 수리·검사(재리뷰 없음), LOW는 기록만 수행. 결정적 CLI는 COMMENT/APPROVE dispatch·재리뷰를 거부하고 5회 dispatch 창을 유지
@@ -54,7 +55,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 
 ## 문서
 
-라이브러리에 담긴 스킬(47종)·에이전트(13종)의 상세는 `docs/`에 정리되어 있습니다.
+라이브러리에 담긴 스킬(48종)·에이전트(13종)의 상세는 `docs/`에 정리되어 있습니다.
 
 | 문서 | 내용 |
 |------|------|
@@ -62,7 +63,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 | [리뷰/품질](docs/skills/review-quality.md) | code-review · design-review · slides-review · qa · explain-diff (선택적 reusable QA 케이스는 [가이드](skills/qa/reusable-cases.md)) |
 | [프론트엔드 디자인](docs/skills/frontend-design.md) | frontend · visual-qa — 웹 UI 설계·구현과 렌더링 결과 독립 검증 |
 | [리서치](docs/skills/research.md) | ultraresearch · insane-browsing — 포화 리서치 엔진과 차단 소스 브라우징 |
-| [문서/콘텐츠·유틸](docs/skills/authoring.md) | create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |
+| [문서/콘텐츠·유틸](docs/skills/authoring.md) | html-report · create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |
 | [지식 그래프(pins)](docs/skills/knowledge-graph-pins.md) | pins 지식 그래프 — pin-setup · record · query · audit · wrap-up |
 | [유틸·개인 워크플로우](docs/skills/utilities-personal.md) | agent-device · agent-browser · dogfood · hud · read-db · resume · jd · mock-interview 등 |
 | [오케스트레이션 가이드](docs/ORCHESTRATION.md) | deep-interview → craft-tasks → 선택적 prometheus → ultragoal → sisyphus 워크플로우 (sisyphus는 ultragoal의 내부 실행자이며 직접 경로가 아님)와 사용법 |
@@ -76,33 +77,12 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 
 - Claude Code CLI 설치됨
 - Node.js v18+ (HUD 기능용)
-- `npm`/`npx` (Mermaid 렌더러 프로비저닝용)
+- `agent-browser` CLI (`html-report` 스킬의 `capture.sh`·`lint.sh`가 헤드리스 Chrome을 구동할 때 사용)
 - `jq` (훅의 페이로드 파싱에 사용 — 대부분 없으면 차단하지 않지만, `codex-spawn-context-gate.sh`와 `codex-spawn-role-gate.sh`는 차단)
 - `sqlite3` (Codex detector가 `state_5.sqlite` 상태 데이터베이스를 조회하는 데 사용 — 없으면 detector가 0건을 세고 stderr에 진단 1건을 출력)
 - macOS 또는 Linux
 
-`mmdc`와 Puppeteer의 `chrome-headless-shell`은 저장소에 포함하지 않으며,
-발표자료를 직접 렌더할 때 필요한 외부 도구입니다. `make sync`는 root
-`sync.yaml`의 provision을 선언 순서대로 각 배포 대상에 적용합니다. `mmdc`가
-없으면 `npm i -g @mermaid-js/mermaid-cli`를 실행하고, 이어서 작은 flowchart를
-실제 `mmdc`로 임시 SVG에 렌더해 headless shell을 확인합니다. 이 smoke check가
-실패하면 `mmdc`에 들어 있는 Puppeteer로 `chrome-headless-shell`을 설치합니다.
-`npx puppeteer`는 npm 최신 Puppeteer를 받아 그 버전의 Chrome을 설치하므로,
-`mmdc`의 Puppeteer가 찾는 버전과 어긋날 수 있습니다.
-
-이 provision은 대상별·비치명적이며 `make sync-dry`에서는 실행하지 않고 의도만
-미리 보여줍니다. 렌더러 자체는 npm 패키지를 설치하지 않습니다. `make sync`를
-거치지 않고 발표자료 렌더러를 직접 실행하거나 provision이 실패한 경우에는
-다음 명령을 수동으로 실행하세요.
-
-```bash
-npm i -g @mermaid-js/mermaid-cli
-"$(dirname "$(realpath "$(command -v mmdc)")")/../node_modules/.bin/puppeteer" browsers install chrome-headless-shell
-```
-
-Mermaid render-gate 훅은 `mmdc`가 없을 때 일반 Markdown 작성을 막지 않도록
-fail-open하지만, mandatory presentation render는 `mmdc`와 headless shell이
-모두 준비되어야 완료됩니다.
+`mmdc`/Mermaid 렌더러는 더 이상 프로비저닝하지 않습니다. 사람이 읽는 리포트는 `html-report` 스킬이 정한 대로 인라인 SVG가 든 HTML 한 파일로 직접 작성합니다.
 
 ### 설정
 
