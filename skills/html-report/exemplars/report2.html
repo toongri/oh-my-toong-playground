@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>렌탈 신용심사 상태 지도</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: narrow reading column for goal + gate tables; the state map breaks out to a wider stage that scrolls sideways on its own at phone width. */
+:root {
+  --bg: #F3F4F8;
+  --surface: #FFFFFF;
+  --surface-2: #E9ECF3;
+  --ink: #141821;
+  --ink-2: #444C5C;
+  --ink-3: #5B6477;
+  --line: #D3D8E2;
+  --line-strong: #98A0B3;
+  --accent: #3340C9;
+  --c-cust: #2358D6;
+  --c-sys: #4B5567;
+  --c-op: #B9500A;
+  --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1117; --surface: #161A22; --surface-2: #1F242E;
+    --ink: #E8EBF1; --ink-2: #B4BBC9; --ink-3: #8F98AA;
+    --line: #2B313D; --line-strong: #566074;
+    --accent: #9DAAFF;
+    --c-cust: #7FA8FF; --c-sys: #A9B3C6; --c-op: #F29A55;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1117; --surface: #161A22; --surface-2: #1F242E;
+  --ink: #E8EBF1; --ink-2: #B4BBC9; --ink-3: #8F98AA;
+  --line: #2B313D; --line-strong: #566074;
+  --accent: #9DAAFF;
+  --c-cust: #7FA8FF; --c-sys: #A9B3C6; --c-op: #F29A55;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font); font-size: 16px; line-height: 1.75;
+  padding-block: 40px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  word-break: keep-all; overflow-wrap: break-word;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+.col { max-width: 720px; }
+h1, h2, h3, p, ul, ol, figure, table { margin: 0; }
+h1 { font-size: clamp(32px, 6vw, 48px); line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }
+h2 { font-size: 24px; line-height: 1.35; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+h3 { font-size: 17px; line-height: 1.4; font-weight: 600; }
+p + p { margin-top: 12px; }
+code { font-family: var(--mono); font-size: 0.88em; background: var(--surface-2); padding: 1px 6px; border-radius: 4px; overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+section { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.sec-head { display: flex; flex-direction: column; gap: 8px; padding-top: 28px; border-top: 2px solid var(--ink); }
+.sec-head p { color: var(--ink-2); max-width: 760px; }
+.muted { color: var(--ink-3); }
+
+.mast { display: flex; flex-direction: column; gap: 20px; max-width: 820px; }
+.kicker { font-size: 14px; color: var(--ink-2); }
+.lede { font-size: 19px; line-height: 1.7; }
+
+.goal { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px 40px; align-items: start; }
+.goal .stat { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-top: 12px; padding: 14px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.goal .stat b { font-size: 28px; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--c-op); letter-spacing: -0.02em; }
+.goal .stat span { font-size: 14.5px; color: var(--ink-2); flex: 1 1 200px; }
+.principles { display: flex; flex-direction: column; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; overflow: hidden; }
+.principles div { padding: 14px 18px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+.principles div:first-child { border-top: 0; }
+.principles b { font-size: 15.5px; }
+.principles span { font-size: 14.5px; color: var(--ink-2); line-height: 1.6; }
+
+/* tabs */
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.tab { font: inherit; font-size: 14.5px; line-height: 1.4; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); cursor: pointer; }
+.tab:hover { background: var(--surface-2); }
+.tab[aria-selected="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); font-weight: 600; }
+.sc-desc { min-height: 3.4em; color: var(--ink-2); max-width: 820px; }
+.sc-desc b { color: var(--ink); }
+
+/* stage */
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow-x: auto; padding: 14px; -webkit-overflow-scrolling: touch; }
+.stage svg { display: block; width: 100%; min-width: 1560px; height: auto; }
+.hint-scroll { display: block; font-size: 13px; color: var(--ink-3); }
+.map-cap { font-size: 14.5px; color: var(--ink-2); max-width: 820px; }
+.map-cap b { color: var(--ink); }
+
+svg text { font-family: var(--font); font-size: 13px; fill: var(--ink); }
+svg .nl { font-size: 13.5px; font-weight: 600; }
+svg .ns { font-size: 11px; fill: var(--ink-3); }
+svg .elbl { font-size: 12px; paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; font-weight: 500; }
+svg .lane-t { font-size: 14px; font-weight: 700; }
+svg .lane-s { font-size: 11.5px; fill: var(--ink-3); }
+svg .band { fill: var(--surface-2); opacity: .55; }
+svg .band2 { fill: none; stroke: var(--line); stroke-dasharray: 3 4; }
+svg .node rect.nb { fill: var(--surface); stroke: var(--ink); stroke-width: 1.6; }
+svg .node.screen rect.nb { stroke-dasharray: 5 4; stroke: var(--ink-3); fill: var(--surface-2); }
+svg .node.fact rect.nb { fill: var(--surface-2); stroke: var(--line-strong); }
+svg .gate polygon { fill: var(--ink); stroke: none; }
+svg .gate text { font-size: 12.5px; font-weight: 700; text-anchor: middle; }
+svg .meta rect { fill: var(--ink); }
+svg .meta text { fill: var(--surface); font-size: 11px; font-weight: 700; text-anchor: middle; }
+svg .edge path { fill: none; stroke-width: 2; }
+svg .a-cust path { stroke: var(--c-cust); }
+svg .a-cust text { fill: var(--c-cust); }
+svg .a-sys path { stroke: var(--c-sys); }
+svg .a-sys text { fill: var(--c-sys); }
+svg .a-op path { stroke: var(--c-op); }
+svg .a-op text { fill: var(--c-op); }
+svg .dashed path { stroke-dasharray: 6 5; }
+svg .read path { stroke: var(--line-strong); stroke-width: 1.6; stroke-dasharray: 2 5; }
+svg .read text { fill: var(--ink-3); }
+svg .mk-cust { fill: var(--c-cust); } svg .mk-sys { fill: var(--c-sys); } svg .mk-op { fill: var(--c-op); } svg .mk-read { fill: var(--line-strong); }
+svg .badge circle { fill: var(--ink); stroke: var(--surface); stroke-width: 2; }
+svg .badge text { fill: var(--surface); font-size: 11px; font-weight: 700; text-anchor: middle; }
+svg .el { transition: opacity .18s ease; }
+svg.filtering .el:not(.on) { opacity: .13; }
+svg.filtering .edge.on path { stroke-width: 3.2; }
+svg.filtering .node.on rect.nb { stroke-width: 2.6; }
+svg.filtering .gate.on polygon { stroke: var(--accent); stroke-width: 3; }
+svg .badge { display: none; }
+svg.filtering .badge { display: inline; }
+
+/* steps */
+.steps-wrap { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px 32px; align-items: start; }
+.steps { list-style: none; padding: 0; counter-reset: st; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; min-width: 0; }
+.steps li { display: grid; grid-template-columns: 28px 64px minmax(0, 1fr); gap: 4px 12px; padding: 12px 16px; border-top: 1px solid var(--line); align-items: baseline; }
+.steps li:first-child { border-top: 0; }
+.steps .n { width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: var(--surface); font-size: 12.5px; font-weight: 700; display: grid; place-items: center; align-self: start; margin-top: 2px; }
+.who { font-size: 13.5px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.who::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: currentColor; flex: none; }
+.who.cust { color: var(--c-cust); } .who.sys { color: var(--c-sys); } .who.op { color: var(--c-op); }
+.st b { display: block; font-weight: 600; }
+.st span { display: block; font-size: 14.5px; color: var(--ink-2); line-height: 1.6; }
+.steps-empty { padding: 18px 20px; color: var(--ink-2); font-size: 15px; display: flex; flex-direction: column; gap: 10px; background: var(--surface); border: 1px dashed var(--line-strong); border-radius: 10px; }
+.legend-actors { display: flex; flex-direction: column; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; font-size: 14.5px; }
+.legend-actors div { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.legend-actors span.d { color: var(--ink-2); line-height: 1.55; }
+
+/* gates */
+.gates { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 20px; }
+.gate-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.gate-card h3 { display: flex; align-items: center; gap: 10px; }
+.dia { width: 14px; height: 14px; background: var(--ink); transform: rotate(45deg) scale(.8); flex: none; }
+.gate-card .when { font-size: 14.5px; color: var(--ink-2); }
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; line-height: 1.55; min-width: 0; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-top: 1px solid var(--line); }
+thead th { border-top: 0; font-size: 13px; color: var(--ink-3); font-weight: 600; background: var(--surface-2); }
+td.k { font-weight: 600; }
+td .to { font-weight: 600; }
+tr.always td { background: var(--surface-2); }
+.note { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; max-width: 820px; font-size: 15.5px; }
+.note b { display: block; margin-bottom: 4px; }
+footer { color: var(--ink-3); font-size: 13.5px; border-top: 1px solid var(--line); padding-top: 16px; max-width: 720px; }
+
+@media (max-width: 860px) {
+  .goal, .steps-wrap { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  body { font-size: 15.5px; padding-block: 28px 56px; }
+  .wrap { gap: 44px; }
+  .lede { font-size: 17px; }
+  .hint-scroll { display: block; }
+  .steps li { grid-template-columns: 24px minmax(0, 1fr); padding: 12px 14px; }
+  .steps li .who { grid-column: 2; }
+  .steps li .st { grid-column: 2; }
+  .tab { font-size: 14px; padding: 7px 12px; }
+}
+@media (prefers-reduced-motion: reduce) { svg .el { transition: none; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+
+<header class="mast">
+  <div class="kicker">설계 문서 · 렌탈 신청 · 신용조회(NICE)</div>
+  <h1>렌탈 신용심사 상태 지도</h1>
+  <p class="lede">렌탈을 신청하는 동안 NICE 신용점수를 자동으로 조회하고, 서버가 고객 화면과 계약 상태를 정합니다. 이 문서는 어떤 사실이 저장되고 어떤 관문이 그 사실로 상태를 옮기는지 한 장에 그립니다.</p>
+</header>
+
+<section>
+  <div class="sec-head"><h2>목표와 원칙</h2></div>
+  <div class="goal">
+    <div>
+      <p><b>주된 목표.</b> Meta 광고가 「심사를 통과한 사람」을 전환으로 학습하게 합니다. 지금은 신청의 상당수가 심사 거절로 취소되어, 광고가 통과하지 못할 사람까지 전환으로 배웁니다.</p>
+      <div class="stat"><b>30~40%</b><span>현재 신청 중 심사 거절로 취소되는 비율</span></div>
+    </div>
+    <div class="principles">
+      <div><b>사실을 저장한다</b><span>조회 상태, 점수, 선납금 금액, 운영자 판단처럼 일어난 일만 저장합니다.</span></div>
+      <div><b>조건을 계산한다</b><span>650점 이상, 선납금 50만원 이상은 규칙이지 상태가 아닙니다.</span></div>
+      <div><b>화면을 계산한다</b><span>「현재 단계」를 따로 저장하지 않고 사실과 계약 상태에서 화면을 정합니다.</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <h2>상태 지도</h2>
+    <p>두 줄이 나란히 움직입니다. 위쪽은 고객과 관리자에게 보이는 「계약 진행 상태」(기존 값만 사용), 아래쪽은 저장만 하는 「신용 사실」입니다. 점수는 고객에게 보이지 않습니다. 마름모 관문이 아래 사실을 읽어 위쪽 줄의 길을 정합니다.</p>
+  </div>
+
+  <div class="tabs" role="tablist" aria-label="시나리오 선택" id="tabs"></div>
+  <p class="sc-desc" id="scdesc" aria-live="polite"></p>
+
+  <figure>
+    <p class="hint-scroll">지도는 좌우로 밀어서 볼 수 있어요. 시나리오를 고르면 아래 단계 목록이 그 경로를 글로 보여 줘요.</p>
+    <div class="stage" tabindex="0" role="region" aria-label="상태 지도, 좌우 스크롤">
+      <div id="map"></div>
+    </div>
+    <figcaption class="map-cap" style="margin-top:12px"><b>지도에서 선이 움직이는 쪽은 위쪽 줄 하나뿐입니다.</b> 아래 사실 줄은 위쪽 상태를 직접 바꾸지 못하고, 관문이 읽어 갈 뿐입니다. 선 색은 그 이동을 하는 주체(고객·시스템·운영자)를 뜻합니다. 설계 문서의 구조를 그린 그림이며 구현을 실행해 확인한 것은 아닙니다.</figcaption>
+  </figure>
+
+  <div class="steps-wrap">
+    <div id="steps" aria-live="polite"></div>
+    <div class="legend-actors">
+      <h3>누가 움직이나</h3>
+      <div><span class="who cust">고객</span><span class="d">주문서 제출, 선납금·기기 구매 선택, 결제, 서명, 접수 완료의 「확인」</span></div>
+      <div><span class="who sys">시스템</span><span class="d">점수 조회, 두 관문의 조건 계산, 카드 결과 반영, Slack 알림</span></div>
+      <div><span class="who op">운영자</span><span class="d">점수 입력, 승인 또는 거절 선택 (관리자 화면)</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <h2>관문 판정표</h2>
+    <p>관문은 저장된 사실과 현재 규칙으로 그때그때 조건을 계산해 계약 상태와 화면을 정합니다.</p>
+  </div>
+  <div class="gates">
+    <div class="gate-card">
+      <h3><span class="dia" aria-hidden="true"></span>결제 관문</h3>
+      <p class="when">결제 직전에 계산합니다. 결과는 결제로 진행하거나, 화면만 바꿉니다.</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>읽은 사실</th><th>결과</th></tr></thead>
+          <tbody>
+            <tr><td class="k">선납금 ≥ 50만원</td><td><span class="to">면제.</span> 조회 없이 결제로</td></tr>
+            <tr><td class="k">미조회</td><td><span class="to">점수 조회 화면</span></td></tr>
+            <tr><td class="k">조회 중</td><td><span class="to">조회 중 화면</span></td></tr>
+            <tr><td class="k">통과 (점수 ≥ 650)</td><td><span class="to">결제로</span></td></tr>
+            <tr><td class="k">650 미만</td><td><span class="to">대안 화면</span> (선납금 50만원 또는 기기 구매)</td></tr>
+            <tr><td class="k">조회 불가</td><td><span class="to">결제로.</span> 고객에게 알리지 않음</td></tr>
+            <tr class="always"><td class="k">이미 결제 내역(charge)이 있음</td><td><span class="to">조건과 무관하게 계속</span></td></tr>
+            <tr class="always"><td class="k">운영자 거절</td><td><span class="to">항상 차단</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="gate-card">
+      <h3><span class="dia" aria-hidden="true"></span>확인 관문</h3>
+      <p class="when">접수 완료 화면에서 고객이 「확인」을 누를 때, 현재 규칙으로 다시 계산합니다.</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>읽은 사실</th><th>결과</th></tr></thead>
+          <tbody>
+            <tr><td class="k">운영자 승인</td><td><span class="to">신용조회 승인</span> + 혜택</td></tr>
+            <tr><td class="k">선납금 면제</td><td><span class="to">신용조회 승인</span> + 혜택</td></tr>
+            <tr><td class="k">통과 (점수 ≥ 650)</td><td><span class="to">신용조회 승인</span> + 혜택</td></tr>
+            <tr><td class="k">위 어느 것도 아님</td><td><span class="to">신용조회 진행중</span> + Slack 「수동 신용심사가 필요해요」 (1회)</td></tr>
+            <tr class="always"><td class="k">이미 처리된 계약</td><td><span class="to">아무 변화 없음</span> (여러 번 눌러도 같은 결과)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>관문을 서명이 아니라 「확인」에 둔 이유</b>Meta 전환은 접수 완료 화면이 열릴 때 발생합니다. 서명 시점에 상태를 바꾸면 그 화면을 건너뛰어 전환이 쏘이지 않습니다.</div>
+</section>
+
+<footer>설계 문서 일부를 시각화한 페이지입니다. 선 색: 고객 파랑, 시스템 슬레이트, 운영자 주황.</footer>
+
+</main>
+
+<script>
+(function () {
+  var NS = 'http://www.w3.org/2000/svg';
+  var GW = 32, GH = 34;
+
+  /* ---- data ---- */
+  var nodes = [
+    /* lane 1: contract state */
+    { id: 'draft',    x: 64,   y: 140, w: 88,  h: 48, k: 'state',  t: '작성 중' },
+    { id: 'submit',   x: 210,  y: 140, w: 88,  h: 48, k: 'state',  t: '주문서 제출' },
+    { id: 'g1',       x: 344,  y: 140, k: 'gate',   t: '결제 관문' },
+    { id: 'paying',   x: 478,  y: 140, w: 88,  h: 48, k: 'state',  t: '결제 진행중' },
+    { id: 'paid',     x: 624,  y: 140, w: 88,  h: 48, k: 'state',  t: '결제 완료' },
+    { id: 'signing',  x: 770,  y: 140, w: 88,  h: 48, k: 'state',  t: '서명 진행중' },
+    { id: 'signed',   x: 916,  y: 140, w: 88,  h: 48, k: 'state',  t: '서명 완료', s: '접수 완료 화면', meta: true },
+    { id: 'g2',       x: 1050, y: 140, k: 'gate',   t: '확인 관문' },
+    { id: 'approved', x: 1184, y: 88,  w: 120, h: 48, k: 'state',  t: '신용조회 승인', s: '+ 혜택' },
+    { id: 'pending',  x: 1184, y: 196, w: 120, h: 48, k: 'state',  t: '신용조회 진행중', s: 'Slack 알림 1회' },
+    { id: 'rejected', x: 1184, y: 296, w: 120, h: 48, k: 'state',  t: '신용조회 거절' },
+    { id: 'shipped',  x: 1346, y: 88,  w: 88,  h: 48, k: 'state',  t: '출하·이용 중', s: '기존 흐름' },
+    { id: 'payfail',  x: 478,  y: 228, w: 88,  h: 48, k: 'state',  t: '결제 실패' },
+    { id: 'alt',      x: 430,  y: 48,  w: 104, h: 48, k: 'screen', t: '대안 화면', s: '화면 · 상태 아님' },
+    { id: 'cancel',   x: 210,  y: 48,  w: 88,  h: 48, k: 'state',  t: '취소', s: '구매 페이지로' },
+    /* lane 2: credit facts */
+    { id: 'f_none',   x: 74,   y: 442, w: 116, h: 52, k: 'fact', t: '미조회' },
+    { id: 'f_query',  x: 270,  y: 442, w: 116, h: 52, k: 'fact', t: '조회 중', s: '최대 30초' },
+    { id: 'f_score',  x: 470,  y: 442, w: 116, h: 52, k: 'fact', t: '점수 받음', s: '예: 742 · 598' },
+    { id: 'f_prepay', x: 730,  y: 442, w: 116, h: 52, k: 'fact', t: '선납금 금액', s: '사실만 저장' },
+    { id: 'f_fail',   x: 470,  y: 540, w: 116, h: 52, k: 'fact', t: '조회 불가', s: '오류 또는 시간 초과' },
+    { id: 'f_oper',   x: 730,  y: 540, w: 116, h: 52, k: 'fact', t: '운영자 판단', s: '승인·거절 기록' }
+  ];
+  var byId = {}; nodes.forEach(function (n) { byId[n.id] = n; });
+
+  function P(id, side) {
+    var n = byId[id], hw = n.k === 'gate' ? GW : n.w / 2, hh = n.k === 'gate' ? GH : n.h / 2;
+    if (side === 'l') return [n.x - hw, n.y];
+    if (side === 'r') return [n.x + hw, n.y];
+    if (side === 't') return [n.x, n.y - hh];
+    return [n.x, n.y + hh];
+  }
+  function E(id, a, from, to, via, who, label, cls) {
+    return { id: id, a: a, p: [P(from[0], from[1])].concat(via || [], [P(to[0], to[1])]), l: label, c: cls || '' };
+  }
+  /* label: {x,y,anchor,lines} */
+  var edges = [
+    E('e1',  'cust', ['draft','r'], ['submit','l'], null, 0, { x: 137, y: 132, lines: ['제출'] }),
+    E('e2',  'sys',  ['submit','r'], ['g1','l'], null, 0, { x: 283, y: 132, lines: ['판정'] }),
+    E('e3',  'sys',  ['g1','r'], ['paying','l'], null, 0, { x: 405, y: 132, lines: ['결제로'] }),
+    E('e4',  'cust', ['paying','r'], ['paid','l'], null, 0, { x: 551, y: 132, lines: ['결제'] }),
+    E('e5',  'cust', ['paid','r'], ['signing','l'], null, 0, { x: 697, y: 132, lines: ['서명 시작'] }),
+    E('e6',  'cust', ['signing','r'], ['signed','l'], null, 0, { x: 843, y: 132, lines: ['서명 제출'] }),
+    E('e7',  'cust', ['signed','r'], ['g2','l'], null, 0, { x: 989, y: 132, lines: ['확인'] }),
+    E('e8',  'sys',  ['g2','t'], ['approved','l'], [[1050, 88]], 0, { x: 1087, y: 80, lines: ['충족'] }),
+    E('e11', 'sys',  ['g2','r'], ['pending','l'], [[1100, 140], [1100, 196]], 0, { x: 1094, y: 172, anchor: 'end', lines: ['그 외'] }),
+    E('e12', 'op',   ['pending','t'], ['approved','b'], null, 0, { x: 1192, y: 148, anchor: 'start', lines: ['운영자 승인'] }),
+    E('e13', 'op',   ['pending','b'], ['rejected','t'], null, 0, { x: 1192, y: 250, anchor: 'start', lines: ['운영자 거절'] }),
+    E('e14', 'sys',  ['approved','r'], ['shipped','l'], null, 0, { x: 1273, y: 80, lines: ['출하'] }),
+    E('e9',  'sys',  ['paying','b'], ['payfail','t'], [[460, 164], [460, 204]], 0, { x: 452, y: 188, anchor: 'end', lines: ['카드 실패'] }),
+    E('e10', 'cust', ['payfail','t'], ['paying','b'], [[496, 204], [496, 164]], 0, { x: 504, y: 188, anchor: 'start', lines: ['같은 조건 재결제'] }, 'dashed'),
+    E('eA',  'sys',  ['g1','t'], ['alt','l'], [[344, 48]], 0, { x: 336, y: 86, anchor: 'end', lines: ['650 미만'] }),
+    E('eB',  'cust', ['alt','b'], ['paying','t'], [[430, 92], [478, 92]], 0, { x: 488, y: 84, anchor: 'start', lines: ['선납금 50만원 선택', '→ 면제로 결제'] }),
+    E('eC',  'cust', ['alt','t'], ['cancel','t'], [[430, 10], [210, 10]], 0, { x: 320, y: 30, lines: ['기기 구매 선택'] }),
+    E('f1',  'sys',  ['f_none','r'], ['f_query','l'], null, 0, { x: 172, y: 434, lines: ['점수 조회'] }),
+    E('f2',  'sys',  ['f_query','r'], ['f_score','l'], null, 0, { x: 370, y: 434, lines: ['점수 응답'] }),
+    E('f3',  'sys',  ['f_query','b'], ['f_fail','l'], [[270, 540]], 0, { x: 344, y: 510, lines: ['NICE 오류 또는', '30초 경과'] }),
+    E('f4',  'cust', ['f_score','r'], ['f_prepay','l'], null, 0, { x: 600, y: 410, lines: ['650 미만 →', '선납금 선택'] }),
+    E('f5',  'op',   ['f_fail','r'], ['f_oper','l'], null, 0, { x: 600, y: 508, lines: ['점수 입력 ·', '승인/거절'] })
+  ];
+  var reads = [
+    { id: 'r1', p: [[344, 394], [344, 208]], l: { x: 352, y: 330, lines: ['사실 읽기'] } },
+    { id: 'r2', p: [[1050, 394], [1050, 208]], l: { x: 1058, y: 330, lines: ['사실 읽기'] } }
+  ];
+
+  var scenarios = [
+    { id: 's1', tab: '처음부터 선납금 50만원',
+      desc: '<b>주문서에서 이미 선납금 50만원을 고른 경우.</b> 두 관문 모두 「면제」로 통과해 신용점수를 조회하지 않습니다.',
+      nodes: ['draft','submit','g1','paying','paid','signing','signed','g2','approved','f_none','f_prepay'],
+      edges: ['e1','e2','e3','e4','e5','e6','e7','e8','r1','r2'],
+      steps: [
+        ['cust','submit','주문서 제출','선납금 50만원을 고른 채 제출합니다.'],
+        ['sys','g1','결제 관문','선납금 ≥ 50만원이라 면제. 조회 없이 결제로 보냅니다.'],
+        ['cust','paid','결제 진행중 → 결제 완료','결제를 마칩니다.'],
+        ['cust','signed','서명 진행중 → 서명 완료','접수 완료 화면이 열리고 Meta 전환이 발생합니다.'],
+        ['sys','g2','확인 관문','「확인」에서 다시 계산해도 면제 조건이 맞습니다.'],
+        ['sys','approved','신용조회 승인','혜택을 줍니다.']
+      ] },
+    { id: 's2', tab: '650점 이상',
+      desc: '<b>점수 742로 규칙을 통과한 경우.</b> 결제 관문과 확인 관문이 각각 같은 사실을 읽고 통과시킵니다.',
+      nodes: ['draft','submit','g1','paying','paid','signing','signed','g2','approved','f_none','f_query','f_score'],
+      edges: ['e1','e2','e3','e4','e5','e6','e7','e8','f1','f2','r1','r2'],
+      steps: [
+        ['cust','submit','주문서 제출','제출과 함께 점수 조회가 시작됩니다.'],
+        ['sys','f_score','조회 중 → 점수 받음','점수 742를 사실로 저장합니다.'],
+        ['sys','g1','결제 관문','742 ≥ 650이라 결제로 보냅니다.'],
+        ['cust','paid','결제 → 서명','결제를 마치고 서명 단계로 갑니다.'],
+        ['cust','signed','접수 완료 화면','화면이 열리면서 Meta 전환이 발생합니다.'],
+        ['sys','g2','확인 관문','현재 규칙으로 다시 계산해도 통과입니다.'],
+        ['sys','approved','신용조회 승인','혜택을 줍니다.']
+      ] },
+    { id: 's3', tab: '650점 미만 → 선납금',
+      desc: '<b>점수 598로 대안 화면에서 선납금 50만원을 고른 경우.</b> 바뀌는 것은 「선납금 금액」 사실뿐이고, 이후에는 면제로 통과합니다.',
+      nodes: ['draft','submit','g1','alt','paying','paid','signing','signed','g2','approved','f_none','f_query','f_score','f_prepay'],
+      edges: ['e1','e2','eA','eB','e4','e5','e6','e7','e8','f1','f2','f4','r1','r2'],
+      steps: [
+        ['cust','submit','주문서 제출','제출과 함께 점수 조회가 시작됩니다.'],
+        ['sys','f_score','조회 중 → 점수 받음','점수 598을 사실로 저장합니다.'],
+        ['sys','g1','결제 관문','598 < 650이라 결제 대신 대안 화면을 보여줍니다.'],
+        ['cust','alt','대안 화면','선납금 50만원을 고릅니다.'],
+        ['sys','f_prepay','선납금 금액','사실만 바뀝니다. 계약 상태는 그대로입니다.'],
+        ['cust','signed','결제 → 서명 → 접수 완료','선납금 조건으로 결제와 서명을 마칩니다.'],
+        ['sys','g2','확인 관문','선납금 ≥ 50만원이라 면제 조건이 맞습니다.'],
+        ['sys','approved','신용조회 승인','혜택을 줍니다.']
+      ] },
+    { id: 's4', tab: '650점 미만 → 기기 구매',
+      desc: '<b>점수 598로 대안 화면에서 기기 구매를 고른 경우.</b> 렌탈 계약은 취소되고 구매 페이지로 넘어갑니다.',
+      nodes: ['draft','submit','g1','alt','cancel','f_none','f_query','f_score'],
+      edges: ['e1','e2','eA','eC','f1','f2','r1'],
+      steps: [
+        ['cust','submit','주문서 제출','제출과 함께 점수 조회가 시작됩니다.'],
+        ['sys','f_score','조회 중 → 점수 받음','점수 598을 사실로 저장합니다.'],
+        ['sys','g1','결제 관문','598 < 650이라 대안 화면을 보여줍니다.'],
+        ['cust','alt','대안 화면','기기 구매를 고릅니다.'],
+        ['sys','cancel','취소','구매 페이지로 보냅니다.']
+      ] },
+    { id: 's5', tab: '조회 불가 → 운영자',
+      desc: '<b>NICE 오류나 30초 경과로 조회하지 못한 경우.</b> 고객은 모르고 결제까지 가며, 확인 관문에서 운영자에게 넘어갑니다. 거절도 승인과 같은 자리에서 고릅니다.',
+      nodes: ['draft','submit','g1','paying','paid','signing','signed','g2','pending','approved','rejected','f_none','f_query','f_fail','f_oper'],
+      edges: ['e1','e2','e3','e4','e5','e6','e7','e11','e12','e13','f1','f3','f5','r1','r2'],
+      steps: [
+        ['cust','submit','주문서 제출','제출과 함께 점수 조회가 시작됩니다.'],
+        ['sys','f_fail','조회 중 → 조회 불가','고객에게 알리지 않습니다.'],
+        ['sys','g1','결제 관문','조회 불가는 결제로 보냅니다.'],
+        ['cust','signed','결제 → 서명 → 접수 완료','일반 신청과 같은 화면을 봅니다.'],
+        ['sys','g2','확인 관문','통과할 조건이 없어 신용조회 진행중으로 두고 Slack에 알립니다.'],
+        ['op','f_oper','점수 입력','운영자가 점수를 넣습니다. 계약 상태는 그대로입니다.'],
+        ['op','pending','변경할 상태 선택','신용조회 승인을 고릅니다. 거절도 같은 자리에서 고릅니다.']
+      ] },
+    { id: 's6', tab: '결제 실패',
+      desc: '<b>카드 결제가 실패한 경우.</b> 주문서를 고칠 수 없고 같은 조건으로만 다시 결제합니다.',
+      nodes: ['paying','payfail','paid','signing'],
+      edges: ['e9','e10','e4','e5'],
+      steps: [
+        ['sys','payfail','결제 진행중 → 결제 실패','카드 결제가 실패합니다.'],
+        ['cust','paying','같은 조건으로 재결제','주문서는 수정할 수 없습니다.'],
+        ['sys','paid','결제 진행중 → 결제 완료','결제가 성공합니다.'],
+        ['cust','signing','이후 기존 흐름','서명과 접수 완료로 이어집니다.']
+      ] }
+  ];
+  var whoName = { cust: '고객', sys: '시스템', op: '운영자' };
+
+  /* ---- svg build ---- */
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+  function labelSvg(l) {
+    var anchor = l.anchor || 'middle';
+    return '<text class="elbl" x="' + l.x + '" y="' + l.y + '" text-anchor="' + anchor + '">' +
+      l.lines.map(function (t, i) { return '<tspan x="' + l.x + '" dy="' + (i ? 15 : 0) + '">' + esc(t) + '</tspan>'; }).join('') + '</text>';
+  }
+  function pathD(pts) { return pts.map(function (p, i) { return (i ? 'L' : 'M') + p[0] + ' ' + p[1]; }).join(' '); }
+
+  var W = 1410, H = 620, s = '';
+  s += '<svg id="mapsvg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="렌탈 신용심사 상태 지도. 위쪽 줄은 계약 진행 상태, 아래쪽 줄은 저장된 신용 사실이며, 결제 관문과 확인 관문이 사실을 읽어 계약 상태를 옮긴다.">';
+  s += '<defs>';
+  ['cust', 'sys', 'op', 'read'].forEach(function (a) {
+    s += '<marker id="m-' + a + '" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" class="mk-' + a + '"/></marker>';
+  });
+  s += '</defs>';
+  s += '<rect class="band" x="0" y="0" width="' + W + '" height="348" rx="10"/>';
+  s += '<rect class="band" x="0" y="364" width="' + W + '" height="256" rx="10"/>';
+  s += '<text class="lane-t" x="14" y="26">계약 진행 상태</text><text class="lane-s" x="14" y="43">고객·관리자에게 보임</text>';
+  s += '<text class="lane-t" x="14" y="392">신용 사실</text><text class="lane-s" x="14" y="409">저장만 함 · 점수는 고객에게 안 보임</text>';
+
+  reads.forEach(function (r) {
+    s += '<g class="el edge read" id="' + r.id + '"><path d="' + pathD(r.p) + '" marker-end="url(#m-read)"/>' + labelSvg(r.l) + '</g>';
+  });
+  edges.forEach(function (e) {
+    s += '<g class="el edge a-' + e.a + ' ' + e.c + '" id="' + e.id + '"><path d="' + pathD(e.p) + '" marker-end="url(#m-' + e.a + ')"/>' + labelSvg(e.l) + '</g>';
+  });
+  nodes.forEach(function (n) {
+    if (n.k === 'gate') {
+      var pts = [[n.x, n.y - GH], [n.x + GW, n.y], [n.x, n.y + GH], [n.x - GW, n.y]].map(function (p) { return p.join(','); }).join(' ');
+      s += '<g class="el gate" id="' + n.id + '"><polygon points="' + pts + '"/><text x="' + n.x + '" y="' + (n.y + GH + 17) + '">' + n.t + '</text></g>';
+      return;
+    }
+    var x = n.x - n.w / 2, y = n.y - n.h / 2;
+    s += '<g class="el node ' + n.k + '" id="' + n.id + '"><rect class="nb" x="' + x + '" y="' + y + '" width="' + n.w + '" height="' + n.h + '" rx="8"/>';
+    if (n.s) {
+      s += '<text class="nl" x="' + n.x + '" y="' + (n.y - 3) + '" text-anchor="middle">' + n.t + '</text><text class="ns" x="' + n.x + '" y="' + (n.y + 13) + '" text-anchor="middle">' + n.s + '</text>';
+    } else {
+      s += '<text class="nl" x="' + n.x + '" y="' + (n.y + 5) + '" text-anchor="middle">' + n.t + '</text>';
+    }
+    if (n.meta) {
+      s += '<g class="meta"><rect x="' + (n.x - 38) + '" y="' + (y - 24) + '" width="76" height="19" rx="9.5"/><text x="' + n.x + '" y="' + (y - 10.5) + '">Meta 전환</text></g>';
+    }
+    s += '</g>';
+  });
+
+  /* legend (lane 2 right side) */
+  var lx = 880, ly = 392;
+  s += '<g id="legend">';
+  s += '<text class="lane-t" x="' + lx + '" y="' + ly + '">읽는 법</text>';
+  [['cust', '고객이 움직임'], ['sys', '시스템이 자동으로'], ['op', '운영자가 처리']].forEach(function (it, i) {
+    var yy = ly + 26 + i * 26;
+    s += '<g class="edge a-' + it[0] + '"><path d="M' + lx + ' ' + yy + ' L' + (lx + 54) + ' ' + yy + '" marker-end="url(#m-' + it[0] + ')"/></g><text x="' + (lx + 66) + '" y="' + (yy + 4) + '">' + it[1] + '</text>';
+  });
+  s += '<g class="edge a-cust dashed"><path d="M' + lx + ' ' + (ly + 104) + ' L' + (lx + 54) + ' ' + (ly + 104) + '" marker-end="url(#m-cust)"/></g><text x="' + (lx + 66) + '" y="' + (ly + 108) + '">점선: 되돌아가는 길</text>';
+  s += '<g class="edge read"><path d="M' + lx + ' ' + (ly + 130) + ' L' + (lx + 54) + ' ' + (ly + 130) + '"/></g><text x="' + (lx + 66) + '" y="' + (ly + 134) + '">점선: 관문이 사실을 읽음</text>';
+  var rx = lx + 300;
+  s += '<g class="gate"><polygon points="' + [[rx + 16, ly + 8], [rx + 32, ly + 24], [rx + 16, ly + 40], [rx, ly + 24]].map(function (p) { return p.join(','); }).join(' ') + '"/></g><text x="' + (rx + 44) + '" y="' + (ly + 29) + '">관문: 조건을 계산해 길을 정함</text>';
+  s += '<g class="node screen"><rect class="nb" x="' + rx + '" y="' + (ly + 58) + '" width="32" height="22" rx="5"/></g><text x="' + (rx + 44) + '" y="' + (ly + 74) + '">점선 상자: 화면, 상태 아님</text>';
+  s += '<g class="meta"><rect x="' + rx + '" y="' + (ly + 92) + '" width="32" height="18" rx="9"/></g><text x="' + (rx + 44) + '" y="' + (ly + 106) + '">Meta 전환이 쏘이는 시점</text>';
+  s += '<g class="node fact"><rect class="nb" x="' + rx + '" y="' + (ly + 122) + '" width="32" height="22" rx="5"/></g><text x="' + (rx + 44) + '" y="' + (ly + 138) + '">회색 상자: 저장된 사실</text>';
+  s += '</g>';
+
+  s += '<g id="badges"></g></svg>';
+  document.getElementById('map').innerHTML = s;
+
+  /* ---- interaction ---- */
+  var svg = document.getElementById('mapsvg');
+  var badgesG = document.getElementById('badges');
+  var tabsEl = document.getElementById('tabs');
+  var descEl = document.getElementById('scdesc');
+  var stepsEl = document.getElementById('steps');
+  var allDesc = '<b>전체 보기.</b> 시나리오를 고르면 지나는 경로만 진하게 남고, 단계가 아래 목록에 채워집니다.';
+  var allSteps = '<div class="steps-empty"><b>시나리오를 고르면 단계가 여기에 나옵니다.</b><span>각 단계는 「누가 · 어떤 상태에서 · 무슨 일이 생기는지」 순서로 적혀 있고, 지도 위 번호와 짝이 맞습니다.</span></div>';
+
+  var tabs = [{ id: 'all', tab: '전체' }].concat(scenarios);
+  tabs.forEach(function (t) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'tab'; b.id = 'tab-' + t.id; b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', 'false'); b.textContent = t.tab;
+    b.addEventListener('click', function () { select(t.id); });
+    tabsEl.appendChild(b);
+  });
+
+  function select(id) {
+    tabs.forEach(function (t) { document.getElementById('tab-' + t.id).setAttribute('aria-selected', String(t.id === id)); });
+    var all = svg.querySelectorAll('.el'); var i;
+    for (i = 0; i < all.length; i++) all[i].classList.remove('on');
+    badgesG.innerHTML = '';
+    if (id === 'all') {
+      svg.classList.remove('filtering');
+      descEl.innerHTML = allDesc; stepsEl.innerHTML = allSteps; return;
+    }
+    var sc = scenarios.filter(function (x) { return x.id === id; })[0];
+    svg.classList.add('filtering');
+    sc.nodes.concat(sc.edges).forEach(function (eid) {
+      var el = document.getElementById(eid); if (el) el.classList.add('on');
+    });
+    descEl.innerHTML = sc.desc;
+    var seen = {}, bs = '', li = '';
+    sc.steps.forEach(function (st, k) {
+      var n = byId[st[1]], hw = n.k === 'gate' ? GW : n.w / 2, hh = n.k === 'gate' ? GH : n.h / 2;
+      var c = seen[st[1]] || 0; seen[st[1]] = c + 1;
+      var bx = n.x - hw + 2 + c * 22, by = n.y - hh - 2;
+      if (n.k === 'gate') { bx = n.x - GW - 2 - c * 22; by = n.y - GH + 4; }
+      if (n.meta) { by -= 22; bx = n.x + 48 + c * 22; by = n.y - hh - 14; }
+      bs += '<g class="badge"><circle cx="' + bx + '" cy="' + by + '" r="10"/><text x="' + bx + '" y="' + (by + 4) + '">' + (k + 1) + '</text></g>';
+      li += '<li><span class="n">' + (k + 1) + '</span><span class="who ' + st[0] + '">' + whoName[st[0]] + '</span><span class="st"><b>' + esc(st[2]) + '</b><span>' + esc(st[3]) + '</span></span></li>';
+    });
+    badgesG.innerHTML = bs;
+    stepsEl.innerHTML = '<ol class="steps">' + li + '</ol>';
+  }
+  select('all');
+  window.__select = select;
+})();
+</script>
+</body>
+</html>
