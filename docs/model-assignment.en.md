@@ -160,6 +160,40 @@ enforced by `make validate`. That list is the **union** of every model's
 pairing a specific model does not support (say `ultra` on `gpt-5.5`) still passes.
 What it catches is the typo.
 
+### `variants:` splits one agent into several roles
+
+```yaml
+model-map:
+  variants:
+    sisyphus-junior:
+      light: { model: gpt-6-luna, effort: low }
+      deep:  { model: gpt-6.1-sol, effort: high }
+```
+
+The shape is `variants: <agent>: <suffix>: { model, effort }`, written in `codex.yaml`.
+The suffix must be kebab-case. `make validate` checks this.
+
+Codex sync emits one extra role TOML per variant, at
+`.codex/agents/<agent>-<suffix>.toml`. It is generated from the same
+`agents/<agent>.md`, so the description and `developer_instructions` are identical.
+Only name, model, and effort differ. The file is tracked in the deploy manifest and is
+removed when the variant is removed.
+
+Why: on Codex, a named role's TOML overrides the `model` and `reasoning_effort` passed
+to `spawn_agent`. This was probed on codex-cli 0.163.0. With `agent_type` set to
+`explore` or `sisyphus-junior` and `gpt-6.1-sol`/`high` passed, the agent ran
+`gpt-6-luna`/`medium`. Only `agent_type` `default` honored the values. A per-call
+override therefore cannot change a named role. Tiers become separate roles, selected by
+`agent_type`.
+
+Current use: `sisyphus-junior` splits into `sisyphus-junior-light` (`gpt-6-luna`,
+`low`) and `sisyphus-junior-deep` (`gpt-6.1-sol`, `high`). The sisyphus Executor Tier
+(`skills/sisyphus/SKILL.md`) picks one. Claude Code has no variant files. Sisyphus
+passes `effort: "low"` for light, or `model: "opus"` and `effort: "high"` for deep, on
+the Agent call. Standard passes nothing.
+
+The Claude, Gemini, and OpenCode adapters ignore `variants`.
+
 ## Records for individual assignments
 
 ### `metis`, opus to fable (2026-07-30)

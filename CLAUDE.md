@@ -137,7 +137,7 @@ skills:
 |----------|-----------|---------------------|-------|
 | claude | `.claude/` | agents, commands, skills, scripts, rules | Full native support |
 | gemini | `.gemini/` | commands, skills, scripts | Hooks/config via syncPlatformYaml |
-| codex | `.codex/` + `.agents/` | agents, skills, scripts, rules, hooks | TWO disjoint deploy roots: skills land in `.agents/skills/<name>`, everything else in `.codex/`. `deployLocationForManifest(platform, category)` (`tools/sync.ts`) is the single formula for that split. Agents: md→toml translate; Hooks/config via syncPlatformYaml |
+| codex | `.codex/` + `.agents/` | agents, skills, scripts, rules, hooks | TWO disjoint deploy roots: skills land in `.agents/skills/<name>`, everything else in `.codex/`. `deployLocationForManifest(platform, category)` (`tools/sync.ts`) is the single formula for that split. Agents: md→toml translate; model-map `variants` emits extra `<agent>-<suffix>` roles; Hooks/config via syncPlatformYaml |
 | opencode | `.opencode/` | agents, commands, skills, scripts, rules | Hooks not supported |
 
 ### Core Skills
@@ -145,7 +145,7 @@ skills:
 | Skill | Purpose | Key Constraint |
 |-------|---------|----------------|
 | prometheus | Strategic planning consultant | Planner only - NEVER implements |
-| sisyphus | Task orchestrator | Delegates via subagents - orchestrates, doesn't solo |
+| sisyphus | Task orchestrator | Delegates via subagents - orchestrates, doesn't solo; executor tier light/standard/deep per junior task (Claude: Agent `effort`/`model`, Codex: `agent_type` variant role) |
 | sisyphus-junior | Focused executor | Works ALONE - no delegation, strict todo discipline |
 | momus | Work plan reviewer | Ruthlessly critical - catches gaps before implementation |
 | diagnose | Architecture/debugging advisor | READ-ONLY consultant - diagnoses, never implements |
