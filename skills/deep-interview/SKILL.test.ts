@@ -248,16 +248,46 @@ describe("removed: spec-presentation render target", () => {
 // The legacy fragile spec-presentation.html template target stays gone (above).
 // deep-interview now produces a DIFFERENT presentation — a maintainer-facing
 // explainer that carries the spec's full design content + every diagram it drew,
-// rendered via the clean scripts/render.ts converter (not a placeholder
-// template), governed by presentation.md. This block locks that wiring.
+// hand-authored as HTML following the shared html-report skill (no renderer,
+// no intermediate Markdown), governed by presentation.md. This block locks that wiring.
 describe("present: presentation wiring", () => {
 	test("Phase 4 authors the presentation governed by presentation.md", () => {
 		expect(skillMd).toContain("presentation.md");
 	});
 
-	test("the presentation renders to a self-contained page via render.ts", () => {
-		expect(skillMd).toContain("scripts/render.ts");
+	test("프레젠테이션은 렌더러 없이 {slug}.presentation.html 로 직접 작성된다", () => {
 		expect(skillMd).toContain("{slug}.presentation.html");
+		expect(skillMd).not.toContain("render.ts");
+		expect(skillMd).not.toContain("{slug}.presentation.md");
+		expect(existsSync(join(import.meta.dir, "scripts/render.ts"))).toBe(false);
+		expect(existsSync(join(import.meta.dir, "scripts/render.test.ts"))).toBe(false);
+	});
+
+	test("SKILL.md 는 작성 전 ../html-report/SKILL.md 를 읽고 capture/lint 자기비평 루프를 돌리도록 지시한다", () => {
+		expect(skillMd).toContain("${CLAUDE_SKILL_DIR}/../html-report/SKILL.md");
+		expect(skillMd).toContain("${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh");
+		expect(skillMd).toContain("${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh");
+		expect(skillMd).toContain("--source");
+		expect(skillMd).toContain("0 errors");
+	});
+
+	test("presentation.md 는 html-report 를 따르고 capture/lint 루프를 통과해야 제출하도록 규정한다", () => {
+		const presentation = readFileSync(join(import.meta.dir, "presentation.md"), "utf8");
+		expect(presentation).toContain("${CLAUDE_SKILL_DIR}/../html-report/SKILL.md");
+		expect(presentation).toContain("html-report/scripts/capture.sh");
+		expect(presentation).toContain("html-report/scripts/lint.sh");
+		expect(presentation).toContain("--source");
+		expect(presentation).toContain("0 errors");
+		expect(presentation).toContain("submit-presentation");
+	});
+
+	test("presentation.md 에는 Mermaid 문법·렌더러·self-contained 형식 규칙이 남아 있지 않다", () => {
+		const presentation = readFileSync(join(import.meta.dir, "presentation.md"), "utf8");
+		expect(presentation).not.toContain("render.ts");
+		expect(presentation).not.toContain("mmdc");
+		expect(presentation).not.toContain("self-contained");
+		expect(presentation).not.toContain("diagram-guide.md");
+		expect(presentation).not.toContain("```mermaid");
 	});
 
 	test("the presentation contract file exists", () => {
@@ -276,7 +306,7 @@ describe("present: presentation wiring", () => {
 		for (const kind of ["용어", "함수", "모듈", "도메인", "기능"]) {
 			expect(presentation).toContain(kind);
 		}
-		expect(presentation).toContain('<ul class="gloss">');
+		expect(presentation).toContain("`gloss`");
 	});
 });
 
@@ -458,18 +488,19 @@ describe("template: entity ontology is decoded in one place, not duplicated acro
 });
 
 // ---------------------------------------------------------------------------
-// NEW-PROSE: diagram-guide.md wiring + canonical 6-lens coverage-table
-// literals (must FAIL before T4 creates diagram-guide.md and T9 rewrites
+// NEW-PROSE: diagram-guide.md removal + canonical 6-lens coverage-table
+// literals (rules now live in the spec template; originally RED before T9 rewrote
 // the template — RED)
 // ---------------------------------------------------------------------------
 
-describe("added: diagram-guide.md exists and is wired from SKILL.md", () => {
-	test("skills/deep-interview/diagram-guide.md exists", () => {
-		expect(existsSync(join(import.meta.dir, "diagram-guide.md"))).toBe(true);
+describe("removed: diagram-guide.md (규칙은 spec 템플릿과 presentation.md 로 이전)", () => {
+	test("skills/deep-interview/diagram-guide.md 가 없다", () => {
+		expect(existsSync(join(import.meta.dir, "diagram-guide.md"))).toBe(false);
 	});
 
-	test("SKILL.md references diagram-guide.md", () => {
-		expect(skillMd).toContain("diagram-guide.md");
+	test("SKILL.md 와 템플릿은 diagram-guide.md 를 참조하지 않는다", () => {
+		expect(skillMd).not.toContain("diagram-guide.md");
+		expect(template).not.toContain("diagram-guide.md");
 	});
 });
 
@@ -1403,18 +1434,18 @@ describe("template: Technical Context heading carries no project-type qualifier"
 });
 
 // ---------------------------------------------------------------------------
-// diagram-naming + lens-order: diagram-guide.md gains (1) a node/participant
+// diagram-naming + lens-order: the spec template's Diagram authoring rules carry (1) a node/participant
 // naming rule — real module/domain/concept names, never an internal private
 // function name, a glob, or a bare DB column, at a consistent abstraction
 // level — which the b2c-6578 "python service (_get_previous_*_totals)"
 // participant violated; and (2) a lens order placing Domain entity (the model)
 // before Entity lifecycle (its transitions), so "ProductOnly" can't be read as
 // the domain model.
-// (must FAIL before the diagram-guide edit — RED)
+// (originally RED before the naming/lens-order edit)
 // ---------------------------------------------------------------------------
 
-describe("diagram-guide: node/participant naming discipline and domain-before-lifecycle lens order", () => {
-	const guide = readFileSync(join(import.meta.dir, "diagram-guide.md"), "utf8");
+describe("template: node/participant naming discipline and domain-before-lifecycle lens order", () => {
+	const guide = template;
 
 	test("the guide has a naming rule forbidding internal private function names / globs / bare DB columns as nodes or participants", () => {
 		expect(guide.toLowerCase()).toContain("participant");
@@ -1426,8 +1457,8 @@ describe("diagram-guide: node/participant naming discipline and domain-before-li
 	});
 
 	test("Domain entity is listed before Entity lifecycle in the 6-lens table (model before its lifecycle)", () => {
-		const dom = guide.indexOf("Domain entity");
-		const life = guide.indexOf("Entity lifecycle");
+		const dom = guide.indexOf("| Domain entity |");
+		const life = guide.indexOf("| Entity lifecycle |");
 		expect(dom).toBeGreaterThan(-1);
 		expect(life).toBeGreaterThan(-1);
 		expect(dom).toBeLessThan(life);

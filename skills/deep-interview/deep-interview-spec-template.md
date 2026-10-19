@@ -82,7 +82,7 @@ An unscored ({null}) dimension on any active component holds the interview's ove
 ## Boundary Map
 The Topology table above lists the components and their scores; this section places each part on the two boundary axes — its **vertical domain** and its **horizontal use-case / layer** — so the design's structure is explicit, not reconstructed from prose. Order: **diagram → placement table → direction verdict.** Vocabulary follows the `architecture-boundaries` rule; borrow DDD / FSD / Clean-architecture names only as vocabulary, never make the spec about a methodology. Server-side scopes name the layers use-case / domain service / repo·adapter / store; client-side scopes may borrow FSD slice / feature / widget — the same two axes.
 
-Read the diagram as **reading objective → diagram → interpretation**, the same discipline as every diagram (see `diagram-guide.md`): one line naming what the picture lets the reader verify, then the diagram, then 2–3 sentences of interpretation naming actual nodes/edges. The diagram groups parts into their **domains** (one `subgraph` per domain) and draws dependency arrows in their real direction, marking any cross-domain or violating edge — this is the picture that makes the **Dependency direction** verdict below checkable rather than merely asserted.
+Read the diagram as **reading objective → diagram → interpretation**, the same discipline as every diagram (see the Diagrams authoring rules below): one line naming what the picture lets the reader verify, then the diagram, then 2–3 sentences of interpretation naming actual nodes/edges. The diagram groups parts into their **domains** (one `subgraph` per domain) and draws dependency arrows in their real direction, marking any cross-domain or violating edge — this is the picture that makes the **Dependency direction** verdict below checkable rather than merely asserted.
 
 ```mermaid
 flowchart LR
@@ -109,7 +109,7 @@ Each part is identifiable by **name + domain + layer/role + responsibility + col
 **Dependency direction:** {which way dependency flows on each axis — e.g. use-case → 도메인 서비스 → repo/adapter → store, and domain A → domain B one-way — and whether the change keeps, violates, or restores unidirectional dependency}. Flag any domain→domain back-reference, cycle, or inner/lower→outer/upper import as a coupling defect (`{defect}` or `none`); a violation surfaced here is an interview finding, not a detail to bury under Risks.
 
 ## Diagrams
-The coverage table below comes first and lists all six deep-interview lenses; a subsection follows for each lens that was actually drawn, in Why → Diagram → Interpretation form. Draw **Domain entity** (the model — what exists) before **Entity lifecycle** (how a modelled thing transitions), so a lifecycle state (e.g. a `ProductOnly` storage phase) is never mistaken for the domain model itself. Node/participant naming and per-lens type rules live in `diagram-guide.md`.
+The coverage table below comes first and lists all six deep-interview lenses; a subsection follows for each lens that was actually drawn, in Why → Diagram → Interpretation form. Draw **Domain entity** (the model — what exists) before **Entity lifecycle** (how a modelled thing transitions), so a lifecycle state (e.g. a `ProductOnly` storage phase) is never mistaken for the domain model itself. Node/participant naming and per-lens type rules are the **Diagram authoring rules** below.
 
 | Lens | Trigger FACT | Status |
 |------|--------------|--------|
@@ -119,6 +119,24 @@ The coverage table below comes first and lists all six deep-interview lenses; a 
 | Domain entity | {trigger FACT} | {drawn \| trigger FALSE: <reason>} |
 | Entity lifecycle | {trigger FACT} | {drawn \| trigger FALSE: <reason>} |
 | Logic branching | {trigger FACT} | {drawn \| trigger FALSE: <reason>} |
+
+**Diagram authoring rules** (instructions for you — do not copy into the spec):
+
+| Lens | Trigger FACT | Mermaid type |
+|---|---|---|
+| System topology | components >= 2 | `flowchart` (group vertical domains vs the horizontal use-case layer; draw dependency arrows in their decided direction so unidirectionality is checkable — see `## Boundary Map`) |
+| Module / API | the approach decides module interaction | `sequenceDiagram` |
+| Actor scenario | a user-facing scenario exists | `sequenceDiagram` (actor) |
+| Domain entity | the ontology is non-empty — an EMPTY ontology makes this row `trigger FALSE` | `erDiagram` |
+| Entity lifecycle | non-trivial state transitions exist | `stateDiagram-v2` |
+| Logic branching | complex branching logic | `flowchart` |
+
+- **Coverage table = audit ledger.** The header is exactly `| Lens | Trigger FACT | Status |`; every Status cell is exactly `drawn` or `trigger FALSE: <reason>`, never blank. The count of `drawn` rows MUST match the number of mermaid fences in `## Diagrams`. Mermaid fences live only in `## Diagrams` and in `## Boundary Map` (exactly one dependency diagram, not counted by the table) — nowhere else.
+- **Naming.** Every node, `subgraph`, and `sequenceDiagram` participant is a real element of the system at one consistent abstraction level — a module, domain concept, service, store, or actor. Never an internal or private function name (`_get_previous_*_totals`; name the owning module or role and put the symbol in prose), a glob or placeholder (`foo_*`), or a bare DB column or table standing in for a component. Do not mix a service, an adapter, a concrete repository class and a DB column as siblings.
+- **A refactor sequence shows before→after,** not just the end state: two small diagrams, or one `Note` marking the removed or added hop.
+- **Size.** Roughly 15 nodes per diagram at most; split into per-subsystem diagrams above that.
+- **Post-draw self-audit.** Re-read each fence against the spec: every edge is a fact the spec decides, the node count is within the cap, and the diagram is no vaguer than the prose it visualizes.
+- **Mermaid validity.** Mermaid treats `;` as a statement separator, so keep a raw `;` out of sequence-message text (use `then` or a comma). In `erDiagram`, double-quote any entity name that contains a space or punctuation (`"Discount Code" ||--o{ "Free Product" : grants`); the `NAME["label"]` alias form is invalid there.
 
 Each drawn lens gets a `### <lens>` subsection in Why → Diagram → Interpretation form. The Domain entity lens is shown in full below as the pattern; author the others the same way.
 
