@@ -2,29 +2,50 @@
 
 Synthesized from 3 chunks: (A) Order API + domain, (B) Payment integration, (C) Inventory + messaging.
 
-This example demonstrates the complete report-only output format: the Walkthrough, then verdict-labeled findings split into Correctness, Requirement Gap, and Cleanup. There is no merge verdict — the review reports, it does not gate.
+This example shows the complete report-only output in its final form: the HTML body the model writes into `{{REVIEW_BODY_HTML}}`, and the table-of-contents items it writes into `{{TOC_ITEMS_HTML}}`. It holds the Walkthrough, then verdict-labeled findings split into Correctness, Requirement Gap, and Cleanup. There is no merge verdict — the review reports, it does not gate.
 
-````
-## Walkthrough
+Things to copy from it:
 
-### Change Summary
-Implements end-to-end order payment flow for the e-commerce platform, spanning three domains: order lifecycle management (creation, validation, state transitions), payment gateway integration (Stripe charge creation, webhook handling), and inventory reservation (stock deduction on payment confirmation with Kafka-based async messaging). The PR introduces 9 new files and modifies 3 existing files across the API, domain, infrastructure, and messaging layers. Orders transition through a state machine (`CREATED` → `PENDING_PAYMENT` → `PAYMENT_IN_PROGRESS` → `PAID` → `FULFILLMENT_READY`), with inventory reserved asynchronously on payment confirmation via a Kafka event. A Flyway migration adds the `payment_records` and `inventory_reservations` tables to support the new flows.
+- Every heading has a unique `id` (`[a-z0-9-]`), and the TOC items link to those ids with `href="#id"`.
+- Every piece of code, identifier, path, and quoted text is HTML-escaped (`&lt;`, `&gt;`, `&amp;`). Look at `ResponseEntity&lt;PaymentResponse&gt;` and `-&gt;` in the code blocks.
+- The findings keep the agent's wording and verdicts. Only the markup changed from the agent's markdown cards to the card HTML shown here.
+- No `<script>`, no event attributes, no `href` other than the in-page TOC anchors.
 
-### Core Logic Analysis
+## `{{TOC_ITEMS_HTML}}`
 
-**Order Lifecycle (order/)**:
-`OrderController.kt` exposes `POST /api/v1/orders` for creation and `POST /api/v1/orders/{id}/pay` to initiate payment. `OrderService.kt` owns the order state machine — `canTransition()` validates allowed state changes, `initiatePayment()` transitions from `CREATED`/`PENDING_PAYMENT` to `PAYMENT_IN_PROGRESS` and delegates to the payment layer. `OrderRepository.kt` adds `findByIdWithLock()` using `@Lock(PESSIMISTIC_WRITE)` to prevent concurrent payment attempts on the same order. The state machine is enforced at the service layer, not via DB constraints.
+```html
+<li class="lvl-2"><a href="#walkthrough">Walkthrough</a></li>
+<li class="lvl-3"><a href="#change-summary">Change Summary</a></li>
+<li class="lvl-3"><a href="#core-logic-analysis">Core Logic Analysis</a></li>
+<li class="lvl-3"><a href="#architecture-diagram">Architecture Diagram</a></li>
+<li class="lvl-3"><a href="#sequence-diagram">Sequence Diagram</a></li>
+<li class="lvl-2"><a href="#findings">Findings</a></li>
+<li class="lvl-3"><a href="#correctness">Correctness</a></li>
+<li class="lvl-3"><a href="#requirement-gap">Requirement Gap</a></li>
+<li class="lvl-3"><a href="#cleanup">Cleanup</a></li>
+<li class="lvl-2"><a href="#out-of-scope">Out of Scope (Pre-existing)</a></li>
+<li class="lvl-2"><a href="#recommendations">Recommendations</a></li>
+```
 
-**Payment Integration (payment/)**:
-`OrderPaymentController.kt` orchestrates the payment flow: validates order state, delegates to `StripeGatewayAdapter.charge()`, and persists the `PaymentRecord`. `StripeGatewayAdapter.kt` implements the `PaymentGateway` port — maps domain `PaymentCommand` to Stripe params, calls the SDK, maps the response back. The webhook endpoint receives async confirmations and publishes a `PaymentConfirmedEvent` to Kafka.
+## `{{REVIEW_BODY_HTML}}`
 
-**Inventory Reservation (inventory/)**:
-`InventoryService.kt` listens for `PaymentConfirmedEvent` via `@KafkaListener` and reserves stock by decrementing `available_quantity` with `SELECT ... FOR UPDATE` to prevent overselling. On insufficient stock it publishes an `InventoryShortageEvent`. The `InventoryReservation` entity tracks which order reserved which SKUs for idempotency on retry.
+````html
+<h2 id="walkthrough">Walkthrough</h2>
 
-**Messaging (kafka/)**:
-`PaymentEventProducer.kt` publishes to `payment-events` keyed by `orderId` for partition affinity — events for the same order keep ordering. No dead-letter topic is configured for the consumer group.
+<h3 id="change-summary">Change Summary</h3>
+<p>Implements end-to-end order payment flow for the e-commerce platform, spanning three domains: order lifecycle management (creation, validation, state transitions), payment gateway integration (Stripe charge creation, webhook handling), and inventory reservation (stock deduction on payment confirmation with Kafka-based async messaging). The PR introduces 9 new files and modifies 3 existing files across the API, domain, infrastructure, and messaging layers. Orders transition through a state machine (<code>CREATED</code> → <code>PENDING_PAYMENT</code> → <code>PAYMENT_IN_PROGRESS</code> → <code>PAID</code> → <code>FULFILLMENT_READY</code>), with inventory reserved asynchronously on payment confirmation via a Kafka event. A Flyway migration adds the <code>payment_records</code> and <code>inventory_reservations</code> tables to support the new flows.</p>
 
-### Architecture Diagram
+<h3 id="core-logic-analysis">Core Logic Analysis</h3>
+<p><b>Order Lifecycle (<code>order/</code>)</b>:<br>
+<code>OrderController.kt</code> exposes <code>POST /api/v1/orders</code> for creation and <code>POST /api/v1/orders/{id}/pay</code> to initiate payment. <code>OrderService.kt</code> owns the order state machine — <code>canTransition()</code> validates allowed state changes, <code>initiatePayment()</code> transitions from <code>CREATED</code>/<code>PENDING_PAYMENT</code> to <code>PAYMENT_IN_PROGRESS</code> and delegates to the payment layer. <code>OrderRepository.kt</code> adds <code>findByIdWithLock()</code> using <code>@Lock(PESSIMISTIC_WRITE)</code> to prevent concurrent payment attempts on the same order. The state machine is enforced at the service layer, not via DB constraints.</p>
+<p><b>Payment Integration (<code>payment/</code>)</b>:<br>
+<code>OrderPaymentController.kt</code> orchestrates the payment flow: validates order state, delegates to <code>StripeGatewayAdapter.charge()</code>, and persists the <code>PaymentRecord</code>. <code>StripeGatewayAdapter.kt</code> implements the <code>PaymentGateway</code> port — maps domain <code>PaymentCommand</code> to Stripe params, calls the SDK, maps the response back. The webhook endpoint receives async confirmations and publishes a <code>PaymentConfirmedEvent</code> to Kafka.</p>
+<p><b>Inventory Reservation (<code>inventory/</code>)</b>:<br>
+<code>InventoryService.kt</code> listens for <code>PaymentConfirmedEvent</code> via <code>@KafkaListener</code> and reserves stock by decrementing <code>available_quantity</code> with <code>SELECT ... FOR UPDATE</code> to prevent overselling. On insufficient stock it publishes an <code>InventoryShortageEvent</code>. The <code>InventoryReservation</code> entity tracks which order reserved which SKUs for idempotency on retry.</p>
+<p><b>Messaging (<code>kafka/</code>)</b>:<br>
+<code>PaymentEventProducer.kt</code> publishes to <code>payment-events</code> keyed by <code>orderId</code> for partition affinity — events for the same order keep ordering. No dead-letter topic is configured for the consumer group.</p>
+
+<h3 id="architecture-diagram">Architecture Diagram</h3>
 <figure>
 <div class="fig-scroll" tabindex="0" role="region" aria-label="Figure 1 architecture, scrolls sideways on a phone">
 <svg viewBox="0 0 728 312" style="min-width:728px" role="img" aria-label="Order payment architecture: OrderController delegates to OrderService, which pays through the PaymentGateway interface. The new StripeGatewayAdapter implements that interface. The new OrderPaymentController charges through the adapter and publishes to the new PaymentEventProducer, which feeds InventoryService over Kafka.">
@@ -50,7 +71,7 @@ Implements end-to-end order payment flow for the e-commerce platform, spanning t
 <figcaption><b>Figure 1. Payment goes through a new gateway adapter, and the confirmation event reaches inventory over Kafka.</b> Green boxes are new, the amber box is modified, the dashed edge is an interface implementation.</figcaption>
 </figure>
 
-### Sequence Diagram
+<h3 id="sequence-diagram">Sequence Diagram</h3>
 <figure>
 <div class="fig-scroll" tabindex="0" role="region" aria-label="Figure 2 sequence, scrolls sideways on a phone">
 <svg viewBox="0 0 866 400" style="min-width:840px" role="img" aria-label="Payment sequence: a client posts the pay request to OrderController, which calls OrderPaymentController. That controller charges through StripeGatewayAdapter and gets a result back, then publishes an event to Kafka. Kafka delivers the event to InventoryService, which reserves stock.">
@@ -74,120 +95,128 @@ Implements end-to-end order payment flow for the e-commerce platform, spanning t
 <figcaption><b>Figure 2. Confirmation flows from the charge result to a Kafka event and then to inventory reservation.</b> The event is <code>PaymentConfirmedEvent</code>; <code>reserveStock()</code> decrements stock under <code>SELECT ... FOR UPDATE</code>.</figcaption>
 </figure>
 
----
+<hr>
 
-## Findings
+<h2 id="findings">Findings</h2>
 
-### Correctness
+<h3 id="correctness">Correctness</h3>
+<div class="findings-grid">
+<div class="finding" data-verdict="CONFIRMED">
+<p><b>[CONFIRMED] <code>@Transactional</code> wraps the external HTTP call to Stripe</b><br><span class="loc"><code>OrderPaymentController.kt:34</code> — <code>processPayment()</code></span></p>
+<ul>
+<li><b>Current Code</b>: 
+<pre><code class="language-kotlin">@PostMapping("/{orderId}/payment")
+@Transactional
+fun processPayment(@PathVariable orderId: Long, @RequestBody @Valid request: PaymentRequest): ResponseEntity&lt;PaymentResponse&gt; {
+    val order = orderRepository.findByIdWithLock(orderId)
+        ?: throw OrderNotFoundException(orderId)
+    order.transitionTo(OrderStatus.PAYMENT_IN_PROGRESS)
+    val result = stripeGatewayAdapter.charge(order, request)  // external HTTP call inside TX
+    val record = paymentRecordRepository.save(PaymentRecord.from(order, result))
+    order.transitionTo(OrderStatus.PAID)
+    return ResponseEntity.ok(PaymentResponse.from(record))
+}</code></pre></li>
+<li><b>What's wrong</b>: <code>processPayment()</code> is <code>@Transactional</code>, but <code>stripeGatewayAdapter.charge()</code> is an external HTTP round-trip (500ms–2s). The DB connection is held open for the entire network call.</li>
+<li><b>Failure scenario</b>: Under concurrent load, ~10 in-flight payments exhaust the HikariCP pool; every other DB operation (order lookup, cart) then blocks. Every payment request holds a DB connection across the Stripe call, so this manifests in normal operation, not only at peak.</li>
+<li><b>Fix</b>: 
+<pre><code class="language-diff">-@PostMapping("/{orderId}/payment")
+-@Transactional
+-fun processPayment(...): ResponseEntity&lt;PaymentResponse&gt; {
+-    val order = orderRepository.findByIdWithLock(orderId) ?: throw OrderNotFoundException(orderId)
+-    order.transitionTo(OrderStatus.PAYMENT_IN_PROGRESS)
+-    val result = stripeGatewayAdapter.charge(order, request)
+-    val record = paymentRecordRepository.save(PaymentRecord.from(order, result))
+-    order.transitionTo(OrderStatus.PAID)
+-    return ResponseEntity.ok(PaymentResponse.from(record))
+-}
++@PostMapping("/{orderId}/payment")
++fun processPayment(...): ResponseEntity&lt;PaymentResponse&gt; {
++    val order = paymentApplicationService.initiatePayment(orderId)       // TX 1: validate + mark IN_PROGRESS
++    val result = stripeGatewayAdapter.charge(order, request)            // external call outside any TX
++    val record = paymentApplicationService.persistResult(order, result) // TX 2: save + update status
++    return ResponseEntity.ok(PaymentResponse.from(record))
++}</code></pre></li>
+<li><b>Blast Radius</b>: <code>OrderController.kt:initiatePayment()</code> calls <code>processPayment()</code>; the new <code>PaymentApplicationService</code> becomes the transaction owner.</li>
+<li><b>Found by</b>: correctness</li>
+</ul>
+</div>
+<div class="finding" data-verdict="PLAUSIBLE">
+<p><b>[PLAUSIBLE] Webhook marks order PAID without re-checking the charged amount</b><br><span class="loc"><code>OrderPaymentController.kt:88</code> — <code>handleWebhook()</code></span></p>
+<ul>
+<li><b>Current Code</b>: 
+<pre><code class="language-kotlin">@PostMapping("/webhook")
+fun handleWebhook(@RequestBody payload: String, @RequestHeader("Stripe-Signature") sig: String): ResponseEntity&lt;Unit&gt; {
+    stripeGatewayAdapter.verifyWebhookSignature(payload, sig)
+    val event = objectMapper.readValue(payload, StripeEvent::class.java)
+    if (event.type == "payment_intent.succeeded") {
+        val order = orderRepository.findByPaymentIntentId(event.data.id)
+            ?: return ResponseEntity.ok().build()
+        order.transitionTo(OrderStatus.PAID)   // no amount comparison
+    }
+    return ResponseEntity.ok().build()
+}</code></pre></li>
+<li><b>What's wrong</b>: The webhook transitions the order to PAID on <code>payment_intent.succeeded</code> but never compares the charged amount against the order total.</li>
+<li><b>Failure scenario</b>: If a PaymentIntent's amount can be influenced below the order total (client-tampered create path, or a partial-capture flow), the order is set to PAID for less than owed. Whether the create path is influenceable is not provable from this diff — realistic but unconfirmed, hence PLAUSIBLE. Confirm by checking that <code>PaymentIntentCreateParams.amount</code> is server-derived only.</li>
+<li><b>Fix</b>: In <code>handleWebhook()</code>, load the order and assert <code>event.amount == order.totalMinorUnits</code> before transitioning to PAID; reject and alert on mismatch.</li>
+<li><b>Blast Radius</b>: webhook path only; <code>verifyWebhookSignature()</code> already runs first.</li>
+<li><b>Found by</b>: regression</li>
+</ul>
+</div>
+</div>
 
-**[CONFIRMED] `@Transactional` wraps the external HTTP call to Stripe**
-- **Location**: `OrderPaymentController.kt:34` — `processPayment()`
-- **Current Code**:
-  ```kotlin
-  @PostMapping("/{orderId}/payment")
-  @Transactional
-  fun processPayment(@PathVariable orderId: Long, @RequestBody @Valid request: PaymentRequest): ResponseEntity<PaymentResponse> {
-      val order = orderRepository.findByIdWithLock(orderId)
-          ?: throw OrderNotFoundException(orderId)
-      order.transitionTo(OrderStatus.PAYMENT_IN_PROGRESS)
-      val result = stripeGatewayAdapter.charge(order, request)  // external HTTP call inside TX
-      val record = paymentRecordRepository.save(PaymentRecord.from(order, result))
-      order.transitionTo(OrderStatus.PAID)
-      return ResponseEntity.ok(PaymentResponse.from(record))
-  }
-  ```
-- **What's wrong**: `processPayment()` is `@Transactional`, but `stripeGatewayAdapter.charge()` is an external HTTP round-trip (500ms–2s). The DB connection is held open for the entire network call.
-- **Failure scenario**: Under concurrent load, ~10 in-flight payments exhaust the HikariCP pool; every other DB operation (order lookup, cart) then blocks. Every payment request holds a DB connection across the Stripe call, so this manifests in normal operation, not only at peak.
-- **Fix**:
-  ```diff
-  -@PostMapping("/{orderId}/payment")
-  -@Transactional
-  -fun processPayment(...): ResponseEntity<PaymentResponse> {
-  -    val order = orderRepository.findByIdWithLock(orderId) ?: throw OrderNotFoundException(orderId)
-  -    order.transitionTo(OrderStatus.PAYMENT_IN_PROGRESS)
-  -    val result = stripeGatewayAdapter.charge(order, request)
-  -    val record = paymentRecordRepository.save(PaymentRecord.from(order, result))
-  -    order.transitionTo(OrderStatus.PAID)
-  -    return ResponseEntity.ok(PaymentResponse.from(record))
-  -}
-  +@PostMapping("/{orderId}/payment")
-  +fun processPayment(...): ResponseEntity<PaymentResponse> {
-  +    val order = paymentApplicationService.initiatePayment(orderId)       // TX 1: validate + mark IN_PROGRESS
-  +    val result = stripeGatewayAdapter.charge(order, request)            // external call outside any TX
-  +    val record = paymentApplicationService.persistResult(order, result) // TX 2: save + update status
-  +    return ResponseEntity.ok(PaymentResponse.from(record))
-  +}
-  ```
-- **Blast Radius**: `OrderController.kt:initiatePayment()` calls `processPayment()`; the new `PaymentApplicationService` becomes the transaction owner.
-- **Found by**: correctness
+<h3 id="requirement-gap">Requirement Gap</h3>
+<div class="findings-grid">
+<div class="finding" data-verdict="CONFIRMED">
+<p><b>[CONFIRMED] Refund path is specified but never implemented</b><br><span class="loc"><code>OrderPaymentController.kt</code> — no refund handler exists</span></p>
+<ul>
+<li><b>Current Code</b>: 
+<pre><code class="language-kotlin">// OrderPaymentController exposes only:
+//   POST /{orderId}/payment   -&gt; processPayment()
+//   POST /webhook             -&gt; handleWebhook()
+// No refund endpoint, and no call into stripeGatewayAdapter.refund().</code></pre></li>
+<li><b>What's wrong</b>: The acceptance criterion requires a refund path for a failed fulfillment, but the diff adds neither an endpoint nor a gateway call for it. The payment side is complete; the reverse side is absent.</li>
+<li><b>Failure scenario</b>: An operator handling a failed fulfillment has no way to return the charge — the order sits PAID with the money captured, and the reconciliation job flags it as a permanent mismatch.</li>
+<li><b>Fix</b>: Add <code>POST /{orderId}/refund</code> calling <code>stripeGatewayAdapter.refund(paymentIntentId, amount)</code>, transitioning the order to REFUNDED inside the same transaction boundary as the status write.</li>
+<li><b>Blast Radius</b>: new endpoint; touches <code>OrderStatus</code> transitions and the reconciliation job's expectations.</li>
+<li><b>AC</b>: “A captured payment can be reversed when fulfillment fails, and the order reaches a terminal REFUNDED state.”</li>
+<li><b>Found by</b>: requirement</li>
+</ul>
+</div>
+</div>
 
-**[PLAUSIBLE] Webhook marks order PAID without re-checking the charged amount**
-- **Location**: `OrderPaymentController.kt:88` — `handleWebhook()`
-- **Current Code**:
-  ```kotlin
-  @PostMapping("/webhook")
-  fun handleWebhook(@RequestBody payload: String, @RequestHeader("Stripe-Signature") sig: String): ResponseEntity<Unit> {
-      stripeGatewayAdapter.verifyWebhookSignature(payload, sig)
-      val event = objectMapper.readValue(payload, StripeEvent::class.java)
-      if (event.type == "payment_intent.succeeded") {
-          val order = orderRepository.findByPaymentIntentId(event.data.id)
-              ?: return ResponseEntity.ok().build()
-          order.transitionTo(OrderStatus.PAID)   // no amount comparison
-      }
-      return ResponseEntity.ok().build()
-  }
-  ```
-- **What's wrong**: The webhook transitions the order to PAID on `payment_intent.succeeded` but never compares the charged amount against the order total.
-- **Failure scenario**: If a PaymentIntent's amount can be influenced below the order total (client-tampered create path, or a partial-capture flow), the order is marked PAID for less than owed. Whether the create path is influenceable is not provable from this diff — realistic but unconfirmed, hence PLAUSIBLE. Confirm by checking that `PaymentIntentCreateParams.amount` is server-derived only.
-- **Fix**: In `handleWebhook()`, load the order and assert `event.amount == order.totalMinorUnits` before transitioning to PAID; reject and alert on mismatch.
-- **Blast Radius**: webhook path only; `verifyWebhookSignature()` already runs first.
-- **Found by**: regression
+<h3 id="cleanup">Cleanup</h3>
+<div class="findings-grid">
+<div class="finding" data-verdict="CONFIRMED">
+<p><b>[CONFIRMED] <code>PaymentRecord.from()</code> re-implements the money-conversion helper</b><br><span class="loc"><code>PaymentRecord.kt:21</code></span></p>
+<ul>
+<li><b>Current Code</b>: 
+<pre><code class="language-kotlin">fun from(order: Order, result: PaymentResult): PaymentRecord =
+    PaymentRecord(
+        orderId = order.id,
+        amountMinor = result.amount.multiply(BigDecimal(100)).toLong(),  // re-implements MoneyUtils.toMinorUnits
+        currency = order.currency,
+    )</code></pre></li>
+<li><b>What's wrong</b>: Converts to minor units inline (<code>amount.multiply(BigDecimal(100)).toLong()</code>) when <code>MoneyUtils.toMinorUnits(amount, currency)</code> already exists and handles rounding and zero-decimal currencies (JPY).</li>
+<li><b>Failure scenario (cost)</b>: The duplicated money logic drifts from the canonical helper, and the inline version silently mishandles zero-decimal currencies — a correctness-and-maintenance liability the next currency addition will trip on.</li>
+<li><b>Fix</b>: Replace the inline conversion with <code>MoneyUtils.toMinorUnits(amount, currency)</code>.</li>
+<li><b>Blast Radius</b>: This location only.</li>
+<li><b>Found by</b>: cleanup</li>
+</ul>
+</div>
+</div>
 
-### Requirement Gap
+<h2 id="out-of-scope">Out of Scope (Pre-existing)</h2>
+<div class="findings-grid">
+<div class="finding" data-verdict="PLAUSIBLE">
+<p><b>[PLAUSIBLE] [Pre-existing] <code>inventory_reservations.order_id</code> is unindexed</b><br><span class="loc"><code>inventory_reservations</code> table (predates this PR)</span></p>
+<p>The idempotency lookup added in this PR reads <code>inventory_reservations</code> by <code>order_id</code>, but the column has no index, so reads are full scans. Not introduced here, but this PR is the first heavy reader. Noted, not blocking.</p>
+</div>
+</div>
 
-**[CONFIRMED] Refund path is specified but never implemented**
-- **Location**: `OrderPaymentController.kt` — no refund handler exists
-- **Current Code**:
-  ```kotlin
-  // OrderPaymentController exposes only:
-  //   POST /{orderId}/payment   -> processPayment()
-  //   POST /webhook             -> handleWebhook()
-  // No refund endpoint, and no call into stripeGatewayAdapter.refund().
-  ```
-- **What's wrong**: The acceptance criterion requires a refund path for a failed fulfillment, but the diff adds neither an endpoint nor a gateway call for it. The payment side is complete; the reverse side is absent.
-- **Failure scenario**: An operator handling a failed fulfillment has no way to return the charge — the order sits PAID with the money captured, and the reconciliation job flags it as a permanent mismatch.
-- **Fix**: Add `POST /{orderId}/refund` calling `stripeGatewayAdapter.refund(paymentIntentId, amount)`, transitioning the order to REFUNDED inside the same transaction boundary as the status write.
-- **Blast Radius**: new endpoint; touches `OrderStatus` transitions and the reconciliation job's expectations.
-- **AC**: "A captured payment can be reversed when fulfillment fails, and the order reaches a terminal REFUNDED state."
-- **Found by**: requirement
-
-### Cleanup
-
-**[CONFIRMED] `PaymentRecord.from()` re-implements the money-conversion helper**
-- **Location**: `PaymentRecord.kt:21`
-- **Current Code**:
-  ```kotlin
-  fun from(order: Order, result: PaymentResult): PaymentRecord =
-      PaymentRecord(
-          orderId = order.id,
-          amountMinor = result.amount.multiply(BigDecimal(100)).toLong(),  // re-implements MoneyUtils.toMinorUnits
-          currency = order.currency,
-      )
-  ```
-- **What's wrong**: Converts to minor units inline (`amount.multiply(BigDecimal(100)).toLong()`) when `MoneyUtils.toMinorUnits(amount, currency)` already exists and handles rounding and zero-decimal currencies (JPY).
-- **Failure scenario** (cost): The duplicated money logic drifts from the canonical helper, and the inline version silently mishandles zero-decimal currencies — a correctness-and-maintenance liability the next currency addition will trip on.
-- **Fix**: Replace the inline conversion with `MoneyUtils.toMinorUnits(amount, currency)`.
-- **Blast Radius**: This location only.
-- **Found by**: cleanup
-
-## Out of Scope (Pre-existing)
-
-**[PLAUSIBLE] [Pre-existing] `inventory_reservations.order_id` is unindexed**
-- **Location**: `inventory_reservations` table (predates this PR)
-- The idempotency lookup added in this PR reads `inventory_reservations` by `order_id`, but the column has no index, so reads are full scans. Not introduced here, but this PR is the first heavy reader. Noted, not blocking.
-
-## Recommendations
-- Resolve the `@Transactional`-over-Stripe finding (`OrderPaymentController.kt:34`) — removes a bug that exhausts the connection pool under normal load.
-- Add the webhook amount re-check (`OrderPaymentController.kt:88`) — preserves the requirement that an order is never marked PAID for less than its total.
-- Replace the inline money conversion with `MoneyUtils.toMinorUnits` (`PaymentRecord.kt:21`) — improves maintainability and removes the latent zero-decimal-currency bug.
+<h2 id="recommendations">Recommendations</h2>
+<ul>
+<li>Resolve the <code>@Transactional</code>-over-Stripe finding (<code>OrderPaymentController.kt:34</code>) — removes a bug that exhausts the connection pool under normal load.</li>
+<li>Add the webhook amount re-check (<code>OrderPaymentController.kt:88</code>) — preserves the requirement that an order is never set to PAID for less than its total.</li>
+<li>Replace the inline money conversion with <code>MoneyUtils.toMinorUnits</code> (<code>PaymentRecord.kt:21</code>) — improves maintainability and removes the latent zero-decimal-currency bug.</li>
+</ul>
 ````

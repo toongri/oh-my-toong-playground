@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{HTML_TITLE}}</title>
-<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi" crossorigin="anonymous"></script>
 <style>
 :root {
   --bg: #fafafa;
@@ -94,8 +93,10 @@ header.hero .meta .pill.warn { background: #fffbeb; color: var(--warn-ink); }
 .section-box h3 .tag { display: inline-block; background: var(--ok); color: white; padding: 1px 8px; border-radius: 10px; font-size: 11px; letter-spacing: 0.5px; margin-left: 8px; vertical-align: middle; }
 .section-box.warn h3 .tag { background: var(--warn); }
 .section-box.info h3 .tag { background: var(--info); }
-.findings-grid { display: grid; gap: 10px; margin-top: 10px; }
-.finding { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 10px 14px; font-size: 13.5px; }
+.findings-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-top: 10px; }
+.finding { min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 10px 14px; font-size: 13.5px; }
+.finding, .finding li { overflow-wrap: anywhere; }
+.finding ul { padding-left: 18px; }
 .finding .loc { color: var(--muted); font-size: 12px; font-family: ui-monospace, SF Mono, Menlo, monospace; }
 .finding .sev { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; margin-right: 8px; background: var(--accent-bg); color: var(--accent); }
 .finding[data-verdict="CONFIRMED"] { border-left: 4px solid var(--danger); background: #fef2f2; }
@@ -164,7 +165,7 @@ svg .m { font-size: 12px; font-weight: 500; fill: var(--ink-2); }
 </head>
 <body>
 <div class="layout">
-<nav class="toc"><div class="title">{{TOC_TITLE}}</div><ul id="toc"></ul></nav>
+<nav class="toc"><div class="title">{{TOC_TITLE}}</div><ul id="toc">{{TOC_ITEMS_HTML}}</ul></nav>
 <main>
 <header class="hero">
   <div class="kicker">{{REVIEW_TITLE}}</div>
@@ -177,40 +178,14 @@ svg .m { font-size: 12px; font-weight: 500; fill: var(--ink-2); }
   </div>
 </header>
 
-<article id="review-content"></article>
+<article id="review-content">
+{{REVIEW_BODY_HTML}}
+</article>
 
 <div class="footer-note">{{FOOTER_NOTE}}</div>
 
 </main>
 </div>
 
-<script type="application/json" id="review-md">{{REVIEW_MARKDOWN_JSON}}</script>
-<script>
-(function() {
-  const md = JSON.parse(document.getElementById('review-md').textContent);
-  marked.setOptions({ gfm: true, breaks: false });
-  const container = document.getElementById('review-content');
-  container.innerHTML = marked.parse(md);
-  const toc = document.getElementById('toc');
-  const headings = container.querySelectorAll('h2, h3, h4');
-  const slugify = (t) => t.toLowerCase().trim().replace(/[^\p{L}\p{N}\s-]/gu, '').replace(/\s+/g, '-') || 'sec';
-  const used = new Set();
-  headings.forEach(h => {
-    let id = h.id || slugify(h.textContent);
-    let base = id, i = 2;
-    while (used.has(id)) { id = base + '-' + i; i++; }
-    used.add(id);
-    h.id = id;
-    const lvl = parseInt(h.tagName.substring(1));
-    const li = document.createElement('li');
-    li.className = 'lvl-' + lvl;
-    const a = document.createElement('a');
-    a.href = '#' + id;
-    a.textContent = h.textContent;
-    li.appendChild(a);
-    toc.appendChild(li);
-  });
-})();
-</script>
 </body>
 </html>
