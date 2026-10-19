@@ -966,6 +966,129 @@ export async function validateSupportedCategories(
 }
 
 // ---------------------------------------------------------------------------
+// Sibling skill co-deploy guard
+// ---------------------------------------------------------------------------
+
+// Same population as skill-refs.ts: only these extensions are text a skill can
+// cite a sibling from, and `references/` + `tests/` hold illustrative example
+// paths (and are not load-bearing instructions), so they are not scanned.
+// `__fixtures__` and `*.test.ts` never deploy (ALWAYS_PRUNE / DEFAULT_EXCLUDE).
+const SIBLING_SCAN_EXTENSIONS = [".md", ".ts", ".yaml", ".sh"];
+const SIBLING_SCAN_EXCLUDED_DIRS = ["references", "tests"];
+
+// `${CLAUDE_SKILL_DIR}/../X/` and `<skill-dir>/../X/` are anchored on the skill's
+// own directory, so a single `../` is always a sibling skill, from any depth.
+const SKILL_DIR_SIBLING_REF = new RegExp(
+	`(?:${SKILL_DIR_TOKEN.replace(/[$.{}]/g, "\\$&")}|<skill-dir>)/\\.\\./([a-z][a-z0-9-]*)/`,
+	"g",
+);
+// A plain `../X/` is a sibling skill only when its `../` run climbs from the
+// file's directory exactly to the skills root (skill-refs.ts normalizes the same
+// way); `../../settings.local.json` has no trailing `/` and never matches.
+const PLAIN_SIBLING_REF = /(?<!\.)(?:\.\.\/)+([a-z][a-z0-9-]*)\//g;
+
+/** Sibling skill names a skill's deployed text file references, with the source file's relative path. */
+function findSiblingSkillRefs(content: string, relPath: string): Set<string> {
+	const names = new Set<string>();
+	for (const match of content.matchAll(SKILL_DIR_SIBLING_REF)) names.add(match[1]);
+
+	const climbToSkillsRoot = relPath.split("/").length - 1; // relPath is `<skill>/<file path>`: dirs between file and skills root
+	for (const match of content.matchAll(PLAIN_SIBLING_REF)) {
+		const left = content.slice(0, match.index ?? 0);
+		if (/:\/\/\S*$/.test(left)) continue; // URL, not a path
+		if ((match[0].match(/\.\.\//g) ?? []).length === climbToSkillsRoot) names.add(match[1]);
+	}
+	return names;
+}
+
+/**
+ * A skill that cites a sibling skill by path (`${CLAUDE_SKILL_DIR}/../X/...`,
+ * `<skill-dir>/../X/...`, or a plain `../X/`) only works when X is deployed
+ * beside it: same sync.yaml scope, same platform (Claude `.claude/skills/<name>`,
+ * Codex `.agents/skills/<name>`). Nothing else enforces that, so a skill deployed
+ * to a platform where its base skill is absent silently breaks at runtime.
+ *
+ * The dependency declaration is the path reference itself. Consumers are resolved
+ * project-first like the deployer; X only needs to be a deployed skill name in
+ * the same scope (existence of X in source is skill-refs.ts's concern).
+ */
+export async function validateSiblingSkillCoDeploy(
+	rootDir: string,
+	enabledProjects?: string[],
+): Promise<ValidationResult> {
+	const result = makeResult();
+
+	const effective = enabledProjects ?? (await getEnabledProjects());
+	const enabledSet = effective && effective.length > 0 ? new Set(effective) : undefined;
+	const projectsDir = join(rootDir, "projects");
+
+	for (const syncYamlPath of discoverSyncYamls(rootDir)) {
+		if (enabledSet) {
+			const parentDir = dirname(syncYamlPath);
+			if (dirname(parentDir) === projectsDir && !enabledSet.has(basename(parentDir))) {
+				continue;
+			}
+		}
+
+		let syncYaml: SyncYaml | null;
+		try {
+			syncYaml = await readAndExpandSyncYaml(syncYamlPath);
+		} catch {
+			continue; // parse error already reported by validateSyncYamlComponents
+		}
+		if (!syncYaml) continue;
+
+		const ctx = setProjectContext(syncYaml, syncYamlPath, rootDir);
+		const projectDirName = ctx.isRootYaml ? undefined : ctx.projectDir;
+		const section = syncYaml.skills;
+		if (!section || !Array.isArray(section.items)) continue;
+
+		// deployed skill name -> platforms it deploys to (name = path part after `project:`)
+		const deployed = new Map<string, Set<string>>();
+		const consumers: Array<{ name: string; component: string; platforms: string[] }> = [];
+		for (const item of section.items) {
+			const component = getItemComponent(item);
+			if (!component) continue;
+			const name = component.includes(":") ? component.slice(component.indexOf(":") + 1) : component;
+			const platforms = await resolvePlatforms(item, section.platforms, syncYaml.platforms, "skills");
+			const set = deployed.get(name) ?? new Set<string>();
+			for (const p of platforms) set.add(p);
+			deployed.set(name, set);
+			consumers.push({ name, component, platforms });
+		}
+
+		const reported = new Set<string>();
+		for (const { name, component, platforms } of consumers) {
+			const resolved = resolveComponentPath(component, "skills", rootDir, projectDirName);
+			if ("error" in resolved || !existsSync(resolved.path) || !statSync(resolved.path).isDirectory()) {
+				continue; // missing-component already reported elsewhere
+			}
+
+			const refs = new Set<string>();
+			for (const rel of await collectFiles(resolved.path, "", [...ALWAYS_PRUNE, ...SIBLING_SCAN_EXCLUDED_DIRS])) {
+				if (!SIBLING_SCAN_EXTENSIONS.some((ext) => rel.endsWith(ext)) || rel.endsWith(".test.ts")) continue;
+				const content = readFileSync(join(resolved.path, rel), "utf-8");
+				for (const ref of findSiblingSkillRefs(content, `${name}/${rel}`)) refs.add(ref);
+			}
+
+			for (const sibling of [...refs].sort()) {
+				if (sibling === name) continue;
+				const siblingPlatforms = deployed.get(sibling) ?? new Set<string>();
+				const missing = platforms.filter((p) => !siblingPlatforms.has(p));
+				const key = `${syncYamlPath}\0${name}\0${sibling}\0${missing.join(",")}`;
+				if (missing.length === 0 || reported.has(key)) continue;
+				reported.add(key);
+				result.errors.push(
+					`sibling skill 동시 배포 누락: skill '${name}'이 sibling skill '${sibling}'을 경로로 참조하지만 platform=${missing.join(", ")} 에 '${sibling}'이 배포되지 않음 (${syncYamlPath})`,
+				);
+			}
+		}
+	}
+
+	return result;
+}
+
+// ---------------------------------------------------------------------------
 // Discovery and orchestration
 // ---------------------------------------------------------------------------
 
@@ -1037,6 +1160,7 @@ export async function validateAll(
 	mergeResult(result, await validateCodexRewriteCoverage(rootDir, enabledProjects));
 	mergeResult(result, await validateCodexSkillFrontmatterFirstLine(rootDir, enabledProjects));
 	mergeResult(result, await validateSupportedCategories(rootDir, enabledProjects));
+	mergeResult(result, await validateSiblingSkillCoDeploy(rootDir, enabledProjects));
 
 	return result;
 }

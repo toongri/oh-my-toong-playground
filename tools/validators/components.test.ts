@@ -13,6 +13,7 @@ import {
 	validateCodexRewriteCoverage,
 	validateCodexSkillFrontmatterFirstLine,
 	validateSupportedCategories,
+	validateSiblingSkillCoDeploy,
 	validateAll,
 } from "./components.ts";
 import { getRootDir } from "../lib/config.ts";
@@ -2350,5 +2351,124 @@ describe("validateSupportedCategories — CATEGORIES SSOT 드리프트 가드 (�
 				),
 			).toBe(true);
 		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: validateSiblingSkillCoDeploy
+// ---------------------------------------------------------------------------
+
+function writeSkill(base: string, name: string, files: Record<string, string> = {}): void {
+	const dir = join(base, "skills", name);
+	mkdirSync(dir, { recursive: true });
+	writeFileSync(join(dir, "SKILL.md"), `---\nname: ${name}\ndescription: fixture\n---\n`, "utf-8");
+	for (const [rel, content] of Object.entries(files)) {
+		mkdirSync(join(dir, rel, ".."), { recursive: true });
+		writeFileSync(join(dir, rel), content, "utf-8");
+	}
+}
+
+describe("validateSiblingSkillCoDeploy — 실제 코퍼스", () => {
+	it("실제 레포는 sibling skill 동시 배포 위반이 없다", async () => {
+		const rootDir = getRootDir();
+		expect(rootDir).not.toBeNull();
+		const result = await validateSiblingSkillCoDeploy(rootDir as string, []);
+		expect(result.errors).toHaveLength(0);
+	});
+});
+
+describe("validateSiblingSkillCoDeploy — 양성/음성 대조", () => {
+	let root: string;
+
+	beforeEach(() => {
+		root = makeRoot();
+	});
+
+	afterEach(() => {
+		rmSync(root, { recursive: true, force: true });
+	});
+
+	it("base가 consumer와 같은 platform에 배포되면 위반 없음", async () => {
+		writeSkill(root, "base");
+		writeSkill(root, "consumer", { "SKILL.md": "Read ${CLAUDE_SKILL_DIR}/../base/SKILL.md\n" });
+		writeYaml(
+			root,
+			"sync.yaml",
+			`path: ${root}\nskills:\n  platforms: [claude, codex]\n  items:\n    - base\n    - consumer\n`,
+		);
+		const result = await validateSiblingSkillCoDeploy(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("base가 sync.yaml에 배포되지 않으면 base 이름을 담은 위반을 반환한다", async () => {
+		writeSkill(root, "base");
+		writeSkill(root, "consumer", { "scripts/run.sh": "bash <skill-dir>/../base/scripts/lint.sh\n" });
+		writeYaml(root, "sync.yaml", `path: ${root}\nskills:\n  items:\n    - consumer\n`);
+		const result = await validateSiblingSkillCoDeploy(root, []);
+		expect(result.errors).toHaveLength(1);
+		expect(result.errors[0]).toContain("'consumer'");
+		expect(result.errors[0]).toContain("'base'");
+		expect(result.errors[0]).toContain("sync.yaml");
+	});
+
+	it("base가 claude에만 배포되고 consumer가 claude와 codex면 codex를 지목한다", async () => {
+		writeSkill(root, "base");
+		writeSkill(root, "consumer", { "SKILL.md": "See ../base/SKILL.md\n" });
+		writeYaml(
+			root,
+			"sync.yaml",
+			`path: ${root}
+skills:
+  items:
+    - component: base
+      platforms: [claude]
+    - component: consumer
+      platforms: [claude, codex]
+`,
+		);
+		const result = await validateSiblingSkillCoDeploy(root, []);
+		expect(result.errors).toHaveLength(1);
+		expect(result.errors[0]).toContain("platform=codex");
+		expect(result.errors[0]).not.toContain("platform=claude");
+	});
+
+	it("skill 디렉터리 밖을 가리키는 ../../settings.local.json 은 skill 참조로 보지 않는다", async () => {
+		writeSkill(root, "consumer", { "scripts/hud.ts": "read('../../settings.local.json')\n" });
+		writeYaml(root, "sync.yaml", `path: ${root}\nskills:\n  items:\n    - consumer\n`);
+		const result = await validateSiblingSkillCoDeploy(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("references/ 아래의 예시 경로는 검사하지 않는다", async () => {
+		writeSkill(root, "consumer", { "references/example.md": "${CLAUDE_SKILL_DIR}/../base/SKILL.md\n" });
+		writeYaml(root, "sync.yaml", `path: ${root}\nskills:\n  items:\n    - consumer\n`);
+		const result = await validateSiblingSkillCoDeploy(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("프로젝트 sync.yaml은 자기 프로젝트 스킬을 먼저 해석하고 같은 scope 배포를 요구한다", async () => {
+		writeSkill(root, "base"); // global
+		const proj = join(root, "projects", "demo");
+		writeSkill(proj, "local-consumer", { "SKILL.md": "${CLAUDE_SKILL_DIR}/../base/SKILL.md\n" });
+
+		// project scope deploys the consumer but not base -> violation even though global base exists
+		writeYaml(
+			proj,
+			"sync.yaml",
+			`path: ${root}\nskills:\n  items:\n    - component: demo:local-consumer\n      platforms: [claude]\n`,
+		);
+		let result = await validateSiblingSkillCoDeploy(root, []);
+		expect(result.errors).toHaveLength(1);
+		expect(result.errors[0]).toContain("'local-consumer'");
+		expect(result.errors[0]).toContain("'base'");
+
+		// deploying global base in the same project scope fixes it
+		writeYaml(
+			proj,
+			"sync.yaml",
+			`path: ${root}\nskills:\n  items:\n    - base\n    - component: demo:local-consumer\n      platforms: [claude]\n`,
+		);
+		result = await validateSiblingSkillCoDeploy(root, []);
+		expect(result.errors.filter((e) => e.includes("'local-consumer'"))).toHaveLength(0);
 	});
 });
