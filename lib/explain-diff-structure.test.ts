@@ -2256,15 +2256,15 @@ describe("모든 저작 스텝 — R11 스타일 발명 금지", () => {
 		expect(r.failedItems.join(" ")).toContain("my-fancy-box");
 	});
 
-	test("카드 v2 멤버 칩 클래스(ae-members·chg)는 render.ts가 CSS를 소유하므로 위반이 아니다", () => {
+	test("카드 v2 멤버 칩 클래스(ae-members·chg)는 기준 스타일시트가 정의하는 승인 클래스이므로 위반이 아니다", () => {
 		const doc = `${evidenceOnlyDoc("a.ts")}\n<ul class="ae-members"><li><code>userId</code></li><li><code class="chg">status</code></li></ul>\n`;
 		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "evidence" });
 		expect(r.pass).toBe(true);
 	});
 
 	// "쓰기 전에 소개" — 그림 속 코드명 요소를 그림 바로 밑에서 한 줄씩 푸는 각주 상자.
-	// render.ts 가 CSS 를 소유하므로(deep-interview/prometheus 와 동일) 승인 클래스다.
-	test("다이어그램 각주 gloss 박스(ul.gloss)는 render.ts가 CSS를 소유하므로 위반이 아니다", () => {
+	// explain-diff 기준 스타일시트(components.css)가 정의하므로(deep-interview/prometheus 와 동일) 승인 클래스다.
+	test("다이어그램 각주 gloss 박스(ul.gloss)는 기준 스타일시트가 정의하는 승인 클래스이므로 위반이 아니다", () => {
 		const doc = `${evidenceOnlyDoc("a.ts")}\n<ul class="gloss"><li><code>getDisplayCatalog</code> — 표시용 카탈로그를 읽는 함수</li></ul>\n`;
 		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "evidence" });
 		expect(r.pass).toBe(true);

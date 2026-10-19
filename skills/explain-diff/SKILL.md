@@ -21,7 +21,7 @@ evidence → background → goal → architecture → capability → intuition �
 ```
 
 The document skeleton and the usable visual components are owned by `references/markdown-template.md`.
-**A `<style>` block, an inline `style=` attribute, or a class outside the sanctioned list anywhere in the document makes the structure check reject that step** — style is owned by render.ts, and the author writes only content and components.
+**A `<style>` block, an inline `style=` attribute, or a class outside the sanctioned list anywhere in the document makes the structure check reject that step** — the Markdown carries content and components only; page style lives in the HTML you author at the render step (Step 9).
 
 Each step must pass two gates — **structure check (script) → judgment (subagent, quote required)** — before it advances. The state CLI renders the pass verdict, and writes to the artifact path are permitted or rejected by a hook that reads that verdict. Steps cannot be skipped.
 
@@ -36,7 +36,7 @@ Each step must pass two gates — **structure check (script) → judgment (subag
 | 모듈·도메인 | 경계 + 소유 한두 줄 — what it owns and where it sits (Step 4 `arch-entity` 카드가 이 몫) |
 | 기능(유스케이스) | 기능 단위 챕터 하나 (Step 5) |
 
-**Diagram elements the cards do not already decode get a gloss footnote.** A diagram figure names its nodes/messages with raw code identifiers (`getDisplayCatalog`, `ProgramActivationTx`, a store name) that a no-context reader cannot decode from the picture alone. Where those identifiers are **not** already explained by a `## Architecture` component/domain card (R18/R21), place a `<ul class="gloss">` footnote **directly under the diagram** — one `<li><code>요소명</code> — 평이한 뜻</li>` per code-name element drawn. render.ts styles it as an "이 그림의 요소" box; it needs no explanation prose around it. (This is the same footnote deep-interview and prometheus already use; a self-evident node already labeled in plain language — `catalog` — needs no entry.)
+**Diagram elements the cards do not already decode get a gloss footnote.** A diagram figure names its nodes/messages with raw code identifiers (`getDisplayCatalog`, `ProgramActivationTx`, a store name) that a no-context reader cannot decode from the picture alone. Where those identifiers are **not** already explained by a `## Architecture` component/domain card (R18/R21), place a `<ul class="gloss">` footnote **directly under the diagram** — one `<li><code>요소명</code> — 평이한 뜻</li>` per code-name element drawn. The page styles it as an "이 그림의 요소" box (`references/components.css` has the rule); it needs no explanation prose around it. (This is the same footnote deep-interview and prometheus already use; a self-evident node already labeled in plain language — `catalog` — needs no entry.)
 
 </Role>
 
@@ -172,7 +172,7 @@ R19 scans the rendered prose of both `## Architecture` and `## 기능 단위` af
 
 **When the component level spans systems, group by system.** If the component diagram carries modules from two or more processes/services (a Node service and a Python service, a mobile app and a backend), wrap each system's modules in its own `group` container so the picture itself says which module lives in which process — cards and prose saying it is not enough when the drawing mixes them flat. Each system's modules keep that system's own layering vocabulary.
 
-Write each diagram as a `<figure class="diagram" data-kind="…">` block holding inline SVG, straight in the Markdown; render.ts passes it through and colors it from the page tokens. Draw each figure following `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` §7 and `${CLAUDE_SKILL_DIR}/../html-report/references/diagram-recipes.md`; the block format is "Diagram figures" in `markdown-template.md`. If any diagram is present, its node/edge labels must be **real identifiers of the actual system** — service, module path, command, entity names — not invented generic nouns (a "service → DB" picture fits any diff and fails R12). Context nodes the diff does not change are welcome, but at least one level must carry a change marker (class `focal`, a `←변경` label, or Before/After contrast) pointing at what this diff changed, and for the 시스템 레벨 the marked-and-drawn boundary must be an actual cross-process/service boundary, not an in-process call. The identifier grounds and the change marker must appear together in the judge's required quote (R12). Type selection and the block contract follow `markdown-template.md`.
+Write each diagram as a `<figure class="diagram" data-kind="…">` block holding inline SVG, straight in the Markdown; at the render step the same `<svg>` is pasted byte-identical into the page, which colors it from its theme tokens. Draw each figure following `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` §7 and `${CLAUDE_SKILL_DIR}/../html-report/references/diagram-recipes.md`; the block format is "Diagram figures" in `markdown-template.md`. If any diagram is present, its node/edge labels must be **real identifiers of the actual system** — service, module path, command, entity names — not invented generic nouns (a "service → DB" picture fits any diff and fails R12). Context nodes the diff does not change are welcome, but at least one level must carry a change marker (class `focal`, a `←변경` label, or Before/After contrast) pointing at what this diff changed, and for the 시스템 레벨 the marked-and-drawn boundary must be an actual cross-process/service boundary, not an in-process call. The identifier grounds and the change marker must appear together in the judge's required quote (R12). Type selection and the block contract follow `markdown-template.md`.
 
 A level with genuinely nothing to draw is replaced by `구조 변화 없음: <사유 한 문장>` — a marker with no rationale is rejected by the structure check. If there is no diagram at all and every one of the three levels carries this reasoned waiver, R12 can still be satisfied. In that case the judge's quote must include all three waiver sentences — system, component, domain — as strings copied verbatim from the document; if any is missing or lacks a rationale, it does not pass. This waiver exception does not apply once any diagram is present.
 
@@ -349,37 +349,42 @@ Giving `pass` without a quote, or a quote that is not present in the document as
 
 ## Step 9 — render
 
-The markdown is the source; the HTML is derived.
+The Markdown document is the content source of truth. At this step **you author the final single-file HTML page yourself** by following `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` (read it first, especially §7 diagrams, §13 fidelity and §14 the capture/lint loop). There is no renderer: the page's look is yours to design, and the CLI then proves deterministically that the page carries the document's exact facts. Codex works the same way as Claude here — write a local `.html` file and run the same commands; do not publish an Artifact.
 
-```bash
-bun ${CLAUDE_SKILL_DIR}/scripts/render.ts --in "<문서.md>" --out "<문서.html>"
-```
+**Start from the two reference stylesheets**, pasted into the page `<style>`: `${CLAUDE_SKILL_DIR}/../html-report/references/diagram-classes.css` (theme tokens and the SVG class palette) and `${CLAUDE_SKILL_DIR}/references/components.css` (page base plus the document components `flow`, `compare`, `callout`, `doc-meta`, `cf`, `arch-entity`, `ae-members`, `chg`, `gloss`, and the `data-change` badges). You may restyle the page around them, but every class the document uses must keep a rule in the page `<style>`. The page needs no script and makes no network request.
 
-render.ts is a deterministic template: it turns the Markdown into one HTML page, passes every `<figure class="diagram">` block through unchanged, and owns all page styling. The page needs no script and makes no network request (the template links no web font; it names the IBM Plex stack and falls back to the system Korean faces). If a figure is malformed, fix it in the Markdown (R11 names the defect) and re-render.
+**What the page must carry** (each item is checked by the submit gate, and a failure names what to fix):
 
-**Check the figures with html-report before the prose review.** The HTML is derived from the Markdown, so fix a figure in the Markdown and re-render; never edit the HTML. After every render run, from the document's folder:
+1. **Diagrams.** Paste each `<figure class="diagram">` SVG (`<svg …>…</svg>`) byte-identical from the document, in document order. Never redraw or retouch an SVG in the HTML; fix a figure in the Markdown, then paste it again. No `<foreignObject>`.
+2. **Code.** Every fenced code block appears verbatim as the text of a `<pre>` element. Syntax-highlight `<span>`s are fine; changed characters are not.
+3. **Facts.** Every commit hash (first 7 characters) and every changed file path of the range appears in the page text.
+4. **Headings.** The document's `##` / `###` heading texts appear in the same order as the page's `<h2>` / `<h3>` texts (tags, entities and whitespace do not matter; keep the words).
+5. **Styles.** Each class from the sanctioned component list and the SVG class list that the document uses has a `.class` selector in the page `<style>`.
+6. **Content.** Carry all of the document's prose, tables and cards. A page that is prettier but thinner than the document fails the technical-writing and presentation reviews below.
+
+**Capture, lint, look, repeat** (html-report §14). Build the evidence folder first: the range's `git diff` saved as a `.patch` file plus the files of the `### 원천` table. `--source` is required here, because the lint receipt records it. From the document's folder:
 
 ```bash
 OUT="<slug>-visual-check/round-1"
+EVIDENCE="<slug>-evidence"      # the .patch + the 원천 files
 bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh "<문서.html>" "$OUT"
-bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh "<문서.html>" --source "<diff/evidence 폴더>" > "$OUT/lint.json"
+bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh "<문서.html>" --source "$EVIDENCE" --strict --receipt "<slug>-lint-receipt.json" > "$OUT/lint.json"
 jq '.summary' "$OUT/lint.json"
-jq -r '.findings[] | select(.severity == "error") | "\(.check)\t\(.viewport) \(.theme)\t\(.where)\t\(.text)"' "$OUT/lint.json"
 ```
 
-`--source` takes the folder holding the evidence the document was written from — for example the range's `git diff` saved as a `.patch` file plus the files of the `### 원천` table. Leave it out only when nothing is on disk, and say so. Look at the light and dark 1280px frames and the 400px frames (`-fig*.png`, `-fig*-end.png` for a scrolling figure) as `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` §14 lists them, fix the figures in the Markdown, re-run render.ts, and repeat in a new round folder until lint reports **0 errors** and a full visual pass finds nothing to fix. A remaining `warn` is read and either fixed or named. Only then submit the final HTML. The html-report loop judges the figures; the page chrome is the template's and is not re-reviewed per document (a defect there is systematic — fix it once in render.ts and its test).
+Look at every frame (light and dark 1280px, light 400px, `-fig*.png`, and `-fig*-end.png` for a scrolling figure) as `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` §14 lists them. Fix the HTML, and **re-run lint with `--receipt` after every edit of the HTML or the document** — the receipt is written only on 0 errors and binds the exact HTML bytes. Repeat in a new round folder until lint reports 0 errors and a full visual pass finds nothing to fix. A remaining `warn` is read and either fixed or named. If you change the Markdown document, update the HTML to match, then capture and lint again.
 
 After the figure loop, **run the verification the machine cannot do — technical-writing.**
 
 1. **technical-writing** — have the technical-writing skill review the markdown prose, and apply the
    accepted points to the document. Record what you applied in `<slug>-writing-report.md` with a last
-   line of `REVIEW: APPLIED`. If you changed the document, re-run render.ts.
+   line of `REVIEW: APPLIED`. If you changed the document, update the HTML to match and re-run capture and lint.
 
 2. **Final self-review checklist** — open `references/final-checklist.md` and grade the finished
    document against its 10 axes (system decomposition, both-sides coverage, goal→diagram→interpretation,
    state diagram, logic flow figure, real identifiers + changed markers, sequence completeness,
    user journey, clean render, 쓰기 전에 소개). Write the graded table to `<slug>-final-checklist.md` next to the
-   document, ending with `CHECKLIST: ALL PASS`. Any FAIL → fix the document, re-run render.ts,
+   document, ending with `CHECKLIST: ALL PASS`. Any FAIL → fix the document and the HTML, re-run lint,
    re-grade from the top. The quiz does not start while a FAIL remains.
 
 3. **Presentation review (required, before the quiz)** — dispatch the `presentation-reviewer` agent to
@@ -391,18 +396,22 @@ After the figure loop, **run the verification the machine cannot do — technica
      correctly understands what/why/what-to-watch from this page alone".
    Its verdict is `APPROVE` / `COMMENT` / `REQUEST_CHANGES` / `INCONCLUSIVE`. `APPROVE/COMMENT` may proceed.
    `REQUEST_CHANGES` requires repairs and re-reviews: repair the document or its source bundle,
-   re-run render.ts, re-grade the checklist, and re-review. `INCONCLUSIVE` or a missing/malformed verdict blocks completion until
+   update the HTML and re-run lint, re-grade the checklist, and re-review. `INCONCLUSIVE` or a missing/malformed verdict blocks completion until
    the reviewer input bundle is repaired and a valid result is returned; the quiz does not start until
    the reviewer no longer requests changes. This is a required review step, not a CLI gate; run it every time.
 
-The render artifact gate requires all three artifacts: `--html`, `--writing-report`, and `--checklist`.
-The checklist file must exist and its last non-whitespace line must be exactly `CHECKLIST: ALL PASS`.
-Missing or invalid checklist evidence keeps the state at `render`, so the quiz cannot start.
+The render submit gate requires `--html`, `--receipt`, `--lint-source`, `--writing-report` and `--checklist`.
+`--lint-source` is the same evidence folder you gave `lint.sh --source`. The checklist file must exist and its
+last non-whitespace line must be exactly `CHECKLIST: ALL PASS`. Missing or invalid evidence keeps the state at
+`render`, so the quiz cannot start.
 
 ```bash
-# Gate 1 — artifact check: current HTML, diagram-figure parity, technical-writing report, final checklist verdict
+# Gate 1 — content proof: clean strict lint receipt for these exact HTML bytes, SVGs/code/hashes/paths/headings/class styles carried,
+# technical-writing report, final checklist verdict
 $CLI submit-step --step render --doc "<문서.md>" --signal-files "a.ts,b.ts" \
   --html "<문서.html>" \
+  --receipt "<slug>-lint-receipt.json" \
+  --lint-source "<slug>-evidence" \
   --writing-report "<slug>-writing-report.md" \
   --checklist "<slug>-final-checklist.md"
 
@@ -410,7 +419,7 @@ $CLI submit-step --step render --doc "<문서.md>" --signal-files "a.ts,b.ts" \
 $CLI pass-step --step render --doc "<문서.md>" --judge-json '[]'
 ```
 
-The render submission also confirms the HTML is an artifact re-generated from the Markdown current at submission time. Submitting old HTML after editing the Markdown is rejected as a stale artifact, so re-run render.ts after every document edit, then submit.
+`pass-step` re-runs the same checks from the stored submission and also requires the document and HTML bytes to be unchanged since `submit-step`. After any edit of the Markdown or the HTML, update the page, re-run capture and lint, and submit again.
 
 When the render is done, tell the user the document, HTML, writing-report, and final-checklist paths and ask them to read the document.
 

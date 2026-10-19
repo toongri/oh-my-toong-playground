@@ -34,6 +34,8 @@ copies these rules. It points here and keeps only its own content rules.
 Long reference material lives in `<skill-dir>/references/`:
 [diagram-recipes.md](references/diagram-recipes.md) (per-type SVG recipes) and
 [data-driven-and-interaction.md](references/data-driven-and-interaction.md) (generated maps, scenario selectors).
+[diagram-classes.css](references/diagram-classes.css) (theme tokens and the `figure.diagram` SVG class palette, light and dark;
+paste it into the page `<style>` as the starting point for diagrams that use the shared class names).
 Two finished reports are in `<skill-dir>/exemplars/` (read `exemplars/README.md` first).
 
 ---
@@ -680,6 +682,10 @@ show branches, joins, or returns; and a table or card list drops the shape the r
 ## 8. Diagram type recipes
 
 The full recipes, with SVG and CSS you can copy, are in [references/diagram-recipes.md](references/diagram-recipes.md).
+A shared class palette (`box`, `head`, `focal`, `rel`, `msg`, `t-b`, ... with light/dark tokens) is in
+[references/diagram-classes.css](references/diagram-classes.css); consumers that keep SVG class names in a source document
+(explain-diff) start the page `<style>` from it.
+
 Read the recipe for each type you draw. Every type is SVG with drawn edges. The musts per type:
 
 | Type | Draw it as | Must include |

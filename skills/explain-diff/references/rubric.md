@@ -41,7 +41,7 @@ The document is written one step at a time, accumulating. So an item is evaluate
 | R23 | judge | capability |
 | R24 | judge | code |
 
-The `intuition` step has no slot of its own — only R6 (judge) and the common R11 decide it. `render` and `quiz` score none of this table's items: `render` looks at the artifact check (HTML present and non-empty, diagram-figure parity, technical-writing `REVIEW: APPLIED`, final checklist ending with `CHECKLIST: ALL PASS`), and `quiz` runs a separate grading path (`grade`). Page layout is not scored per document — it is a deterministic property render.ts owns. Label clipping is sealed by SVG `<text>` labels (they never hide; R11 bans `<foreignObject>` in the Markdown and `checkRenderOutput` fails on any in the page), and wide-diagram legibility by fit-to-column default + an opt-in `data-min-width` scroll container, both regression-guarded by `render.test.ts`. The figures themselves are checked per document by the html-report capture and lint loop at the render step.
+The `intuition` step has no slot of its own — only R6 (judge) and the common R11 decide it. `render` and `quiz` score none of this table's items: `render` looks at the artifact check (HTML present with a body, clean strict lint receipt for its bytes, every diagram SVG byte-identical, every code block verbatim in a `<pre>`, commit hashes, changed paths, headings in order, a style rule per used class, technical-writing `REVIEW: APPLIED`, final checklist ending with `CHECKLIST: ALL PASS`), and `quiz` runs a separate grading path (`grade`). Page layout is not scored per document by a rubric item — it is proven by the html-report lint receipt and the submit gate's content proof (`checkHtmlSubmission`). Label clipping is sealed by SVG `<text>` labels (they never hide; R11 bans `<foreignObject>` in the Markdown and `checkHtmlSubmission` fails on any in the page), and wide-diagram legibility by fit-to-column default + an opt-in `data-min-width` scroll container in the reference stylesheet. The figures themselves are checked per document by the html-report capture and lint loop at the render step.
 
 ---
 
@@ -146,8 +146,8 @@ Nowhere in the document is there a `<style>` block or an inline `style=` attribu
 
 > **RED 11/12.** Each document invented 3–78 inline style attributes of its own, and the 2 real documents
 > hand-wrote different `<style>` blocks (27 lines / 30 lines). This is exactly why two artifacts of the same
-> skill look like they were made with different tools. The visual language is owned by render.ts alone, and
-> the author is left only components.
+> skill look like they were made with different tools. The document carries no style at all (R11), and the
+> page style starts from the two reference stylesheets.
 
 ### R13. Commit spine + core-logic code
 

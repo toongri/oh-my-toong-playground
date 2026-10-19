@@ -1,8 +1,9 @@
 # Document template — Markdown skeleton and sanctioned components
 
 This file owns the document's **shape**. Authors use only the skeleton and components here.
-`render.ts` owns style — the structure check (R11) rejects `<style>` blocks or inline `style=`
-attributes in the document. It also rejects `class=` values outside the sanctioned list.
+The document carries no style — the structure check (R11) rejects `<style>` blocks or inline `style=`
+attributes in it. The page style lives only in the HTML authored at the render step, starting from
+`references/components.css` and `../html-report/references/diagram-classes.css`. It also rejects `class=` values outside the sanctioned list.
 
 Use **한다체 (declarative Korean)** consistently in the body — "저장한다", "확인할 수 있다".
 Mixing in 합니다체 causes the measured defect of inconsistent register across documents.
@@ -247,7 +248,7 @@ when the structure needs no cards. Prose-only card descriptions or unsupported `
 
 To pass R18, the component level must contain `패키지`/`책임`/`인터페이스`/`변경점` labels and
 renderer-recognized `arch-entity`/`data-change` cards (a reasoned waiver may replace cards).
-`data-change="new|mod|del"` carries the change kind; render.ts supplies the badge color.
+`data-change="new|mod|del"` carries the change kind; the page stylesheet supplies the badge color.
 
 ### Domain level — entity cards (R21 required)
 
@@ -268,7 +269,7 @@ Fill each card's three distinct slots:
   (unscannable prose enumeration is a measured defect).
 - **핵심 멤버** — List member variables, keys, and core methods as **code chips**:
   `<p class="ae-members"><strong>핵심 멤버</strong> <code>userId</code> …</p>`. Apply the `chg` class
-  to added/changed members, as in `<code class="chg">has_completed_tutorial</code>`; render.ts draws
+  to added/changed members, as in `<code class="chg">has_completed_tutorial</code>`; the page stylesheet draws
   the chips and change colors. The chip tag **must be `<code>`** — `<span>` does not receive chip CSS,
   and backticks inside raw HTML blocks are not converted to Markdown, leaving literal backticks on
   screen (a measured defect). For member-less concepts (value concepts such as request kinds), write
@@ -437,8 +438,8 @@ whether it steals a collaborator's responsibility, and whether the version class
 ## Diagram figures
 
 Every 2D diagram is a raw-HTML **figure block** written straight into the Markdown. The block is the
-whole diagram — there is no diagram language, no fence, and no build-time diagram tool. `render.ts`
-passes the block through unchanged, and the page CSS colors it.
+whole diagram — there is no diagram language, no fence, and no build-time diagram tool. The `<svg>` is pasted byte-identical
+into the final HTML, and the page CSS colors it.
 
 ```html
 <figure class="diagram" data-kind="flow">
@@ -470,7 +471,7 @@ never faint or dashed.
   (entities and relationships), `architecture` (components, boundaries, dependencies). R15 accepts only
   `flow`, `sequence`, `state` as a capability's flow diagram.
 - Optional `data-min-width="N"` (240–1400) for a figure whose labels fall under 12px when shrunk to the
-  column. `render.ts` then draws the SVG at least N px wide inside its own scroll container and prints
+  column. the page then draws the SVG at least N px wide inside its own scroll container and prints
   the hint "그림은 좌우로 밀어서 볼 수 있어요." only on viewports where it overflows. Use it for a
   secondary figure, never to hide the changed half of a key one; add the edge/message table under the
   figure when you use it.
@@ -597,7 +598,7 @@ and `<strong>변경</strong>` as complete sentences in the same `<p>`. New symbo
 instead of 기존; removed symbols use `<strong>삭제</strong>`. Below that, write `왜`,
 `효과·사이드이펙트`, and `검증` once per change in complete sentences. Keep provenance outside prose
 in `cf-src` badges, and locations in `cf-loc` slots. `data-change` carries the change-kind badge
-(신설·변경·삭제); render.ts supplies its colors and labels — authors provide only `new`/`mod`/`del`.
+(신설·변경·삭제); the page stylesheet supplies its colors and labels — authors provide only `new`/`mod`/`del`.
 Use `<strong>` for field labels; Markdown `**…**` does not work inside divs. `cf-loc` is a **location
 citation**, not a flow; the use-case-level sequence diagram shows flow.
 
@@ -635,7 +636,7 @@ by a quote), `추론` (inferred from code, followed by the inference ground), or
 This component carries **component-level nodes (R18)** and **domain-level objects (R21)**. (The
 `## 기능 단위` chapters are not cards — they are `### <capability>` subsections with header slots; see
 that section above.) It uses the same `<p><strong>라벨</strong> 값>` field convention as `cf`, with the
-change kind in `data-change` supplying a badge. render.ts owns badge text and colors; authors provide
+change kind in `data-change` supplying a badge. the page stylesheet owns badge text and colors; authors provide
 only the kind (`new`/`mod`/`del`). Required labels vary by section (component: `패키지`/`책임`/`인터페이스`/`변경점`;
 domain: `책임`/`핵심 멤버`/`변경점`). Under R18, every authored component-level card must satisfy
 these fields independently; one valid card cannot compensate for another card's missing/invalid fields.
@@ -652,7 +653,7 @@ these fields independently; one valid card cannot compensate for another card's 
 
 `data-change` is one of `new` (added), `mod` (modified), or `del` (deleted). A renderer-recognized
 `arch-entity` opening tag must carry an allowed value to count as a card for R15/R18. Do not write
-colors/styles directly in the artifact (R11) — provide the kind and render.ts supplies colors.
+colors/styles directly in the artifact (R11) — provide the kind and the page stylesheet supplies colors.
 
 ### `flow` / `flow-step` / `flow-arrow` — one-dimensional step strip
 
@@ -688,8 +689,8 @@ Use only for one-paragraph cautions or key points. Overuse defeats emphasis.
 ### `diagram` — inline SVG figure
 
 Write the figure block yourself; see "Diagram figures" above for the block contract, the `data-kind`
-values, and the allowed SVG classes. `render.ts` does not wrap or generate anything: it passes the block
-through and supplies the card, the colors, and the scroll container.
+values, and the allowed SVG classes. The page author pastes the block into the HTML unchanged and the page stylesheet
+supplies the card, the colors, and the scroll container.
 
 ```html
 <figure class="diagram" data-kind="flow">
@@ -710,7 +711,7 @@ no-context reader cannot decode from the picture (a `sequence` figure's messages
 `architecture` figure's process/store nodes). One `<li>` per code-name element drawn — the element in
 `<code>`, then a plain-language reading. Skip an element already spelled out by an `arch-entity`
 card (R18/R21) or already labeled in plain language in the diagram (`catalog`);
-this footnote is for the identifiers the cards do not reach. render.ts supplies the "이 그림의 요소"
+this footnote is for the identifiers the cards do not reach. the page stylesheet supplies the "이 그림의 요소"
 label — do not write it yourself (쓰기 전에 소개).
 
 ```html

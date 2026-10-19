@@ -766,9 +766,9 @@ function levelFigures(text: string, level: string): DiagramFigure[] | null {
  *
  * `data-kind` is one of {@link DIAGRAM_KINDS}. The block starts at a line that
  * opens `<figure class="diagram"` (at most 3 spaces of indent) and runs to the
- * first `</figure>`. render.ts passes the whole block through unchanged, blank
- * lines included, and this file reads the same span: the Markdown stays the single
- * source of truth for both the structure checks and the HTML.
+ * first `</figure>`. The submitted HTML page must carry the block's `<svg>` span
+ * byte-identical (checked at the render step), so the Markdown stays the single
+ * source of truth for both the structure checks and the page's diagrams.
  */
 export const DIAGRAM_KINDS = ["flow", "sequence", "state", "class", "er", "architecture"] as const;
 export type DiagramKind = (typeof DIAGRAM_KINDS)[number];
@@ -776,11 +776,12 @@ export type DiagramKind = (typeof DIAGRAM_KINDS)[number];
 /** Kinds that show how a use-case runs — the only ones R15 accepts as a capability's flow diagram. */
 const FLOW_KINDS: readonly string[] = ["flow", "sequence", "state"];
 
-/** Regex source for one figure block (no anchors, no flags); render.ts anchors it to its own block start. */
+/** Regex source for one figure block (no anchors, no flags); callers anchor it to their own block start. */
 export const DIAGRAM_FIGURE_PATTERN = String.raw`<figure\b[^>]*\bclass\s*=\s*(?:"(?:[^"]*\s)?diagram(?:\s[^"]*)?"|'(?:[^']*\s)?diagram(?:\s[^']*)?')[^>]*>[\s\S]*?<\/figure\s*>`;
 
 /**
- * The SVG classes render.ts ships CSS for. SVG shapes take their colors from these
+ * The SVG classes the html-report reference stylesheet (`diagram-classes.css`) defines
+ * and the submitted HTML must style. SVG shapes take their colors from these
  * classes (tokens), never from literal colors in attributes, so a figure follows the
  * page's light/dark theme. Anything outside this set and SANCTIONED_CLASSES is an invented style.
  */
@@ -1496,10 +1497,11 @@ function checkR13(
 }
 
 /**
- * The component classes render.ts ships CSS for. Anything outside this set is
- * styling the renderer does not know, i.e. an invented visual language.
+ * The component classes the explain-diff reference stylesheet (`components.css`)
+ * defines and the submitted HTML must style. Anything outside this set is a class
+ * the document vocabulary does not know, i.e. an invented visual language.
  */
-const SANCTIONED_CLASSES = new Set([
+export const SANCTIONED_CLASSES = new Set([
 	"flow",
 	"flow-step",
 	"flow-arrow",
@@ -1518,10 +1520,10 @@ const SANCTIONED_CLASSES = new Set([
 	"gloss",
 ]);
 
-// R11 — the document authors content, the renderer owns presentation.
+// R11 — the Markdown document authors content only; presentation lives in the HTML page.
 // Outside a figure: no <style>/<script>/style=, only SANCTIONED_CLASSES. Inside a
 // `figure.diagram`: SVG drawing elements and presentation attributes are allowed,
-// classes come from SANCTIONED_CLASSES + DIAGRAM_SVG_CLASSES (CSS the renderer owns),
+// classes come from SANCTIONED_CLASSES + DIAGRAM_SVG_CLASSES (CSS the reference stylesheets define),
 // and <style>, style=, <script>, <foreignObject>, event handlers, links and literal
 // colors stay banned, so the figure follows the page theme.
 const FIGURE_CLASSES = new Set<string>([...SANCTIONED_CLASSES, ...DIAGRAM_SVG_CLASSES]);
@@ -1586,7 +1588,7 @@ function checkR11(text: string): CheckItem {
 		figureHtml.push(block.trimStart());
 		return block.replace(/[^\n]/g, " ");
 	});
-	if (/<style/i.test(outside)) problems.push("<style> 블록은 금지입니다 — 스타일은 render.ts가 소유합니다");
+	if (/<style/i.test(outside)) problems.push("<style> 블록은 금지입니다 — 문서(Markdown)에는 스타일을 두지 않습니다. 스타일은 render 스텝에서 쓰는 HTML 페이지에만 둡니다");
 	if (/<script\b/i.test(outside)) problems.push("<script> 는 금지입니다");
 	if (/style\s*=\s*["']/i.test(outside)) problems.push('인라인 style="…" 속성은 금지입니다 — 승인된 컴포넌트 클래스를 쓰세요');
 	problems.push(...classProblems(outside, SANCTIONED_CLASSES));
@@ -1656,7 +1658,7 @@ export function checkStructure(text: string, input: StructureInput): StructureRe
 		case "render":
 		case "quiz":
 			// Neither reaches this function in production: `render` is scored by
-			// checkRenderOutput (explain-diff-state.ts), `quiz` by a separate
+			// checkHtmlSubmission (explain-diff-state.ts), `quiz` by a separate
 			// grading path.
 			throw new Error(`checkStructure는 '${input.step}' 스텝을 채점하지 않습니다`);
 		default:
@@ -1668,4 +1670,44 @@ export function checkStructure(text: string, input: StructureInput): StructureRe
 
 	const failedItems = items.filter((i) => !i.pass).map((i) => `${i.title}: ${i.detail}`);
 	return { pass: failedItems.length === 0, items, failedItems };
+}
+
+// ---------------------------------------------------------------------------
+// Document facts the submitted HTML page must carry (render-step content proof)
+// ---------------------------------------------------------------------------
+
+/** Inline Markdown in a heading reduced to the text a reader sees. */
+function plainHeadingText(raw: string): string {
+	return raw
+		.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+		.replace(/<[^>]+>/g, "")
+		.replace(/[`*]/g, "")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+/** The `##` / `###` heading texts a reader sees, in document order, code and comments excluded. */
+export function documentHeadings(text: string): string[] {
+	const masked = maskNonVisibleMarkdown(text);
+	const out: string[] = [];
+	for (const m of masked.matchAll(/^ {0,3}#{2,3}[ \t]+(.+?)[ \t]*$/gm)) {
+		const plain = plainHeadingText(m[1] ?? "");
+		if (plain !== "") out.push(plain);
+	}
+	return out;
+}
+
+/**
+ * The classes of {@link SANCTIONED_CLASSES} ∪ {@link DIAGRAM_SVG_CLASSES} the document
+ * actually uses (inline Markdown code excluded). The submitted page must define each.
+ */
+export function usedStyleClasses(text: string): string[] {
+	const vocabulary = new Set<string>([...SANCTIONED_CLASSES, ...DIAGRAM_SVG_CLASSES]);
+	const used = new Set<string>();
+	for (const m of withoutMarkdownCode(text).matchAll(/(?<![\w-])class\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
+		for (const cls of (m[1] ?? m[2] ?? "").split(/\s+/).filter(Boolean)) {
+			if (vocabulary.has(cls)) used.add(cls);
+		}
+	}
+	return [...used].sort();
 }

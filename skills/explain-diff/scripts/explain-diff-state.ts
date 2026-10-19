@@ -10,12 +10,11 @@
  * every existence claim with a quote this CLI found in the document.
  */
 import { execFileSync } from "child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
-import { fileURLToPath } from "url";
+import { createHash } from "crypto";
+import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { getOmtDir } from "@lib/omt-dir";
-import { nowStamp, resolveSessionIdOrThrow, STATE_PREFIX } from "@lib/state-core";
+import { findMarkdownBlocks } from "@lib/markdown-blocks";
+import { lintReceiptProblem, nowStamp, resolveSessionIdOrThrow, STATE_PREFIX } from "@lib/state-core";
 import {
 	computeDerived,
 	CAPABILITY_STEP_MIGRATION_VERSION,
@@ -26,7 +25,14 @@ import {
 	type ExplainDiffState,
 	type Step,
 } from "@lib/explain-diff-core";
-import { checkStructure, diagramFigures, type DiffHunk, type DiffLineRange } from "@lib/explain-diff-structure";
+import {
+	checkStructure,
+	diagramFigures,
+	documentHeadings,
+	usedStyleClasses,
+	type DiffHunk,
+	type DiffLineRange,
+} from "@lib/explain-diff-structure";
 import { renderHelp, type CliCommand } from "@lib/cli-help";
 
 interface Persisted extends ExplainDiffState {
@@ -51,43 +57,74 @@ interface Persisted extends ExplainDiffState {
 	derived: ReturnType<typeof computeDerived>;
 }
 
+/**
+ * What the successful render submission bound: the document and the model-authored
+ * HTML (both by path and by content hash), the lint receipt with the evidence
+ * folder it was linted against, and the two review reports.
+ */
 interface RenderProofBinding {
 	doc_path: string;
+	doc_sha256: string;
 	html_path: string;
+	html_sha256: string;
+	lint_receipt_path: string;
+	lint_source_path: string;
 	writing_report_path: string;
 	checklist_path: string;
 }
 
-const CURRENT_RENDER_PROOF_CONTRACT_VERSION = 1;
-const renderedDocumentCache = new Map<string, string>();
-type FreshRenderer = (docPath: string) => string;
+const CURRENT_RENDER_PROOF_CONTRACT_VERSION = 2;
 
 function statePath(sessionId: string): string {
 	return `${getOmtDir()}/${STATE_PREFIX["explain-diff"]}${sessionId}.json`;
+}
+
+function sha256File(path: string): string | null {
+	try {
+		return createHash("sha256").update(readFileSync(path)).digest("hex");
+	} catch {
+		return null;
+	}
 }
 
 function normalizeRenderProofBinding(raw: unknown): RenderProofBinding | null {
 	if (raw === null || typeof raw !== "object") return null;
 	const record: Record<string, unknown> = {};
 	Object.assign(record, raw);
-	const docPath = record["doc_path"];
-	const htmlPath = record["html_path"];
-	const writingReportPath = record["writing_report_path"];
-	const checklistPath = record["checklist_path"];
+	const text = (key: string): string | null => {
+		const value = record[key];
+		return typeof value === "string" && value.length > 0 ? value : null;
+	};
+	const sha = (key: string): string | null => {
+		const value = text(key);
+		return value !== null && /^[0-9a-f]{64}$/.test(value) ? value : null;
+	};
+	const docPath = text("doc_path");
+	const docSha = sha("doc_sha256");
+	const htmlPath = text("html_path");
+	const htmlSha = sha("html_sha256");
+	const receiptPath = text("lint_receipt_path");
+	const lintSource = text("lint_source_path");
+	const writingReportPath = text("writing_report_path");
+	const checklistPath = text("checklist_path");
 	if (
-		typeof docPath !== "string" ||
-		docPath.length === 0 ||
-		typeof htmlPath !== "string" ||
-		htmlPath.length === 0 ||
-		typeof writingReportPath !== "string" ||
-		writingReportPath.length === 0 ||
-		typeof checklistPath !== "string" ||
-		checklistPath.length === 0
+		docPath === null ||
+		docSha === null ||
+		htmlPath === null ||
+		htmlSha === null ||
+		receiptPath === null ||
+		lintSource === null ||
+		writingReportPath === null ||
+		checklistPath === null
 	)
 		return null;
 	return {
 		doc_path: docPath,
+		doc_sha256: docSha,
 		html_path: htmlPath,
+		html_sha256: htmlSha,
+		lint_receipt_path: receiptPath,
+		lint_source_path: lintSource,
 		writing_report_path: writingReportPath,
 		checklist_path: checklistPath,
 	};
@@ -186,7 +223,7 @@ function readSnapshot(sessionId: string): ReadSnapshot | null {
 			if (state.step === "quiz") state.step = "render";
 			state.last_failure = {
 				step: "render",
-				items: ["기존 render 증거가 현재 체크리스트 계약으로 검증되지 않았습니다."],
+				items: ["기존 render 증거가 현재 계약(모델이 쓴 HTML + lint 영수증, render_proof v2)으로 검증되지 않았습니다 — html-report 로 HTML 을 쓰고 lint 영수증과 함께 다시 제출하세요."],
 			};
 		}
 		state.derived = computeDerived(state);
@@ -640,129 +677,198 @@ function checkChecklistReport(checklistPath: string | undefined, failedItems: st
 	}
 }
 
-/**
- * Re-renders the submitted Markdown through the project renderer and returns
- * the exact bytes it produced.  The renderer output is the proof boundary:
- * comparing only figure counts cannot detect stale prose or component
- * markup, while comparing this deterministic derivation proves the HTML was
- * built from this exact source (including every figure's SVG, not just its count).
- */
-function renderCurrentDocument(docPath: string): string {
-	const markdown = readFileSync(docPath, "utf8");
-	const cached = renderedDocumentCache.get(markdown);
-	if (cached !== undefined) return cached;
-	const dir = mkdtempSync(join(tmpdir(), "explain-diff-render-check-"));
-	const sourcePath = join(dir, "source.md");
-	const outPath = join(dir, "render.html");
-	try {
-		writeFileSync(sourcePath, markdown, "utf8");
-		execFileSync(
-			process.execPath,
-			[
-				fileURLToPath(new URL("./render.ts", import.meta.url)),
-				"--in",
-				sourcePath,
-				"--out",
-				outPath,
-			],
-			{ encoding: "utf8", stdio: ["ignore", "ignore", "pipe"] },
-		);
-		const rendered = readFileSync(outPath, "utf8");
-		renderedDocumentCache.set(markdown, rendered);
-		return rendered;
-	} finally {
-		rmSync(dir, { recursive: true, force: true });
+const BASIC_ENTITIES: Record<string, string> = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" };
+
+/** Decodes the five basic named entities and numeric entities in one pass (no double decoding). */
+function decodeHtmlEntities(text: string): string {
+	return text.replace(/&(#x[0-9a-f]+|#\d+|lt|gt|amp|quot|apos);/gi, (whole, body: string) => {
+		if (body[0] !== "#") return BASIC_ENTITIES[body.toLowerCase()] ?? whole;
+		const code = body[1]?.toLowerCase() === "x" ? Number.parseInt(body.slice(2), 16) : Number.parseInt(body.slice(1), 10);
+		return Number.isSafeInteger(code) && code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+	});
+}
+
+/** Tag-stripped, entity-decoded text of an HTML fragment. */
+function htmlText(fragment: string): string {
+	return decodeHtmlEntities(fragment.replace(/<[^>]*>/g, ""));
+}
+
+function collapseSpace(text: string): string {
+	return text.replace(/\s+/g, " ").trim();
+}
+
+/** Bodies of the document's fenced code blocks (empty fences skipped), fence indentation removed. */
+function documentCodeBodies(doc: string): string[] {
+	const lines = doc.split(/\r\n?|\n/);
+	const bodies: string[] = [];
+	for (const block of findMarkdownBlocks(doc)) {
+		if (block.kind !== "code" || !block.fenced) continue;
+		const indent = /^[ \t]*/.exec(lines[block.start] ?? "")?.[0].length ?? 0;
+		const bodyLines = lines
+			.slice(block.start + 1, block.closed ? block.end : block.end + 1)
+			.map((line) => line.slice(Math.min(indent, /^[ \t]*/.exec(line)?.[0].length ?? 0)));
+		const body = bodyLines.join("\n");
+		if (body.trim() !== "") bodies.push(body);
 	}
+	return bodies;
 }
 
-let renderFreshDocument: FreshRenderer = renderCurrentDocument;
+const trimOneTrailingNewline = (text: string): string => text.replace(/\r\n/g, "\n").replace(/\n$/, "");
 
-/** Test seam: production keeps the sibling renderer; tests inject its pure renderer. */
-export function setRenderForTesting(renderer?: FreshRenderer): void {
-	renderFreshDocument = renderer ?? renderCurrentDocument;
+export interface HtmlSubmissionInput {
+	htmlPath: string | undefined;
+	docPath: string;
+	receiptPath: string | undefined;
+	lintSource: string | undefined;
+	writingReport: string | undefined;
+	checklistPath: string | undefined;
+	commitHashes: string[];
+	diffHunks: DiffHunk[];
 }
 
 /**
- * render is a derivation, not authoring — the markdown structure slots were
- * already earned at `code`, so this checks the artifacts of the derivation:
- * the HTML exists and is not empty, every authored diagram figure came
- * through with its inline SVG, and the technical-writing prose review ran and closed
- * with its machine-checkable verdict line. The final checklist must also close
- * with its machine-checkable all-pass verdict and nine grounded axis rows. Visual layout is not reviewed
- * per document — it is a deterministic property render.ts owns (wide-diagram
- * legibility is sealed by the figure's own scroll container and the html-report
- * lint run at the render step, regression-guarded by render.test.ts), so there is no per-document visual-qa
- * gate here.
+ * render is authored by the model (html-report) and proven here: the Markdown
+ * document stays the content SSOT, and the submitted page must carry its exact
+ * facts — every diagram's SVG byte-identical and in order, every fenced code block
+ * verbatim in a `<pre>`, every commit hash and changed path, every `##`/`###`
+ * heading in order, a style rule for each reference class the document uses, and no
+ * `<foreignObject>`. A clean strict lint receipt for these exact HTML bytes proves
+ * the page was captured and looked at in both themes and at phone width. The
+ * technical-writing report and final checklist close with their machine-checkable lines.
  */
-function checkRenderOutput(
-	htmlPath: string | undefined,
-	docPath: string,
-	writingReport: string | undefined,
-	checklistPath: string | undefined,
-): { pass: boolean; failedItems: string[] } {
+export function checkHtmlSubmission(input: HtmlSubmissionInput): { pass: boolean; failedItems: string[] } {
 	const failedItems: string[] = [];
-	if (!htmlPath) {
-		return { pass: false, failedItems: ["render 산출물 경로(--html)가 없습니다."] };
-	}
-	let size: number;
+	const { htmlPath, docPath, receiptPath, lintSource } = input;
+	if (!htmlPath) return { pass: false, failedItems: ["render 산출물 경로(--html)가 없습니다."] };
+	if (!receiptPath) return { pass: false, failedItems: ["lint 영수증 경로(--receipt)가 없습니다 — html-report lint.sh 를 --receipt 로 실행하세요."] };
+	if (!lintSource) return { pass: false, failedItems: ["lint 원천 폴더 경로(--lint-source)가 없습니다 — lint.sh 의 --source 와 같은 증거 폴더를 주세요."] };
+
+	// a. the page exists, has a body, and is not older than the document
+	let html: string;
+	let doc: string;
 	try {
-		size = statSync(htmlPath).size;
+		if (statSync(htmlPath).size === 0) return { pass: false, failedItems: [`render 산출물이 비어 있습니다: ${htmlPath}`] };
+		html = readFileSync(htmlPath, "utf8");
 	} catch {
 		return { pass: false, failedItems: [`render 산출물을 찾을 수 없습니다: ${htmlPath}`] };
 	}
-	if (size === 0) {
-		return { pass: false, failedItems: [`render 산출물이 비어 있습니다: ${htmlPath}`] };
+	try {
+		doc = readFileSync(docPath, "utf8");
+	} catch {
+		return { pass: false, failedItems: [`문서를 읽을 수 없습니다: ${docPath}`] };
+	}
+	const body = /<body\b[^>]*>([\s\S]*?)(?:<\/body\s*>|$)/i.exec(html)?.[1] ?? "";
+	if (!/<html\b/i.test(html) || htmlText(body.replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, "")).trim() === "") {
+		return { pass: false, failedItems: [`HTML 에 <html> 또는 내용이 있는 <body> 가 없습니다: ${htmlPath}`] };
+	}
+	if (statSync(htmlPath).mtimeMs < statSync(docPath).mtimeMs) {
+		failedItems.push(
+			`HTML 이 문서보다 오래됐습니다 — 문서를 고친 뒤 HTML 을 다시 쓰고(최신 문서 기준), capture·lint 를 다시 돌려 제출하세요: ${htmlPath}`,
+		);
 	}
 
+	// b. clean strict lint receipt for exactly these bytes
 	try {
-		const actualHtml = readFileSync(htmlPath, "utf8");
-		const expectedHtml = renderFreshDocument(docPath);
-		if (actualHtml !== expectedHtml) {
+		statSync(lintSource);
+	} catch {
+		failedItems.push(`lint 원천 폴더를 찾을 수 없습니다: ${lintSource}`);
+	}
+	const receiptProblem = lintReceiptProblem(receiptPath, htmlPath, lintSource);
+	if (receiptProblem !== null) failedItems.push(`lint 영수증이 유효하지 않습니다 — ${receiptProblem}`);
+
+	// c. every diagram SVG, byte-identical and in document order
+	let cursor = 0;
+	diagramFigures(doc).forEach((figure, i) => {
+		if (figure.svg === null) return;
+		const at = html.indexOf(figure.svg, cursor);
+		if (at >= 0) {
+			cursor = at + figure.svg.length;
+		} else if (html.includes(figure.svg)) {
+			failedItems.push(`다이어그램 ${i + 1}번째 SVG 가 문서의 순서와 다른 위치에 있습니다 — 문서 순서대로 놓으세요.`);
+		} else {
 			failedItems.push(
-				`HTML이 현재 Markdown에서 만들어진 renderer 산출물과 일치하지 않습니다 — 현재 Markdown으로 다시 렌더한 뒤 제출하세요: ${htmlPath}`,
+				`다이어그램 ${i + 1}번째 SVG 가 HTML 에 문서와 바이트 단위로 같게 들어 있지 않습니다 — 문서의 <svg>…</svg> 를 한 글자도 바꾸지 말고 그대로 붙여 넣으세요.`,
 			);
 		}
-	} catch {
-		failedItems.push(`현재 Markdown으로 renderer 산출물을 만들 수 없습니다: ${docPath}`);
-	}
+	});
 
-	// Diagram parity: N authored `figure.diagram` blocks must come out as N figures in
-	// the page, each still holding its <svg>. Counting reads the Markdown the same way
-	// the structure checks do, so a figure shown inside a code fence is not counted.
-	try {
-		const authored = diagramFigures(readFileSync(docPath, "utf8")).length;
-		if (authored > 0) {
-			const html = readFileSync(htmlPath, "utf8");
-			const rendered = html.match(/<figure class="diagram"[\s\S]*?<\/figure>/g) ?? [];
-			const drawn = rendered.filter((figure) => figure.includes("<svg")).length;
-			if (rendered.length !== authored || drawn !== authored) {
-				failedItems.push(
-					`다이어그램 figure ${authored}개 중 페이지에 SVG와 함께 나온 것이 ${drawn}개(figure ${rendered.length}개)입니다 — 문서의 <figure class="diagram"> 블록이 </figure> 로 닫혔는지, 블록 안에 <svg> 가 있는지 확인하세요.`,
-				);
-			}
-			// Labels are SVG <text>. A <foreignObject> box has a fixed pixel width measured in the
-			// author's font and CLIPS (hides) text when the viewer's font is wider.
-			const foreignObjects = (html.match(/<foreignObject/gi) || []).length;
-			if (foreignObjects > 0) {
-				failedItems.push(
-					`다이어그램에 <foreignObject> 라벨이 ${foreignObjects}개 있습니다 — 뷰어 폰트가 넓으면 고정폭 박스가 글자를 잘라 숨깁니다. 라벨은 <text>/<tspan> 으로 그리세요.`,
-				);
-			}
+	// Markup a reader sees: <style>/<script> bodies and comments (which may mention "<pre>") dropped.
+	const visible = html.replace(/<!--[\s\S]*?-->/g, "").replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, "");
+
+	// d. every fenced code block verbatim as the text of some <pre>
+	const preTexts = [...visible.matchAll(/<pre\b[^>]*>([\s\S]*?)<\/pre\s*>/gi)].flatMap((m) => {
+		const text = trimOneTrailingNewline(htmlText(m[1] ?? ""));
+		return [text, text.replace(/^\n/, "")];
+	});
+	documentCodeBodies(doc).forEach((code, i) => {
+		if (!preTexts.includes(trimOneTrailingNewline(code))) {
+			failedItems.push(
+				`문서의 ${i + 1}번째 코드 블록("${code.trim().split("\n")[0]?.slice(0, 40) ?? ""}…")이 HTML 의 어떤 <pre> 텍스트와도 같지 않습니다 — 코드는 글자 그대로 <pre> 안에 넣으세요(구문 강조 <span> 은 가능).`,
+			);
 		}
-	} catch {
-		failedItems.push(`문서를 읽을 수 없습니다: ${docPath}`);
+	});
+
+	// e. commit hashes (7-char short form, as R10 compares) and changed paths in the page text
+	const pageText = htmlText(visible);
+	const missingHashes = input.commitHashes.map((h) => h.slice(0, 7)).filter((h) => !pageText.includes(h));
+	if (missingHashes.length > 0) failedItems.push(`HTML 에 없는 커밋 해시: ${missingHashes.join(", ")}`);
+	const missingPaths = [...new Set(input.diffHunks.map((h) => h.path))].filter((p) => !pageText.includes(p));
+	if (missingPaths.length > 0) failedItems.push(`HTML 에 없는 변경 파일 경로: ${missingPaths.join(", ")}`);
+
+	// f. document headings as an ordered subsequence of the page's h2/h3 texts
+	const pageHeadings = [...visible.matchAll(/<h([23])\b[^>]*>([\s\S]*?)<\/h\1\s*>/gi)].map((m) => collapseSpace(htmlText(m[2] ?? "")));
+	let headingCursor = 0;
+	for (const heading of documentHeadings(doc)) {
+		const wanted = collapseSpace(decodeHtmlEntities(heading));
+		const at = pageHeadings.indexOf(wanted, headingCursor);
+		if (at < 0) {
+			failedItems.push(
+				pageHeadings.includes(wanted)
+					? `문서 헤딩 "${wanted}" 이 문서의 순서와 다른 위치에 있습니다.`
+					: `문서 헤딩 "${wanted}" 이 HTML 의 <h2>/<h3> 텍스트에 없습니다 — 문서의 ##/### 헤딩을 같은 글자로 같은 순서로 두세요.`,
+			);
+			continue;
+		}
+		headingCursor = at + 1;
 	}
 
+	// g. labels are SVG <text>; a fixed-width <foreignObject> box clips when the viewer font is wider
+	const foreignObjects = (html.match(/<foreignObject/gi) ?? []).length;
+	if (foreignObjects > 0) {
+		failedItems.push(
+			`HTML 에 <foreignObject> 가 ${foreignObjects}개 있습니다 — 뷰어 폰트가 넓으면 고정폭 박스가 글자를 잘라 숨깁니다. 라벨은 <text>/<tspan> 으로 그리세요.`,
+		);
+	}
+
+	// h. a style rule for every reference class the document uses
+	const css = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi)].map((m) => m[1] ?? "").join("\n");
+	const unstyled = usedStyleClasses(doc).filter((cls) => !new RegExp(`\\.${cls}(?![\\w-])`).test(css));
+	if (unstyled.length > 0) {
+		failedItems.push(
+			`문서가 쓰는 class 의 스타일 규칙이 <style> 에 없습니다: ${unstyled.join(", ")} — 기준 스타일시트(skills/explain-diff/references/components.css, skills/html-report/references/diagram-classes.css)에서 가져오세요.`,
+		);
+	}
+
+	// i. review reports
 	checkReport(
 		"technical-writing",
 		"--writing-report",
-		writingReport,
+		input.writingReport,
 		/^REVIEW:\s*APPLIED\s*$/,
 		"REVIEW: APPLIED",
 		failedItems,
 	);
-	checkChecklistReport(checklistPath, failedItems);
+	checkChecklistReport(input.checklistPath, failedItems);
 	return { pass: failedItems.length === 0, failedItems };
+}
+
+/** The `render` step's evidence paths; all are required, a missing one fails the submission. */
+export interface RenderSubmission {
+	htmlPath?: string;
+	receiptPath?: string;
+	lintSource?: string;
+	writingReport?: string;
+	checklistPath?: string;
 }
 
 /**
@@ -777,9 +883,7 @@ function submitStep(
 	docPath: string,
 	signalFiles: string[],
 	addedFiles: string[],
-	htmlPath?: string,
-	writingReport?: string,
-	checklistPath?: string,
+	render: RenderSubmission = {},
 ): number {
 	return withLock(statePath(sessionId), () => {
 		const s = mustRead(sessionId);
@@ -788,7 +892,16 @@ function submitStep(
 		}
 		const result =
 			step === "render"
-					? checkRenderOutput(htmlPath, docPath, writingReport, checklistPath)
+					? checkHtmlSubmission({
+							htmlPath: render.htmlPath,
+							docPath,
+							receiptPath: render.receiptPath,
+							lintSource: render.lintSource,
+							writingReport: render.writingReport,
+							checklistPath: render.checklistPath,
+							commitHashes: s.commit_hashes,
+							diffHunks: s.diff_hunks,
+						})
 					: checkStructure(readFileSync(docPath, "utf8"), {
 						signalFiles,
 						addedFiles,
@@ -807,15 +920,29 @@ function submitStep(
 		}
 		s.last_failure = null;
 		if (step === "render") {
-			if (htmlPath === undefined || writingReport === undefined || checklistPath === undefined) {
+			const docSha = sha256File(docPath);
+			const htmlSha = render.htmlPath === undefined ? null : sha256File(render.htmlPath);
+			if (
+				docSha === null ||
+				htmlSha === null ||
+				render.htmlPath === undefined ||
+				render.receiptPath === undefined ||
+				render.lintSource === undefined ||
+				render.writingReport === undefined ||
+				render.checklistPath === undefined
+			) {
 				throw new Error("render 제출이 성공했지만 증거 경로가 없습니다.");
 			}
 			s.render_proof_contract_version = CURRENT_RENDER_PROOF_CONTRACT_VERSION;
 			s.render_proof = {
 				doc_path: docPath,
-				html_path: htmlPath,
-				writing_report_path: writingReport,
-				checklist_path: checklistPath,
+				doc_sha256: docSha,
+				html_path: render.htmlPath,
+				html_sha256: htmlSha,
+				lint_receipt_path: render.receiptPath,
+				lint_source_path: render.lintSource,
+				writing_report_path: render.writingReport,
+				checklist_path: render.checklistPath,
 			};
 		}
 		if (!s.structural_ok.includes(step)) s.structural_ok.push(step);
@@ -855,17 +982,27 @@ function passStep(sessionId: string, step: Step, docPath: string, judge: JudgeIt
 			if (docPath !== proof.doc_path) {
 				bad.push(`render pass-step의 docPath가 제출 시 저장한 경로와 다릅니다: ${docPath}`);
 			}
-			const renderResult = checkRenderOutput(
-				proof.html_path,
-				proof.doc_path,
-				proof.writing_report_path,
-				proof.checklist_path,
-			);
+			const renderResult = checkHtmlSubmission({
+				htmlPath: proof.html_path,
+				docPath: proof.doc_path,
+				receiptPath: proof.lint_receipt_path,
+				lintSource: proof.lint_source_path,
+				writingReport: proof.writing_report_path,
+				checklistPath: proof.checklist_path,
+				commitHashes: s.commit_hashes,
+				diffHunks: s.diff_hunks,
+			});
 			bad.push(...renderResult.failedItems);
+			if (sha256File(proof.doc_path) !== proof.doc_sha256) {
+				bad.push(`제출 뒤 문서가 바뀌었습니다 — HTML 을 문서에 맞추고 capture·lint 를 거쳐 다시 제출하세요: ${proof.doc_path}`);
+			}
+			if (sha256File(proof.html_path) !== proof.html_sha256) {
+				bad.push(`제출 뒤 HTML 이 바뀌었습니다 — lint 를 다시 돌려 다시 제출하세요: ${proof.html_path}`);
+			}
 			try {
 				text = readFileSync(proof.doc_path, "utf8");
 			} catch {
-				// checkRenderOutput already records the missing/unreadable document.
+				// checkHtmlSubmission already records the missing/unreadable document.
 			}
 		} else {
 			text = readFileSync(docPath, "utf8");
@@ -1090,9 +1227,13 @@ function main(): void {
 						req(args, "doc"),
 						csv(req(args, "signal-files")),
 							csv(typeof args["added-files"] === "string" ? args["added-files"] : ""),
-							typeof args["html"] === "string" ? args["html"] : undefined,
-							typeof args["writing-report"] === "string" ? args["writing-report"] : undefined,
-							typeof args["checklist"] === "string" ? args["checklist"] : undefined,
+							{
+								htmlPath: typeof args["html"] === "string" ? args["html"] : undefined,
+								receiptPath: typeof args["receipt"] === "string" ? args["receipt"] : undefined,
+								lintSource: typeof args["lint-source"] === "string" ? args["lint-source"] : undefined,
+								writingReport: typeof args["writing-report"] === "string" ? args["writing-report"] : undefined,
+								checklistPath: typeof args["checklist"] === "string" ? args["checklist"] : undefined,
+							},
 						),
 				);
 				break;
