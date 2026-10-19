@@ -24,7 +24,7 @@ import { isPlainObject } from "../lib/deep-merge.ts";
 import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
 import { backupCategory } from "../lib/backup.ts";
 import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
-import { assertMappedTier } from "../lib/model-map.ts";
+import { assertMappedTier, listAgentVariants } from "../lib/model-map.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { PLATFORM_REWRITE_RULES, applyRewriteRules } from "../lib/rewrite-rules.ts";
 import { composePreToolTraceCommand } from "../lib/pretool-trace-command.ts";
@@ -531,6 +531,8 @@ export class CodexAdapter implements PlatformAdapter {
 	 * `deny_unknown_fields` is silently disabled by the flattened `ConfigToml`
 	 * (serde limitation, verified at 0.144.1) — so it will not catch a leak for us:
 	 * this emit-allowlist is the only guarantee, and must never become a denylist.
+	 * Each `modelMap.variants[<agent>]` entry additionally emits a `<agent>-<suffix>` role
+	 * TOML with the same description/instructions and the variant's model/effort.
 	 */
 	async syncAgentsDirect(
 		targetPath: string,
@@ -602,20 +604,36 @@ export class CodexAdapter implements PlatformAdapter {
 			? `${rewrittenInstructions}\n\n${buildCodexLeafGuard(toToolList(frontmatter.tools))}`
 			: rewrittenInstructions;
 
-		const tomlObj = {
-			name,
-			description: rewrittenDescription,
-			developer_instructions: gatedInstructions,
-			...modelFields,
+		const writeRole = async (
+			roleName: string,
+			file: string,
+			modelEntry: Partial<CodexResolvedModel>,
+		): Promise<void> => {
+			const tomlObj = {
+				name: roleName,
+				description: rewrittenDescription,
+				developer_instructions: gatedInstructions,
+				...modelEntry,
+			};
+			const operation = async (): Promise<void> => {
+				await fs.mkdir(path.dirname(file), { recursive: true });
+				await fs.writeFile(file, stringify(tomlObj), "utf-8");
+			};
+			if (mutationHooks) await mutationHooks.mutate(file, operation);
+			else await operation();
+			logInfo(`Codex agent 생성: ${path.basename(file)}`);
 		};
 
-		const operation = async (): Promise<void> => {
-			await fs.mkdir(path.dirname(targetFile), { recursive: true });
-			await fs.writeFile(targetFile, stringify(tomlObj), "utf-8");
-		};
-		if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
-		else await operation();
-		logInfo(`Codex agent 생성: ${displayName}.toml`);
+		await writeRole(name, targetFile, modelFields);
+		for (const variant of listAgentVariants(modelMap, name)) {
+			await writeRole(
+				variant.name,
+				codexDestinationPath(targetPath, "agents", variant.name),
+				variant.entry.effort
+					? { model: variant.entry.model, model_reasoning_effort: variant.entry.effort }
+					: { model: variant.entry.model },
+			);
+		}
 	}
 
 	// ---------------------------------------------------------------------------
