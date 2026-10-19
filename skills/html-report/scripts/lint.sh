@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # lint.sh - layout lint for a local HTML report, run in a real browser through agent-browser.
 #
-# Usage: lint.sh <page.html> [--state '<js run after load>'] [--strict] [--source <dir-or-file>]
+# Usage: lint.sh <page.html> [--state '<js run after load>'] [--strict] [--source <dir-or-file>] [--receipt <path>]
 #
 # Runs scripts/lint.js in three configurations and prints one JSON document on stdout:
 #   1280px light : SVG text overlap / outside figure / on strokes / size, clipped HTML, contrast,
@@ -12,18 +12,23 @@
 #   400px  light : page-level horizontal overflow, SVG text size, clipped HTML, sideways-scrolling figures
 # Findings are allowed; the JSON "summary" counts every error and warning (by check and by run);
 # "findings" lists at most 100 per check per run, plus "info" notes (sampling counts, truncation).
+# --receipt <path> writes a JSON receipt (schema_version 1) after a run with 0 errors: html_sha256 of the linted bytes,
+#   html_path, errors, warnings, runs, source, strict, lint_js_sha256, created_at. It proves lint ran clean on those
+#   exact bytes (a mistake-guard, not tamper-proof). With errors > 0, or when the file changed during the run, no
+#   receipt is written; an existing file at <path> is never deleted, so consumers must compare html_sha256.
 # --strict exits 2 when any finding has severity "error". Without it the exit code is 0 on a completed run.
 set -euo pipefail
 
-usage() { echo "usage: lint.sh <page.html> [--state '<js>'] [--strict] [--source <dir-or-file>]" >&2; exit 64; }
+usage() { echo "usage: lint.sh <page.html> [--state '<js>'] [--strict] [--source <dir-or-file>] [--receipt <path>]" >&2; exit 64; }
 [ $# -ge 1 ] || usage
 HTML=$1; shift
-STATE=""; STRICT=0; SOURCE=""
+STATE=""; STRICT=0; SOURCE=""; RECEIPT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --state) [ $# -ge 2 ] || usage; STATE=$2; shift 2 ;;
     --strict) STRICT=1; shift ;;
     --source) [ $# -ge 2 ] || usage; SOURCE=$2; shift 2 ;;
+    --receipt) [ $# -ge 2 ] || usage; RECEIPT=$2; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -33,8 +38,15 @@ done
 [ -f "$HTML" ] || { echo "lint.sh: no such file: $HTML" >&2; exit 66; }
 if [ -n "$SOURCE" ] && [ ! -e "$SOURCE" ]; then echo "lint.sh: no such source: $SOURCE" >&2; exit 66; fi
 
+sha256_of() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
+  elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
+  else openssl dgst -sha256 "$1" | sed 's/^.*= //'; fi
+}
+
 DIR=$(cd "$(dirname "$0")" && pwd)
 ABS="$(cd "$(dirname "$HTML")" && pwd)/$(basename "$HTML")"
+HTML_SHA=$(sha256_of "$ABS")
 URL="file://$(printf '%s' "$ABS" | sed 's/%/%25/g; s/ /%20/g; s/#/%23/g; s/?/%3F/g')"
 SESSION="hr-lint-$$"
 TMP=$(mktemp -d)
@@ -85,5 +97,32 @@ jq -s --arg file "$ABS" --arg state "$STATE" '{
 }' "$TMP/run-1280-light.json" "$TMP/run-1280-dark.json" "$TMP/run-400-light.json" > "$TMP/out.json"
 
 cat "$TMP/out.json"
+
+if [ -n "$RECEIPT" ]; then
+  if [ "$(sha256_of "$ABS")" != "$HTML_SHA" ]; then
+    echo "lint.sh: $ABS changed during linting; no receipt written" >&2; exit 1
+  fi
+  if [ "$(jq '.summary.errors' "$TMP/out.json")" -eq 0 ]; then
+    SRC_ABS=""
+    if [ -n "$SOURCE" ]; then
+      if [ -d "$SOURCE" ]; then SRC_ABS=$(cd "$SOURCE" && pwd); else SRC_ABS="$(cd "$(dirname "$SOURCE")" && pwd)/$(basename "$SOURCE")"; fi
+    fi
+    mkdir -p "$(dirname "$RECEIPT")"
+    RTMP="$RECEIPT.tmp.$$"
+    jq --arg sha "$HTML_SHA" --arg path "$ABS" --arg src "$SRC_ABS" --argjson strict "$STRICT" \
+       --arg js "$(sha256_of "$DIR/lint.js")" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
+      schema_version: 1,
+      html_sha256: $sha,
+      html_path: $path,
+      errors: .summary.errors,
+      warnings: .summary.warnings,
+      runs: (.runs | map({viewport, theme})),
+      source: (if $src == "" then null else $src end),
+      strict: ($strict == 1),
+      lint_js_sha256: $js,
+      created_at: $at
+    }' "$TMP/out.json" > "$RTMP" && mv "$RTMP" "$RECEIPT"
+  fi
+fi
 if [ "$STRICT" = 1 ] && [ "$(jq '.summary.errors' "$TMP/out.json")" -gt 0 ]; then exit 2; fi
 exit 0

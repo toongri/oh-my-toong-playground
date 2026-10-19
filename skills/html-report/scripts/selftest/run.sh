@@ -55,4 +55,22 @@ echo "$OUT" | jq -e '[.findings[] | select(.check=="contrast" and .theme=="light
   && echo "ok   no false light-theme report for the dark-only defect" || { echo "FAIL dark-only defect reported in light"; fail=1; }
 echo "$OUT" | jq -e '[.findings[] | select(.check=="contrast" and .theme=="dark" and .text=="light-theme contrast defect")] | length == 0' >/dev/null \
   && echo "ok   no false dark-theme report for the light-only defect" || { echo "FAIL light-only defect reported in dark"; fail=1; }
+# receipt: clean fixture writes a valid receipt; defects fixture (errors > 0) writes none
+RT=$(mktemp -d); trap 'rm -rf "$RT"' EXIT
+bash "$HERE/../lint.sh" "$HERE/clean.html" --source "$HERE/source" --receipt "$RT/clean.json" >/dev/null
+bash "$HERE/../lint.sh" "$HERE/defects.html" --source "$HERE/source" --receipt "$RT/defects.json" >/dev/null
+SUM=$(shasum -a 256 "$HERE/clean.html" | cut -d' ' -f1)
+if jq -e --arg sha "$SUM" --arg src "$(cd "$HERE/source" && pwd)" --arg p "$HERE/clean.html" '
+    (keys | sort) == (["schema_version","html_sha256","html_path","errors","warnings","runs","source","strict","lint_js_sha256","created_at"] | sort)
+    and .schema_version == 1 and .html_sha256 == $sha and (.html_path | startswith("/")) and (.html_path | endswith("/clean.html"))
+    and .errors == 0 and (.warnings | type == "number") and .source == $src and .strict == false
+    and (.lint_js_sha256 | test("^[0-9a-f]{64}$")) and (.created_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$"))
+    and .runs == [{viewport:1280,theme:"light"},{viewport:1280,theme:"dark"},{viewport:400,theme:"light"}]' "$RT/clean.json" >/dev/null; then
+  echo "ok   receipt: clean fixture writes a valid receipt with matching html_sha256"
+else
+  echo "FAIL receipt content:"; cat "$RT/clean.json" 2>&1; fail=1
+fi
+[ ! -e "$RT/defects.json" ] && echo "ok   receipt: none written when errors > 0" || { echo "FAIL receipt written despite errors"; fail=1; }
+bash "$HERE/../lint.sh" "$HERE/clean.html" --receipt "$RT/nosrc.json" >/dev/null
+jq -e '.source == null' "$RT/nosrc.json" >/dev/null && echo "ok   receipt: source is null without --source" || { echo "FAIL receipt source null"; fail=1; }
 exit $fail

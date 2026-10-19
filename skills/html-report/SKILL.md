@@ -902,6 +902,17 @@ one frame per `<figure>` (`-fig1.png` ...), and at 400px the far end of each sid
 It prints `scrollWidth / innerWidth` per configuration. `lint.sh` prints one JSON document; `--strict` makes it
 exit 2 when any error remains (the strict run is `bash <skill-dir>/scripts/lint.sh report.html --strict`).
 
+**Lint receipt.** `lint.sh report.html [--source ...] --receipt <path>` also writes a JSON receipt to `<path>`
+(atomic tmp + mv) when the run ends with 0 errors. The consuming skill decides the receipt path and passes it
+to its submit command. Fields: `schema_version` (1), `html_sha256` (of the linted bytes, taken at lint start),
+`html_path` (absolute), `errors`, `warnings`, `runs` (the three standard runs: 1280 light, 1280 dark, 400 light),
+`source` (absolute `--source` path or null), `strict`, `lint_js_sha256`, `created_at` (UTC). With errors above 0,
+or when the file changed during linting, no receipt is written. An old receipt at that path is never deleted;
+a gate compares `html_sha256` to the submitted file, so a receipt for older bytes fails. The receipt proves lint
+ran clean on those exact bytes. It guards against mistakes (editing after lint, skipping lint); it is not
+tamper-proof. Re-run lint with `--receipt` after every edit of the HTML. An example is in
+`scripts/selftest/receipt.example.json`.
+
 **Look at every frame.** Open each PNG with your environment's image viewer or file reader that renders images.
 If you cannot view images, say so in your report and rely on lint alone; never claim a visual check you did not do.
 Check each frame for:
@@ -958,7 +969,8 @@ graph inside a `<div>` that is not a `<figure>`. Sections 13.1 and 13.2 and the 
 
 Return to the caller: the absolute path of the HTML file; the number of critique rounds and what each fixed; the
 final `summary` from `lint.sh` with any remaining errors and why they remain; the reconciliation of section 13.1
-(per kind: source count, count on the page, and each omission with its reason); whether `--source` was used; which
+(per kind: source count, count on the page, and each omission with its reason); whether `--source` was used; the
+receipt path when the caller required one (`--receipt`, section 14); which
 states and the offline view you captured; and anything you could not verify (for example, "contrast inside the
 map was not measured for the hover state").
 
