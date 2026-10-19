@@ -1,21 +1,11 @@
-import { execFileSync, spawnSync } from "child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { spawnSync } from "child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { describe, expect, test } from "bun:test";
-import { mmdcRenderSvg, normalizeSvgWidth, renderToHtml, slugify, zoomableFigure } from "./render";
+import { DIAGRAM_SVG_CLASSES } from "@lib/explain-diff-structure";
+import { renderToHtml, slugify } from "./render";
 import { extractTitle, stripControlChars } from "./render";
-
-const MMDC_TEST_TIMEOUT_MS = 60_000;
-
-function mmdcAvailable(): boolean {
-	try {
-		execFileSync("mmdc", ["--version"], { stdio: "ignore" });
-		return true;
-	} catch {
-		return false;
-	}
-}
 
 const DOC = `# 트리 선택기 수평 패닝
 
@@ -33,19 +23,17 @@ const offset = clamp(anchor - width, 0, max);
 \`\`\`
 `;
 
-describe("자기완결성", () => {
+describe("외부 참조·스크립트 없음", () => {
 	const html = renderToHtml(DOC, "제목");
 
 	test("외부 참조가 하나도 없다 — 오프라인·인쇄·메일 전달에서 깨지지 않는다", () => {
 		expect(html).not.toMatch(/src\s*=\s*["']https?:/i);
 		expect(html).not.toMatch(/href\s*=\s*["']https?:\/\/[^"']*\.(css|js)/i);
+		expect(html).not.toMatch(/<link\b/i);
 	});
 
-	test("스크립트는 정확히 하나 — 확대 오버레이 ESC/Enter 편의뿐, 콘텐츠는 무-JS로 렌더된다", () => {
-		expect(html.match(/<script/gi) ?? []).toHaveLength(1);
-		// 그 하나는 오직 키보드 단축키(확대 토글 해제)만 하고, 외부 소스를 부르지 않는다.
-		expect(html).toMatch(/<script>[\s\S]*keydown[\s\S]*dz-toggle:checked[\s\S]*<\/script>/);
-		expect(html).not.toMatch(/<script[^>]*\ssrc\s*=/i);
+	test("스크립트가 하나도 없다 — 페이지는 무-JS 로 렌더된다", () => {
+		expect(html).not.toMatch(/<script/i);
 	});
 
 	test("CSS 는 인라인으로 들어간다", () => {
@@ -108,108 +96,6 @@ describe("테마", () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
-// v3 — mermaid 사전 렌더 + 렌더러 소유 컴포넌트 CSS
-
-import { preRenderMermaid, softWrapLabels } from "./render";
-
-describe("긴 점(dot) 라벨 줄바꿈 — softWrapLabels", () => {
-	test("긴 dotted 라벨은 점 앞에서 <br/>로 나뉜다 — 단어 중간이 아니라 자연 경계", () => {
-		// 사용자가 좋다고 한 형태: ProductRepository / .update (한 줄로 넓어지는 대신 점에서 줄바꿈)
-		expect(softWrapLabels('A["ProductRepository.update"]')).toBe('A["ProductRepository<br/>.update"]');
-	});
-
-	test("짧은 dotted 라벨은 건드리지 않는다 — a.b 는 그대로", () => {
-		expect(softWrapLabels('A["a.b"]')).toBe('A["a.b"]');
-	});
-
-	test("점 없는 긴 라벨은 한 줄 유지 — 단어 중간을 쪼개지 않는다(wrappingWidth 가 담당)", () => {
-		const s = 'A["SmartSubscriptionBundleMappingRepo"]';
-		expect(softWrapLabels(s)).toBe(s);
-	});
-
-	test("저자가 이미 <br/> 를 넣었으면 다시 넣지 않는다", () => {
-		const s = 'A["ProductRepository<br/>.update"]';
-		expect(softWrapLabels(s)).toBe(s);
-	});
-
-	test("여러 점의 메서드 체인은 각 점에서 나뉜다", () => {
-		expect(softWrapLabels('A["OrderRepo.findActiveByHousehold.count"]')).toBe(
-			'A["OrderRepo<br/>.findActiveByHousehold<br/>.count"]',
-		);
-	});
-
-	test("긴 따옴표 click URL은 원문을 그대로 보존한다", () => {
-		const source = 'click A "https://example.com/docs/very-long-click-target"';
-		expect(softWrapLabels(source)).toBe(source);
-	});
-});
-
-const MERMAID_DOC = `# 제목
-
-## Architecture
-
-### 시스템 레벨
-
-\`\`\`mermaid
-flowchart LR
-  A --> B
-\`\`\`
-
-산문.
-
-\`\`\`mermaid
-flowchart TB
-  C --> D
-\`\`\`
-`;
-
-describe("mermaid 사전 렌더", () => {
-	test("mermaid 펜스는 렌더 함수를 거쳐 확대 가능한 figure.diagram 안 인라인 SVG 가 된다", () => {
-		const out = preRenderMermaid(MERMAID_DOC, (src, i) => `<svg data-i="${i}">${src.includes("A --> B") ? "AB" : "CD"}</svg>`);
-		expect(out).not.toContain("```mermaid");
-		// SVG 는 .dz-scroll 안에 들어가고, 블록마다 고유 id 의 확대 토글이 붙는다.
-		expect(out).toContain('<div class="dz-scroll"><svg data-i="0">AB</svg></div>');
-		expect(out).toContain('<div class="dz-scroll"><svg data-i="1">CD</svg></div>');
-		expect(out).toContain('id="dz-0"');
-		expect(out).toContain('id="dz-1"');
-		expect(out).toContain('<figure class="diagram">');
-		// 바깥 클릭으로 닫기: 각 figure 는 같은 토글을 가리키는 전체 화면 backdrop 라벨을 갖는다.
-		expect(out).toContain('<label for="dz-0" class="dz-backdrop"');
-		expect(out).toContain('<label for="dz-1" class="dz-backdrop"');
-	});
-
-	test("mermaid 가 아닌 코드 펜스는 건드리지 않는다", () => {
-		const doc = "```ts\nconst x = 1;\n```\n";
-		expect(preRenderMermaid(doc, () => "<svg/>")).toBe(doc);
-	});
-
-	test("렌더 함수가 던지면 실패한 블록 번호가 오류에 실린다", () => {
-		expect(() =>
-			preRenderMermaid(MERMAID_DOC, (_src, i) => {
-				if (i === 1) throw new Error("mmdc exploded");
-				return "<svg/>";
-			}),
-		).toThrow(/2번째 mermaid 블록/);
-	});
-});
-
-describe("mmdc 결정성 — 렌더 게이트의 재현 비교 전제", () => {
-	// 렌더 게이트는 제출된 HTML을 현재 Markdown으로 다시 렌더해 바이트 비교로
-	// "이 소스에서 만든 HTML"임을 증명한다. 그 전제는 렌더러가 결정적이라는 것 —
-	// mermaid는 기본적으로 랜덤 id와 rough.js 손그림 획으로 매 실행 다른 SVG를
-	// 낸다. mmdc가 있는 환경에서만 돈다(없으면 skip).
-	test.skipIf(!mmdcAvailable())(
-		"classDiagram 을 같은 소스로 두 번 렌더하면 바이트가 동일하다",
-		() => {
-			const src = "classDiagram\n  class Tool { execute() }\n  class Helper { run() }\n  Tool --> Helper\n";
-			expect(mmdcRenderSvg(src, 0)).toBe(mmdcRenderSvg(src, 0));
-		},
-		// 실제 mmdc는 headless Chromium을 띄운다. 전체 테스트가 도는 부하에서는 bun 기본 5초를 넘긴다.
-		MMDC_TEST_TIMEOUT_MS,
-	);
-});
-
 describe("컴포넌트 CSS — 렌더러가 시각 언어를 소유한다", () => {
 	const html = renderToHtml(DOC, "제목");
 
@@ -244,153 +130,148 @@ describe("컴포넌트 CSS — 렌더러가 시각 언어를 소유한다", () =
 	});
 });
 
+
 // ---------------------------------------------------------------------------
-// 넓은 mermaid 라벨 가독성 — 다운스케일이 아니라 자연폭+스크롤
-//
-// mmdc 는 SVG 루트에 width="100%" 를 박는다. 그대로 두면 컬럼보다 넓은 다이어그램이
-// 컬럼으로 축소돼 16px 라벨이 몇 px 로 붕괴하고(브라우저 실측: 2261px vb → 데스크톱
-// 4.7px·모바일 2.1px) figure 의 overflow-x 도 발화하지 않는다. 봉인은 두 겹이다 —
-// normalizeSvgWidth 가 width 를 viewBox px 로 재작성하고, CSS 가 그 폭을 캡하지 않는다.
+// 다이어그램 figure — 문서에 직접 쓴 인라인 SVG 가 그대로 통과하고, 페이지 CSS 가 색·크기를 소유한다
 
-describe("넓은 mermaid 폭 정규화 (normalizeSvgWidth)", () => {
-	const wide = `<svg id="mmd-0" width="100%" class="flowchart" style="max-width: 2261.48px;" viewBox="0 0 2261.484375 94">x</svg>`;
+const FIGURE = `<figure class="diagram" data-kind="flow">
+<svg viewBox="0 0 340 120" role="img" aria-label="요청은 게이트웨이를 지나 서비스로 간다.">
+  <!-- 열: x=16, 행: y=24 -->
+  <rect class="box" x="16" y="24" width="120" height="40" rx="8"/>
+  <text class="t-b" x="28" y="48">게이트웨이 $& $1</text>
 
-	test("중첩 marker의 viewBox가 아니라 루트 SVG의 viewBox 폭을 사용한다", () => {
-		const svg =
-			'<svg width="100%" viewBox="-23.609375 0 1467.28125 244">' +
-			'<defs><marker viewBox="0 0 10 10" /></defs></svg>';
+  <path class="rel" d="M136 44 H200"/>
+    <text class="t-s lbl" x="150" y="36">요청</text>
+</svg>
+<figcaption><b>그림 1.</b> 요청 흐름</figcaption>
+</figure>`;
 
-		expect(normalizeSvgWidth(svg)).toContain('width="1468"');
+describe("다이어그램 figure — 블록 통과", () => {
+	const html = renderToHtml(`# T\n\n${FIGURE}\n\n뒤 문단\n`, "t");
+
+	test("figure 블록은 <svg> 여는 태그의 크기 상한 style 하나만 빼고 바이트 그대로 통과한다 — 빈 줄·들여쓰기·주석·$ 패턴 포함", () => {
+		expect(html).not.toContain(FIGURE);
+		expect(html.replace(/ style="max-width:\d+px"/, "")).toContain(FIGURE);
 	});
 
-	test("viewBox 원점이 0이 아니어도 Mermaid의 작은 width를 자연 폭으로 고친다", () => {
-		const svg =
-			'<svg width="10" viewBox="0.7037296295166016 0 1350.8125 268.27227783203125"></svg>';
-
-		expect(normalizeSvgWidth(svg)).toContain('width="1351"');
+	test("폭 상한은 viewBox 폭의 1.5배다 — 좁게 그린 그림이 넓은 화면에서 3배로 커지지 않는다", () => {
+		expect(html).toContain('<svg viewBox="0 0 340 120" role="img" aria-label="요청은 게이트웨이를 지나 서비스로 간다." style="max-width:510px">');
 	});
 
-	test('width="100%" 를 viewBox 자연폭(px)으로 재작성한다 — 넓은 다이어그램이 축소되지 않는다', () => {
-		const out = normalizeSvgWidth(wide);
-		expect(out).toContain('width="2262"');
-		expect(out).not.toContain('width="100%"');
+	test("viewBox 가 없으면 상한을 붙이지 않는다", () => {
+		expect(renderToHtml(FIGURE.replace('viewBox="0 0 340 120" ', ""), "t")).not.toContain('style="max-width:');
 	});
 
-	test("mmdc 가 구운 인라인 max-width 를 제거한다 — 스타일시트가 맞춤/확대 폭을 소유하게 한다", () => {
-		// 인라인 style 이 스타일시트를 이기므로, 남겨두면 .dz-scroll svg{max-width:100%}(맞춤)와
-		// .dz-view … svg{max-width:none}(확대)가 둘 다 무시돼 SVG 가 카드 밖으로 넘친다(깨짐).
-		const out = normalizeSvgWidth(wide);
-		expect(out).not.toMatch(/max-width:\s*[\d.]+px/);
+	test("figure 안의 빈 줄 뒤 들여쓴 줄이 코드 블록이나 문단으로 바뀌지 않는다", () => {
+		expect(html).not.toContain("<pre>");
+		expect(html).not.toContain("<p>  <path");
+		expect(html).toContain("<p>뒤 문단</p>");
 	});
 
-	test("viewBox 가 없으면 손대지 않는다", () => {
-		const noVb = `<svg id="mmd-0" width="100%" class="flowchart">x</svg>`;
-		expect(normalizeSvgWidth(noVb)).toBe(noVb);
+	test("문단 바로 아래에 붙은 figure 도 블록으로 통과한다", () => {
+		const out = renderToHtml(`앞 문단\n${FIGURE}\n`, "t");
+		expect(out).toContain("<p>앞 문단</p>");
+		expect(out).toContain('<figure class="diagram" data-kind="flow">');
+		expect(out).toContain("<figcaption><b>그림 1.</b> 요청 흐름</figcaption>");
 	});
 
-	test("이미 px 폭이면(= width=100% 아님) 그대로 둔다", () => {
-		const fixed = `<svg id="mmd-1" width="123" viewBox="0 0 123 40">y</svg>`;
-		expect(normalizeSvgWidth(fixed)).toBe(fixed);
+	test("코드 펜스 안의 figure 예시는 이스케이프된 코드로 남는다", () => {
+		const out = renderToHtml('```html\n<figure class="diagram" data-kind="flow"></figure>\n```\n', "t");
+		expect(out).toContain("&lt;figure");
+		expect(out).not.toContain('<figure class="diagram"');
 	});
 
-	test("preRenderMermaid 가 감싸는 SVG 에 폭 재작성이 적용된다", () => {
-		const doc = "```mermaid\nflowchart LR\n  A --> B\n```\n";
-		const out = preRenderMermaid(doc, () => wide);
-		expect(out).toContain('<div class="dz-scroll"><svg id="mmd-0" width="2262"');
-		expect(out).not.toContain('width="100%"');
+	test("figure 가 제목 추출·목차를 흐트러뜨리지 않는다", () => {
+		expect(extractTitle(`${FIGURE}\n\n# 진짜 제목\n`, "fb")).toBe("진짜 제목");
+		const out = renderToHtml(`# T\n\n${FIGURE}\n\n## 뒤 절\n`, "t");
+		expect(out).toContain('<a href="#뒤-절">뒤 절</a>');
+	});
+
+	test("같은 입력은 같은 바이트를 낸다 — 렌더 게이트의 재현 비교 전제", () => {
+		expect(renderToHtml(`# T\n\n${FIGURE}\n`, "t")).toBe(renderToHtml(`# T\n\n${FIGURE}\n`, "t"));
 	});
 });
 
-// ---------------------------------------------------------------------------
-// 다이어그램 크기 조절 — 기본은 컬럼에 맞춰 축소(가로 스크롤 제거), 확대는 무-JS 오버레이
-//
-// 이전 계약은 "넓은 다이어그램은 축소가 아니라 자연폭+스크롤"이었다. 실사용에서 그 가로
-// 스크롤이 불편하다는 피드백으로 계약을 뒤집는다: 기본은 컬럼 폭에 맞춰 축소해 페이지가
-// 가로로 넘치지 않게 하고, 잘 안 보이는 문제는 우측 상단 확대 버튼(자연 크기 오버레이)으로
-// 푼다. 무-JS 불변식은 체크박스 토글(:checked 형제 선택자)로 지킨다.
+describe("다이어그램 figure — data-min-width 자체 스크롤", () => {
+	const wide = FIGURE.replace('data-kind="flow"', 'data-kind="flow" data-min-width="760"');
+	const html = renderToHtml(`# T\n\n${wide}\n`, "t");
 
-describe("figure.diagram 크기 조절 CSS — 맞춤 기본 + 무-JS 확대 오버레이", () => {
+	test("SVG 가 min-width 를 갖는 키보드 접근 가능한 스크롤 영역 안에 놓인다", () => {
+		expect(html).toContain('<div class="fig-scroll" tabindex="0" role="region" aria-label="그림, 좌우 스크롤">');
+		expect(html).toContain('style="min-width:760px"');
+		expect(html).toMatch(/<\/svg><\/div><p class="fig-hint" data-min="760">그림은 좌우로 밀어서 볼 수 있어요\.<\/p>/);
+	});
+
+	test("스크롤 힌트는 그 폭이 넘치는 뷰포트에서만 보인다 — 폭마다 중단점이 하나", () => {
+		expect(html).toMatch(/@media \(max-width: \d+px\) \{ figure\.diagram \.fig-hint\[data-min="760"\] \{ display: block; \} \}/);
+		const two = renderToHtml(`${wide}\n\n${wide.replace("760", "500")}\n\n${wide}\n`, "t");
+		expect((two.match(/\.fig-hint\[data-min="760"\] \{ display: block/g) ?? []).length).toBe(1);
+		expect((two.match(/\.fig-hint\[data-min="500"\] \{ display: block/g) ?? []).length).toBe(1);
+	});
+
+	test("data-min-width 가 없는 figure 에는 스크롤 영역도 힌트도 없다", () => {
+		const plain = renderToHtml(`# T\n\n${FIGURE}\n`, "t");
+		expect(plain).not.toContain('class="fig-scroll"');
+		expect(plain).not.toContain('<p class="fig-hint"');
+		expect(plain).not.toContain("data-min=");
+	});
+
+	test("힌트 줄은 기본이 숨김이고 인쇄에서도 숨는다", () => {
+		expect(html).toMatch(/figure\.diagram \.fig-hint \{ display: none;/);
+		expect(html.split("@media print", 2)[1]).toMatch(/\.fig-hint \{ display: none !important; \}/);
+	});
+});
+
+describe("figure.diagram CSS — 라이트·다크에서 읽히고 폭에 맞춰 줄어든다", () => {
 	const html = renderToHtml(DOC, "제목");
+	const css = html.slice(html.indexOf("<style>"), html.indexOf("</style>"));
 
-	test("기본은 컬럼 폭에 맞춰 축소한다 — .dz-scroll svg 가 max-width:100%", () => {
-		const screenCss = html.split("@media print", 1)[0];
-		expect(screenCss).toMatch(/\.dz-scroll svg\s*\{[^}]*max-width:\s*100%/);
+	test("SVG 는 컬럼 폭에 맞춰 줄어든다 — width:100%, max-width:100%, height:auto", () => {
+		expect(css).toMatch(/figure\.diagram svg \{[^}]*width: 100%;[^}]*max-width: 100%;[^}]*height: auto;[^}]*margin-inline: auto;/);
 	});
 
-	test("확대 상태는 자연 크기다 — :checked ~ .dz-view .dz-scroll svg 가 max-width:none", () => {
-		expect(html).toMatch(/\.dz-toggle:checked ~ \.dz-view \.dz-scroll svg\s*\{[^}]*max-width:\s*none/);
+	test("figure 배경과 SVG 색은 모두 토큰이다 — 리터럴 색이 없다", () => {
+		expect(css).toMatch(/figure\.diagram \{[^}]*background: var\(--surface\)/);
+		const figureRules = css.split("\n").filter((line) => line.startsWith("figure.diagram"));
+		expect(figureRules.length).toBeGreaterThan(30);
+		for (const line of figureRules) expect(line).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/);
 	});
 
-	test("확대는 전체 뷰포트 오버레이다 — :checked ~ .dz-view 가 position:fixed", () => {
-		expect(html).toMatch(/\.dz-toggle:checked ~ \.dz-view\s*\{[^}]*position:\s*fixed/);
+	test("승인된 SVG 클래스 전부에 CSS 규칙이 있다 — 없는 클래스는 스타일 없는 도형이 된다", () => {
+		for (const cls of DIAGRAM_SVG_CLASSES) {
+			expect(css).toMatch(new RegExp(`figure\\.diagram (?:svg |figcaption )?[^{]*\\.${cls.replace(/-/g, "\\-")}\\b`));
+		}
 	});
 
-	test("확대 자체는 CSS다 — 토글은 체크박스, 바깥클릭 닫기는 backdrop 라벨", () => {
-		expect(html).toContain("dz-toggle");
-		expect(html).toContain("dz-backdrop");
-		// 페이지의 유일한 스크립트는 ESC/Enter 편의뿐 — 콘텐츠·확대·바깥클릭 닫기는 그것 없이도 동작한다.
-		expect(html.match(/<script/gi) ?? []).toHaveLength(1);
+	test("html-report 토큰이 맨 :root 에 정의되고 다크 값이 두 방식으로 다시 정의된다", () => {
+		expect(css).toMatch(/:root \{[^}]*--surface: #FFFFFF;[^}]*--ink: #141821;[^}]*--line-strong: #98A0B3;[^}]*--ok-bg:/);
+		expect(css).toMatch(/@media \(prefers-color-scheme: dark\) \{\s*:root:not\(\[data-theme="light"\]\) \{[^}]*--ink: #E8EBF1;/);
+		expect(css).toMatch(/:root\[data-theme="dark"\] \{[^}]*--ink: #E8EBF1;/);
+		expect(css).toMatch(/body \{[^}]*background: var\(--bg\);/);
 	});
 
-	test("native 확대 체크박스가 키보드 접근 가능하고 접근성 이름을 갖는다", () => {
-		const figure = zoomableFigure("<svg></svg>", 0);
-		expect(figure).toContain('<input type="checkbox" id="dz-0" class="dz-toggle" aria-label="다이어그램 확대">');
-		expect(figure).not.toMatch(/<input[^>]*aria-hidden=/);
-	});
-
-	test("확대 오버레이는 다이어그램 카드 밖 클릭으로 닫힌다 — backdrop 이 카드(z-index) 아래", () => {
-		expect(html).toMatch(/\.dz-toggle:checked ~ \.dz-view \.dz-backdrop\s*\{[^}]*position:\s*fixed/);
-		expect(html).toMatch(/\.dz-toggle:checked ~ \.dz-view \.dz-scroll\s*\{[^}]*z-index:\s*1/);
-	});
-
-	test("ESC/Enter 로 확대를 닫는 스크립트가 있고, 외부 소스를 부르지 않는다", () => {
-		expect(html).toMatch(/<script>[\s\S]*keydown[\s\S]*Escape[\s\S]*Enter[\s\S]*dz-toggle:checked[\s\S]*<\/script>/);
-		expect(html).not.toMatch(/<script[^>]*\ssrc\s*=/i);
-	});
-
-	test("인쇄에서는 확대 버튼을 숨기고 SVG를 인쇄 가능 폭에 맞춘다", () => {
-		const printCss = html.match(/@media print\s*\{([\s\S]*?)\n\}/)?.[1];
-		expect(printCss).toBeDefined();
-		expect(printCss).toMatch(/\.dz-btn\s*\{[^}]*display:\s*none/);
-		expect(printCss).toMatch(/max-width:\s*100%/);
-	});
-
-	test("인쇄에서는 체크된 확대 래퍼도 자연폭을 초기화한다", () => {
-		const printCss = html.match(/@media print\s*\{([\s\S]*?)\n\}/)?.[1];
-		expect(printCss).toMatch(
-			/\.dz-toggle:checked\s*~\s*\.dz-view\s+\.dz-scroll\s*\{[^}]*width:\s*100%[^}]*max-width:\s*100%/,
-		);
+	test("글꼴과 한글 줄바꿈은 html-report 타이포 규칙을 따른다", () => {
+		expect(css).toMatch(/--font: "IBM Plex Sans KR", "Apple SD Gothic Neo"/);
+		expect(css).toMatch(/body \{[^}]*font: 16px\/1.75 var\(--font\);[^}]*word-break: keep-all; overflow-wrap: break-word;/);
+		expect(css).toMatch(/h1 \{ font-size: clamp\(30px, 6vw, 46px\);/);
+		expect(css).toMatch(/figure\.diagram svg text \{[^}]*font-size: 13px;/);
 	});
 
 	test("본문 폭은 뷰포트 반응형이다 — 46rem 고정 컬럼은 다이어그램이 잘리는 결함이었다", () => {
 		expect(html).toMatch(/main\s*\{[^}]*max-width:\s*min\(/);
 		expect(html).not.toMatch(/main\s*\{[^}]*max-width:\s*46rem/);
 	});
-});
 
-// ---------------------------------------------------------------------------
-// 라벨 클리핑 방지 — htmlLabels:false 로 foreignObject 클립 영역 제거 (폰트 독립)
-//
-// mermaid 기본 htmlLabels:true 는 노드 라벨을 foreignObject(고정폭 HTML)로 굽고, 폭은
-// 렌더 폰트로 측정된다. 그 폰트가 없는 뷰어(iOS/iCloud 엔 trebuchet ms 없음)는 더 넓은
-// 대체 폰트로 다시 배치하고 고정폭 박스가 넘치는 글자를 잘라 숨긴다. htmlLabels:false 는
-// 라벨을 SVG <text> 로 만들어 클립 영역 자체를 없앤다 — 넓어도 박스를 넘칠 뿐 안 숨는다.
+	test("인쇄에서는 figure 가 쪼개지지 않고 스크롤 영역이 펼쳐진다", () => {
+		const printCss = css.split("@media print", 2)[1] ?? "";
+		expect(printCss).toContain("break-inside: avoid");
+		expect(printCss).toMatch(/\.fig-scroll \{ overflow: visible; \}/);
+	});
 
-describe("라벨 클리핑 방지 — mmdc htmlLabels:false", () => {
-	test.skipIf(!mmdcAvailable())(
-		"긴 단일 토큰 식별자가 잘리거나 문자 중간에서 쪼개지지 않고 온전히 렌더된다",
-		() => {
-			const src =
-				'flowchart TD\n  A["OrderRepo.findActiveSmartSubscriptionSupplementsByHousehold"] --> B["x"]\n';
-			const svg = mmdcRenderSvg(src, 0);
-			// foreignObject(클립 영역)가 없어야 하고, 긴 식별자가 <text> 안에 통째로 있어야 한다.
-			expect(svg).not.toContain("<foreignObject");
-			const textContent = svg.replace(/<[^>]+>/g, "");
-			expect(textContent).toContain("findActiveSmartSubscriptionSupplementsByHousehold");
-		},
-		// 실제 mmdc는 headless Chromium을 띄운다. 전체 테스트가 도는 부하에서는 bun 기본 5초를 넘긴다.
-		MMDC_TEST_TIMEOUT_MS,
-	);
+	test("이전 확대 오버레이 CSS·스크립트는 없다", () => {
+		expect(html).not.toMatch(/dz-(?:toggle|btn|view|scroll|backdrop)/);
+		expect(html).not.toContain("<script");
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -470,12 +351,11 @@ describe("HTML 블록 바로 아래에 쓴 마크다운", () => {
 		expect(html).toContain("</div>");
 	});
 
-	test("mermaid 그림 바로 아래의 범례 줄이 렌더된다", () => {
-		const md = "# T\n\n```mermaid\ngraph TD\n  A --> B\n```\n**범례** `x`\n";
-		const pre = preRenderMermaid(md, () => '<svg viewBox="0 0 10 10"></svg>');
-		const html = renderToHtml(pre, "t");
+	test("다이어그램 figure 바로 아래의 범례 줄이 렌더된다", () => {
+		const md = `# T\n\n${FIGURE}\n**범례** \`x\`\n`;
+		const html = renderToHtml(md, "t");
 		expect(html).toContain("<strong>범례</strong> <code>x</code>");
-		expect(html).toContain('<figure class="diagram">');
+		expect(html).toContain('<figure class="diagram" data-kind="flow">');
 	});
 
 	test("나뉜 뒤쪽의 <summary> 와 제목도 인라인 렌더·앵커를 유지한다", () => {
@@ -573,11 +453,6 @@ describe("잔여 결함 수정 — 목차·제목·변환 경계", () => {
 		expect(ids).toEqual(["a-2", "a", "a-3"]);
 	});
 
-	test("다이어그램 id(dz-N, mmd-N)는 예약되어 제목이 가져가지 않는다", () => {
-		const html = bodyOf("# T\n\n## dz-0\n\n## mmd-12\n");
-		expect([...html.matchAll(/<h2 id="([^"]+)"/g)].map((m) => m[1])).toEqual(["dz-0-2", "mmd-12-2"]);
-	});
-
 	test("h2/h3 가 없으면 목차 상자를 내지 않는다", () => {
 		const html = bodyOf("# T\n\n본문만 있다.\n");
 		expect(html).not.toContain('class="toc"');
@@ -651,12 +526,6 @@ describe("제목 추출 (extractTitle)", () => {
 	});
 });
 
-describe("normalizeSvgWidth — 치환 문자열 해석 금지", () => {
-	test("루트 태그의 $& 와 $1 이 그대로 남는다", () => {
-		const svg = '<svg viewBox="0 0 100 50" data-x="$&$1" width="5"><g/></svg>';
-		expect(normalizeSvgWidth(svg)).toBe('<svg viewBox="0 0 100 50" data-x="$&$1" width="100"><g/></svg>');
-	});
-});
 
 describe("CSS — 긴 토큰과 다크 모드 배지", () => {
 	const html = renderToHtml("# T\n", "t");
@@ -665,125 +534,33 @@ describe("CSS — 긴 토큰과 다크 모드 배지", () => {
 		expect(html).toMatch(/h1, h2, h3, h4, summary, th, td \{ overflow-wrap: anywhere; \}/);
 	});
 
-	test("다크 모드 변경 배지는 어두운 글자색을 쓰고 라이트 모드는 흰 글자 그대로다", () => {
-		expect(html).toMatch(/\.cf\[data-change\]::before \{[^}]*color: #fff;/);
-		expect(html).toMatch(/@media \(prefers-color-scheme: dark\) \{\s*\.cf\[data-change\]::before, \.arch-entity\[data-change\]::before \{ color: #16181c; \}/);
-	});
-});
-
-describe("preRenderMermaid — 줄 단위 펜스 스캔", () => {
-	const fake = (src: string, i: number) => `<svg data-i="${i}">${src.trim().replace(/\n/g, "|")}</svg>`;
-	const run = (md: string) => preRenderMermaid(md, fake);
-
-	test("틸드 펜스, info 문자열, 공백, 대소문자 변형을 모두 인식한다", () => {
-		for (const open of ["~~~mermaid", '```mermaid title="x"', "``` mermaid", "```Mermaid", "````mermaid"]) {
-			const close = open.startsWith("~") ? "~~~" : open.startsWith("````") ? "````" : "```";
-			const out = run(`앞\n${open}\ngraph TD\nA-->B\n${close}\n뒤\n`);
-			expect(out).toContain('data-i="0"');
-			expect(out).toContain("graph TD|A-->B");
-			expect(out).not.toContain("mermaid");
-		}
-	});
-
-	test("같은 문자이고 같거나 긴 펜스로만 닫힌다 — 짧은 펜스 줄은 소스에 남는다", () => {
-		const out = run("````mermaid\ngraph TD\n```\nA-->B\n````\n");
-		expect(out).toContain("graph TD|```|A-->B");
-	});
-
-	test("CRLF 와 CR 줄바꿈도 인식하고 LF 로 정규화한다", () => {
-		const out = run("```mermaid\r\ngraph TD\r\n```\r\n끝\r");
-		expect(out).toContain('data-i="0"');
-		expect(out).not.toContain("\r");
-	});
-
-	test("다른 펜스 코드 블록 안에 중첩된 mermaid 펜스는 코드로 남는다", () => {
-		const md = "````md\n```mermaid\ngraph TD\n```\n````\n";
-		expect(run(md)).toBe(md);
-	});
-
-	test("닫히지 않은 펜스 안의 mermaid 는 코드로 남는다", () => {
-		const md = "```js\n```mermaid\ngraph TD\n";
-		expect(run(md)).toBe(md);
-		const md2 = "```mermaid\ngraph TD\n";
-		expect(run(md2)).toBe(md2);
-	});
-
-	test("인용문 줄의 mermaid 펜스는 건드리지 않는다 — '> ' 가 소스로 새지 않는다", () => {
-		const md = "> ```mermaid\n> graph TD\n> ```\n";
-		expect(run(md)).toBe(md);
-	});
-
-	test("목록 안 펜스는 들여쓰기만큼 소스를 내어쓰고 그림 앞에 같은 들여쓰기를 남긴다", () => {
-		const seen: string[] = [];
-		const out = preRenderMermaid("- 항목\n\n  ```mermaid\n  graph TD\n    A-->B\n  ```\n", (s, i) => {
-			seen.push(s);
-			return fake(s, i);
-		});
-		expect(seen).toEqual(["graph TD\n  A-->B\n"]);
-		expect(out).toContain('\n  <figure class="diagram">');
-		expect(renderToHtml(out, "t")).toMatch(/<li>[\s\S]*<figure class="diagram">[\s\S]*<\/li>/);
-	});
-
-	test("최상위에서 4칸 이상 들여쓴 펜스는 들여쓴 코드 블록이라 그대로 둔다", () => {
-		const md = "예시:\n\n    ```mermaid\n    graph TD\n    ```\n";
-		expect(run(md)).toBe(md);
-		const tab = "예시:\n\n\t```mermaid\n\tgraph TD\n\t```\n";
-		expect(run(tab)).toBe(tab);
-	});
-
-	test("목록 항목 내용 열에서 4칸 미만 들여쓴 펜스는 그림으로 바꾼다", () => {
-		expect(run("- 항목\n\n    ```mermaid\n    graph TD\n    ```\n")).toContain('data-i="0"');
-		expect(run("1. 항목\n   - 하위\n\n     ```mermaid\n     graph TD\n     ```\n")).toContain('data-i="0"');
-		expect(run("- 항목\n\n  문단\n\n  ```mermaid\n  graph TD\n  ```\n")).toContain('data-i="0"');
-	});
-
-	test("목록 항목 내용 열보다 4칸 이상 들여쓴 펜스는 코드로 둔다", () => {
-		const md = "- 항목\n\n      ```mermaid\n      graph TD\n      ```\n";
-		expect(run(md)).toBe(md);
-	});
-
-	test("들여쓴 코드 안의 닫히지 않은 펜스 줄이 뒤의 그림을 삼키지 않는다", () => {
-		expect(run("예시:\n\n    ```\n\n```mermaid\ngraph TD\n```\n")).toContain('data-i="0"');
-	});
-
-	test("그림 번호는 실제로 치환한 다이어그램만 센다", () => {
-		const out = run("````md\n```mermaid\nx\n```\n````\n\n```mermaid\ngraph TD\n```\n");
-		expect(out).toContain('data-i="0"');
-		expect(out).not.toContain('data-i="1"');
-	});
-
-	test("렌더 실패 메시지 형식은 그대로다", () => {
-		expect(() =>
-			preRenderMermaid("```mermaid\nbad\n```\n", () => {
-				throw new Error("boom");
-			}),
-		).toThrow(/^1번째 mermaid 블록 렌더 실패: Error: boom\n--- 블록 원문 ---\nbad\n$/);
+	test("변경 배지 글자색은 토큰이다 — 라이트는 흰색, 다크는 어두운 색으로 바뀐다", () => {
+		expect(html).toMatch(/\.cf\[data-change\]::before \{[^}]*color: var\(--on-badge\);/);
+		expect(html).toMatch(/--on-badge: #FFFFFF;/);
+		expect(html).toMatch(/:root:not\(\[data-theme="light"\]\) \{[^}]*--on-badge: #0E1117;/);
+		expect(html).toMatch(/:root\[data-theme="dark"\] \{[^}]*--on-badge: #0E1117;/);
 	});
 });
 
 describe("render.ts CLI", () => {
-	test("프론트매터 안의 mermaid 블록과 백슬래시 코드는 mmdc 호출·경고를 일으키지 않는다", () => {
+	test("프론트매터 안의 figure 예시와 백슬래시 코드는 경고를 일으키지 않고 본문 figure 는 통과한다", () => {
 		const dir = mkdtempSync(join(tmpdir(), "render-cli-"));
 		try {
-			mkdirSync(join(dir, "bin"));
-			const log = join(dir, "mmdc.log");
-			const fake = join(dir, "bin", "mmdc");
-			writeFileSync(fake, `#!/bin/sh\necho called >> "${log}"\nexit 1\n`);
-			chmodSync(fake, 0o755);
 			const doc = join(dir, "doc.md");
 			const out = join(dir, "doc.html");
 			writeFileSync(
 				doc,
-				"---\nexample: |\n  ```mermaid\n  graph TD\n  A-->B\n  ```\nnote: `a\\`\n---\n# 제목\n\n본문\n",
+				`---\nexample: |\n  <figure class="diagram" data-kind="flow"></figure>\nnote: \`a\\\`\n---\n# 제목\n\n${FIGURE}\n`,
 			);
 			const r = spawnSync("bun", [join(import.meta.dir, "render.ts"), "--in", doc, "--out", out], {
-				env: { ...process.env, PATH: `${join(dir, "bin")}:${process.env.PATH}` },
 				encoding: "utf8",
 			});
 			expect(r.status).toBe(0);
-			expect(existsSync(log)).toBe(false);
 			expect(r.stderr).not.toContain("경고");
-			expect(readFileSync(out, "utf8")).toContain("제목");
+			const html = readFileSync(out, "utf8");
+			expect(html).toContain("<h1");
+			expect(html.match(/<figure class="diagram"/g)).toHaveLength(1);
+			expect(html).toContain("<figcaption><b>그림 1.</b> 요청 흐름</figcaption>");
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}

@@ -48,15 +48,15 @@ If read, 확보=열람; if no tool is available, 확보=접근 불가 (record th
 
 ## Architecture
 ### 시스템 레벨
-<mermaid (edges = short protocols: HTTP/SQL/REST) or "구조 변화 없음: <reason>">
+<diagram figure, data-kind="architecture" (edges = short protocols: HTTP/SQL/REST) or "구조 변화 없음: <reason>">
 <gloss footnote — `<ul class="gloss"><li><code>노드명</code> — 평이한 뜻</li>…` decoding each code-name node the diagram draws (process/store/mapping-table) that the standing-interface table does not already spell out; a plain-language node needs no entry (쓰기 전에 소개)>
 <standing-interface table — exact three-column header/separator and at least one data row; `인터페이스`/`오가는 것` state actual signatures/payloads/response bodies; see below (R17)>
 <change-contract table — three axes: 서버 API / DB 스키마 / 클라이언트 의존; see below (R14)>
 ### 컴포넌트 레벨
-<mermaid dependency graph — nodes name modules/concepts (features/use cases/hooks/services); no file paths — or "구조 변화 없음: <reason>">
+<diagram figure, data-kind="architecture" — a dependency graph whose nodes name modules/concepts (features/use cases/hooks/services); no file paths — or "구조 변화 없음: <reason>">
 <arch-entity card per changed behavior node — 패키지 (package path locating it) / 책임 / 인터페이스 / 변경점 (what this diff changed) + change kind; see below (R18)>
 ### 도메인 레벨
-<mermaid (erDiagram/classDiagram) — nodes name real business concepts (no file paths); fill each classDiagram box with member variables/methods — or "구조 변화 없음: <reason>">
+<diagram figure, data-kind="er" or "class" — nodes name real business concepts (no file paths); fill each class box with member variables/methods — or "구조 변화 없음: <reason>">
 <arch-entity per domain object — 책임 (invariants) / 핵심 멤버 / 변경점 (what this diff changed) + change kind; see below (R21)>
 
 ## 기능 단위
@@ -69,8 +69,8 @@ If read, 확보=열람; if no tool is available, 확보=접근 불가 (record th
 
 **책임** <only this use-case's own responsibility. A use-case orchestrates domains through their contracts; it does not steal a collaborator's responsibility or absorb a cross-cutting property (transaction/idempotency) that another path owns>
 
-<one sentence naming what the reader verifies with the flow — then a mermaid `sequenceDiagram` (real symbols, mark the step this diff changed) — then 2–3 sentences reading the drawn flow plus its 관련 흐름. If the diff touches a user-facing surface, a user-journey `flowchart` from the user's first action `([사용자: …])` through actual branches (권한 거부/락/재시도) to what they see may replace or accompany the sequence>
-<gloss footnote — `<ul class="gloss"><li><code>요소명</code> — 평이한 뜻</li>…` decoding each code-name message/participant the flow draws (`getDisplayCatalog`, a repository method) that no card above already explains; a participant aliased to plain language (`participant Backend as catalog`) needs no entry (쓰기 전에 소개)>
+<one sentence naming what the reader verifies with the flow — then a `data-kind="sequence"` figure (real symbols, mark the step this diff changed) — then 2–3 sentences reading the drawn flow plus its 관련 흐름. If the diff touches a user-facing surface, a user-journey `data-kind="flow"` figure from the user's first action `사용자: …` through actual branches (권한 거부/락/재시도) to what they see may replace or accompany the sequence>
+<gloss footnote — `<ul class="gloss"><li><code>요소명</code> — 평이한 뜻</li>…` decoding each code-name message/participant the flow draws (`getDisplayCatalog`, a repository method) that no card above already explains; a participant already labeled in plain language (`catalog`) needs no entry (쓰기 전에 소개)>
 
 **개념/도메인 모델 연결** <the domain models/concepts this use-case connects>
 
@@ -149,29 +149,29 @@ per change. Absorb docs/noise commits as one line in the group explaining the co
 
 ## Questions answered by the three Architecture levels
 
-| Level | Question | Recommended mermaid |
+| Level | Question | Recommended figure |
 |---|---|---|
-| 시스템 레벨 | Which **distinct processes, services, deployables, and stores** are involved, and which boundary does this diff touch? | `flowchart` + `subgraph` (boundaries) — name the relevant core resources (modules, stores, mapping tables) through which the change flows inside each subgraph. Show at least two (at most five) when two or more are relevant; exactly one is allowed only when the document names it and explains why there is only one. Mark touched nodes/edges with `:::changed`. |
-| 컴포넌트 레벨 | How do dependencies between modules/domains differ before and after the change? | Two `flowchart`s (Before/After), or one distinguishing added/removed edges. |
-| 도메인 레벨 | What are the entities, concepts, and invariants, and what changes? | `erDiagram`/`classDiagram`; add a `stateDiagram-v2` if a touched concept has 3+ states or named transitions (lock, retry limit exceeded, confirm, expire), labeling transitions with actual guards. If none truly exists, say so in one line. |
+| 시스템 레벨 | Which **distinct processes, services, deployables, and stores** are involved, and which boundary does this diff touch? | `architecture` — a `group` container rect per boundary; name the relevant core resources (modules, stores, mapping tables) through which the change flows inside each container. Show at least two (at most five) when two or more are relevant; exactly one is allowed only when the document names it and explains why there is only one. Mark touched nodes/edges with `focal`. |
+| 컴포넌트 레벨 | How do dependencies between modules/domains differ before and after the change? | Two `architecture` figures (Before/After) on one layout, or one figure distinguishing added/removed edges. |
+| 도메인 레벨 | What are the entities, concepts, and invariants, and what changes? | `er` or `class`; add a `state` figure if a touched concept has 3+ states or named transitions (lock, retry limit exceeded, confirm, expire), labeling transitions with actual guards. If none truly exists, say so in one line. |
 
 **The system level is about process boundaries.** Function/module call chains within one process
 (runtime) belong to the component/domain level, not the system level — do not disguise an in-process
 call chain (such as `test → helper → tool`) as a system diagram. If this diff crosses no process/service
 boundary, use the `구조 변화 없음: <사유>` marker for the system level.
 
-**Fill each subgraph's interior.** Create a `subgraph` for each involved process/service/store, and
+**Fill each container's interior.** Draw a `group` container for each involved process/service/store, and
 fill it with named nodes for the relevant core resources through which this change flows — modules,
-stores, mapping tables. Show at least two (at most five) when two or more are relevant; a subgraph with
+stores, mapping tables. Show at least two (at most five) when two or more are relevant; a container with
 exactly one is allowed only when the document names it and explains why there is only one (internal
 dependency edges traversed by the change are welcome). A reader should get from one diagram:
 system units + each system's core internal composition + contracts between systems. A single node
-repeating its subgraph label shows a boundary but no composition — name the actual parts. The boundary
+repeating its container label shows a boundary but no composition — name the actual parts. The boundary
 rule above still holds: diffs crossing no boundary use a waiver, and internal nodes cannot replace a cross-process edge.
 
 **Diagrams show more than what the diff changed.** Include unchanged surrounding systems, services,
 and components as context when needed to understand this diff. However, (1) every node must actually
-exist in the system (no invention), and (2) change markers (`:::changed`/Before-After) must identify
+exist in the system (no invention), and (2) change markers (`focal`/Before-After) must identify
 what this diff changed, so context and changes remain distinguishable.
 
 If a level truly has nothing to draw, write one line under it —
@@ -224,7 +224,7 @@ where, not what; long paths truncate mid-word in rendering — `health-`, `propo
 `패키지` slot states **where** the component lives at package-path granularity
 (`packages/schemas/src/program`, `entities/supplement/api`). This slot holds a directory path, hence
 the name 패키지; calling it "레이어" (an architecture layer) misleads readers. R18 rejects file-path nodes.
-A dependency graph (mermaid) shows what connects to what, but the node name alone cannot explain what
+A dependency graph (an `architecture` figure) shows what connects to what, but the node name alone cannot explain what
 `CurrentBoostPackInfoCard` does. If component structure truly does not change, a reasoned
 `구조 변화 없음: <사유>` waiver can satisfy R18. Otherwise, every authored `arch-entity` card is checked
 **independently**. Each must contain **패키지·책임·인터페이스 (functions)·변경점** and
@@ -258,7 +258,7 @@ they guarantee. Nodes and cards must be **real business concepts**: things the d
 in the codebase's own domain terms. A schema class name can serve as a domain object **only when its
 encoded business concept is explained**; an encoding-only node (`GenerationIntakeTimeCodesSchema`)
 without business meaning is not a domain object. **Above** the entity/relation diagram
-(`erDiagram`/`classDiagram`), place **one `arch-entity` card per domain object this diff touches**.
+(`er`/`class` figure), place **one `arch-entity` card per domain object this diff touches**.
 Fill each card's three distinct slots:
 
 - **책임** — Describe the object's full picture thoroughly: its duty, invariants, and **the relevant
@@ -279,25 +279,37 @@ Fill each card's three distinct slots:
 
 The badge carries the **change kind (`data-change`)**. **Fill every box in an object/class diagram**
 with member variables and methods/messages. An empty name-only box teaches nothing, and R21 rejects
-member-less `classDiagram`s. In the diagram too, append `←변경` to member lines added/changed by this
-diff (`+has_completed_tutorial: boolean ←변경` — verified safe for mmdc rendering). Nodes name domain
+member-less class boxes. In the diagram too, append `←변경` to member lines added/changed by this
+diff (`has_completed_tutorial: boolean ←변경`). Nodes name domain
 concepts, not file paths. If no domain object truly changes, use a `구조 변화 없음: <사유>` waiver instead.
 
 ```markdown
 ### 도메인 레벨
-​```mermaid
-classDiagram
-  class SupplementCategory {
-    +code: string
-    +displayName: string
-    +isActive() bool ←변경
-  }
-  class ProposalCategoryMirror {
-    +categoryCode: string
-    +proposalId: string
-    +reflects() SupplementCategory
-  }
-  SupplementCategory "1" <-- "*" ProposalCategoryMirror : identifies
+​```html
+<figure class="diagram" data-kind="class">
+  <svg viewBox="0 0 344 328" role="img" aria-label="ProposalCategoryMirror는 SupplementCategory를 가리켜 제안이 바꾸는 카테고리를 식별한다. SupplementCategory의 isActive()가 이번에 바뀐다.">
+    <defs><marker id="f2-ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" class="mk-mut"/></marker></defs>
+    <!-- 두 박스를 세로로 쌓는다: x=16 w=312, 머리 32px + 멤버 줄 24px -->
+    <path class="rel" d="M172 200 V128" marker-end="url(#f2-ah)"/>
+    <text class="t-s lbl" x="184" y="168">identifies</text>
+    <text class="t-s" x="180" y="148">1</text><text class="t-s" x="180" y="192">*</text>
+    <g data-class="SupplementCategory">
+      <rect class="head" x="16" y="16" width="312" height="32" rx="6"/><text class="t-b" x="28" y="37">SupplementCategory</text>
+      <rect class="box" x="16" y="48" width="312" height="80"/>
+      <text class="t-m" x="28" y="68">code: string</text>
+      <text class="t-m" x="28" y="92">displayName: string</text>
+      <text class="t-m" x="28" y="116">isActive(): bool ←변경</text>
+    </g>
+    <g data-class="ProposalCategoryMirror">
+      <rect class="head" x="16" y="200" width="312" height="32" rx="6"/><text class="t-b" x="28" y="221">ProposalCategoryMirror</text>
+      <rect class="box" x="16" y="232" width="312" height="80"/>
+      <text class="t-m" x="28" y="252">categoryCode: string</text>
+      <text class="t-m" x="28" y="276">proposalId: string</text>
+      <text class="t-m" x="28" y="300">reflects(): SupplementCategory</text>
+    </g>
+  </svg>
+  <figcaption><b>그림 2. 제안 mirror가 원본 카테고리를 가리킨다.</b> <code>←변경</code>이 이번 diff가 바꾼 멤버다.</figcaption>
+</figure>
 ​```
 
 <div class="arch-entity" data-change="mod">
@@ -316,7 +328,7 @@ classDiagram
 ```
 
 To pass R21, the domain level must contain `arch-entity` cards with `책임`/`핵심 멤버`/`변경점`
-labels and allowed `data-change` values (a reasoned waiver may replace cards). If a `classDiagram`
+labels and allowed `data-change` values (a reasoned waiver may replace cards). If a `class` figure
 is drawn, every box must also contain members/methods.
 
 ## 기능 단위 chapters (R15 required)
@@ -361,8 +373,8 @@ diagram; R23 — the judge — checks the semantic discipline the scan cannot se
 - **입구(트리거)** — the trigger kind + entry point + interface signature + change kind (new|mod|del).
 - **영향범위** — the blast radius: who reads/depends on this capability and how a failure propagates.
 
-Then the **narrative body** (judged, not scanned): **책임** (its own responsibility only), a mermaid
-`sequenceDiagram` of the flow with the changed step marked plus 2–3 sentences reading it and its
+Then the **narrative body** (judged, not scanned): **책임** (its own responsibility only), a
+`data-kind="sequence"` figure of the flow with the changed step marked plus 2–3 sentences reading it and its
 관련 흐름, **개념/도메인 모델 연결**, and a one-line `의존 방향 판정`. Participants must be real
 module/service/function names (R12); if the flow truly does not change, a diff that changes no use-case
 uses a section-level `구조 변화 없음: <사유>` waiver in place of chapters.
@@ -387,16 +399,26 @@ inline code; English methodology tokens are case-insensitive).
 
 표시 카탈로그가 조립되어 상담챗 카드로 돌아가는 흐름을 확인한다.
 
-​```mermaid
-sequenceDiagram
-  participant Chat as 상담챗 feature
-  participant Resolver as entities resolver
-  participant Backend as backend catalog
-  Chat->>+Resolver: resolveDisplay(code)
-  Resolver->>+Backend: GET /v1/supplement-catalog?includeDeletedCategories=true
-  Note over Resolver,Backend: 이 diff — 삭제 카테고리까지 포함해 조회
-  Backend-->>-Resolver: 표시 카탈로그(삭제 포함)
-  Resolver-->>-Chat: 카드용 표시 카탈로그
+​```html
+<figure class="diagram" data-kind="sequence" data-min-width="640">
+  <svg viewBox="0 0 640 280" role="img" aria-label="상담챗이 resolver에 표시 카탈로그를 요청하면 resolver가 backend를 조회해 삭제 카테고리를 포함한 카탈로그를 돌려받는다.">
+    <defs>
+      <marker id="f3-ah" viewBox="0 0 8 6" refX="7" refY="3" markerWidth="8" markerHeight="6" orient="auto"><path d="M0 0L8 3L0 6z" class="mk-mut"/></marker>
+      <marker id="f3-ah-key" viewBox="0 0 8 6" refX="7" refY="3" markerWidth="8" markerHeight="6" orient="auto"><path d="M0 0L8 3L0 6z" class="mk-accent"/></marker>
+    </defs>
+    <!-- 생명선 x = 112, 320, 528. 메시지 행: y = 112, 160, 208, 256 -->
+    <line class="life" x1="112" y1="52" x2="112" y2="272"/><line class="life" x1="320" y1="52" x2="320" y2="272"/><line class="life" x1="528" y1="52" x2="528" y2="272"/>
+    <rect class="act" x="315" y="112" width="10" height="144"/><rect class="act" x="523" y="160" width="10" height="48"/>
+    <path class="msg" d="M112 112 H315" marker-end="url(#f3-ah)"/><text class="m" x="214" y="104" text-anchor="middle">resolveDisplay(code)</text>
+    <path class="msg focal" d="M325 160 H523" marker-end="url(#f3-ah-key)"/><text class="m" x="424" y="152" text-anchor="middle">GET /v1/supplement-catalog ←변경</text>
+    <path class="msg ev" d="M523 208 H325" marker-end="url(#f3-ah)"/><text class="m" x="424" y="200" text-anchor="middle">표시 카탈로그(삭제 포함)</text>
+    <path class="msg ev" d="M315 256 H112" marker-end="url(#f3-ah)"/><text class="m" x="214" y="248" text-anchor="middle">카드용 표시 카탈로그</text>
+    <rect class="box" x="24" y="16" width="176" height="36" rx="6"/><text class="t-b" x="112" y="39" text-anchor="middle">상담챗 feature</text>
+    <rect class="box" x="232" y="16" width="176" height="36" rx="6"/><text class="t-b" x="320" y="39" text-anchor="middle">entities resolver</text>
+    <rect class="box" x="440" y="16" width="176" height="36" rx="6"/><text class="t-b" x="528" y="39" text-anchor="middle">backend catalog</text>
+  </svg>
+  <figcaption><b>그림 3. 표시 카탈로그 조회는 resolver에서 backend로 한 번 나간다.</b> 파란 화살표가 이번 diff로 바뀐 호출이다.</figcaption>
+</figure>
 ​```
 
 `Resolver`가 `includeDeletedCategories=true`로 backend를 조회하는 단계가 이 diff로 바뀐다. 관련 흐름인 판매용 카탈로그 조회는 삭제 카테고리를 여전히 제외하므로 이 경로와 분리된다.
@@ -407,105 +429,131 @@ sequenceDiagram
 ```
 
 R15 checks, **per chapter**, the presence of the `구현체`/`버전`/`소속 도메인`/`입구`/`영향범위` slots
-and a mermaid flow diagram (the same presence philosophy as R14). One complete chapter cannot mask an
+and a `flow`/`sequence`/`state` diagram figure (the same presence philosophy as R14). One complete chapter cannot mask an
 incomplete one — every `### <capability>` chapter is checked independently. The author fills each
 slot's content; R23 judges whether the chapter is a real use-case (not a demoted domain function),
 whether it steals a collaborator's responsibility, and whether the version classification is grounded.
 
-## Mermaid authoring rules
+## Diagram figures
 
-- Use a ` ```mermaid ` fence. `render.ts` bakes it into inline SVG through mmdc at build time —
-  the resulting HTML remains self-contained, with no external references and no script needed to
-  render (its only script is an ESC/Enter shortcut for the zoom overlay that degrades away cleanly).
-- Use real system identifiers (service names, module paths, command names) for node labels — invented
-  generic nouns ("service"→"DB") fit any diff and fail R12. Context nodes may be unchanged, but nodes/
-  edges this diff changed must carry change markers. Judgment (R12) verifies label reality and change
-  markers through quotes.
-- Standardize change markers on `classDef changed stroke:#b0563a,stroke-width:3px`, but application
-  syntax differs by diagram type — combinations outside this table cause parse errors:
+Every 2D diagram is a raw-HTML **figure block** written straight into the Markdown. The block is the
+whole diagram — there is no diagram language, no fence, and no build-time diagram tool. `render.ts`
+passes the block through unchanged, and the page CSS colors it.
 
-  | Type | Application syntax |
-  |---|---|
-  | `flowchart` | `class order,coupon changed` |
-  | `classDiagram` | `cssClass "Foo,Bar" changed` or `class Foo:::changed` in the declaration |
-  | `stateDiagram-v2` | `class Active changed` |
-  | `erDiagram` | classDef unsupported — identify changed entities in the caption or body |
+```html
+<figure class="diagram" data-kind="flow">
+  <svg viewBox="0 0 340 120" role="img" aria-label="요청이 게이트웨이를 지나 서비스로 간다.">
+    <defs><marker id="f1-ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" class="mk-mut"/></marker></defs>
+    <rect class="box" x="16" y="40" width="120" height="40" rx="8"/><text class="t-b" x="28" y="64">게이트웨이</text>
+    <path class="rel" d="M136 60 H204" marker-end="url(#f1-ah)"/><text class="t-s lbl" x="170" y="52" text-anchor="middle">HTTP</text>
+    <rect class="box focal" x="204" y="40" width="120" height="40" rx="8"/><text class="t-b" x="216" y="64">서비스</text>
+  </svg>
+  <figcaption><b>그림 1. 요청은 게이트웨이를 지나 서비스로 간다.</b> 파란 테두리가 이 diff로 바뀐 요소다.</figcaption>
+</figure>
+```
 
-  ```mermaid
-  flowchart LR
-    order[OrderCancelService] -->|REVOKE_COUPONS| coupon[coupon-command-handlers]
-    coupon --> db[(PostgreSQL)]
-    classDef changed stroke:#b0563a,stroke-width:3px
-    class order,coupon changed
-  ```
+**How to draw.** Follow `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` §7 (inline SVG mechanics, Korean
+labels, connector rules, legends) and the per-type recipes in
+`${CLAUDE_SKILL_DIR}/../html-report/references/diagram-recipes.md`. Design narrow-first (viewBox 360 wide
+or less) so the one geometry reads at 400px and at 1280px. Per figure: at most 9 nodes and 12 arrows
+(sequence: 5 lifelines, 12 messages); past that, split into an overview and a detail figure. Every
+arrow carries a verb or a short protocol label. A failure path is solid at full weight (`rel-bad`),
+never faint or dashed.
 
-- Do not exceed 12 nodes per diagram. Exceeding that signals a wrong level or a need to split into two diagrams.
-- Arrange every diagram as **reading goal → picture → interpretation**: one sentence immediately
-  above the fence naming a concrete goal the reader can verify with it, and 2–3 sentences immediately
-  below interpreting actual drawn nodes/edges (structural facts such as store lifetime differences,
-  the edge preserving unidirectionality, or where causal paths merge). Genre descriptions such as
-  "이 그림은 흐름을 보여준다" are not goals.
-- Draw synchronous `sequenceDiagram` calls with activation pairs — `A->>+B: 호출(인자)` …
-  `B-->>-A: 반환값` (or `activate`/`deactivate` pairs). Explicitly mark messages without returns as
-  async/fire-and-forget using `A-)B:` or a Note, so readers can distinguish no response by design from
-  a missing return edge. Use real symbols verbatim for participant labels, without abbreviation.
-- **Double-quote flowchart labels whenever they contain special characters.** Unquoted node/edge
-  labels containing parentheses `()`, braces `{}`, colons, or slashes cause parse errors (mmdc fails
-  during render): quote the entire label as `"…"`, as in `A -->|"redeem({ code, householdId })"| B`
-  and `node["pairing_code:{code}"]`. With this document style's signature/payload labels, it is safe
-  to treat virtually every edge label as requiring quotes.
-- **Semicolons separate mermaid statements.** A `;` inside label/note text splits the statement and
-  causes a parse error — replace it with a comma or `·`; for long notes use the multiline form
-  `note right of X` … `end note`.
-- **Activations must balance to render.** A `B-->>-A` return must pair with an earlier `A->>+B`
-  activation — deactivating without activating makes mmdc fail with
-  "Trying to inactivate an inactive participant". Close nested calls from the inside out like a
-  stack; for calls drawn without activation, also omit `-` on the return: `B-->>A:`.
-- **The classDiagram change marker is inline `:::changed`.** The flowchart bulk assignment
-  `class A,B,C changed` causes a classDiagram parse error — attach the marker inline in the class
-  declaration, as in `class CardType:::changed` (the `classDef` definition stays the same).
+**The block contract** (R11 enforces it; R9, R15, R18, R21 read it):
 
-### Worked example — one system-level diagram applying all the rules above
+- The block starts on a line that opens `<figure class="diagram" data-kind="…">` (at most 3 spaces of
+  indent, top level — not inside a list or quote) and ends at the first `</figure>`. Blank lines and
+  indented SVG lines inside the block are fine. Figures do not nest.
+- `data-kind` is required and is one of: `flow` (steps and branches), `sequence` (messages between
+  actors over time), `state` (states and transitions), `class` (domain objects with members), `er`
+  (entities and relationships), `architecture` (components, boundaries, dependencies). R15 accepts only
+  `flow`, `sequence`, `state` as a capability's flow diagram.
+- Optional `data-min-width="N"` (240–1400) for a figure whose labels fall under 12px when shrunk to the
+  column. `render.ts` then draws the SVG at least N px wide inside its own scroll container and prints
+  the hint "그림은 좌우로 밀어서 볼 수 있어요." only on viewports where it overflows. Use it for a
+  secondary figure, never to hide the changed half of a key one; add the edge/message table under the
+  figure when you use it.
+- The `<svg>` carries `viewBox`, `role="img"`, and an `aria-label` that states what the figure shows in
+  one sentence. `<figcaption>` is the visible caption: "그림 N." plus the claim, then what is verified
+  from the source.
+- Allowed elements: `svg g defs marker path line polyline polygon rect circle ellipse text tspan title
+  desc`, plus `figcaption b strong em i span code br small` in the caption. No `<style>`, `<script>`,
+  `<foreignObject>`, `<image>`, links, `style=` attributes, or event handlers.
+- Colors come from classes, never from literal values. Allowed classes: the sanctioned component classes
+  and `box head focal ext group store mask act rel rel-ok rel-bad ret msg ev key life stop init fin-ring
+  diamond verdict-ok verdict-bad mk-mut mk-ok mk-bad mk-open mk-accent t-b t-s t-m t-ok t-bad lbl m vf`.
+  A `fill`/`stroke` attribute may only be `none`, `currentColor`, `inherit`, `url(#id)`, or `var(--token)`.
+- Arrowhead `<marker>` ids are unique in the whole document: prefix with the figure number (`f1-ah`,
+  `f2-ah`). Duplicate ids fail R11.
+- Labels are `<text>` (use `<tspan>` for a second line). Escape `<`, `>`, `&` as entities
+  (`Promise&lt;void&gt;`). Give arrow and message labels `class="lbl"` (or `m`): the file-path ban on
+  diagram nodes (R18, R21) reads every other `<text>` as a node name.
+- **Class boxes** (`data-kind="class"`, R21): group each box as `<g data-class="Name">…</g>`. Inside,
+  the first `<text>` is the class name and every later `<text>` is one member or method line. A
+  `«stereotype»` text is ignored. A box with only its name, or a class figure with no `<g data-class>`,
+  fails.
 
-This example uses a fictional domain (coupon redemption). It sets the quality bar for combining
-goal sentence → diagram → interpretation, named subgraph resources, quoted contract labels, and change markers in one picture.
+**Change markers.** Give every node, message, or member this diff changed the class `focal` (accent
+stroke) and say in the caption what the marker means. Before/after comparisons are two figures on one
+layout (same viewBox, same coordinates) in which only the changed elements differ. Append `←변경` to a
+changed member line or message label when the judge needs the marker in a quotable text (R12).
+
+**Reading goal → picture → interpretation.** Arrange every diagram as one sentence above the figure
+naming a concrete goal the reader can verify with it, the figure, and 2–3 sentences below interpreting
+nodes and edges actually drawn (store lifetime differences, the edge keeping a dependency one-way, where
+two cause-paths merge). Genre descriptions such as "이 그림은 흐름을 보여준다" are not goals.
+
+**Identifiers.** Use real system identifiers (service names, module names, commands, entity names) for
+node labels — invented generic nouns ("service"→"DB") fit any diff and fail R12. Context nodes may be
+unchanged, but nodes and edges this diff changed carry the change marker. Judgment (R12) verifies label
+reality and change markers through quotes.
+
+### Worked example — one system-level figure applying all the rules above
+
+This example uses a fictional domain (coupon redemption). It sets the quality bar for combining goal
+sentence → figure → interpretation, named container boundaries, short protocol labels, and change
+markers in one picture.
 
 이 그림으로 쿠폰 적용 요청이 모바일에서 Node로 넘어간 뒤, 새로 추가된 잠금 키와
 기존 쿠폰 테이블 중 어느 쪽을 먼저 만지는지 확인할 수 있다.
 
-```mermaid
-flowchart LR
-  subgraph mobile["apps/mobile"]
-    screen["CouponInputScreen"]
-    repo["CouponRepositoryImpl.redeem"]
-    screen --> repo
-  end
-  subgraph node["apps/backend"]
-    router["CouponRouter.redeem"]
-    service["CouponService"]
-    guard["CouponAttemptGuard"]
-    router --> service --> guard
-  end
-  subgraph redis["Redis"]
-    lock["coupon_lock:{couponId}"]
-  end
-  subgraph pg["PostgreSQL"]
-    coupons["coupons.redeemed_at"]
-  end
-  repo -->|"tRPC redeem({ code, userId })"| router
-  guard -->|"SET NX EX 30"| lock
-  service -->|"UPDATE"| coupons
-  classDef changed stroke:#b0563a,stroke-width:3px
-  class guard,lock changed
+```html
+<figure class="diagram" data-kind="architecture" data-min-width="872">
+  <svg viewBox="0 0 872 416" role="img" aria-label="쿠폰 적용 요청이 모바일에서 백엔드로 넘어가 CouponService를 지나 쿠폰 테이블을 갱신하고, 백엔드 CouponAttemptGuard는 Redis 잠금 키를 만든다.">
+    <defs><marker id="f1-ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" class="mk-mut"/></marker></defs>
+    <!-- 컨테이너: mobile x=16, backend x=320, redis/pg x=640. 행 중심: 174(진입), 266(저장), 360(잠금) -->
+    <rect class="group" x="16" y="16" width="208" height="208" rx="10"/><text class="t-s" x="28" y="36">apps/mobile</text>
+    <rect class="group" x="320" y="16" width="240" height="384" rx="10"/><text class="t-s" x="332" y="36">apps/backend</text>
+    <rect class="group" x="640" y="208" width="216" height="96" rx="10"/><text class="t-s" x="652" y="228">PostgreSQL</text>
+    <rect class="group" x="640" y="312" width="216" height="88" rx="10"/><text class="t-s" x="652" y="332">Redis</text>
+    <!-- 간선 먼저 -->
+    <path class="rel" d="M120 96 V148" marker-end="url(#f1-ah)"/>
+    <path class="rel" d="M208 174 H336" marker-end="url(#f1-ah)"/><text class="t-s lbl" x="272" y="166" text-anchor="middle">tRPC</text>
+    <path class="rel" d="M440 196 V244" marker-end="url(#f1-ah)"/>
+    <path class="rel" d="M440 288 V338" marker-end="url(#f1-ah)"/>
+    <path class="rel" d="M544 266 H656" marker-end="url(#f1-ah)"/><text class="t-s lbl" x="600" y="258" text-anchor="middle">UPDATE</text>
+    <path class="rel focal" d="M544 360 H656" marker-end="url(#f1-ah)"/><text class="t-s lbl" x="600" y="352" text-anchor="middle">SET NX</text>
+    <!-- 노드 -->
+    <rect class="box" x="32" y="52" width="176" height="44" rx="8"/><text class="t-b" x="44" y="79">CouponInputScreen</text>
+    <rect class="box" x="32" y="148" width="176" height="52" rx="8"/><text class="t-b" x="44" y="170">CouponRepositoryImpl</text><text class="t-m" x="44" y="188">.redeem</text>
+    <rect class="box" x="336" y="152" width="208" height="44" rx="8"/><text class="t-b" x="348" y="179">CouponRouter.redeem</text>
+    <rect class="box" x="336" y="244" width="208" height="44" rx="8"/><text class="t-b" x="348" y="271">CouponService</text>
+    <rect class="box focal" x="336" y="338" width="208" height="44" rx="8"/><text class="t-b" x="348" y="356">CouponAttemptGuard</text><text class="t-s" x="348" y="373">← 변경</text>
+    <rect class="box" x="656" y="244" width="184" height="44" rx="8"/><text class="t-m" x="668" y="271">coupons.redeemed_at</text>
+    <rect class="box focal" x="656" y="338" width="184" height="44" rx="8"/><text class="t-m" x="668" y="356">coupon_lock:{couponId}</text><text class="t-s" x="668" y="373">← 변경</text>
+  </svg>
+  <figcaption><b>그림 1. 이 diff는 검증 경로에 Redis 잠금 한 겹을 끼운다.</b> 파란 테두리가 이 diff로 바뀐 요소다.</figcaption>
+</figure>
 ```
 
 이 작례의 범위에서 Redis와 PostgreSQL은 이 흐름에 관련된 핵심 자원이 각각 하나뿐이다 —
 Redis는 `coupon_lock:{couponId}` 잠금 키만, PostgreSQL은 `coupons.redeemed_at` 컬럼만
-해당하므로 각 subgraph에 하나씩만 실명으로 둔다.
+해당하므로 각 컨테이너에 하나씩만 실명으로 둔다.
 
 `CouponAttemptGuard`와 `coupon_lock:{couponId}`만 변경 마커를 달고 있어, 이 diff가
 검증 경로에 잠금 한 겹을 끼웠을 뿐 `CouponService`→`coupons.redeemed_at`의 기존 쓰기
-경로는 그대로임이 그림에서 바로 읽힌다. 잠금 키가 테이블이 아니라 Redis subgraph에
+경로는 그대로임이 그림에서 바로 읽힌다. 잠금 키가 테이블이 아니라 Redis 컨테이너에
 있다는 것이 저장소 수명 차이(TTL 30초 vs 영구 행)를 드러낸다.
 
 ## Core-logic code (R13 required)
@@ -523,7 +571,7 @@ export const SupplementCostItem = z.strictObject({
 ​```
 ```
 
-- Use the actual file language tag (`ts`, `py`, `sql`, etc.). mermaid is reserved for diagrams; do not use it here.
+- Use the actual file language tag (`ts`, `py`, `sql`, etc.). Diagrams are figure blocks, not code fences; use a fence for code only.
 - Also represent deleted files with a one-line fence such as `# 이 파일은 통째로 삭제된다`.
 
 ## Sanctioned components (complete list)
@@ -608,7 +656,7 @@ colors/styles directly in the artifact (R11) — provide the kind and render.ts 
 
 ### `flow` / `flow-step` / `flow-arrow` — one-dimensional step strip
 
-Use only for **things flowing in one line**, such as chronological or call order. Use mermaid when boundaries/branches are needed.
+Use only for **things flowing in one line**, such as chronological or call order. Use a diagram figure when boundaries/branches are needed.
 
 ```html
 <div class="flow">
@@ -637,25 +685,31 @@ Use only for one-paragraph cautions or key points. Overuse defeats emphasis.
 <p class="callout">개별 usage 실패는 계속 처리하지만, 목록 조회 실패는 전체 경계 실패다.</p>
 ```
 
-### `diagram` — diagram wrapper with caption
+### `diagram` — inline SVG figure
 
-render.ts automatically wraps mermaid blocks in `<figure class="diagram">`.
-Write the wrapper yourself only when adding a caption:
+Write the figure block yourself; see "Diagram figures" above for the block contract, the `data-kind`
+values, and the allowed SVG classes. `render.ts` does not wrap or generate anything: it passes the block
+through and supplies the card, the colors, and the scroll container.
 
 ```html
-<figure class="diagram">
-  <!-- (When inserting a component combination other than mermaid) -->
-  <figcaption>회수 커맨드의 경계</figcaption>
+<figure class="diagram" data-kind="flow">
+  <svg viewBox="0 0 340 80" role="img" aria-label="회수 커맨드는 쿠폰 서비스로 간다.">
+    <defs><marker id="f4-ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" class="mk-mut"/></marker></defs>
+    <rect class="box" x="16" y="20" width="136" height="40" rx="8"/><text class="t-m" x="28" y="45">REVOKE_COUPONS</text>
+    <path class="rel" d="M152 40 H204" marker-end="url(#f4-ah)"/>
+    <rect class="box focal" x="204" y="20" width="120" height="40" rx="8"/><text class="t-b" x="216" y="45">쿠폰 서비스</text>
+  </svg>
+  <figcaption><b>그림 4. 회수 커맨드의 경계</b></figcaption>
 </figure>
 ```
 
 ### `gloss` — "이 그림의 요소" footnote decoding a diagram's code-name elements
 
-Place **directly under a mermaid diagram** whose nodes/messages carry raw code identifiers a
-no-context reader cannot decode from the picture (a `sequenceDiagram`'s messages, a 시스템 레벨
-`flowchart`'s process/store nodes). One `<li>` per code-name element drawn — the element in
+Place **directly under a diagram figure** whose nodes/messages carry raw code identifiers a
+no-context reader cannot decode from the picture (a `sequence` figure's messages, a 시스템 레벨
+`architecture` figure's process/store nodes). One `<li>` per code-name element drawn — the element in
 `<code>`, then a plain-language reading. Skip an element already spelled out by an `arch-entity`
-card (R18/R21) or already aliased to plain language in the diagram (`participant Backend as catalog`);
+card (R18/R21) or already labeled in plain language in the diagram (`catalog`);
 this footnote is for the identifiers the cards do not reach. render.ts supplies the "이 그림의 요소"
 label — do not write it yourself (쓰기 전에 소개).
 

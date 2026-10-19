@@ -26,7 +26,7 @@ import {
 	type ExplainDiffState,
 	type Step,
 } from "@lib/explain-diff-core";
-import { checkStructure, type DiffHunk, type DiffLineRange } from "@lib/explain-diff-structure";
+import { checkStructure, diagramFigures, type DiffHunk, type DiffLineRange } from "@lib/explain-diff-structure";
 import { renderHelp, type CliCommand } from "@lib/cli-help";
 
 interface Persisted extends ExplainDiffState {
@@ -643,9 +643,9 @@ function checkChecklistReport(checklistPath: string | undefined, failedItems: st
 /**
  * Re-renders the submitted Markdown through the project renderer and returns
  * the exact bytes it produced.  The renderer output is the proof boundary:
- * comparing only Mermaid/SVG counts cannot detect stale prose or component
+ * comparing only figure counts cannot detect stale prose or component
  * markup, while comparing this deterministic derivation proves the HTML was
- * built from this exact source (including Mermaid source, not just its SVG).
+ * built from this exact source (including every figure's SVG, not just its count).
  */
 function renderCurrentDocument(docPath: string): string {
 	const markdown = readFileSync(docPath, "utf8");
@@ -685,13 +685,13 @@ export function setRenderForTesting(renderer?: FreshRenderer): void {
 /**
  * render is a derivation, not authoring — the markdown structure slots were
  * already earned at `code`, so this checks the artifacts of the derivation:
- * the HTML exists and is not empty, every authored mermaid block actually
- * became an inline SVG, and the technical-writing prose review ran and closed
+ * the HTML exists and is not empty, every authored diagram figure came
+ * through with its inline SVG, and the technical-writing prose review ran and closed
  * with its machine-checkable verdict line. The final checklist must also close
  * with its machine-checkable all-pass verdict and nine grounded axis rows. Visual layout is not reviewed
  * per document — it is a deterministic property render.ts owns (wide-diagram
- * legibility is sealed by normalizeSvgWidth + the figure scroll container,
- * regression-guarded by render.test.ts), so there is no per-document visual-qa
+ * legibility is sealed by the figure's own scroll container and the html-report
+ * lint run at the render step, regression-guarded by render.test.ts), so there is no per-document visual-qa
  * gate here.
  */
 function checkRenderOutput(
@@ -726,30 +726,26 @@ function checkRenderOutput(
 		failedItems.push(`현재 Markdown으로 renderer 산출물을 만들 수 없습니다: ${docPath}`);
 	}
 
-	// Diagram parity: N authored mermaid fences must yield at least N inline
-	// SVGs, and no fence may survive as literal text — a page with the source
-	// where the picture should be is a failed render that still "exists".
+	// Diagram parity: N authored `figure.diagram` blocks must come out as N figures in
+	// the page, each still holding its <svg>. Counting reads the Markdown the same way
+	// the structure checks do, so a figure shown inside a code fence is not counted.
 	try {
-		const md = readFileSync(docPath, "utf8");
-		const fences = (md.match(/```mermaid/g) || []).length;
-		if (fences > 0) {
+		const authored = diagramFigures(readFileSync(docPath, "utf8")).length;
+		if (authored > 0) {
 			const html = readFileSync(htmlPath, "utf8");
-			const svgs = (html.match(/<svg/g) || []).length;
-			if (svgs < fences || html.includes("```mermaid") || html.includes("language-mermaid")) {
+			const rendered = html.match(/<figure class="diagram"[\s\S]*?<\/figure>/g) ?? [];
+			const drawn = rendered.filter((figure) => figure.includes("<svg")).length;
+			if (rendered.length !== authored || drawn !== authored) {
 				failedItems.push(
-					`mermaid 블록 ${fences}개 중 인라인 SVG로 렌더된 것이 ${svgs}개입니다 — render.ts가 mmdc 사전 렌더에 실패했는지 확인하세요.`,
+					`다이어그램 figure ${authored}개 중 페이지에 SVG와 함께 나온 것이 ${drawn}개(figure ${rendered.length}개)입니다 — 문서의 <figure class="diagram"> 블록이 </figure> 로 닫혔는지, 블록 안에 <svg> 가 있는지 확인하세요.`,
 				);
 			}
-			// Label-clipping regression catch. A <foreignObject> in the baked SVG is
-			// mermaid's htmlLabels:true fingerprint — a fixed-width HTML label box
-			// measured in the render font that CLIPS (hides) text when the viewer's
-			// font is wider (iOS/iCloud lacks "trebuchet ms"). render.ts pins
-			// htmlLabels:false so labels are SVG <text> that overflow-but-never-hide;
-			// if a foreignObject survives, the render regressed to the clipping mode.
-			const foreignObjects = (html.match(/<foreignObject/g) || []).length;
+			// Labels are SVG <text>. A <foreignObject> box has a fixed pixel width measured in the
+			// author's font and CLIPS (hides) text when the viewer's font is wider.
+			const foreignObjects = (html.match(/<foreignObject/gi) || []).length;
 			if (foreignObjects > 0) {
 				failedItems.push(
-					`다이어그램에 <foreignObject> 라벨이 ${foreignObjects}개 있습니다 — 뷰어 폰트가 넓으면 고정폭 박스가 글자를 잘라 숨깁니다. render.ts mmdc 설정에 htmlLabels:false 가 적용됐는지 확인하세요.`,
+					`다이어그램에 <foreignObject> 라벨이 ${foreignObjects}개 있습니다 — 뷰어 폰트가 넓으면 고정폭 박스가 글자를 잘라 숨깁니다. 라벨은 <text>/<tspan> 으로 그리세요.`,
 				);
 			}
 		}

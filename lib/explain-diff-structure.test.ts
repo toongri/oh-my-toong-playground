@@ -1,7 +1,42 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { checkStructure, type DiffHunk } from "./explain-diff-structure";
+import {
+	checkStructure,
+	DIAGRAM_KINDS,
+	DIAGRAM_SVG_CLASSES,
+	diagramFigures,
+	type DiffHunk,
+} from "./explain-diff-structure";
+
+/** 문서에 쓰는 다이어그램 figure — data-kind 와 노드 라벨(<text>)만 다르다. 간선 라벨은 class="lbl". */
+function fig(kind: string, ...labels: string[]): string {
+	const texts = labels
+		.map((label, i) => `<text class="t-b" x="16" y="${24 + i * 24}">${label}</text>`)
+		.join("");
+	return `<figure class="diagram" data-kind="${kind}">
+<svg viewBox="0 0 340 ${24 + labels.length * 24}" role="img" aria-label="${labels.join(", ")}">${texts}</svg>
+<figcaption>그림. ${labels.join(" → ")}</figcaption>
+</figure>`;
+}
+
+/** 클래스 figure — 박스마다 <g data-class>, 첫 <text> 는 이름, 나머지는 멤버 줄. */
+function classFig(boxes: Record<string, string[]>): string {
+	const groups = Object.entries(boxes)
+		.map(
+			([name, members], b) =>
+				`<g data-class="${name}"><rect class="head" x="${16 + b * 220}" y="16" width="200" height="32"/><text class="t-b" x="${28 + b * 220}" y="37">${name}</text>${members
+					.map((m, i) => `<text class="t-m" x="${28 + b * 220}" y="${68 + i * 24}">${m}</text>`)
+					.join("")}</g>`,
+		)
+		.join("\n");
+	return `<figure class="diagram" data-kind="class">
+<svg viewBox="0 0 576 168" role="img" aria-label="클래스 ${Object.keys(boxes).join(", ")}">
+${groups}
+</svg>
+<figcaption>그림. 도메인 객체</figcaption>
+</figure>`;
+}
 
 // v5 계약: 코드 섹션의 뼈대는 커밋이고, 단위는 파일이 아니라 변경(change)이다.
 // Change Group(관심사) 안에서 커밋 단위로 내려가고(### `hash` — 제목), 커밋 아래
@@ -1057,11 +1092,7 @@ v1 복원으로 사라진 404 계약 테스트를 지운다.
 const ARCH_OK = `## Architecture
 
 ### 시스템 레벨
-\`\`\`mermaid
-flowchart LR
-  A[commerce browser] -->|HTTP| B[Hono backend]
-  B -->|SQL| C[(PostgreSQL)]
-\`\`\`
+${fig("architecture", "commerce browser", "Hono backend", "PostgreSQL")}
 
 | 경계 | 인터페이스 | 오가는 것 |
 |---|---|---|
@@ -1077,10 +1108,7 @@ flowchart LR
 설명.
 
 ### 컴포넌트 레벨
-\`\`\`mermaid
-flowchart LR
-  card --> resolver
-\`\`\`
+${fig("architecture", "card", "resolver")}
 
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
@@ -1112,13 +1140,7 @@ const CAPABILITY_OK = `## 기능 단위
 
 표시 카탈로그가 조립되는 흐름을 확인한다.
 
-\`\`\`mermaid
-sequenceDiagram
-  participant Chat as 상담챗
-  participant Backend as catalog
-  Chat->>Backend: getDisplayCatalog()
-  Backend-->>Chat: 표시 카탈로그(삭제 포함)
-\`\`\`
+${fig("sequence", "상담챗", "catalog", "표시 카탈로그(삭제 포함)")}
 
 **개념/도메인 모델 연결** SupplementCategory와 그 삭제 상태를 연결한다.
 
@@ -1190,7 +1212,7 @@ describe("architecture 스텝 — R9·R14·R17·R18·R19·R21", () => {
 	test("컴포넌트 레벨의 사유 있는 구조 변화 없음 면제는 R18을 통과시킨다", () => {
 		const doc = withBackground(
 			ARCH_OK.replace(
-				/```mermaid\nflowchart LR\n {2}card --> resolver\n```[\s\S]*?(?=### 도메인 레벨)/,
+				/(?<=### 컴포넌트 레벨\n)<figure class="diagram"[\s\S]*?<\/figure>\n[\s\S]*?(?=### 도메인 레벨)/,
 				"구조 변화 없음: 이 diff는 컴포넌트 경계를 바꾸지 않는다.\n\n",
 			),
 		);
@@ -1436,7 +1458,7 @@ describe("architecture 스텝 — R9·R14·R17·R18·R19·R21", () => {
 		expect(r.failedItems.join(" ")).toContain("도메인 레벨");
 	});
 
-	test("레벨에 mermaid도 생략 마커도 없으면 R9가 실패한다", () => {
+	test("레벨에 다이어그램 figure도 생략 마커도 없으면 R9가 실패한다", () => {
 		const doc = withBackground(ARCH_OK.replace(/구조 변화 없음.*$/m, "산문만 있다."));
 		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" });
 		expect(r.pass).toBe(false);
@@ -1498,7 +1520,7 @@ describe("architecture 스텝 — R9·R14·R17·R18·R19·R21", () => {
 		const doc = withBackground(
 			ARCH_OK.replace(
 				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
-				"### 도메인 레벨\n```mermaid\nclassDiagram\n  class SupplementCategory\n```",
+				`### 도메인 레벨\n${classFig({ SupplementCategory: [] })}`,
 			),
 		);
 		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
@@ -1513,14 +1535,7 @@ describe("architecture 스텝 — R9·R14·R17·R18·R19·R21", () => {
 			ARCH_OK.replace(
 				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
 				`### 도메인 레벨
-\`\`\`mermaid
-classDiagram
-  class SupplementCategory {
-    +code: string
-    +displayName: string
-    +isActive() bool
-  }
-\`\`\`
+${classFig({ SupplementCategory: ["code: string", "displayName: string", "isActive(): bool"] })}
 
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> <code>SupplementCategory</code></p>
@@ -1598,14 +1613,7 @@ classDiagram
 
 	test("도메인 카드의 한 행 라벨 충돌은 책임·변경점 독립 필드로 인정하지 않는다", () => {
 		const domainLevel = `### 도메인 레벨
-\`\`\`mermaid
-classDiagram
-  class SupplementCategory {
-    +code: string
-    +displayName: string
-    +isActive() bool
-  }
-\`\`\`
+${classFig({ SupplementCategory: ["code: string", "displayName: string", "isActive(): bool"] })}
 
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> <code>SupplementCategory</code></p>
@@ -1798,8 +1806,12 @@ classDiagram
 	test("컴포넌트 다이어그램 노드가 파일 경로면 R18이 실패한다", () => {
 		const doc = withBackground(
 			ARCH_OK.replace(
-				"flowchart LR\n  card --> resolver",
-				'flowchart LR\n  a["apps/backend/src/domains/health-profiles/routers/health-v2.router.ts"] --> b["packages/schemas/src/program/proposal-request-v2.ts"]',
+				fig("architecture", "card", "resolver"),
+				fig(
+					"architecture",
+					"apps/backend/src/domains/health-profiles/routers/health-v2.router.ts",
+					"packages/schemas/src/program/proposal-request-v2.ts",
+				),
 			),
 		);
 		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
@@ -1809,11 +1821,14 @@ classDiagram
 		expect(item?.detail).toContain("파일 경로");
 	});
 
-	test("컴포넌트 다이어그램 edge label·note·comment의 파일 경로는 R18 노드 경로가 아니다", () => {
+	test("컴포넌트 다이어그램 간선 라벨(class=lbl)·SVG 주석의 파일 경로는 R18 노드 경로가 아니다", () => {
 		const doc = withBackground(
 			ARCH_OK.replace(
-				"flowchart LR\n  card --> resolver",
-				"flowchart LR\n%% reads src/comment.ts\n  card -->|reads src/config.ts| resolver\n  Note right of card: src/note.ts",
+				fig("architecture", "card", "resolver"),
+				fig("architecture", "card", "resolver").replace(
+					"</svg>",
+					'<!-- reads src/comment.ts --><text class="lbl" x="8" y="90">reads src/config.ts</text></svg>',
+				),
 			),
 		);
 		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
@@ -1825,8 +1840,8 @@ classDiagram
 	test("루트 파일명이 컴포넌트 다이어그램 노드면 R18이 실패한다", () => {
 		const doc = withBackground(
 			ARCH_OK.replace(
-				"flowchart LR\n  card --> resolver",
-				"flowchart LR\n  package.json --> resolver",
+				fig("architecture", "card", "resolver"),
+				fig("architecture", "package.json", "resolver"),
 			),
 		);
 		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
@@ -1841,12 +1856,7 @@ classDiagram
 			ARCH_OK.replace(
 				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
 				`### 도메인 레벨
-\`\`\`mermaid
-classDiagram
-  class SupplementCategory
-  class Supplement
-  SupplementCategory --> Supplement
-\`\`\`
+${classFig({ SupplementCategory: [], Supplement: [] })}
 
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> <code>SupplementCategory</code></p>
@@ -1861,19 +1871,12 @@ classDiagram
 		expect(item?.detail).toContain("멤버");
 	});
 
-	test("classDiagram의 한 클래스가 채워져도 다른 빈 클래스 박스를 가리지 못한다", () => {
+	test("클래스 figure의 한 박스가 채워져도 다른 빈 클래스 박스를 가리지 못한다", () => {
 		const doc = withBackground(
 			ARCH_OK.replace(
 				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
 				`### 도메인 레벨
-\`\`\`mermaid
-classDiagram
-  class SupplementCategory {
-    +code: string
-  }
-  class Supplement
-  SupplementCategory --> Supplement
-\`\`\`
+${classFig({ SupplementCategory: ["code: string"], Supplement: [] })}
 
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> <code>SupplementCategory</code></p>
@@ -1888,16 +1891,12 @@ classDiagram
 		expect(item?.detail).toContain("멤버");
 	});
 
-	test("관계로 암시된 빈 class도 R21에서 검사한다", () => {
+	test("스테레오타입(«interface»)만 있는 박스는 멤버가 없는 것으로 본다", () => {
 		const doc = withBackground(
 			ARCH_OK.replace(
 				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
 				`### 도메인 레벨
-\`\`\`mermaid
-classDiagram
-  SupplementCategory : +code: string
-  SupplementCategory --> Supplement
-\`\`\`
+${classFig({ SupplementCategory: ["«interface»"] })}
 
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> <code>SupplementCategory</code></p>
@@ -1912,13 +1911,17 @@ classDiagram
 		expect(item?.detail).toContain("멤버");
 	});
 
-	test("공백 없는 class 관계의 암시된 빈 class도 R21에서 검사한다", () => {
-		const domainSection =
-			"### 도메인 레벨\n```mermaid\nclassDiagram\n  Populated : +id: string\n  Populated-->Empty\n```\n\n<div class=\"arch-entity\" data-change=\"new\">\n<p><strong>이름</strong> <code>Populated</code></p>\n<p><strong>책임</strong> canonical 정체성 보유</p>\n</div>";
+	test("data-kind=class 인데 <g data-class> 박스가 없으면 R21이 실패한다", () => {
 		const doc = withBackground(
 			ARCH_OK.replace(
 				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
-				domainSection,
+				`### 도메인 레벨
+${fig("class", "SupplementCategory", "Supplement")}
+
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>SupplementCategory</code></p>
+<p><strong>책임</strong> canonical 정체성 보유</p>
+</div>`,
 			),
 		);
 		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
@@ -1926,6 +1929,23 @@ classDiagram
 		);
 		expect(item?.pass).toBe(false);
 		expect(item?.detail).toContain("멤버");
+	});
+
+	test("중첩 <g> 가 든 클래스 박스는 바깥 </g> 까지를 한 박스로 읽어 멤버를 센다", () => {
+		const nested = classFig({ SupplementCategory: ["code: string"] }).replace(
+			'<text class="t-m"',
+			'<g><rect class="act" x="0" y="0" width="1" height="1"/></g><text class="t-m"',
+		);
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨\n${nested}\n<div class="arch-entity" data-change="new">\n<p><strong>이름</strong> <code>SupplementCategory</code></p>\n<p><strong>책임</strong> 정체성 보유</p>\n<p class="ae-members"><strong>핵심 멤버</strong> <code>code</code></p>\n<p><strong>변경점</strong> 신설</p>\n</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(true);
 	});
 });
 
@@ -1953,12 +1973,12 @@ describe("capability 스텝 — R15 기능 단위 챕터", () => {
 	}
 
 	test("캐피빌리티 챕터에 흐름 다이어그램이 없으면 R15가 실패한다", () => {
-		const item = cap(CAPABILITY_OK.replace(/```mermaid[\s\S]*?```\n/, ""));
+		const item = cap(CAPABILITY_OK.replace(/<figure class="diagram"[\s\S]*?<\/figure>\n/, ""));
 		expect(item?.pass).toBe(false);
 		expect(item?.detail).toContain("흐름 다이어그램");
 	});
 
-	test("HTML 주석과 Markdown 펜스 안의 heading·슬롯·Mermaid는 R15 증거가 아니다", () => {
+	test("HTML 주석과 Markdown 펜스 안의 heading·슬롯·figure는 R15 증거가 아니다", () => {
 		const doc = `## 기능 단위
 
 ### 실제 캐피빌리티
@@ -1970,10 +1990,7 @@ describe("capability 스텝 — R15 기능 단위 챕터", () => {
 - 소속 도메인: hidden
 - 입구: hidden
 - 영향범위: hidden
-\`\`\`mermaid
-flowchart LR
-  A --> B
-\`\`\`
+${fig("flow", "A", "B")}
 -->
 
 \`\`\`markdown
@@ -1984,33 +2001,37 @@ flowchart LR
 - 입구: hidden
 - 영향범위: hidden
 
-\`\`\`mermaid
-flowchart LR
-  A --> B
-\`\`\`
+${fig("flow", "A", "B")}
 \`\`\`
 `;
 		const item = cap(doc);
 		expect(item?.pass).toBe(false);
 		expect(item?.detail).toContain("실제 캐피빌리티");
-	});
-
-	test("visible classDiagram은 R15의 흐름 다이어그램으로 인정하지 않는다", () => {
-		const doc = CAPABILITY_OK.replace(
-			/```mermaid[\s\S]*?```/,
-			"```mermaid\nclassDiagram\n  class Catalog\n```",
-		);
-		const item = cap(doc);
-		expect(item?.pass).toBe(false);
 		expect(item?.detail).toContain("흐름 다이어그램");
 	});
 
-	for (const diagram of ["flowchart LR\n  A --> B", "sequenceDiagram\n  A->>B: request"]) {
-		test(`visible ${diagram.split("\n", 1)[0]}은 필수 슬롯과 함께 R15를 통과한다`, () => {
-			const doc = CAPABILITY_OK.replace(/```mermaid[\s\S]*?```/, `\`\`\`mermaid\n${diagram}\n\`\`\``);
+	test("data-kind=class 나 er 도형은 R15의 흐름 다이어그램으로 인정하지 않는다", () => {
+		for (const kind of ["class", "er", "architecture"]) {
+			const doc = CAPABILITY_OK.replace(/<figure class="diagram"[\s\S]*?<\/figure>/, fig(kind, "Catalog"));
+			const item = cap(doc);
+			expect(item?.pass).toBe(false);
+			expect(item?.detail).toContain("흐름 다이어그램");
+		}
+	});
+
+	for (const kind of ["flow", "sequence", "state"]) {
+		test(`visible data-kind=${kind} figure는 필수 슬롯과 함께 R15를 통과한다`, () => {
+			const doc = CAPABILITY_OK.replace(/<figure class="diagram"[\s\S]*?<\/figure>/, fig(kind, "A", "B"));
 			expect(cap(doc)?.pass).toBe(true);
 		});
 	}
+
+	test("data-kind 가 없거나 <svg> 가 없는 figure는 R15의 흐름 다이어그램이 아니다", () => {
+		const noKind = CAPABILITY_OK.replace(' data-kind="sequence"', "");
+		expect(cap(noKind)?.pass).toBe(false);
+		const noSvg = CAPABILITY_OK.replace(/<svg[\s\S]*?<\/svg>/, "");
+		expect(cap(noSvg)?.pass).toBe(false);
+	});
 
 	test("## 기능 단위 섹션이 없으면 R15가 실패한다", () => {
 		const item = cap(withBackground(ARCH_OK));
@@ -2032,11 +2053,7 @@ flowchart LR
 - 입구(트리거): tRPC \`x.y\`
 - 영향범위: 없음
 
-\`\`\`mermaid
-sequenceDiagram
-  participant A
-  A->>A: noop
-\`\`\`
+${fig("sequence", "A")}
 `;
 		// 두 번째 챕터에는 소속 도메인 슬롯이 없다.
 		const item = cap(incomplete);
@@ -2111,12 +2128,19 @@ describe("markdown-template canonical examples", () => {
 	});
 
 	test("승인된 sequence 예제가 호출·반환 activation을 균형 있게 유지한다", () => {
-		expect(template).toMatch(
-			/Chat->>\+Resolver: resolveDisplay\(code\)[\s\S]*?Resolver->>\+Backend: GET \/v1\/supplement-catalog\?includeDeletedCategories=true[\s\S]*?Backend-->>-Resolver: 표시 카탈로그\(삭제 포함\)[\s\S]*?Resolver-->>-Chat: 카드용 표시 카탈로그/,
+		const start = template.indexOf('data-kind="sequence" data-min-width="640"');
+		const sequence = template.slice(start, template.indexOf("</figure>", start));
+		const order = ["resolveDisplay(code)", "GET /v1/supplement-catalog", "표시 카탈로그(삭제 포함)", "카드용 표시 카탈로그"].map((label) =>
+			sequence.indexOf(label),
 		);
-		expect(template).not.toContain("Chat->>Resolver: resolveDisplay(code)");
-		expect(template).not.toContain("Resolver->>Backend: GET /v1/supplement-catalog?includeDeletedCategories=true");
+		expect(order.every((at) => at >= 0)).toBe(true);
+		expect(order).toEqual([...order].sort((x, y) => x - y));
+		// 호출 화살표 둘(실선) 뒤에 반환 화살표 둘(점선 .ev), activation 막대 둘.
+		expect(sequence.match(/class="msg(?: focal)?" d=/g)).toHaveLength(2);
+		expect(sequence.match(/class="msg ev" d=/g)).toHaveLength(2);
+		expect(sequence.match(/class="act"/g)).toHaveLength(2);
 	});
+
 });
 
 const OVERVIEW = `## Commit Journey
@@ -2297,11 +2321,8 @@ describe("게이트 이완 보강 — R3 배지 형식·R13 코드 펜스", () =
 		expect(r.items.find((i) => i.id === "R3")?.pass).toBe(false);
 	});
 
-	test("R13 — 변경 블록의 유일한 펜스가 mermaid면 핵심 로직 코드로 인정되지 않는다", () => {
-		const body = GOOD_GROUP.replace(
-			/```ts[\s\S]*?```/,
-			"```mermaid\nflowchart LR\n  A --> B\n```",
-		);
+	test("R13 — 변경 블록에 다이어그램 figure만 있고 코드 펜스가 없으면 핵심 로직 코드로 인정되지 않는다", () => {
+		const body = GOOD_GROUP.replace(/```ts[\s\S]*?```/, fig("flow", "A", "B"));
 		const r = checkStructure(withBackground(body), {
 			signalFiles: ["lib/state-lock.ts"],
 			step: "code",
@@ -2354,10 +2375,7 @@ describe("게이트 이완 보강 — R14 펜스 마스킹", () => {
 		const fenced = `## Architecture
 
 ### 시스템 레벨
-\`\`\`mermaid
-flowchart LR
-  A[Node] --> B[(PG)]
-\`\`\`
+${fig("architecture", "Node", "PG")}
 
 표는 이렇게 씁니다:
 
@@ -2522,5 +2540,154 @@ describe("code 스텝 — R22 근거 소스 대조", () => {
 			sourceCorpus: "근거가 전혀 없는 코퍼스",
 		});
 		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// 다이어그램 figure 계약 — 문서에 직접 쓰는 <figure class="diagram" data-kind> 인라인 SVG
+
+describe("diagramFigures — figure 블록 읽기", () => {
+	test("data-kind 와 svg 를 읽고, 빈 줄과 4칸 들여쓴 SVG 줄이 있어도 한 블록이다", () => {
+		const doc = `앞 문단
+<figure class="diagram" data-kind="state">
+    <svg viewBox="0 0 10 10" role="img" aria-label="x">
+
+        <text class="t-b">초안</text>
+    </svg>
+</figure>
+`;
+		const figures = diagramFigures(doc);
+		expect(figures).toHaveLength(1);
+		expect(figures[0]?.kind).toBe("state");
+		expect(figures[0]?.svg).toContain("초안");
+	});
+
+	test("주석·코드 펜스·<pre> 안의 figure 와 4칸 들여쓴 figure 여는 줄은 세지 않는다", () => {
+		const doc = `<!-- ${fig("flow", "a")} -->
+
+\`\`\`html
+${fig("flow", "b")}
+\`\`\`
+
+<pre>
+${fig("flow", "c")}
+</pre>
+
+    ${fig("flow", "d")}
+`;
+		expect(diagramFigures(doc)).toHaveLength(0);
+	});
+
+	test("지원하는 data-kind 값은 여섯 가지다", () => {
+		expect([...DIAGRAM_KINDS]).toEqual(["flow", "sequence", "state", "class", "er", "architecture"]);
+	});
+});
+
+describe("R9 — 아키텍처 레벨의 figure 인정 조건", () => {
+	const r9 = (doc: string) =>
+		checkStructure(withBackground(doc), { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R9",
+		);
+	const withDomain = (body: string) => ARCH_OK.replace("구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.", body);
+
+	test("<svg> 가 든 유효한 data-kind figure 는 waiver 없이 레벨을 채운다", () => {
+		expect(r9(withDomain(fig("er", "Household", "Member")))?.pass).toBe(true);
+	});
+
+	test("data-kind 가 없는 figure 는 다이어그램으로 세지 않는다", () => {
+		const noKind = fig("er", "Household").replace(' data-kind="er"', "");
+		expect(r9(withDomain(noKind))?.pass).toBe(false);
+	});
+
+	test("<svg> 가 없는 figure 는 다이어그램으로 세지 않는다", () => {
+		const noSvg = fig("er", "Household").replace(/<svg[\s\S]*?<\/svg>/, "");
+		expect(r9(withDomain(noSvg))?.pass).toBe(false);
+	});
+
+	test("코드 펜스 안의 figure 예시는 다이어그램으로 세지 않는다", () => {
+		expect(r9(withDomain(`\`\`\`html\n${fig("er", "Household")}\n\`\`\``))?.pass).toBe(false);
+	});
+});
+
+describe("R11 — figure.diagram 안팎의 스타일 발명 금지", () => {
+	const r11 = (doc: string) =>
+		checkStructure(withBackground(doc), { signalFiles: ["a.ts"], step: "intuition" }).items.find(
+			(i) => i.id === "R11",
+		);
+	const expectFail = (doc: string, needle: string) => {
+		const item = r11(doc);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain(needle);
+	};
+
+	test("승인된 SVG 클래스·marker·tspan·currentColor 만 쓴 figure 는 통과한다", () => {
+		const doc = `<figure class="diagram" data-kind="flow" data-min-width="640">
+<svg viewBox="0 0 640 80" role="img" aria-label="흐름">
+<defs><marker id="f1-ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" class="mk-mut" fill="currentColor"/></marker></defs>
+<rect class="box focal" x="8" y="8" width="100" height="40" fill="var(--surface)"/>
+<text class="t-b" x="16" y="30"><tspan x="16">첫째</tspan><tspan x="16" dy="16">둘째</tspan></text>
+<path class="rel" d="M108 28 H200" marker-end="url(#f1-ah)" fill="none"/>
+</svg>
+<figcaption><b>그림 1.</b> 설명 <span class="vf">확인됨: 코드</span></figcaption>
+</figure>`;
+		expect(r11(doc)?.pass).toBe(true);
+	});
+
+	test("class figure 의 <g data-class> 속성은 class 속성으로 읽히지 않는다", () => {
+		expect(r11(classFig({ SupplementCategory: ["code: string"] }))?.pass).toBe(true);
+	});
+
+	test("figure 안의 승인 목록 밖 class 는 실패한다", () => {
+		expectFail(fig("flow", "A").replace('class="t-b"', 'class="neon"'), "neon");
+	});
+
+	test("figure 밖에서는 SVG 클래스(box 등)가 승인 클래스가 아니다", () => {
+		expectFail('<div class="box">x</div>', "box");
+	});
+
+	for (const [name, mutate, needle] of [
+		["<style>", (f: string) => f.replace("</svg>", "<style>text{fill:red}</style></svg>"), "<style>"],
+		["인라인 style=", (f: string) => f.replace("<text ", '<text style="fill:red" '), "style="],
+		["<script>", (f: string) => f.replace("</svg>", "<script>1</script></svg>"), "<script>"],
+		["<foreignObject>", (f: string) => f.replace("</svg>", "<foreignObject><div>x</div></foreignObject></svg>"), "foreignObject"],
+		["이벤트 핸들러", (f: string) => f.replace("<text ", '<text onclick="x()" '), "이벤트"],
+		["href", (f: string) => f.replace("<text ", '<a href="https://x.test"><text '), "href"],
+		["허용되지 않은 요소", (f: string) => f.replace("</svg>", '<image width="1"/></svg>'), "image"],
+		["리터럴 색", (f: string) => f.replace("<text ", '<text fill="#fff" '), "리터럴 색"],
+		["data-kind 누락", (f: string) => f.replace(' data-kind="flow"', ""), "data-kind"],
+		["data-kind 오류", (f: string) => f.replace('data-kind="flow"', 'data-kind="venn"'), "data-kind"],
+		["viewBox 누락", (f: string) => f.replace('viewBox="0 0 340 48" ', ""), "viewBox"],
+		["aria-label 누락", (f: string) => f.replace(/ aria-label="[^"]*"/, ""), "aria-label"],
+		["<svg> 누락", (f: string) => f.replace(/<svg[\s\S]*?<\/svg>/, ""), "<svg>"],
+		["data-min-width 범위", (f: string) => f.replace('data-kind="flow"', 'data-kind="flow" data-min-width="99"'), "data-min-width"],
+	] as const) {
+		test(`figure 안의 ${name} 은 R11 에서 실패한다`, () => {
+			expectFail(mutate(fig("flow", "A")), needle);
+		});
+	}
+
+	test("figure 밖의 <style>·<script>·style= 은 계속 실패한다", () => {
+		expectFail("<style>p{color:red}</style>", "<style>");
+		expectFail("<script>1</script>", "<script>");
+		expectFail('<p style="color:red">x</p>', "style=");
+	});
+
+	test("두 figure 가 같은 marker id 를 쓰면 실패한다", () => {
+		const withMarker = (id: string) =>
+			fig("flow", "A").replace("<text", `<defs><marker id="${id}"/></defs><text`);
+		expectFail(`${withMarker("ah")}\n\n${withMarker("ah")}`, "중복된 id");
+		expect(r11(`${withMarker("f1-ah")}\n\n${withMarker("f2-ah")}`)?.pass).toBe(true);
+	});
+
+	test("```mermaid 펜스가 남아 있으면 figure 로 바꾸라고 알리며 실패한다", () => {
+		expectFail("```mermaid\nflowchart LR\n  A --> B\n```", "figure");
+	});
+
+	test("코드 펜스 안에 예시로 든 figure 의 <style> 은 위반이 아니다", () => {
+		expect(r11("```html\n<figure class=\"diagram\"><style>x</style></figure>\n```")?.pass).toBe(true);
+	});
+
+	test("DIAGRAM_SVG_CLASSES 는 중복이 없다", () => {
+		expect(new Set(DIAGRAM_SVG_CLASSES).size).toBe(DIAGRAM_SVG_CLASSES.length);
 	});
 });

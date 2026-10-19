@@ -6,7 +6,7 @@ The items are **split three ways by who decides**. Absence is counted by the scr
 
 ## Grounds
 
-The `RED` values for R1–R8 are 16 measured runs: no-guidance and gist-source, two controls × 4 fixtures × Claude/Codex (`$OMT_DIR/explain-diff-eval/probe.ts`). The `RED` values for R9–R12 are measured on 13 documents actually produced by the pre-v3 skill (10 fixtures + 2 real + 1 codex terra). No item is written from a guess. v3 GREEN: the revised skill × codex (gpt-5.6-terra, high) × 4 fixtures passed the full-step structure check + mermaid render parity 4/4 — including a full hash comparison of a 23-commit merge PR.
+The `RED` values for R1–R8 are 16 measured runs: no-guidance and gist-source, two controls × 4 fixtures × Claude/Codex (`$OMT_DIR/explain-diff-eval/probe.ts`). The `RED` values for R9–R12 are measured on 13 documents actually produced by the pre-v3 skill (10 fixtures + 2 real + 1 codex terra). No item is written from a guess. v3 GREEN: the revised skill × codex (gpt-5.6-terra, high) × 4 fixtures passed the full-step structure check + diagram render parity 4/4 — including a full hash comparison of a 23-commit merge PR.
 
 The `RED` for R13 and R14 is measured on a v3 artifact (the document for the real 21-commit PR `b2c-6106`): the code section was separated from the commit narrative so files sat stranded, the file fields clumped into a single paragraph, and the system level ended with one box-and-arrow diagram, never enumerating which API, schema, or client contracts change.
 
@@ -41,7 +41,7 @@ The document is written one step at a time, accumulating. So an item is evaluate
 | R23 | judge | capability |
 | R24 | judge | code |
 
-The `intuition` step has no slot of its own — only R6 (judge) and the common R11 decide it. `render` and `quiz` score none of this table's items: `render` looks at the artifact check (HTML present and non-empty, mermaid→SVG parity, technical-writing `REVIEW: APPLIED`, final checklist ending with `CHECKLIST: ALL PASS`), and `quiz` runs a separate grading path (`grade`). Visual layout is not scored per document — it is a deterministic property render.ts owns. Label clipping is sealed by `htmlLabels:false` (SVG `<text>` labels never hide; `checkRenderOutput` fails on any surviving `<foreignObject>`), and wide-diagram legibility by fit-to-column default + a CSS-only zoom overlay, both regression-guarded by `render.test.ts`.
+The `intuition` step has no slot of its own — only R6 (judge) and the common R11 decide it. `render` and `quiz` score none of this table's items: `render` looks at the artifact check (HTML present and non-empty, diagram-figure parity, technical-writing `REVIEW: APPLIED`, final checklist ending with `CHECKLIST: ALL PASS`), and `quiz` runs a separate grading path (`grade`). Page layout is not scored per document — it is a deterministic property render.ts owns. Label clipping is sealed by SVG `<text>` labels (they never hide; R11 bans `<foreignObject>` in the Markdown and `checkRenderOutput` fails on any in the page), and wide-diagram legibility by fit-to-column default + an opt-in `data-min-width` scroll container, both regression-guarded by `render.test.ts`. The figures themselves are checked per document by the html-report capture and lint loop at the render step.
 
 ---
 
@@ -126,7 +126,7 @@ header, not from a prose claim.
 
 ### R9. Three architecture levels
 
-Under `## Architecture`, `### 시스템 레벨`, `### 컴포넌트 레벨`, and `### 도메인 레벨` are all present, and each level has a mermaid diagram or a reasoned waiver marker (`구조 변화 없음: <사유>`). The question each level answers and the recommended diagram type are defined by `markdown-template.md`.
+Under `## Architecture`, `### 시스템 레벨`, `### 컴포넌트 레벨`, and `### 도메인 레벨` are all present, and each level has a diagram figure (`<figure class="diagram" data-kind="…">` holding an `<svg>`) or a reasoned waiver marker (`구조 변화 없음: <사유>`). The question each level answers and the recommended diagram type are defined by `markdown-template.md`.
 
 > **RED 0/12.** None of the 12 documents produced by the pre-v3 skill (10 fixtures + 2 real) has an
 > architecture-level view anywhere. Structural facts ("Node/Python read the same PostgreSQL") existed only as
@@ -151,7 +151,7 @@ Nowhere in the document is there a `<style>` block or an inline `style=` attribu
 
 ### R13. Commit spine + core-logic code
 
-The code section is organized with the commit as its spine, and its unit is the change (`#### 변경 N: <한 일>`), not the file. Each Change Group has at least one commit subsection (`### \`hash\``) carrying a valid range hash, and each change block has one core-logic code fence — a mermaid-only or empty fence does not count (the template reserves mermaid for diagrams and requires real code/pseudocode per change). The gate forces this coarse spine — a commit subsection per group and a code fence per change block; how the responsibilities nest inside a change and which cf fields each carries is the author's to fill from the template, not machine-forced. Hash validity is compared against the list `start` pinned — if enumeration failed and the list is empty, the validity check is skipped ("git failed" is not "every hash is fake").
+The code section is organized with the commit as its spine, and its unit is the change (`#### 변경 N: <한 일>`), not the file. Each Change Group has at least one commit subsection (`### \`hash\``) carrying a valid range hash, and each change block has one core-logic code fence — an empty fence does not count, and a diagram figure is not a fence (the template requires real code/pseudocode per change). The gate forces this coarse spine — a commit subsection per group and a code fence per change block; how the responsibilities nest inside a change and which cf fields each carries is the author's to fill from the template, not machine-forced. Hash validity is compared against the list `start` pinned — if enumeration failed and the list is empty, the validity check is skipped ("git failed" is not "every hash is fake").
 
 > **RED — v3 artifact.** In the `b2c-6106` document, `## Commit Journey` (21 commits) and `## Change Group`
 > (per file) were fully separated, so commits were listed unrelated to the code explanation. File blocks
@@ -181,11 +181,11 @@ Use-case description is a **top-level `## 기능 단위` section**, no longer a 
 middle of three layers (입구 trigger → **기능 단위 use-case** → 도메인 함수·모델). A domain/persistence
 function (a repository method, a domain operation) is **not** a chapter; it surfaces as a depended-on
 collaborator inside a chapter's `소속 도메인 + 협력` slot. R15 checks, **per chapter**, the presence of
-five header slots — `구현체`, `버전`, `소속 도메인`, `입구`, `영향범위` — and a mermaid flow diagram; one
+five header slots — `구현체`, `버전`, `소속 도메인`, `입구`, `영향범위` — and a diagram figure of kind `flow`, `sequence`, or `state`; one
 complete chapter cannot mask an incomplete one, and every `### <capability>` chapter is checked
 independently. A diff that changes no use-case uses a section-level reasoned `구조 변화 없음: <사유>`
 waiver in place of chapters. Slot presence is read on the fence-masked chapter body; the flow diagram
-is a mermaid fence (or a per-chapter waiver). What each slot says, and the narrative body (`책임`,
+is such a figure (or a per-chapter waiver). What each slot says, and the narrative body (`책임`,
 `개념/도메인 모델 연결`, `의존 방향 판정`), is the author's to fill — the *semantic* discipline is R23's,
 not the script's. The vocabulary follows the `architecture-boundaries` rule but the output speaks the
 codebase's own terms (enforced by R19, which now scans this section too).
@@ -280,10 +280,10 @@ invalid card. Nodes and cards must name **real business concepts** — the thing
 (a Program, an intake-time slot, an onboarding vs regular request kind) — in the codebase's own terms;
 a bare schema-encoding name with no business meaning is not a domain object (reality judged by R12).
 Two structural bans hold even under the waiver: diagram nodes must not be file paths, and a
-`classDiagram`, if drawn, must fill each box with **members and methods** — an empty class box (name
+A `data-kind="class"` figure, if drawn, must fill each `<g data-class>` box with **members and methods** — an empty class box (name
 only) fails. This is the domain-level counterpart to R18.
 
-> **RED — real artifact (`pr-3412`, luna max).** The domain `classDiagram` drew boxes with class names
+> **RED — real artifact (`pr-3412`, luna max).** The domain class diagram drew boxes with class names
 > only and no members — `GenerationIntakeTimeCodesSchema`, `ProgramGenerationRequestV2Schema` — so a
 > reader could not tell what each object holds or does, nor whether these encoding names were real
 > business concepts. An object diagram must show member variables and methods; the domain level names
@@ -302,7 +302,7 @@ only) fails. This is the domain-level counterpart to R18.
 > most important one. The `책임` contract was widened to the object's full picture and `변경점` was made
 > a required field. A follow-up review found member variables enumerated inside the `책임` prose
 > unscannable ("멤버변수를 글로 서술하는 건 좀 애매한 느낌") — members moved to the structured
-> `핵심 멤버` chip slot, with changed members highlighted and `←변경` marking in the classDiagram.
+> `핵심 멤버` chip slot, with changed members highlighted and `←변경` marking in the class figure.
 
 ### R19. No methodology name or axis label in the structural prose
 
@@ -370,7 +370,7 @@ Group N's advance herald presupposes group N-1. The judge quotes the passage whe
 
 ### R12. The architecture diagram's correspondence to the diff
 
-The Architecture diagram's node/edge labels are real identifiers of the actual system (service, module, command, entity names) — not invented generic nouns, though context nodes the diff does not change are allowed — and at least one level has a change marker (`:::changed` or Before/After contrast) pointing at what this diff changed. For the 시스템 레벨 specifically, its nodes must be **distinct processes/services/deployables/stores**: an in-process call chain (functions or modules within one runtime) drawn as the system level is mislabeled and fails, because it presents component/domain structure as a system boundary. The 시스템 레벨 must also be **complete** — every distinct process/service/store the Evidence or Background prose names as involved must appear as a node; a process the prose names but the diagram omits (a separate API, a CLI) is a fail. The judge quotes both the diagram's labels and the body/Evidence sentence where those identifiers appear, plus the change marker. R9 counts "is there a picture", and R12 looks at "is that picture this diff's picture, at the right level" — the structure check can only count the presence of a mermaid fence, so correspondence and leveling are left to the quote-based judgment.
+The Architecture diagram's node/edge labels are real identifiers of the actual system (service, module, command, entity names) — not invented generic nouns, though context nodes the diff does not change are allowed — and at least one level has a change marker (class `focal`, a `←변경` label, or Before/After contrast) pointing at what this diff changed. For the 시스템 레벨 specifically, its nodes must be **distinct processes/services/deployables/stores**: an in-process call chain (functions or modules within one runtime) drawn as the system level is mislabeled and fails, because it presents component/domain structure as a system boundary. The 시스템 레벨 must also be **complete** — every distinct process/service/store the Evidence or Background prose names as involved must appear as a node; a process the prose names but the diagram omits (a separate API, a CLI) is a fail. The judge quotes both the diagram's labels and the body/Evidence sentence where those identifiers appear, plus the change marker. R9 counts "is there a picture", and R12 looks at "is that picture this diff's picture, at the right level" — the structure check can only count the presence of a diagram figure, so correspondence and leveling are left to the quote-based judgment.
 
 > **RED — real artifact (`boostpack-tool-helper-restore`).** A 14-line test-only diff whose R14 contract table
 > declared all three axes "변경 없음" still drew a 시스템 레벨 diagram of `test → helper → tool → api → server` —

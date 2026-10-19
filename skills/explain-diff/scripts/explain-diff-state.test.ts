@@ -8,7 +8,18 @@ import {
 	STEP_ORDER,
 	type Step,
 } from "@lib/explain-diff-core";
-import { preRenderMermaid, renderToHtml } from "./render";
+import { renderToHtml } from "./render";
+
+/** 문서에 쓰는 다이어그램 figure — data-kind 와 라벨(<text>)만 다르다. */
+function figure(kind: string, ...labels: string[]): string {
+	const texts = labels
+		.map((label, i) => `<text class="t-b" x="16" y="${24 + i * 24}">${label}</text>`)
+		.join("");
+	return `<figure class="diagram" data-kind="${kind}">
+<svg viewBox="0 0 340 ${24 + labels.length * 24}" role="img" aria-label="${labels.join(", ")}">${texts}</svg>
+<figcaption>그림. ${labels.join(" → ")}</figcaption>
+</figure>`;
+}
 
 const SID = "explain-diff-cli-test";
 let sandbox: string;
@@ -87,10 +98,7 @@ export function withLock(path, fn) {
 const ARCH_SECTION = `## Architecture
 
 ### 시스템 레벨
-\`\`\`mermaid
-flowchart LR
-  CLI --> STATE[(state file)]
-\`\`\`
+${figure("architecture", "CLI", "state file")}
 
 | 경계 | 인터페이스 | 오가는 것 |
 |---|---|---|
@@ -103,11 +111,7 @@ flowchart LR
 | 클라이언트 의존 | 두 CLI가 공용 락 모듈에 의존하게 된다 |
 
 ### 컴포넌트 레벨
-\`\`\`mermaid
-flowchart LR
-  cliA --> lock
-  cliB --> lock
-\`\`\`
+${figure("architecture", "cliA", "cliB", "lock")}
 
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> <code>state-lock</code></p>
@@ -136,14 +140,7 @@ const CAPABILITY_SECTION = `## 기능 단위
 
 락 획득→쓰기→해제 흐름을 확인한다.
 
-\`\`\`mermaid
-sequenceDiagram
-  participant CLI_A as ultragoal CLI
-  participant Lock as withLock (신설)
-  participant State as state file
-  CLI_A->>Lock: 상태 쓰기 요청
-  Lock->>State: 락 획득 → 쓰기 → 해제
-\`\`\`
+${figure("sequence", "ultragoal CLI", "withLock (신설)", "state file", "락 획득 → 쓰기 → 해제")}
 
 **개념/도메인 모델 연결** 상태 파일과 락 소유권을 연결한다.
 
@@ -1016,12 +1013,8 @@ const projectRenderedHtmlCache = new Map<string, string>();
 function projectRenderedHtml(markdown: string): string {
 	const cached = projectRenderedHtmlCache.get(markdown);
 	if (cached !== undefined) return cached;
-	const renderedMarkdown = preRenderMermaid(
-		markdown,
-		(_source, index) => `<svg data-i="${index}"></svg>`,
-	);
-	const title = (renderedMarkdown.match(/^#\s+(.+)$/m)?.[1] ?? "explain-diff").trim();
-	const rendered = renderToHtml(renderedMarkdown, title);
+	const title = (markdown.match(/^#\s+(.+)$/m)?.[1] ?? "explain-diff").trim();
+	const rendered = renderToHtml(markdown, title);
 	projectRenderedHtmlCache.set(markdown, rendered);
 	return rendered;
 }
@@ -1289,7 +1282,7 @@ describe("render 산출물 검사", () => {
 		expect(state().passed).not.toContain("render");
 	});
 
-	test("Markdown 산문이 바뀐 뒤 예전 renderer HTML은 Mermaid 패리티가 같아도 거부하고 현재 산출물은 통과한다", async () => {
+	test("Markdown 산문이 바뀐 뒤 예전 renderer HTML은 figure 패리티가 같아도 거부하고 현재 산출물은 통과한다", async () => {
 		const { submitStep, doc } = await driveToRender();
 		const oldMarkdown = readFileSync(doc, "utf8");
 		const currentMarkdown = oldMarkdown.replace("내용", "현재 문서의 새 산문");
@@ -1307,7 +1300,7 @@ describe("render 산출물 검사", () => {
 
 	test("visual-qa 리포트 없이도 통과한다 — 넓은 다이어그램 가독성은 render.ts 가 결정적으로 봉인한다", async () => {
 		// 시각 검증은 문서마다 반복할 대상이 아니라 렌더러가 소유하는 결정적 속성이다
-		// (넓은 mermaid 다운스케일은 normalizeSvgWidth + figure.diagram 스크롤로 봉인).
+		// (넓은 다이어그램은 figure.diagram 의 자체 스크롤 컨테이너 + render step 의 html-report lint 로 봉인).
 		// 그래서 render 게이트는 더는 visual-qa 리포트를 요구하지 않는다.
 		const { submitStep, doc } = await driveToRender();
 		const htmlPath = join(sandbox, "doc.html");
@@ -1340,28 +1333,41 @@ describe("render 산출물 검사", () => {
 		expect(state().last_failure.items.join(" ")).toContain("REVIEW: APPLIED");
 	});
 
-	test("문서에 mermaid 블록이 있는데 HTML에 SVG가 그만큼 없으면 실패한다", async () => {
+	test("문서에 다이어그램 figure가 있는데 HTML에 SVG가 든 figure가 그만큼 없으면 실패한다", async () => {
 		const { submitStep, doc } = await driveToRender();
 		const htmlPath = join(sandbox, "doc.html");
-		// FULL_DOC 은 mermaid 블록 1개를 갖는다 — svg 0개인 HTML은 렌더 누락이다.
+		// FULL_DOC 은 다이어그램 figure 3개를 갖는다 — figure 0개인 HTML은 렌더 누락이다.
 		writeFileSync(htmlPath, "<html>svg 없음</html>", "utf8");
 		const rep = reportFiles();
 		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist);
 		expect(rc).toBe(1);
-		expect(state().last_failure.items.join(" ")).toContain("mermaid");
+		expect(state().last_failure.items.join(" ")).toContain("다이어그램 figure");
+	});
+
+	test("figure 개수는 같아도 SVG가 빠진 figure가 있으면 실패한다", async () => {
+		const stateCli = await import("./explain-diff-state");
+		const { submitStep, doc } = await driveToRender();
+		const withoutSvg = (docPath: string): string =>
+			projectRenderedHtml(readFileSync(docPath, "utf8")).replace(/<svg\b[\s\S]*?<\/svg>/, "");
+		stateCli.setRenderForTesting(withoutSvg);
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, withoutSvg(doc), "utf8");
+		const rep = reportFiles();
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(1);
+		expect(state().last_failure.items.join(" ")).toContain("다이어그램 figure");
 	});
 
 	test("다이어그램 SVG에 <foreignObject> 라벨이 남으면 실패한다 — 뷰어 폰트 넓으면 잘리는 회귀", async () => {
-		// 라벨 클리핑 회귀 감지: htmlLabels:true 는 고정폭 foreignObject 라벨을 굽고,
-		// 뷰어 폰트가 넓으면 글자가 잘려 숨는다. render.ts 는 htmlLabels:false 로 <text> 를
-		// 쓰지만, 회귀로 foreignObject 가 다시 나오면 이 게이트가 잡는다. 바이트 비교를
-		// 통과시키려 fresh renderer 와 제출 HTML 을 같은 foreignObject 포함본으로 맞춘다.
+		// 라벨 클리핑 회귀 감지: foreignObject 는 고정폭 HTML 박스라, 뷰어 폰트가 넓으면
+		// 글자가 잘려 숨는다. 라벨은 <text> 로 그려야 하고, foreignObject 가 페이지에
+		// 나오면 이 게이트가 잡는다. 바이트 비교를 통과시키려 fresh renderer 와
+		// 제출 HTML 을 같은 foreignObject 포함본으로 맞춘다.
 		const stateCli = await import("./explain-diff-state");
 		const { submitStep, doc } = await driveToRender();
 		const withForeign = (docPath: string): string =>
 			projectRenderedHtml(readFileSync(docPath, "utf8")).replace(
-				'<svg data-i="0">',
-				'<svg data-i="0"><foreignObject width="80"><div>clipped</div></foreignObject>',
+				"</svg>",
+				'<foreignObject width="80"><div>clipped</div></foreignObject></svg>',
 			);
 		stateCli.setRenderForTesting(withForeign);
 		const htmlPath = join(sandbox, "doc.html");
