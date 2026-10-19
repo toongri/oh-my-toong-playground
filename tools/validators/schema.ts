@@ -710,7 +710,7 @@ function validatePlatformYamlData(
 	}
 }
 
-const VALID_MODEL_MAP_TOP_FIELDS = new Set(["tiers", "agents"]);
+const VALID_MODEL_MAP_TOP_FIELDS = new Set(["tiers", "agents", "variants"]);
 const VALID_MODEL_MAP_ENTRY_FIELDS = new Set(["model", "effort"]);
 
 /**
@@ -728,10 +728,13 @@ const VALID_MODEL_MAP_ENTRY_FIELDS = new Set(["model", "effort"]);
  * gpt-5.5) still passes. The failure this catches is the typo — `hgih`,
  * `higher`, `Medium` — which previously reached the deployed TOML untouched.
  */
+/** A variant suffix becomes part of the generated file name `<agent>-<suffix>.toml`. */
+const VARIANT_SUFFIX_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
 const VALID_CODEX_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max", "ultra"]);
 
 /**
- * Validates a model-map.tiers or model-map.agents entry map: each entry needs
+ * Validates a model-map.tiers, model-map.agents or model-map.variants.<agent> entry map: each entry needs
  * a string `model`, and `effort` (if present) must be a string — except for
  * opencode, where `effort` is forbidden outright (opencode's ModelMapEntry has
  * no reasoning-effort concept).
@@ -740,7 +743,7 @@ function validateModelMapEntries(
 	entries: unknown,
 	label: string,
 	platform: string,
-	fieldLabel: "tiers" | "agents",
+	fieldLabel: string,
 	result: ValidationResult,
 ): void {
 	if (!isObject(entries)) {
@@ -811,6 +814,30 @@ function validateModelMapSection(
 
 	if (modelMap.agents !== undefined) {
 		validateModelMapEntries(modelMap.agents, label, platform, "agents", result);
+	}
+
+	if (modelMap.variants !== undefined) {
+		if (!isObject(modelMap.variants)) {
+			result.errors.push(`${label}: model-map.variants는 object 형식이어야 합니다`);
+			return;
+		}
+		for (const [agent, suffixes] of Object.entries(modelMap.variants)) {
+			const variantLabel = `variants.${agent}`;
+			if (isObject(suffixes) && Object.keys(suffixes).length === 0) {
+				result.errors.push(`${label}: model-map.${variantLabel}에 suffix가 하나 이상 필요합니다`);
+				continue;
+			}
+			if (isObject(suffixes)) {
+				for (const suffix of Object.keys(suffixes)) {
+					if (!VARIANT_SUFFIX_PATTERN.test(suffix)) {
+						result.errors.push(
+							`${label}: model-map.${variantLabel}: suffix '${suffix}'는 소문자/숫자/하이픈(kebab-case)이어야 합니다 (${VARIANT_SUFFIX_PATTERN})`,
+						);
+					}
+				}
+			}
+			validateModelMapEntries(suffixes, label, platform, variantLabel, result);
+		}
 	}
 }
 
