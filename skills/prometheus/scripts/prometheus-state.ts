@@ -8,7 +8,7 @@
  *   set --phase <S> [--plan-path <p>] [--resume-summary <s>]
  *       [--record-ac '<json-array>' | --record-ac - (reads JSON array from stdin)]
  *       [--record-non-goals '<lines>' | --record-non-goals - (reads lines from stdin)]
- *       [--mark-design-done] [--mark-plan-done] [--submit-presentation <html>] [--await-user]
+ *       [--mark-design-done] [--mark-plan-done] [--submit-presentation <html> --receipt <receipt.json>] [--await-user]
  *   get
  *   clear (system-only internal teardown)
  */
@@ -239,6 +239,8 @@ export function setPrometheusState(
 		/** Sets steps.plan.done=true. */
 		mark_plan_done?: boolean;
 		submit_presentation?: string;
+		/** html-report lint receipt for `submit_presentation`; required with it. */
+		lint_receipt?: string;
 		/** Sets awaiting_user=true (legitimate pause at a human gate). Omitting it on any set clears the flag. */
 		await_user?: boolean;
 		/** Records `aborted` with this reason (the user's words). Omitting it on any set clears `aborted`. */
@@ -286,9 +288,9 @@ function writePrometheusState(
 	const resolvedNonGoals = opts.non_goals ?? prior.non_goals ?? "";
 	assertValidNonGoals(resolvedNonGoals, resolvedPhase);
 	const presentation = opts.submit_presentation !== undefined
-		? createPresentationSubmission(resolvedPlanPath, opts.submit_presentation)
+		? createPresentationSubmission(resolvedPlanPath, opts.submit_presentation, opts.lint_receipt ?? "", "plan-todos")
 		: prior.presentation;
-	if (opts.submit_presentation !== undefined && !presentationSubmissionCurrent(presentation, resolvedPlanPath, stageAPresentationPath(resolvedPlanPath))) {
+	if (opts.submit_presentation !== undefined && !presentationSubmissionCurrent(presentation, "plan-todos", resolvedPlanPath, stageAPresentationPath(resolvedPlanPath))) {
 		throw new Error("presentation must be submitted at the current plan's presentation/<stem>.html path");
 	}
 
@@ -356,8 +358,8 @@ function writePrometheusState(
 			case "ok":
 				break;
 		}
-		if (!presentationSubmissionCurrent(presentation, resolvedPlanPath, presentationPath)) {
-			refuse("presentation submission missing or stale; use set --phase S5 --submit-presentation <html> after rendering");
+		if (!presentationSubmissionCurrent(presentation, "plan-todos", resolvedPlanPath, presentationPath)) {
+			refuse("presentation submission missing or stale; use set --phase S5 --submit-presentation <html> --receipt <receipt.json> after rendering");
 		}
 	}
 
@@ -539,6 +541,7 @@ function main(): void {
 			}
 			const resumeSummary = stringFlag(args, "resume-summary");
 			const submitPresentation = stringFlag(args, "submit-presentation");
+			const lintReceipt = stringFlag(args, "receipt");
 
 			// --record-ac '<json-array>'  |  --record-ac -  (read JSON array from stdin)
 			let recordAc: string[] | undefined;
@@ -609,6 +612,7 @@ function main(): void {
 				mark_design_done: markDesignDone || undefined,
 				mark_plan_done: markPlanDone || undefined,
 				submit_presentation: submitPresentation,
+				lint_receipt: lintReceipt,
 				await_user: awaitUser || undefined,
 				abort_reason: abort ? reason : undefined,
 			});

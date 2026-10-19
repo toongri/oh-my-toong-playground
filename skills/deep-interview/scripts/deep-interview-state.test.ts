@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, readdirSy
 import { execSync } from "child_process";
 import { tmpdir } from "os";
 import { join } from "path";
+import { writeLintReceipt } from "../../../lib/__fixtures__/lint-receipt.ts";
 import {
 	initDeepInterviewState,
 	updateDeepInterviewState,
@@ -68,7 +69,7 @@ describe("deep-interview state", () => {
 		writeFileSync(presentationMarkdown, "# Presentation\nA confirmed presentation.");
 		writeFileSync(html, "<!doctype html><html><body><h1>Design</h1><p>A confirmed design.</p></body></html>");
 		const cli = join(import.meta.dir, "deep-interview-state.ts");
-		execSync(`bun '${cli}' submit-presentation --spec-path '${spec}' --html-path '${html}'`, { stdio: "pipe", env: { ...process.env } });
+		execSync(`bun '${cli}' submit-presentation --spec-path '${spec}' --html-path '${html}' --receipt '${writeLintReceipt(join(tmpDir, "receipt.json"), html, spec)}'`, { stdio: "pipe", env: { ...process.env } });
 		const state = rawState()["state"] as DeepInterviewStateContent;
 		expect(state.presentation?.html_path).toBe(html);
 		updateDeepInterviewState(SID, { current_phase: "handoff" });
@@ -86,11 +87,41 @@ describe("deep-interview state", () => {
 		writeFileSync(html, "<!doctype html><html><body><h1>Design</h1><p>Original explanation.</p></body></html>");
 		const cli = join(import.meta.dir, "deep-interview-state.ts");
 
-		execSync(`bun '${cli}' submit-presentation --spec-path '${spec}' --html-path '${html}'`, { stdio: "pipe", env: { ...process.env } });
+		execSync(`bun '${cli}' submit-presentation --spec-path '${spec}' --html-path '${html}' --receipt '${writeLintReceipt(join(tmpDir, "receipt.json"), html, spec)}'`, { stdio: "pipe", env: { ...process.env } });
 		updateDeepInterviewState(SID, { current_phase: "handoff" });
 		writeFileSync(presentationMarkdown, "# Presentation\nEdited explanation.");
 
 		expect(() => updateDeepInterviewState(SID, { current_phase: "handoff" })).toThrow("presentation");
+	});
+
+	test("HTML 제출 명령은 --receipt 없이는 거부하고 state를 유지함", () => {
+		initDeepInterviewState(SID, { initial_idea: "presentation receipt" });
+		const spec = join(tmpDir, "foo.md");
+		const html = join(tmpDir, "foo.presentation.html");
+		writeFileSync(spec, "# Design\nA confirmed design.");
+		writeFileSync(html, "<!doctype html><html><body><h1>Design</h1></body></html>");
+		const before = readFileSync(resolveStatePath(SID), "utf8");
+		const cli = join(import.meta.dir, "deep-interview-state.ts");
+		expect(() => execSync(`bun '${cli}' submit-presentation --spec-path '${spec}' --html-path '${html}'`, { stdio: "pipe", env: { ...process.env } })).toThrow();
+		expect(readFileSync(resolveStatePath(SID), "utf8")).toBe(before);
+	});
+
+	test("spec의 Mermaid 수보다 svg figure가 적으면 제출을 거부함", () => {
+		initDeepInterviewState(SID, { initial_idea: "presentation figures" });
+		const spec = join(tmpDir, "foo.md");
+		const html = join(tmpDir, "foo.presentation.html");
+		writeFileSync(spec, "# Design\n\n## Diagrams\n\n```mermaid\nflowchart LR\n```\n");
+		writeFileSync(html, "<!doctype html><html><body><h1>Design</h1></body></html>");
+		const receipt = writeLintReceipt(join(tmpDir, "receipt.json"), html, spec);
+		const cli = join(import.meta.dir, "deep-interview-state.ts");
+		let stderr = "";
+		try {
+			execSync(`bun '${cli}' submit-presentation --spec-path '${spec}' --html-path '${html}' --receipt '${receipt}'`, { stdio: "pipe", env: { ...process.env } });
+		} catch (e) {
+			stderr = String((e as { stderr: Buffer }).stderr);
+		}
+		expect(stderr).toContain("1 Mermaid diagram(s)");
+		expect(stderr).toContain("0 <figure>");
 	});
 
 	test("HTML 제출 명령은 원본과 다른 slug의 HTML을 거부하고 state를 유지함", () => {

@@ -495,7 +495,7 @@ The Metadata `Output shape` value must be copied exactly from persisted `state.o
 ```bash
 OUT=$OMT_DIR/deep-interview/{slug}.visual-check/round-1
 bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh $OMT_DIR/deep-interview/{slug}.presentation.html "$OUT"
-bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh $OMT_DIR/deep-interview/{slug}.presentation.html --source $OMT_DIR/deep-interview/{slug}.md > "$OUT/lint.json"
+bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh $OMT_DIR/deep-interview/{slug}.presentation.html --source $OMT_DIR/deep-interview/{slug}.md --strict --receipt "$OUT/receipt.json" > "$OUT/lint.json"
 ```
 
 The presentation is derived and non-authoritative — the spec on disk is never rewritten to match it. Write its prose in the session's conversation language (same detect-at-write-time rule as the spec).
@@ -503,11 +503,11 @@ The presentation is derived and non-authoritative — the spec on disk is never 
 4. **Submit the HTML before announcing completion or offering any Phase 5 route.** The human-facing deliverable is the HTML file. Read [presentation.md](presentation.md) for the authoring contract and self-audit, then submit the file once the self-critique loop passes:
 
 ```bash
-bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts submit-presentation --spec-path "$OMT_DIR/deep-interview/{slug}.md" --html-path "$OMT_DIR/deep-interview/{slug}.presentation.html"
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts submit-presentation --spec-path "$OMT_DIR/deep-interview/{slug}.md" --html-path "$OMT_DIR/deep-interview/{slug}.presentation.html" --receipt "$OUT/receipt.json"
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update --current-phase handoff
 ```
 
-Use the actual saved spec path. Submission records `state.presentation` with source/HTML paths and content hashes; `handoff` and the completion hook require a current submission. Editing either file requires re-running the self-critique loop and resubmission. On resume, check the submission before routing; legacy rich states with no submission are incomplete too. The same submission step applies to normal crystallization, execution deferral after closure, and every revised completed spec.
+Use the actual saved spec path. Submission records `state.presentation` with source/HTML/lint-receipt paths and content hashes (the receipt written by `lint.sh --strict --receipt` must match the current HTML bytes and this spec, and the HTML needs one `<figure>` with an inline `<svg` per spec Mermaid fence in `## Diagrams` and `## Boundary Map`); `handoff` and the completion hook require a current submission. Editing the spec or the HTML requires re-running the self-critique loop (including `lint.sh`, which rewrites the receipt) and resubmission. On resume, check the submission before routing; legacy rich states with no submission are incomplete too. The same submission step applies to normal crystallization, execution deferral after closure, and every revised completed spec.
 
 5. **Presentation review (required, before the handoff token).** Dispatch the `presentation-reviewer` agent to contrast the presentation against the spec it was written from, for its reader. It is skill-agnostic, so assemble the bundle:
    - **presentation**: the presentation `.html`.
@@ -572,7 +572,7 @@ This is the normal-completion checklist. A paused interview or delivered DRAFT r
 - [ ] Each question names the decision it changes; the register persists dependencies, provenance, rejected alternatives, checks, and any reopened decisions
 - [ ] Spec file written to `$OMT_DIR/deep-interview/{slug}.md`
 - [ ] Inline self-review (6 checks: placeholder / consistency / scope / non-goal-decider / invariant / ambiguity) performed
-- [ ] presentation authored per [presentation.md](presentation.md) and `../html-report/SKILL.md` as `$OMT_DIR/deep-interview/{slug}.presentation.html`, self-critique loop passed (lint 0 errors), submitted with `submit-presentation`, and accepted by `update --current-phase handoff` (current source/HTML hashes; self-audit passed)
+- [ ] presentation authored per [presentation.md](presentation.md) and `../html-report/SKILL.md` as `$OMT_DIR/deep-interview/{slug}.presentation.html`, self-critique loop passed (lint 0 errors), submitted with `submit-presentation --receipt` (lint receipt from `lint.sh --strict --receipt`, one SVG `<figure>` per spec Mermaid diagram), and accepted by `update --current-phase handoff` (current source/HTML hashes; self-audit passed)
 - [ ] Spec includes: goal, constraints, invariants, acceptance criteria, Approach & Design Decisions, clarity breakdown, transcript
 - [ ] Token `<deep-interview-done/>` emitted in the final assistant message before handoff
 - [ ] Execution bridge presented as alternatives with their trade-offs, or the user's execution deferral honored

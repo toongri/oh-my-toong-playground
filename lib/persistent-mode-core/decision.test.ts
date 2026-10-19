@@ -8,6 +8,7 @@ import { execFileSync } from "child_process";
 import { approveOk, evidenceReviewSnapshot, qaReportSnapshot } from "@lib/qa-chain-core";
 import { createHash } from "crypto";
 import { createPresentationSubmission } from "@lib/state-core";
+import { writeLintReceipt } from "@lib/__fixtures__/lint-receipt";
 import { CAPABILITY_STEP_MIGRATION_VERSION } from "@lib/explain-diff-core";
 
 // ---------------------------------------------------------------------------
@@ -81,7 +82,8 @@ describe("makeDecision", () => {
 		const html = join(omtDir, "spec.html");
 		fs.writeFileSync(spec, "# Confirmed design");
 		fs.writeFileSync(html, "<html><body>Confirmed design</body></html>");
-		return createPresentationSubmission(spec, html);
+		const receipt = writeLintReceipt(join(omtDir, "receipt.json"), html, spec);
+		return createPresentationSubmission(spec, html, receipt, "spec-diagrams");
 	}
 
 	afterEach(() => {
@@ -1304,7 +1306,8 @@ describe("makeDecision", () => {
 			await mkdir(join(planDirFor(), "presentation"), { recursive: true });
 			await writeFile(presentationMarkdownPathFor(), "# presentation\n");
 			await writeFile(presentationPathFor(), "<html><body>presentation</body></html>\n");
-			await writeStateWithPlanDone(createPresentationSubmission(planPathFor(), presentationPathFor()));
+			const receipt = writeLintReceipt(join(omtDir, "receipt.json"), presentationPathFor(), planPathFor());
+			await writeStateWithPlanDone(createPresentationSubmission(planPathFor(), presentationPathFor(), receipt, "plan-todos"));
 
 			const context = createContext({ lastAssistantMessage: "Done.\n<prometheus-done/>" });
 
@@ -1312,6 +1315,21 @@ describe("makeDecision", () => {
 
 			expect(result.decision).not.toBe("block");
 			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(false);
+		});
+
+		it("refuses <prometheus-done/> when the stored submission has no lint receipt fields", async () => {
+			await writePlanOnDisk();
+			await mkdir(join(planDirFor(), "presentation"), { recursive: true });
+			await writeFile(presentationMarkdownPathFor(), "# presentation\n");
+			await writeFile(presentationPathFor(), "<html><body>presentation</body></html>\n");
+			const receipt = writeLintReceipt(join(omtDir, "receipt.json"), presentationPathFor(), planPathFor());
+			const { lint_receipt_path: _p, lint_receipt_sha256: _h, ...legacy } = createPresentationSubmission(planPathFor(), presentationPathFor(), receipt, "plan-todos");
+			await writeStateWithPlanDone(legacy as ReturnType<typeof createPresentationSubmission>);
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "Done.\n<prometheus-done/>" }));
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("--receipt");
 		});
 
 		const writeAbortableState = async (aborted?: { reason: string; phase: string; at: string }) => {

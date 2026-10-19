@@ -148,12 +148,15 @@ fix, and repeat in a new directory until lint reports 0 errors and the frame che
 ```bash
 OUT=$OMT_DIR/deep-interview/{slug}.visual-check/round-1
 bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh $OMT_DIR/deep-interview/{slug}.presentation.html "$OUT"
-bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh $OMT_DIR/deep-interview/{slug}.presentation.html --source $OMT_DIR/deep-interview/{slug}.md > "$OUT/lint.json"
+bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh $OMT_DIR/deep-interview/{slug}.presentation.html --source $OMT_DIR/deep-interview/{slug}.md --strict --receipt "$OUT/receipt.json" > "$OUT/lint.json"
 ```
 
-Then run `deep-interview-state.ts submit-presentation --spec-path <spec>.md --html-path <presentation>.html`.
-On success, the paths and hashes are stored in `state.presentation`. If either file changes,
-re-run the loop and submit again.
+Then run `deep-interview-state.ts submit-presentation --spec-path <spec>.md --html-path <presentation>.html --receipt "$OUT/receipt.json"`.
+`lint.sh` writes the receipt only when the run has 0 errors, so a receipt file proves one clean strict lint of exact HTML bytes.
+The submission refuses unless the receipt matches the current HTML bytes, its `--source` is this spec, and it covers all three runs (1280 light, 1280 dark, 400 light).
+It also refuses unless the HTML holds at least as many `<figure>` elements containing an `<svg` as the spec has Mermaid fences in `## Diagrams` and `## Boundary Map` (the refusal states both counts).
+On success, the paths and hashes of the spec, HTML and receipt are stored in `state.presentation`. If any of them changes,
+the submission is no longer current: **re-run `lint.sh` after every edit to the HTML** (a receipt for older bytes is refused), then submit again.
 
 ## Self-audit (before submitting)
 - [ ] Does the first screen establish what changes and why — **all reasons from the spec (zero invented motives)**;
@@ -167,7 +170,7 @@ re-run the loop and submit again.
 - [ ] Interview/AI machinery (Clarity Breakdown, Ontology Convergence, Transcript, scoring values) removed.
 - [ ] Lead enumeration = section enumeration; overview is a true subset of details; apparent contradictions reconciled; prose matches diagrams.
 - [ ] Zero invention or contradiction against the SSOT.
-- [ ] html-report read in full; self-critique loop run until lint shows 0 errors and the frame checklist passes (capture + `lint.sh --source` the spec).
+- [ ] html-report read in full; self-critique loop run until lint shows 0 errors and the frame checklist passes (capture + `lint.sh --source` the spec `--strict --receipt`; one `<figure>` with an inline `<svg` per spec Mermaid diagram; re-lint after any HTML edit).
 - [ ] Each redrawn spec diagram has the same node and edge counts as the spec's Mermaid; any split or omission is stated on the page.
 
 The sole passing criterion: **can a colleague or team-lead with no prior context understand from this

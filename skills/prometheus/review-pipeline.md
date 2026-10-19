@@ -101,11 +101,11 @@ no-invention Fidelity Bounds still hold.
   ```bash
   OUT=$OMT_DIR/plans/presentation/.visual-check/round-1
   bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh $OMT_DIR/plans/presentation/{name}.html "$OUT"
-  bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh $OMT_DIR/plans/presentation/{name}.html --source $OMT_DIR/plans/{name}.md > "$OUT/lint.json"
+  bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh $OMT_DIR/plans/presentation/{name}.html --source $OMT_DIR/plans/{name}.md --strict --receipt "$OUT/receipt.json" > "$OUT/lint.json"
   ```
-  Look at every captured frame, fix, and repeat into a new round directory until `lint.sh` reports 0 errors and the frame checklist of html-report section 14 passes. Then submit the HTML. Repeat the loop and the submission after every plan or HTML revision:
+  Look at every captured frame, fix, and repeat into a new round directory until `lint.sh` reports 0 errors and the frame checklist of html-report section 14 passes. Then submit the HTML. `lint.sh` writes the receipt only on a run with 0 errors. The submission refuses unless the receipt matches the current HTML bytes and was linted with `--source` this plan, so re-run `lint.sh` after every HTML edit. Repeat the loop and the submission after every plan or HTML revision:
   ```bash
-  bun ${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts set --phase S5 --submit-presentation "$OMT_DIR/plans/presentation/{name}.html"
+  bun ${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts set --phase S5 --submit-presentation "$OMT_DIR/plans/presentation/{name}.html" --receipt "$OUT/receipt.json"
   ```
 - **Presentation review (required, after render/submit, before Stage C and `prometheus-done`)**: dispatch the `presentation-reviewer` agent to contrast the presentation against the plan it was rendered from, for its reader. It is skill-agnostic, so assemble the bundle:
   - **presentation**: the presentation `.html`.
@@ -139,7 +139,7 @@ The presentation page is authored in exactly this order, top to bottom:
 3. **Pipeline State box** — a callout surfacing the S0 → S_current pipeline-state journal from session state as of the render (S5), so it does not show later phases, immediately after the Execution Recommendation box.
 4. **Bird's-Eye View** — the `## Bird's-Eye View` section (coverage table + triggered lens diagrams), generated when ANY lens trigger holds (see Lens Taxonomy under Diagram Content Rules) — NOT only the System topology `>= 2 components` trigger. A single-component plan that triggers Domain state or Business logic still generates the section to host that diagram and its coverage-table row; `>= 2 components` gates only the System topology row inside the table, never the section's existence.
 5. **Review Digest** — the `## Review Digest` section (AC paired with verification method), immediately after Bird's-Eye View when generated, otherwise immediately after the Pipeline State box.
-6. **plan body** — the full plan markdown, rewritten for readability, with the TODO breakdown wrapped in collapsed `<details><summary>` blocks so execution detail is opt-in reading.
+6. **plan body** — the full plan markdown, rewritten for readability, with the TODO breakdown wrapped in collapsed `<details><summary>` blocks so execution detail is opt-in reading. **Every plan TODO id (`3`, `F1`, as written in `- [ ] 3.` / `- [ ] F1.` under `## TODOs`) must appear on the page as an attribute `data-todo="<id>"`** on that TODO's element (for example `<details data-todo="3">`). The submission refuses and lists the ids whose anchor is missing.
 
 Every `<figure>` containing an `<svg>` lives inside the Bird's-Eye View section — figure-locality is absolute, no diagram is drawn anywhere else in the document, the decision-log flow diagram included.
 

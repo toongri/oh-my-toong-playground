@@ -1166,11 +1166,11 @@ After reconciliation, the design passes through the human design gate, then S3 p
 
 This step CANNOT be skipped. After Momus APPROVE/COMMENT, prometheus MUST execute Stages B → A → C before any user-facing handoff: compute the Stage B recommendation right after Momus APPROVE/COMMENT, because the Stage A presentation carries the recommendation box; render and submit Stage A; dispatch `presentation-reviewer` after that submit and before Stage C; then present Stage C. **Past sessions have skipped Stage A entirely; do NOT.**
 
-**Required submission.** Read [review-pipeline.md](review-pipeline.md) Stage A before authoring; it owns the reader, section order, fidelity checks, diagram lens rules, the html-report authoring-and-loop instruction, and the HTML submission command. `prometheus-state.ts set --phase S5 --submit-presentation <html>` records the plan/HTML paths and content hashes in `presentation`. S6 or later refuses to advance unless:
+**Required submission.** Read [review-pipeline.md](review-pipeline.md) Stage A before authoring; it owns the reader, section order, fidelity checks, diagram lens rules, the html-report authoring-and-loop instruction, and the HTML submission command. `prometheus-state.ts set --phase S5 --submit-presentation <html> --receipt <receipt.json>` records the plan, HTML and lint-receipt paths and content hashes in `presentation`. The receipt is the file `lint.sh <html> --source <plan> --strict --receipt <receipt.json>` writes on a run with 0 errors; the submission refuses a receipt for other HTML bytes or another source, and refuses HTML that lacks a `data-todo="<id>"` anchor for any plan TODO id. S6 or later refuses to advance unless:
 
 - `plan_path` is set (it is set at S0 and preserved; empty here means that write was skipped)
 - the HTML exists at `<plan directory>/presentation/<plan stem>.html`
-- a current submission binds this plan and HTML; changing either requires re-rendering and resubmission
+- a current submission binds this plan, HTML and lint receipt; changing any of them requires re-rendering and resubmission
 
 The sole presentation deliverable is HTML, authored directly by the model following `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md`; its capture and lint loop must reach 0 lint errors and a passing frame checklist before the submission. There is no intermediate presentation Markdown. Apply this same sequence on the first approved plan, scoped re-review, revised plan, resumed session, and Finish/execution deferral. Existing HTML or a chat link alone does not satisfy submission.
 
