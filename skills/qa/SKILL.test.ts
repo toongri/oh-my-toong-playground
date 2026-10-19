@@ -289,6 +289,14 @@ describe("new-prose: PRE-FLIGHT contract gate", () => {
 	test("cycle-not-executed fail-fast wording is present", () => {
 		expect(skillMd).toContain("cycle NOT executed");
 	});
+
+	test("diff base is the remote default branch, never the local main", () => {
+		expect(skillMd).not.toContain("merge-base HEAD main");
+		expect(skillMd).toContain("refs/remotes/origin/HEAD");
+		expect(skillMd).toContain("git merge-base <base> HEAD");
+		expect(skillMd).toContain("git ls-files --others --exclude-standard");
+		expect(skillMd).not.toContain("--name-only <base>...HEAD");
+	});
 });
 
 // ---------------------------------------------------------------------------
