@@ -95,9 +95,14 @@ tier 절 추가 후 8/8 통과.
 결론: 이름 있는 role의 TOML이 호출 단위 override보다 우선한다. 그래서 Codex tier는 호출 파라미터가
 아니라 별도 생성 role(codex.yaml `model-map.variants`)로 구현한다.
 
-### Pending (미관측)
+### Codex 생성 role end-to-end
 
-`make sync`가 `sisyphus-junior-light.toml` / `sisyphus-junior-deep.toml`을 배포한 뒤의 Codex
-end-to-end. `agent_type:"sisyphus-junior-deep"`을 spawn하고 DB 행이 `gpt-6.1-sol` / `high`인지
-확인해야 한다. 확인 전까지 Codex 런타임 적용은 GREEN으로 기록하지 않는다. 명령은 위 "실행·관측
-방법"의 템플릿을 쓴다.
+- 환경: codex-cli 0.163.0, 격리 CODEX_HOME(`tools/codex-probe/isolated-codex-home.ts`로 생성).
+  `agents/`에는 실제 `codex.yaml`로 `CodexAdapter.syncAgentsDirect`가 생성한
+  `sisyphus-junior.toml` / `-light.toml` / `-deep.toml`을 두었다. config는 `features.multi_agent`와
+  `features.multi_agent_v2`(`tool_namespace="agents"`)만 두었고, 기본 model은 `gpt-6-luna` / `medium`이다.
+- 부모 rollout의 `spawn_agent` 인자: `agent_type`만 있고 `model` / `reasoning_effort`는 없다.
+- 관측(상태 DB): `sisyphus-junior-deep` -> `gpt-6.1-sol` / `high`, `sisyphus-junior-light` ->
+  `gpt-6-luna` / `low`. 두 자식 모두 pong에 응답했다. 판정 PASS.
+- 참고: role 파일을 신뢰되지 않은 프로젝트의 `.codex/agents`에만 두면 `unknown agent_type`으로
+  거부됐다. 생성 role은 배포된 CODEX_HOME(또는 신뢰된 프로젝트)에 있어야 한다.
