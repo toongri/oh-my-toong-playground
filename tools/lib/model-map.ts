@@ -1,4 +1,4 @@
-import type { ModelMap, Platform } from "./types.ts";
+import type { ModelMap, ModelMapEntry, Platform } from "./types.ts";
 
 /**
  * Distinguishes the model-map hard-fail from unrelated errors (e.g. malformed
@@ -23,4 +23,18 @@ export function assertMappedTier(
 	throw new ModelMapError(
 		`model-map: agent '${ctx.agentFile}' declares tier '${tier}' not mapped in ${ctx.platform} model-map.tiers`,
 	);
+}
+
+/**
+ * Lists the extra roles declared for `agentName` in `modelMap.variants`, each
+ * named `<agentName>-<suffix>`. Sorted by name so deploy output is
+ * deterministic; empty when the model-map or the agent's variants are absent.
+ */
+export function listAgentVariants(
+	modelMap: ModelMap | undefined,
+	agentName: string,
+): { name: string; entry: ModelMapEntry }[] {
+	return Object.entries(modelMap?.variants?.[agentName] ?? {})
+		.map(([suffix, entry]) => ({ name: `${agentName}-${suffix}`, entry }))
+		.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
