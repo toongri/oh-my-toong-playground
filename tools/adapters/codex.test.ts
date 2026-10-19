@@ -488,6 +488,162 @@ describe("CodexAdapter", () => {
 			expect(parsed.model_reasoning_effort).toBe("high");
 		});
 
+		describe("model-map variants", () => {
+			const variantMap: ModelMap = {
+				tiers: { sonnet: { model: "gpt-6.1-sol", effort: "medium" } },
+				variants: {
+					"sisyphus-junior": {
+						light: { model: "gpt-6-luna", effort: "low" },
+						deep: { model: "gpt-6.1-sol", effort: "high" },
+					},
+				},
+			};
+
+			async function writeSource(): Promise<string> {
+				const sourceFile = path.join(tmpDir, "sisyphus-junior.md");
+				await fs.writeFile(
+					sourceFile,
+					"---\nname: sisyphus-junior\ndescription: Focused executor\nmodel: sonnet\n---\n\nBody text.\n",
+				);
+				return sourceFile;
+			}
+			const agentsDir = () => path.join(tmpDir, "target", ".codex", "agents");
+
+			it("emits one extra role TOML per variant that shares the base instructions via `syncAgentsDirect`", async () => {
+				const sourceFile = await writeSource();
+				await adapter.syncAgentsDirect(
+					path.join(tmpDir, "target"),
+					"sisyphus-junior",
+					sourceFile,
+					[],
+					[],
+					false,
+					variantMap,
+				);
+
+				expect((await fs.readdir(agentsDir())).sort()).toEqual([
+					"sisyphus-junior-deep.toml",
+					"sisyphus-junior-light.toml",
+					"sisyphus-junior.toml",
+				]);
+				const read = async (file: string) =>
+					parse(await fs.readFile(path.join(agentsDir(), file), "utf-8")) as Record<string, unknown>;
+				const base = await read("sisyphus-junior.toml");
+				const light = await read("sisyphus-junior-light.toml");
+				const deep = await read("sisyphus-junior-deep.toml");
+
+				expect(light.name).toBe("sisyphus-junior-light");
+				expect(deep.name).toBe("sisyphus-junior-deep");
+				for (const variant of [light, deep]) {
+					expect(variant.developer_instructions).toBe(base.developer_instructions);
+					expect(variant.description).toBe(base.description);
+					expect(Object.keys(variant).sort()).toEqual(Object.keys(base).sort());
+				}
+				expect(light.model).toBe("gpt-6-luna");
+				expect(light.model_reasoning_effort).toBe("low");
+				expect(deep.model).toBe("gpt-6.1-sol");
+				expect(deep.model_reasoning_effort).toBe("high");
+			});
+
+			it("keys variants by displayName when frontmatter name differs via `syncAgentsDirect`", async () => {
+				const sourceFile = path.join(tmpDir, "source.md");
+				await fs.writeFile(
+					sourceFile,
+					"---\nname: other-name\ndescription: Focused executor\nmodel: sonnet\n---\n\nBody text.\n",
+				);
+				await adapter.syncAgentsDirect(
+					path.join(tmpDir, "target"),
+					"sisyphus-junior",
+					sourceFile,
+					[],
+					[],
+					false,
+					variantMap,
+				);
+				expect((await fs.readdir(agentsDir())).sort()).toEqual([
+					"sisyphus-junior-deep.toml",
+					"sisyphus-junior-light.toml",
+					"sisyphus-junior.toml",
+				]);
+			});
+
+			it("logs one dry-run line per variant and writes nothing via `syncAgentsDirect`", async () => {
+				const sourceFile = await writeSource();
+				const logs: string[] = [];
+				const logger = spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => { logs.push(String(chunk)); return true; });
+				const out = spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => { logs.push(String(chunk)); return true; });
+				try {
+					await adapter.syncAgentsDirect(
+						path.join(tmpDir, "target"),
+						"sisyphus-junior",
+						sourceFile,
+						[],
+						[],
+						true,
+						variantMap,
+					);
+				} finally { logger.mockRestore(); out.mockRestore(); }
+				const text = logs.join("\n");
+				expect(text).toContain("sisyphus-junior-light.toml");
+				expect(text).toContain("sisyphus-junior-deep.toml");
+				await expect(fs.stat(agentsDir())).rejects.toThrow();
+			});
+
+			it("emits only the base file when the agent has no variants via `syncAgentsDirect`", async () => {
+				const sourceFile = await writeSource();
+				await adapter.syncAgentsDirect(
+					path.join(tmpDir, "target"),
+					"sisyphus-junior",
+					sourceFile,
+					[],
+					[],
+					false,
+					{ tiers: variantMap.tiers, variants: { oracle: { deep: { model: "gpt-6.1-sol" } } } },
+				);
+				expect(await fs.readdir(agentsDir())).toEqual(["sisyphus-junior.toml"]);
+			});
+
+			it("writes nothing for base or variants on dryRun via `syncAgentsDirect`", async () => {
+				const sourceFile = await writeSource();
+				await adapter.syncAgentsDirect(
+					path.join(tmpDir, "target"),
+					"sisyphus-junior",
+					sourceFile,
+					[],
+					[],
+					true,
+					variantMap,
+				);
+				await expect(fs.access(agentsDir())).rejects.toThrow();
+			});
+
+			it("routes variant writes through `mutationHooks.mutate` via `syncAgentsDirect`", async () => {
+				const sourceFile = await writeSource();
+				const mutated: string[] = [];
+				const hooks: DeployMutationHooks = {
+					mutate: async (targetPath, operation) => {
+						mutated.push(targetPath);
+						await operation();
+					},
+				};
+				await adapter.syncAgentsDirect(
+					path.join(tmpDir, "target"),
+					"sisyphus-junior",
+					sourceFile,
+					[],
+					[],
+					false,
+					variantMap,
+					hooks,
+				);
+				expect([...mutated].sort()).toEqual(
+					["sisyphus-junior", "sisyphus-junior-deep", "sisyphus-junior-light"]
+						.map((n) => path.join(agentsDir(), `${n}.toml`))
+						.sort(),
+				);
+			});
+		});
+
 		it("throws naming sourcePath when frontmatter description is blank via `syncAgentsDirect`", async () => {
 			const sourceFile = path.join(tmpDir, "blank-description.md");
 			await fs.writeFile(

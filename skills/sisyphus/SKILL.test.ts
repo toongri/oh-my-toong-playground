@@ -24,3 +24,20 @@ describe("Sisyphus 정직한 보고 prose 계약", () => {
 		expect(honestReporting).toContain("partial result");
 	});
 });
+
+describe("Sisyphus 실행자 티어 prose 계약", () => {
+	test("`Executor Tier` maps each tier to concrete tool parameters per platform", () => {
+		const tier = extractSection(
+			skillMd,
+			"## Executor Tier",
+			"## Todo Discipline",
+		);
+
+		expect(tier).toContain("sisyphus-junior-light");
+		expect(tier).toContain("sisyphus-junior-deep");
+		expect(tier).toContain('model: "opus"');
+		expect(tier).toContain('effort: "high"');
+		expect(tier).toContain('effort: "low"');
+		expect(tier).toContain("never pass `model` or `reasoning_effort`");
+	});
+});

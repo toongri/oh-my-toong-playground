@@ -1339,6 +1339,121 @@ model-map:
 		}
 	});
 
+	it("accepts a valid model-map variants section", () => {
+		const path = writeYaml(
+			dir,
+			"codex.yaml",
+			`
+model-map:
+  tiers:
+    opus:
+      model: gpt-6.1-sol
+  variants:
+    sisyphus-junior:
+      light:
+        model: gpt-6-luna
+        effort: low
+      deep:
+        model: gpt-6.1-sol
+        effort: high
+`,
+		);
+		const result = validatePlatformYaml(path, "codex");
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("returns error when a variant effort is misspelled", () => {
+		const path = writeYaml(
+			dir,
+			"codex.yaml",
+			`
+model-map:
+  tiers:
+    opus:
+      model: gpt-6.1-sol
+  variants:
+    sisyphus-junior:
+      deep:
+        model: gpt-6.1-sol
+        effort: hgih
+`,
+		);
+		const result = validatePlatformYaml(path, "codex");
+		expect(result.errors.some((e) => e.includes("variants") && e.includes("effort"))).toBe(true);
+	});
+
+	it("returns error when a variant suffix is not lowercase kebab-case", () => {
+		const path = writeYaml(
+			dir,
+			"codex.yaml",
+			`
+model-map:
+  tiers:
+    opus:
+      model: gpt-6.1-sol
+  variants:
+    sisyphus-junior:
+      Deep_1:
+        model: gpt-6.1-sol
+`,
+		);
+		const result = validatePlatformYaml(path, "codex");
+		expect(result.errors.some((e) => e.includes("Deep_1"))).toBe(true);
+	});
+
+	it("returns error when variants is not a mapping", () => {
+		const path = writeYaml(
+			dir,
+			"codex.yaml",
+			`
+model-map:
+  tiers:
+    opus:
+      model: gpt-6.1-sol
+  variants: nope
+`,
+		);
+		const result = validatePlatformYaml(path, "codex");
+		expect(result.errors.some((e) => e.includes("variants"))).toBe(true);
+	});
+
+	it("returns error when a variants agent has an empty suffix mapping", () => {
+		const path = writeYaml(
+			dir,
+			"codex.yaml",
+			`
+model-map:
+  tiers:
+    opus:
+      model: gpt-6.1-sol
+  variants:
+    sisyphus-junior: {}
+`,
+		);
+		const result = validatePlatformYaml(path, "codex");
+		expect(result.errors.some((e) => e.includes("sisyphus-junior"))).toBe(true);
+	});
+
+	it("returns error when an opencode variant declares effort", () => {
+		const path = writeYaml(
+			dir,
+			"opencode.yaml",
+			`
+model-map:
+  tiers:
+    opus:
+      model: gpt-6.1-sol
+  variants:
+    sisyphus-junior:
+      deep:
+        model: gpt-6.1-sol
+        effort: high
+`,
+		);
+		const result = validatePlatformYaml(path, "opencode");
+		expect(result.errors.some((e) => e.includes("effort"))).toBe(true);
+	});
+
 	it("returns error when opencode model-map tier declares effort", () => {
 		const path = writeYaml(
 			dir,

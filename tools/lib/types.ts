@@ -38,7 +38,16 @@ export type SyncSection = {
 
 export type ModelMapEntry = { model: string; effort?: string };
 
-export type ModelMap = { tiers: Record<string, ModelMapEntry>; agents?: Record<string, ModelMapEntry> };
+export type ModelMap = {
+	tiers: Record<string, ModelMapEntry>;
+	agents?: Record<string, ModelMapEntry>;
+	/**
+	 * Outer key = source agent name, inner key = variant suffix. Each variant
+	 * deploys as an extra Codex role `<agent>-<suffix>` carrying the source
+	 * agent's instructions and the variant's model/effort.
+	 */
+	variants?: Record<string, Record<string, ModelMapEntry>>;
+};
 
 export type DocsItem = string | { component: string; path?: string; as?: string; delete?: true };
 

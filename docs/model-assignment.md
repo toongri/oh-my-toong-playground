@@ -145,6 +145,39 @@ resolveCodexAgentModel: modelMap.agents?.[name] ?? modelMap.tiers[tier]
 `supported_reasoning_levels`를 모델별로 조사한 **합집합**이라, 특정 모델이 지원하지 않는
 조합(예: `gpt-5.5`에 `ultra`)은 통과한다. 잡는 것은 오타다.
 
+### `variants:`는 한 에이전트를 여러 역할로 나눌 때 쓴다
+
+```yaml
+model-map:
+  variants:
+    sisyphus-junior:
+      light: { model: gpt-6-luna, effort: low }
+      deep:  { model: gpt-6.1-sol, effort: high }
+```
+
+형태는 `variants: <agent>: <suffix>: { model, effort }`이며 `codex.yaml`에 쓴다. suffix는
+kebab-case여야 하고 `make validate`가 검사한다.
+
+Codex sync는 variant마다 role TOML을 하나 더 만든다. 파일은
+`.codex/agents/<agent>-<suffix>.toml`이다. 원본 `agents/<agent>.md`에서 생성하므로
+description과 `developer_instructions`는 같고, name·model·effort만 다르다. 이 파일은
+배포 매니페스트에 기록되며, variant를 지우면 함께 삭제된다.
+
+이유: Codex에서는 이름 있는 role의 TOML이 `spawn_agent`에 넘긴 `model`·
+`reasoning_effort`를 덮어쓴다. codex-cli 0.163.0에서 확인했다. `agent_type`을 `explore`와
+`sisyphus-junior`로 하고 `gpt-6.1-sol`/`high`를 넘기면 `gpt-6-luna`/`medium`으로
+실행됐다. 값이 적용된 경우는 `agent_type`이 `default`일 때뿐이었다. 그래서 호출마다
+override를 넘겨서는 이름 있는 role을 바꿀 수 없다. 등급은 별도 role로 만들고
+`agent_type`으로 고른다.
+
+현재 쓰임: `sisyphus-junior`가 `sisyphus-junior-light`(`gpt-6-luna`, `low`)와
+`sisyphus-junior-deep`(`gpt-6.1-sol`, `high`)로 나뉜다. sisyphus의 Executor Tier
+(`skills/sisyphus/SKILL.md`)가 둘 중 하나를 고른다. Claude Code에는 variant 파일이 없다.
+sisyphus가 Agent 호출에 light는 `effort: "low"`, deep는 `model: "opus"`와
+`effort: "high"`를 넘기고, standard는 아무것도 넘기지 않는다.
+
+Claude·Gemini·OpenCode 어댑터는 `variants`를 무시한다.
+
 ## 개별 배정에 대한 기록
 
 ### `metis`를 opus에서 fable로 (2026-07-30)

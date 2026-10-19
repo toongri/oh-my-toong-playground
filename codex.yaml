@@ -76,6 +76,22 @@ model-map:
     mnemosyne:
       model: gpt-6-luna
       effort: low
+  # `variants:` deploys extra Codex roles `<agent>-<suffix>` generated from the
+  # same agents/<agent>.md (identical instructions, the variant's model/effort).
+  # They exist because a named role's TOML overrides any `model` /
+  # `reasoning_effort` passed to `spawn_agent` (probed on codex-cli 0.163.0:
+  # agent_type explore/sisyphus-junior + gpt-6.1-sol/high ran gpt-6-luna/medium;
+  # only agent_type "default" honored the override). sisyphus selects these by
+  # tier via `agent_type` (skills/sisyphus/SKILL.md "Executor Tier"); `standard`
+  # is the base `sisyphus-junior` role above.
+  variants:
+    sisyphus-junior:
+      light:
+        model: gpt-6-luna
+        effort: low
+      deep:
+        model: gpt-6.1-sol
+        effort: high
 hooks:
   SessionStart:
     - component: rules-injector
