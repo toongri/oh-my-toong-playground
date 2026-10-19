@@ -93,7 +93,9 @@ import { withFeatureMapReadLock, type FeatureMapOptions } from "@lib/feature-map
 import { readQaCaseRunReceiptSnapshot, type QaCaseRunReceipt } from "@lib/qa-case-run.ts";
 import { getQaCase, validateQaCase, type QaCaseStoreOptions } from "@lib/qa-case-store.ts";
 import { readDeviceProfiles } from "@lib/qa-device-profiles.ts";
+import { CODE_IDENTIFIER, defaultEvidenceReader, validateNarrative, type QaReportNarrative } from "./qa-narrative.ts";
 
+export { CODE_IDENTIFIER };
 
 const DEFAULT_MAX_CYCLES = 5;
 
@@ -152,13 +154,6 @@ function localId(value: unknown, field: string): string {
 	if (id.includes(":")) throw new Error(`${field} must not contain ":" because story and scenario ids join as "story:scenario" in report keys`);
 	return id;
 }
-
-/**
- * camelCase (`displayName`), snake_case (`deep_link_value`) or a three-part PascalCase
- * component name (`JoinStepLayout`) — a code name, not something a reader sees.
- * Two-part brand names (AlgoCare, OneLink) stay allowed.
- */
-export const CODE_IDENTIFIER = /\b(?:[a-z]{2,}[A-Z][a-z]\w*|[a-z]+_[a-z]\w*|[A-Z][a-z]+(?:[A-Z][a-z]+){2,})/;
 
 /** Reader-facing prose: the report shows it to a PO, so it names what the user sees, never a code identifier. */
 function readerProse(value: unknown, field: string): string {
@@ -1720,6 +1715,7 @@ const ROSTER: CliCommand[] = [
 		authority: "ai",
 		effect: "marks the finished, gate-satisfied cycle inactive",
 	},
+	{ name: "validate-narrative", authority: "ai", effect: "checks a report narrative (--narrative <json-file>) against the recorded state without rendering and lists every problem: contract and content problems refuse the final render (exit 1), gaps only render a visible marker; writes nothing" },
 	{ name: "get", authority: "ai", effect: "reads the full recorded chain/view" },
 	{
 		name: "force-complete",
@@ -1935,6 +1931,15 @@ function main(): void {
 			for (const f of failed) {
 				process.stderr.write(`warning: ${f.kind} "${f.id}" is still running — its stop command failed. Stop it manually.\n  ${f.error}\n`);
 			}
+		} else if (subcommand === "validate-narrative") {
+			const view = readQaView(sessionId);
+			if (!view) throw new Error("validate-narrative: no state recorded for this session");
+			const narrative: QaReportNarrative = JSON.parse(readFileSync(requiredArg(args, "narrative"), "utf8"));
+			const problems = validateNarrative(view, narrative, defaultEvidenceReader, { content: true });
+			for (const problem of problems) process.stdout.write(`${problem.kind === "gap" ? "gap" : "error"}: ${problem.message}\n`);
+			const refused = problems.filter((problem) => problem.kind !== "gap").length;
+			process.stdout.write(`validate-narrative: ${refused} error(s) that refuse the render, ${problems.length - refused} gap(s) that render a visible marker\n`);
+			if (refused > 0) process.exit(1);
 		} else if (subcommand === "get") {
 			process.stdout.write(JSON.stringify(readQaView(sessionId)) + "\n");
 		} else {

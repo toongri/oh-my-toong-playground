@@ -1,0 +1,17 @@
+{
+  "schema_version": 2,
+  "html_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "html_path": "/abs/path/to/report.html",
+  "errors": 0,
+  "warnings": 3,
+  "runs": [
+    { "viewport": 1280, "theme": "light" },
+    { "viewport": 1280, "theme": "dark" },
+    { "viewport": 400, "theme": "light" }
+  ],
+  "source": "/abs/path/to/source.md",
+  "source_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+  "strict": true,
+  "lint_js_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "created_at": "2026-10-19T00:00:00Z"
+}

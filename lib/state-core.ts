@@ -53,7 +53,7 @@ import { createHash } from "crypto";
 // (the sync alias-rewriter skips lib/** files). Relative imports let `make sync`'s dep collector
 // follow the path and deploy omt-dir alongside this module.
 import { getOmtDir, resolveOmtDir } from "./omt-dir";
-import { linesOutsideBlocks } from "./markdown-blocks";
+import { findMarkdownBlocks, linesOutsideBlocks } from "./markdown-blocks";
 import { withStateLock } from "./persistent-mode-core/state-lock";
 import { chainComplete, commentOk, approveOk, driverGateArmed, recordComplete } from "./qa-chain-core";
 import type { QaChainState } from "./qa-chain-core";
@@ -1106,17 +1106,82 @@ export function touchSessionStates(sessionId: string): void {
 
 export type StageAPresentationStatus = "ok" | "plan-missing" | "presentation-missing" | "stale";
 
-/** A submission binds the reviewed source and the reader's HTML to their current bytes. */
+/** What the submitted HTML must cover from its source, checked by bytes with no model judgment. */
+export type PresentationCoverage = "plan-todos" | "spec-diagrams";
+
+/** A submission binds the reviewed source, the reader's HTML and its html-report lint receipt to their current bytes. */
 export interface PresentationSubmission {
 	source_path: string;
 	html_path: string;
 	source_sha256: string;
 	html_sha256: string;
+	lint_receipt_path: string;
+	lint_receipt_sha256: string;
 	presentation_markdown_path?: string;
 	presentation_markdown_sha256?: string;
 }
 
-export function createPresentationSubmission(sourcePath: string, htmlPath: string, presentationMarkdownPath?: string): PresentationSubmission {
+const LINT_RECEIPT_RUNS = ["1280 light", "1280 dark", "400 light"];
+
+const sha256Hex = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
+
+/**
+ * Why the html-report lint receipt at `receiptPath` does not vouch for the HTML at
+ * `htmlPath` linted against `sourcePath`; null when it does. lint.sh writes a receipt only
+ * after a run with 0 errors and never deletes an older one, so the receipt must name the
+ * current HTML bytes. A mistake guard, not tamper-proofing.
+ */
+export function lintReceiptProblem(receiptPath: string, htmlPath: string, sourcePath: string): string | null {
+	const rerun = `re-run: bash skills/html-report/scripts/lint.sh ${htmlPath} --source ${sourcePath} --strict --receipt ${receiptPath}`;
+	if (!receiptPath.trim()) return `a lint receipt is required (--receipt <receipt.json>); ${rerun}`;
+	let receipt: unknown;
+	try {
+		receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
+	} catch {
+		return `lint receipt ${receiptPath} is missing or not JSON; ${rerun}`;
+	}
+	if (!isPlainObject(receipt) || receipt.schema_version !== 2) return `lint receipt ${receiptPath} is not a schema_version 2 receipt (older receipts do not bind the source bytes); ${rerun}`;
+	if (receipt.errors !== 0) return `lint receipt records errors=${String(receipt.errors)}; fix the lint errors, then ${rerun}`;
+	let htmlSha: string;
+	try {
+		htmlSha = sha256Hex(readFileSync(htmlPath));
+	} catch {
+		return `presentation HTML ${htmlPath} is unreadable`;
+	}
+	if (receipt.html_sha256 !== htmlSha) return `lint receipt is for different HTML bytes (the HTML changed after linting); ${rerun}`;
+	if (typeof receipt.html_path !== "string" || resolve(receipt.html_path) !== resolve(htmlPath)) return `lint receipt is for another HTML file (${String(receipt.html_path)}); ${rerun}`;
+	const runs = Array.isArray(receipt.runs) ? receipt.runs.map((r) => (isPlainObject(r) ? `${String(r.viewport)} ${String(r.theme)}` : "")) : [];
+	if (runs.length !== LINT_RECEIPT_RUNS.length || !LINT_RECEIPT_RUNS.every((r) => runs.includes(r))) {
+		return `lint receipt must cover exactly the runs ${LINT_RECEIPT_RUNS.join(", ")} (viewport theme); ${rerun}`;
+	}
+	if (typeof receipt.source !== "string" || receipt.source !== resolve(sourcePath)) return `lint receipt was linted against source ${String(receipt.source)}, not ${resolve(sourcePath)}; ${rerun}`;
+	let sourceStat: ReturnType<typeof statSync>;
+	try {
+		sourceStat = statSync(sourcePath);
+	} catch {
+		return `presentation source ${sourcePath} is unreadable`;
+	}
+	if (sourceStat.isFile()) {
+		if (receipt.source_sha256 !== sha256Hex(readFileSync(sourcePath))) return `source changed after linting (the lint receipt's source_sha256 differs from the current source bytes); ${rerun}`;
+	} else if (receipt.source_sha256 !== null) {
+		// lazy: a directory source is bound by path only; its contents feed warning-level checks, and explain-diff's facts are byte-checked against the doc separately
+		return `lint receipt records source_sha256 for a directory source (expected null); ${rerun}`;
+	}
+	return null;
+}
+
+/** Why the HTML does not cover its source (TODO anchors or diagram figures); null when it does. */
+function sourceCoverageProblem(coverage: PresentationCoverage, sourceText: string, html: string): string | null {
+	if (coverage === "plan-todos") {
+		const missing = planTodoIds(sourceText).filter((id) => !html.includes(`data-todo="${id}"`));
+		return missing.length === 0 ? null : `presentation HTML lacks data-todo="<id>" anchors for plan TODO ids: ${missing.join(", ")}`;
+	}
+	const need = specMermaidFenceCount(sourceText);
+	const have = (html.match(/<figure\b[^>]*>(?:(?!<\/figure>)[\s\S])*?<svg\b/gi) ?? []).length;
+	return have >= need ? null : `spec has ${need} Mermaid diagram(s) in ## Diagrams and ## Boundary Map but the HTML has ${have} <figure> element(s) containing an <svg`;
+}
+
+export function createPresentationSubmission(sourcePath: string, htmlPath: string, receiptPath: string, coverage: PresentationCoverage, presentationMarkdownPath?: string): PresentationSubmission {
 	if (!sourcePath.trim() || !htmlPath.trim() || extname(htmlPath).toLowerCase() !== ".html") {
 		throw new Error("presentation requires a source file and an HTML file");
 	}
@@ -1133,21 +1198,34 @@ export function createPresentationSubmission(sourcePath: string, htmlPath: strin
 	if (presentationMarkdown !== undefined && intermediatePath !== undefined && statSync(htmlPath).mtimeMs < statSync(intermediatePath).mtimeMs) {
 		throw new Error("presentation HTML predates its intermediate Markdown; render again before submitting");
 	}
+	const receiptProblem = lintReceiptProblem(receiptPath, htmlPath, sourcePath);
+	if (receiptProblem !== null) throw new Error(receiptProblem);
+	const coverageProblem = sourceCoverageProblem(coverage, source.toString("utf8"), html.toString("utf8"));
+	if (coverageProblem !== null) throw new Error(coverageProblem);
 	const submission: PresentationSubmission = {
 		source_path: resolve(sourcePath),
 		html_path: resolve(htmlPath),
-		source_sha256: createHash("sha256").update(source).digest("hex"),
-		html_sha256: createHash("sha256").update(html).digest("hex"),
+		source_sha256: sha256Hex(source),
+		html_sha256: sha256Hex(html),
+		lint_receipt_path: resolve(receiptPath),
+		lint_receipt_sha256: sha256Hex(readFileSync(receiptPath)),
 	};
 	if (presentationMarkdown !== undefined && intermediatePath !== undefined) {
 		submission.presentation_markdown_path = resolve(intermediatePath);
-		submission.presentation_markdown_sha256 = createHash("sha256").update(presentationMarkdown).digest("hex");
+		submission.presentation_markdown_sha256 = sha256Hex(presentationMarkdown);
 	}
 	return submission;
 }
 
-export function presentationSubmissionCurrent(value: unknown, sourcePath?: string, htmlPath?: string): boolean {
+/**
+ * One predicate for every gate (CLI handoff/S6 gates and the Stop hook): the stored
+ * submission still matches the bytes of source, HTML, lint receipt and optional
+ * intermediate Markdown, and the receipt and source coverage still pass. A submission
+ * without receipt fields (stored before the receipt existed) is not current.
+ */
+export function presentationSubmissionCurrent(value: unknown, coverage: PresentationCoverage, sourcePath?: string, htmlPath?: string): boolean {
 	if (!isPlainObject(value) || typeof value.source_path !== "string" || typeof value.html_path !== "string") return false;
+	if (typeof value.lint_receipt_path !== "string" || typeof value.lint_receipt_sha256 !== "string") return false;
 	if (sourcePath !== undefined && resolve(sourcePath) !== value.source_path) return false;
 	if (htmlPath !== undefined && resolve(htmlPath) !== value.html_path) return false;
 	try {
@@ -1157,8 +1235,9 @@ export function presentationSubmissionCurrent(value: unknown, sourcePath?: strin
 			if (typeof value.presentation_markdown_path !== "string" || typeof value.presentation_markdown_sha256 !== "string") return false;
 			intermediatePath = value.presentation_markdown_path;
 		}
-		const current = createPresentationSubmission(value.source_path, value.html_path, intermediatePath);
+		const current = createPresentationSubmission(value.source_path, value.html_path, value.lint_receipt_path, coverage, intermediatePath);
 		return current.source_sha256 === value.source_sha256 && current.html_sha256 === value.html_sha256 &&
+			current.lint_receipt_sha256 === value.lint_receipt_sha256 &&
 			(!hasIntermediate || current.presentation_markdown_sha256 === value.presentation_markdown_sha256);
 	} catch {
 		return false;
@@ -1204,6 +1283,37 @@ export function planFileHasTodos(planPath: string): boolean {
 		}
 	}
 	return false;
+}
+
+/** TODO ids (`3`, `F1`) of the plan's `## TODOs` section, outside code blocks and comments. */
+export function planTodoIds(planText: string): string[] {
+	const ids: string[] = [];
+	let inTodos = false;
+	for (const line of linesOutsideBlocks(planText, ["code", "comment"])) {
+		const visible = line.replace(/<!--.*?-->/g, "");
+		if (PLAN_NEXT_H2_HEADING.test(line)) {
+			inTodos = PLAN_TODOS_HEADING.test(visible);
+		} else if (inTodos) {
+			const id = PLAN_TODO_LINE.exec(visible)?.[1];
+			if (id !== undefined) ids.push(id);
+		}
+	}
+	return ids;
+}
+
+/** Mermaid fences under the spec's `## Diagrams` and `## Boundary Map` sections. */
+export function specMermaidFenceCount(specText: string): number {
+	const lines = specText.split(/\r\n?|\n/);
+	const blocks = findMarkdownBlocks(specText);
+	const covered = new Set<number>();
+	for (const b of blocks) for (let k = b.start; k <= b.end; k++) covered.add(k);
+	const sectionAt: string[] = [];
+	let section = "";
+	lines.forEach((line, k) => {
+		if (!covered.has(k) && PLAN_NEXT_H2_HEADING.test(line)) section = line.replace(/^##\s+/, "").trim();
+		sectionAt[k] = section;
+	});
+	return blocks.filter((b) => b.kind === "code" && b.fenced && /^mermaid\b/.test(b.info) && (sectionAt[b.start] === "Diagrams" || sectionAt[b.start] === "Boundary Map")).length;
 }
 
 /**

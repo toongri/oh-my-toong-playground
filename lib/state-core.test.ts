@@ -8,7 +8,7 @@
 
 import { describe, test, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import * as fs from "fs";
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync } from "fs";
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync, mkdirSync, utimesSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -32,7 +32,13 @@ import {
 	ensureSeed,
 	touchSessionStates,
 	planFileHasTodos,
+	planTodoIds,
+	specMermaidFenceCount,
+	lintReceiptProblem,
+	createPresentationSubmission,
+	presentationSubmissionCurrent,
 } from "./state-core.ts";
+import { writeLintReceipt } from "./__fixtures__/lint-receipt.ts";
 
 // ---------------------------------------------------------------------------
 // Freshness assertions
@@ -2087,5 +2093,144 @@ describe("planFileHasTodos", () => {
 	test("파일이 없거나 읽을 수 없으면 false", () => {
 		expect(planFileHasTodos(join(dir, "missing.md"))).toBe(false);
 		expect(planFileHasTodos(dir)).toBe(false);
+	});
+});
+
+describe("presentation 제출: lint 영수증과 원본 포함 검사", () => {
+	let dir: string;
+	let source: string;
+	let html: string;
+	let receipt: string;
+	beforeEach(() => {
+		dir = mkdtempSync(join(tmpdir(), "presentation-gate-"));
+		source = join(dir, "source.md");
+		html = join(dir, "source.html");
+		receipt = join(dir, "receipt.json");
+	});
+	afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+	const page = (body: string): string => `<!doctype html><html><body>${body}</body></html>`;
+	/** Source first, then HTML, so the HTML is never older than the source. */
+	function write(sourceText: string, htmlText: string): void {
+		writeFileSync(source, sourceText);
+		writeFileSync(html, htmlText);
+		writeLintReceipt(receipt, html, source);
+	}
+
+	test("유효한 영수증은 받아들임", () => {
+		write("# Plan", page("<p>x</p>"));
+		expect(lintReceiptProblem(receipt, html, source)).toBeNull();
+	});
+
+	test("HTML 바이트가 영수증과 다르면 거부함", () => {
+		write("# Plan", page("<p>x</p>"));
+		writeFileSync(html, page("<p>x</p> "));
+		expect(lintReceiptProblem(receipt, html, source)).toContain("different HTML bytes");
+	});
+
+	test("errors가 0이 아니면 거부함", () => {
+		write("# Plan", page("<p>x</p>"));
+		writeLintReceipt(receipt, html, source, { errors: 2 });
+		expect(lintReceiptProblem(receipt, html, source)).toContain("errors=2");
+	});
+
+	test("세 실행 조합 중 하나가 빠지면 거부함", () => {
+		write("# Plan", page("<p>x</p>"));
+		writeLintReceipt(receipt, html, source, { runs: [{ viewport: 1280, theme: "light" }, { viewport: 1280, theme: "dark" }] });
+		expect(lintReceiptProblem(receipt, html, source)).toContain("runs");
+	});
+
+	test("영수증의 source가 다르면 거부함", () => {
+		write("# Plan", page("<p>x</p>"));
+		writeLintReceipt(receipt, html, source, { source: join(dir, "other.md") });
+		expect(lintReceiptProblem(receipt, html, source)).toContain("source");
+		writeLintReceipt(receipt, html, source, { source: null });
+		expect(lintReceiptProblem(receipt, html, source)).toContain("source");
+	});
+
+	test("영수증의 html_path가 다르면 거부함", () => {
+		write("# Plan", page("<p>x</p>"));
+		writeLintReceipt(receipt, html, source, { html_path: join(dir, "other.html") });
+		expect(lintReceiptProblem(receipt, html, source)).toContain("another HTML file");
+	});
+
+	test("영수증이 없거나 JSON이 아니거나 schema_version이 다르면 거부함", () => {
+		write("# Plan", page("<p>x</p>"));
+		expect(lintReceiptProblem(join(dir, "none.json"), html, source)).toContain("missing or not JSON");
+		writeFileSync(receipt, "[1]");
+		expect(lintReceiptProblem(receipt, html, source)).toContain("schema_version 2");
+		writeLintReceipt(receipt, html, source, { schema_version: 1 });
+		expect(lintReceiptProblem(receipt, html, source)).toContain("schema_version 2");
+	});
+
+	test("원본 파일을 lint 뒤에 고치면(HTML 그대로, mtime 정상) 거부하고 제출은 현재가 아님", () => {
+		write("# Plan", page("<p>x</p>"));
+		const submission = createPresentationSubmission(source, html, receipt, "plan-todos");
+		writeFileSync(source, "# Plan revised");
+		const later = new Date(Date.now() + 5000);
+		utimesSync(html, later, later);
+		expect(lintReceiptProblem(receipt, html, source)).toContain("source changed after linting");
+		expect(() => createPresentationSubmission(source, html, receipt, "plan-todos")).toThrow("source changed after linting");
+		expect(presentationSubmissionCurrent(submission, "plan-todos", source, html)).toBe(false);
+	});
+
+	test("원본이 디렉터리이면 source_sha256 null 영수증을 받아들이고 해시가 있으면 거부함", () => {
+		const srcDir = join(dir, "srcdir");
+		mkdirSync(srcDir);
+		writeFileSync(join(srcDir, "a.md"), "# A");
+		writeFileSync(html, page("<p>x</p>"));
+		writeLintReceipt(receipt, html, srcDir);
+		expect(JSON.parse(readFileSync(receipt, "utf8")).source_sha256).toBeNull();
+		expect(lintReceiptProblem(receipt, html, srcDir)).toBeNull();
+		writeLintReceipt(receipt, html, srcDir, { source_sha256: "0".repeat(64) });
+		expect(lintReceiptProblem(receipt, html, srcDir)).toContain("directory source");
+	});
+
+	test("제출 후 영수증 파일을 고치면 현재 제출이 아님", () => {
+		write("# Plan", page("<p>x</p>"));
+		const submission = createPresentationSubmission(source, html, receipt, "plan-todos");
+		expect(presentationSubmissionCurrent(submission, "plan-todos", source, html)).toBe(true);
+		writeLintReceipt(receipt, html, source, { warnings: 9 });
+		expect(presentationSubmissionCurrent(submission, "plan-todos", source, html)).toBe(false);
+	});
+
+	test("제출 후 HTML을 고치면 현재 제출이 아님", () => {
+		write("# Plan", page("<p>x</p>"));
+		const submission = createPresentationSubmission(source, html, receipt, "plan-todos");
+		writeFileSync(html, page("<p>y</p>"));
+		expect(presentationSubmissionCurrent(submission, "plan-todos", source, html)).toBe(false);
+	});
+
+	test("영수증 필드가 없는 예전 제출은 현재 제출이 아님", () => {
+		write("# Plan", page("<p>x</p>"));
+		const { lint_receipt_path: _p, lint_receipt_sha256: _h, ...legacy } = createPresentationSubmission(source, html, receipt, "plan-todos");
+		expect(presentationSubmissionCurrent(legacy, "plan-todos", source, html)).toBe(false);
+	});
+
+	test("영수증 경로가 비어 있으면 제출을 거부함", () => {
+		write("# Plan", page("<p>x</p>"));
+		expect(() => createPresentationSubmission(source, html, "", "plan-todos")).toThrow("--receipt");
+	});
+
+	test("plan TODO id가 data-todo 앵커로 없으면 누락 id를 나열해 거부함", () => {
+		const plan = "# Plan\n\n## TODOs\n\n- [ ] 1. First\n- [x] F1. Final\n- [ ] 2. Second\n\n## Other\n- [ ] 9. not a todo\n";
+		write(plan, page('<section data-todo="1"></section><section data-todo="F1"></section>'));
+		expect(() => createPresentationSubmission(source, html, receipt, "plan-todos")).toThrow("2");
+		write(plan, page('<section data-todo="1"></section><section data-todo="F1"></section><section data-todo="2"></section>'));
+		expect(createPresentationSubmission(source, html, receipt, "plan-todos").lint_receipt_path).toBe(receipt);
+	});
+
+	test("planTodoIds는 코드 블록 안 TODO와 TODOs 밖 항목을 무시함", () => {
+		const plan = "## TODOs\n- [ ] 1. a\n```\n- [ ] 2. in code\n```\n## Next\n- [ ] 3. outside\n";
+		expect(planTodoIds(plan)).toEqual(["1"]);
+	});
+
+	test("spec의 Mermaid 수만큼 svg figure가 없으면 두 개수를 밝혀 거부함", () => {
+		const spec = "# Spec\n\n## Boundary Map\n\n```mermaid\nflowchart LR\n```\n\n## Diagrams\n\n```mermaid\nerDiagram\n```\n\n## Elsewhere\n\n```mermaid\nflowchart LR\n```\n";
+		expect(specMermaidFenceCount(spec)).toBe(2);
+		write(spec, page("<figure><svg></svg></figure><figure><p>no svg</p></figure>"));
+		expect(() => createPresentationSubmission(source, html, receipt, "spec-diagrams")).toThrow("2 Mermaid diagram(s)");
+		write(spec, page("<figure><svg></svg></figure><figure class=\"d\"><svg></svg></figure>"));
+		expect(createPresentationSubmission(source, html, receipt, "spec-diagrams").html_path).toBe(html);
 	});
 });

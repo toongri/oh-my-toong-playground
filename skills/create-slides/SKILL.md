@@ -1,6 +1,6 @@
 ---
 name: create-slides
-description: Generates single-file HTML presentations with vertical scrolling and scroll-snap. Uses plain HTML+CSS without slide libraries and supports dark/light themes, frontend-design skill integration, and highlight.js·Mermaid·KaTeX·Chart.js·Iconify CDNs.  Triggers: "make a presentation", "create slides", "build a deck", "발표자료", "프레젠테이션", "슬라이드", "제안서", "발표 만들어", "ppt", "keynote", "pitch deck", "tech talk", "발표 만들어줘".
+description: Generates single-file HTML presentations with vertical scrolling and scroll-snap. Uses plain HTML+CSS without slide libraries and supports dark/light themes, frontend-design skill integration, and highlight.js·KaTeX·Chart.js·Iconify CDNs and inline SVG diagrams.  Triggers: "make a presentation", "create slides", "build a deck", "발표자료", "프레젠테이션", "슬라이드", "제안서", "발표 만들어", "ppt", "keynote", "pitch deck", "tech talk", "발표 만들어줘".
 ---
 
 # Scrollytelling Presentation Generator
@@ -120,14 +120,16 @@ Design each slide's actual content elements in detail at this stage to ensure co
 
       | Condition | Type to use |
       |------|---------|
-      | sequence / request-response flow | Mermaid (`sequenceDiagram`) |
-      | flowchart / branches / if-else | Mermaid (`flowchart LR`) |
-      | ER / table relationships / DB schema | Mermaid (`erDiagram`) |
-      | gantt / schedule / roadmap | Mermaid (`gantt`) |
-      | Architecture with 4 or more nodes | Mermaid (`flowchart`) |
-      | Simple component relationships, **≤3 nodes**, slide theme colors needed | Inline SVG (`diagram` type) |
+      | sequence / request-response flow | Inline SVG, sequence recipe |
+      | flowchart / branches / if-else | Inline SVG, structure recipe or state machine recipe |
+      | ER / table relationships / DB schema | Inline SVG, ERD recipe |
+      | gantt / schedule / roadmap | `timeline` slide, or a to-scale inline SVG axis |
+      | Architecture with 4 or more nodes | Inline SVG, structure recipe |
+      | Simple component relationships, **≤7 nodes**, slide theme colors needed | Inline SVG (`diagram` type) |
 
-    - `diagram` type (Inline SVG): `viewBox="0 0 600 {height}"` — Only for 3 nodes or fewer. Nodes (`<g class="diag-node">`), edges (`<line class="diag-edge">`), and `<defs>` markers. Reference CSS variables for fill/stroke. **Marker ids must be unique per slide** (e.g., `id="diag-arrow-s5"`) — Prevent duplicate ids when Mermaid/multiple diagram slides coexist.
+      Author every diagram as inline SVG with drawn edges, following `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` section 7 and the per-type recipes in `${CLAUDE_SKILL_DIR}/../html-report/references/diagram-recipes.md`. Keep one figure within the section 12 complexity budget (9 nodes, 12 arrows); a larger structure is split into an overview slide plus a detail slide, or drawn as one larger SVG when the slide has room. Color through the slide theme's CSS variables, never literal colors.
+
+    - `diagram` type (Inline SVG): `viewBox="0 0 600 {height}"` — up to 7 nodes. Nodes (`<g class="diag-node">`), edges (`<line class="diag-edge">`), and `<defs>` markers. Reference CSS variables for fill/stroke. **Marker ids must be unique per slide** (e.g., `id="diag-arrow-s5"`) — Prevent duplicate ids when multiple diagram slides coexist.
     - `flow` 5-step variant: `.workflow-grid` grid + `.wf-step::after` arrows. No `.flow-arrow` div needed.
     - `title` hero badges: `.hero-badge-row` + `.hero-badge`. Show 3–4 key points with dots + text, without Iconify.
 - **Notes**: {special considerations — whether min-height is needed, CDN libraries, overflow switching, etc.}
@@ -164,7 +166,7 @@ Do not put slide content inside `<body>` at this stage.
   </head>
   <body>
 
-  {CDN scripts — only those needed, such as highlight.js and Mermaid}
+  {CDN scripts — only those needed, such as highlight.js}
   <script>
     hljs.highlightAll();
   </script>
@@ -336,7 +338,7 @@ Do not set them **smaller** than these values.
 **Image/visual alternatives**:
 
 - Use emoji by default when icons are needed. Use the Iconify CDN if more refined icons are needed (see allowed libraries below)
-- Draw simple diagrams directly with CSS+HTML. Use Mermaid for complex flow/sequence/ER diagrams
+- Draw diagrams as inline SVG with drawn edges (see `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` section 7); no diagram library is used
 - Where actual images (photos, screenshots) are needed, insert placeholders specifying aspect ratio and intent, and describe the recommended image in a comment
 - Multimedia such as video/audio is not supported; propose a screenshot placeholder + link as an alternative
 
@@ -357,7 +359,6 @@ All libraries follow the **"include only when needed"** principle. If the corres
 | ------------ | ----------------------------- | ---------------------------- |
 | highlight.js | When code blocks are present           | `code`                       |
 | Chart.js     | When visualizing numbers as charts     | Supplements `stat-grid`             |
-| Mermaid      | When complex diagrams are needed | Advanced alternative to `flow`, `timeline` |
 | KaTeX        | When mathematical formulas appear         | `content` (academic)             |
 | Iconify      | When refined icons are needed     | `card-grid`, `flow`          |
 
@@ -371,7 +372,7 @@ Files referenced by this skill. The workflow contains inline pointers; use this 
 | ---- | ---- | ---------------- |
 | `references/design-system.md` | Built-in design system — component CSS, palettes, Fullscreen toggle implementation, flow 5-step variant, etc. | When selecting the "자체 심플" design path; when detailed implementations such as Fullscreen or flow variants are needed |
 | `references/code-snippets.md` | `@font-face` font declarations, page-number CSS counter, typography baseline scale values | **Required before writing the HTML skeleton in Step 4** — Do not write fonts, page numbers, or scale values from memory |
-| `references/cdn-libraries.md` | CDN URLs and markup patterns for allowed libraries (highlight.js / Chart.js / Mermaid / KaTeX / Iconify) | **Required when actually using the library** — Do not write URLs from memory or change them arbitrarily |
+| `references/cdn-libraries.md` | CDN URLs and markup patterns for allowed libraries (highlight.js / Chart.js / KaTeX / Iconify) | **Required when actually using the library** — Do not write URLs from memory or change them arbitrarily |
 | `assets/example-dark.html` | Dark theme 4-slide example (technical presentation) — example of the target quality level in practice | When calibrating style and component placement before the first output (do not copy the template verbatim; freely adapt to the outline without being constrained by the example's slide structure/count) |
 | `assets/example-light.html` | Light theme 4-slide example (business strategy) — example of the target quality level in practice | When calibrating style and component placement before the first output (do not copy the template verbatim; freely adapt to the outline without being constrained by the example's slide structure/count) |
 | `slides-review` skill | Gemini design review — apply visual improvement feedback to generated HTML | Step 7 (optional design review); quiet pass if the gemini CLI is not installed |

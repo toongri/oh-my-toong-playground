@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lint self-test</title>
+<style>
+/* Every block below plants one defect that lint.sh must report. run.sh lists what it expects. */
+:root { --bg: #ffffff; --ink: #1a1a1a; --faint: #a0a0a0; --muted: #5a5a5a; --line: #888888; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #111111; --ink: #eeeeee; --faint: #a0a0a0; --muted: #3a3a3a; --line: #777777; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #111111; --ink: #eeeeee; --faint: #a0a0a0; --muted: #3a3a3a; --line: #777777; color-scheme: dark; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, sans-serif; padding: 24px 16px; }
+.low { color: var(--faint); }               /* contrast fails in light only (2.6:1 on white) */
+.dark-only { color: var(--muted); }         /* contrast fails in dark only */
+.wide { width: 900px; }                     /* page-level overflow at 400px */
+.clip { height: 24px; overflow: hidden; width: 200px; } /* vertical clipping */
+.scroll { overflow-x: auto; }
+.scroll svg { min-width: 900px; width: 100%; display: block; }
+svg text { font-size: 13px; fill: var(--ink); }
+figure.first svg { display: block; width: 100%; max-width: 360px; } /* drawn at 1:1 on desktop */
+.flow { display: flex; gap: 8px; align-items: center; }
+.st { border: 1px solid var(--line); padding: 8px 12px; min-width: 90px; }
+svg .nd { fill: var(--bg); stroke: var(--line); stroke-width: 1.5; }
+svg .ed { fill: none; stroke: var(--ink); stroke-width: 2; }
+svg .mk { fill: var(--ink); }
+</style>
+</head>
+<body>
+<header class="mast"><div class="kicker">사고 보고서 · 2026-10-19 (KST) 작성 · <time>2026-10-17</time> 발생</div></header>
+<p class="low">light-theme contrast defect</p>
+<p class="dark-only">dark-theme contrast defect</p>
+<div class="wide">this box is 900px wide and pushes the page sideways at 400px</div>
+<div class="clip">첫째 줄<br>둘째 줄은 잘린다<br>셋째 줄도 잘린다</div>
+<figure class="first">
+  <svg viewBox="0 0 360 200" role="img" aria-label="self-test figure">
+    <rect x="10" y="10" width="140" height="60" fill="#ffffff" stroke="var(--line)"/>
+    <text x="20" y="44">겹치는 라벨 하나</text>
+    <text x="40" y="48">겹치는 라벨 둘</text>
+    <text x="300" y="100">밖으로 나가는 라벨</text>
+    <line x1="10" y1="140" x2="350" y2="140" stroke="var(--line)" stroke-width="2"/>
+    <text x="120" y="144">선 위의 라벨</text>
+    <text x="20" y="180" style="font-size:9px">tiny 9px label</text>
+    <text x="200" y="180" style="font-size:11.5px">작은 한글 라벨</text>
+    <rect x="200" y="20" width="150" height="40" fill="#ffffff"/>
+    <text x="210" y="45" style="fill:#c8c8c8">pale on white</text>
+  </svg>
+  <figcaption>figure 1: overlap, outside, on-stroke, tiny, small Korean, low-contrast SVG text</figcaption>
+</figure>
+<figure>
+  <div class="scroll"><svg viewBox="0 0 900 80" role="img" aria-label="wide figure"><text x="10" y="40">this 900-wide figure scrolls sideways at 400px</text></svg></div>
+  <figcaption>figure 2: sideways scroll</figcaption>
+</figure>
+<figure>
+  <div class="flow"><div class="st">초안</div><span>→</span><div class="st">검토</div><span>→</span><div class="st">승인</div></div>
+  <figcaption>figure 3: a state diagram built from HTML boxes and arrow glyphs (figure-graph-nosvg)</figcaption>
+</figure>
+<figure>
+  <svg viewBox="0 0 360 80" role="img" aria-label="three boxes and no edges" style="display:block;width:100%;max-width:360px">
+    <rect class="nd" x="8" y="20" width="96" height="40" rx="6"/><rect class="nd" x="132" y="20" width="96" height="40" rx="6"/><rect class="nd" x="256" y="20" width="96" height="40" rx="6"/>
+  </svg>
+  <figcaption>figure 4: boxes without edges (svg-no-edges)</figcaption>
+</figure>
+<figure>
+  <svg viewBox="0 0 360 80" role="img" aria-label="three boxes joined by arrows" style="display:block;width:100%;max-width:360px">
+    <defs><marker id="ok-ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+    <path class="ed" d="M104 40 H128" marker-end="url(#ok-ah)"/><path class="ed" d="M228 40 H252" marker-end="url(#ok-ah)"/>
+    <rect class="nd" x="8" y="20" width="96" height="40" rx="6"/><rect class="nd" x="132" y="20" width="96" height="40" rx="6"/><rect class="nd" x="256" y="20" width="96" height="40" rx="6"/>
+  </svg>
+  <figcaption>figure 5: a clean SVG graph, which no graph check may flag</figcaption>
+</figure>
+<p>저는 이 구조를 결정했습니다.</p>
+<p>전체 1,620대 중 41대, 그리고 9999명이 영향을 받았다. 10월 17일에 시작됐다.</p>
+<footer>참고: NOTES.md</footer>
+</body>
+</html>

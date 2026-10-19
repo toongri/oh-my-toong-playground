@@ -212,8 +212,8 @@ function prometheusStageAGateReason(state: PrometheusState): string | null {
 	// otherwise escape with a full plan and no presentation); the S0 draft has no TODOs.
 	if (planPath === "" || (state.steps?.plan?.done !== true && !planFileHasTodos(planPath))) return null;
 	const status = stageAPresentationStatus(planPath);
-	if ((status === "ok" || status === "plan-missing") && !presentationSubmissionCurrent(state.presentation, planPath, stageAPresentationPath(planPath))) {
-		return "<prometheus-stage-a-gate>Prometheus presentation submission missing or stale. Read review-pipeline.md Stage A, render HTML, then run prometheus-state.ts set --phase S5 --submit-presentation <html> before completion.</prometheus-stage-a-gate>";
+	if ((status === "ok" || status === "plan-missing") && !presentationSubmissionCurrent(state.presentation, "plan-todos", planPath, stageAPresentationPath(planPath))) {
+		return "<prometheus-stage-a-gate>Prometheus presentation submission missing or stale. Read review-pipeline.md Stage A, render HTML, then run prometheus-state.ts set --phase S5 --submit-presentation <html> --receipt <receipt.json> before completion.</prometheus-stage-a-gate>";
 	}
 	if (status !== "presentation-missing" && status !== "stale") return null;
 	const presentationPath = stageAPresentationPath(planPath);
@@ -608,13 +608,13 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		} else if (detectDeepInterviewDone(lastAssistantMessage)) {
 			if (deepInterviewStateRaw.state !== undefined &&
 				isProgressLive(deepInterviewStateRaw, nowEpoch) &&
-				!presentationSubmissionCurrent(deepInterviewStateRaw.state.presentation)) {
+				!presentationSubmissionCurrent(deepInterviewStateRaw.state.presentation, "spec-diagrams")) {
 				return formatBlockOutput(`<deep-interview-continuation>\n\n[DEEP INTERVIEW DONE REFUSED — PRESENTATION MISSING]\n\n${deliverableRefusalBody({
 					deliverable: "deep-interview presentation",
 					problem: "the deep-interview presentation is missing or stale",
 					guideline: "presentation.md (render + submission contract)",
 					produce: "render the spec to its sibling {spec}.presentation.html",
-					submit: "deep-interview-state.ts submit-presentation --spec-path <spec> --html-path <html>, then emit <deep-interview-done/>",
+					submit: "deep-interview-state.ts submit-presentation --spec-path <spec> --html-path <html> --receipt <receipt.json>, then emit <deep-interview-done/>",
 				})}\n\n</deep-interview-continuation>`);
 			}
 			// UC10 (topology-floor-evolution Stage 5): a done-token alone is not proof of

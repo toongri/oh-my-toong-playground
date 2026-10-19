@@ -228,20 +228,24 @@ there is no separate actor-roster table).
   reached and attempt log are audit-only; they never appear in a card or the banner.
   Risks declared not applicable are not cards: the renderer folds them under one
   "펼쳐 보기" toggle with their reasons, so they never crowd the scenarios.
-- **Big picture (`bigPicture`)** — a mermaid diagram of the user flows / affected
-  users, baked to inline SVG at build time. The strongest way to convey flow to a
-  no-context reader.
+- **Big picture (`bigPictureSvg`)** — a hand-authored inline `<svg>` of the user
+  flows / affected users, with drawn edges. The strongest way to convey flow to a
+  no-context reader. The renderer sanitizes it and refuses the render on any
+  disallowed construct (see "Diagram discipline").
 - **Requirement fulfillment (`requirementMapping`, keyed by AC index)** — this is
   merged with the acceptance-criteria text into the single **요구사항(AC) 충족
   현황** board near the top of the report (the AC text alone is no longer a
   separate section). Each entry must include a non-empty `scenarioRefs` array of
   `{story, scenario}` selectors. The renderer validates every ref against
   exactly one recorded current-cycle scenario, requires the ref's story to link that
-  AC, and checks its recorded status (`pass`, `fail`, or `blocked`). The grounded status invariants are: `yes` requires
-  every referenced scenario to be `pass`; `no` requires every referenced scenario to be
-  `fail`; `partial` requires at least one `pass` and one `fail` and no
-  `blocked`; `unverified` requires at least one valid `blocked`. Missing/legacy/malformed/duplicate/stale/unknown/ineligible
-  mappings fail closed to a visible neutral gap (`미판정`) rather than a green
+  AC, and checks its recorded status (`pass`, `fail`, or `blocked`). **The
+  satisfaction is derived, never written**: the renderer computes it from those
+  recorded statuses. All referenced scenarios `pass` → 충족; all `fail` → 미충족; any
+  `blocked` → 미검증; otherwise (a mix of `pass` and `fail`) → 부분 충족. A
+  narrative that still carries a `satisfied` field is refused with an error: delete
+  the field. Missing/legacy/malformed/duplicate/stale/unknown mappings, and a ref to
+  a scenario with no recorded result yet, cannot be derived and fail closed to a
+  visible neutral gap (`미판정`) rather than a green
   verdict. Prose evidence explains a verdict but cannot establish it, so it names
   only what the referenced scenarios show, in reader words: a test is named by what
   it checks ("보유분 표 화면 테스트"), never by its file name. The final render
@@ -271,9 +275,10 @@ there is no separate actor-roster table).
 - **Draw and say only what the records decided** — no arrow, order, or concrete
   value that the verification did not establish. Do not merge two separate things
   into one cause or category.
-- **The verdict matches the verification log.** A `requirementMapping` verdict
-  must not contradict the recorded pass/fail of the scenarios behind it. Never
-  cite a scenario that did not pass as proof that a requirement is met.
+- **The evidence prose matches the verification log.** The verdict of a
+  `requirementMapping` entry is derived from the recorded status of its scenarios,
+  so the prose must not argue against it. Never cite a scenario that did not pass
+  as proof that a requirement is met.
 
 ## No internal QA jargon in the reader view
 The reader is a PO, not a QA engineer. Risk numbers, source tags, and
@@ -287,18 +292,51 @@ separate audit section for traceability — you do not author it here.
 
 ## Diagram discipline
 `skills/qa/scenario-authoring.md` owns actor/boundary/scenario derivation — read
-it before authoring. For the big-picture diagram:
+it before authoring. Author `bigPictureSvg` by the diagram rules of
+`${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` (§7 diagram rules, §7.6 directed
+graphs are SVG, §12 complexity budget, §13 fidelity rules) and the recipe for your
+diagram type in `${CLAUDE_SKILL_DIR}/../html-report/references/diagram-recipes.md`.
+The page itself stays renderer-owned; only this one slot is yours.
 - **Why → Diagram → Interpretation.** Why this picture is needed, the picture, and
   one paragraph of what it says (put the interpretation in `bigPictureCaption` or
   the overview prose).
+- **Source-diagram inventory first.** Before drawing, list every flow step,
+  transition, decision and actor the plan/spec/ticket shows. Every one appears in
+  the SVG, or the caption/overview names what was left out and why. Draw only
+  relations the verification established; never invent a node, edge or status.
+- **Draw every edge** as a `<path>`/`<line>` with a `marker-end` arrowhead and a
+  short verb label; no arrow glyphs, no HTML boxes. Orthogonal routes, labels
+  clear of strokes, at most 9 nodes and 12 edges (over budget: split the flow).
+- **Labels at least 12px rendered at 1280px width.** Design narrow-first
+  (`viewBox` width 360 or less keeps 13px labels legible on a phone). A wider
+  `viewBox` is allowed: the renderer keeps it 1:1 and scrolls it in its own frame.
 - **Gloss code/domain nodes** so a no-context reader knows each node and arrow from
-  the page alone.
+  the page alone. Node labels are users, screens, devices, data — never code symbols.
 - **No unlabeled arrows.** If an arrow or color means several things, add a legend.
-- **Readable in light and dark mode.** The renderer draws the diagram on a fixed
-  light panel; do not set mermaid theme colors that assume a dark page.
-- **A diagram is easier to invent than prose** — nodes and edges only for
-  relations the verification established. Node labels are users, screens, devices,
-  data — never code symbols. Avoid double quotes inside mermaid node labels.
+- **Theming is the renderer's.** The SVG carries no colors: shapes take a `class`
+  from this fixed vocabulary, which the page maps to its light and dark tokens:
+  `box`, `box-focal` (at most 1-2 per diagram), `zone` (a boundary rect behind
+  nodes), `edge`, `edge-pass`, `edge-fail`, `edge-dash`, `mk` / `mk-pass` /
+  `mk-fail` (marker shapes), `t-b` (bold text), `t-s` (small muted text), `lbl`
+  (text halo for a label near a line), `stop` (a ✗ mark). Text uses the default
+  page color. Failure paths use `edge-fail` solid, never dashed.
+- **Required shape.** Exactly one root `<svg viewBox="0 0 W H" aria-label="...">`
+  (the `aria-label` is one sentence stating what the diagram shows; no `width`/`height`
+  on the root). Allowed elements: `svg g defs marker path line polyline polygon rect
+  circle ellipse text tspan title desc`. Arrowheads are `<marker>` elements in
+  `<defs>` referenced as `url(#id)`. `fill`/`stroke` may only be `none`,
+  `currentColor` or `var(--token)`.
+- **Refused, with the construct named in the error:** `<script>`, `<foreignObject>`,
+  `<style>`, `style=`, any `on*` attribute, `href`/`xlink:href`, any `url(...)` other
+  than a `#id` defined inside the SVG, `<image>`, `<a>`, `<use>`, animation,
+  comments/CDATA, unknown elements, attributes or classes. The renderer exits
+  non-zero and writes no report; fix the SVG and render again. Escape `&` as `&amp;`.
+- **After rendering,** run `${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh <report> <dir>`
+  and `${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh <report>`, look at the
+  big-picture frames in light and dark, and fix the `bigPictureSvg` until lint
+  reports 0 errors for the figure. A finding outside the big picture (the rest of
+  the page is renderer-owned) is a renderer limitation: note it, never fix it by
+  editing `qa-report.ts` during a cycle.
 
 ## 쓰기 전에 소개 (introduce before you use) — first-occurrence gloss
 The reader is a PO/designer with no prior context, so **every product/domain entity the report leans
@@ -327,8 +365,8 @@ of `qa-report.ts --narrative <json-file>` (never persisted to qa-state):
     "overview": "product-level what & why prose",
     "affectedUsers": { "<actor-id>": "how this user uses the product + how the change affects them, at their boundary" },
     "scenarioFlows": { "<story-id>": "short intro: who this actor is + which scenarios were checked" },
-    "requirementMapping": { "0": { "satisfied": "yes|no|partial|unverified", "scenarioRefs": [{ "story": "<story-id>", "scenario": "<scenario-id>" }], "evidence": "the prose explains the grounded verdict" } },
-    "bigPicture": "flowchart LR\n  Owner --> StockScreen",
+    "requirementMapping": { "0": { "scenarioRefs": [{ "story": "<story-id>", "scenario": "<scenario-id>" }], "evidence": "the prose explains what the referenced scenarios showed; the verdict itself is derived" } },
+    "bigPictureSvg": "<svg viewBox=\"0 0 340 200\" aria-label=\"one sentence: what the diagram shows\">...</svg>",
     "bigPictureCaption": "one-line interpretation of the diagram"
   },
   "scenarios": {
@@ -337,15 +375,28 @@ of `qa-report.ts --narrative <json-file>` (never persisted to qa-state):
 }
 ```
 
-Render command (at STATE, after `set-verdict`, before `complete`):
+Check the narrative before rendering. `validate-narrative` runs every content
+check without writing a report and lists every problem at once (it reads the
+current session's recorded state):
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts validate-narrative --narrative <presentation>.json
+```
+`error:` lines (a retired field such as `bigPicture` or `satisfied`, a rejected
+`bigPictureSvg`, QA-result words or a code name in reader prose, a missing
+observation or screenshot) refuse the final render and make the command exit 1.
+`gap:` lines (an empty slot, a requirement with no resolvable mapping) only render
+a visible gap marker; the command still exits 0. Fix every `error:` and read every
+`gap:` before rendering.
+
+Render command (at STATE, after `set-verdict`, before `complete`; it runs the same checks):
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts --session <id> --out <path> --narrative <presentation>.json
 ```
 
 The report is a self-contained HTML page (inline `<style>`, zero runtime
-`<script>`, zero external reference); mermaid is baked to inline SVG at build time
-with mmdc (a missing mmdc or a failing block preserves the source and does not
-abort the report). Any required slot left unwritten renders a **visible `gap`
+`<script>`, zero external reference); `bigPictureSvg` is sanitized and inlined
+(a disallowed construct, or the retired `bigPicture` field, aborts the render with
+an error naming it). Any required slot left unwritten renders a **visible `gap`
 marker** (`class="gap"`) — what was skipped shows in the report.
 
 ## Self-audit (after render, by eye)
@@ -399,7 +450,7 @@ works, and therefore whether the requirements were met?**
 - Implementation terms (cache, id, data type, function name) appear in a user narrative → rewrite in user terms
 - A user flow slot holds raw test or build logs → replace with what was proven, in words
 - A scenario shows a raw curl/HTTP/JSON dump (`HTTP=404`, `{"error":...}`, `table row count before=6`) as its proof → convert it to a natural-language "we ran this scenario and observed X"; the raw bytes belong in the audit section, not the reader
-- A requirement was never proven but it reads `yes`/`partial` → mark `satisfied: "unverified"` (renders loud "미검증")
+- A requirement was never proven but its prose reads as met → the verdict is derived, so fix the `scenarioRefs` (a requirement backed by a `blocked` scenario renders loud "미검증"); never add a `satisfied` field, the render refuses it
 - A visual scenario lacks either an observation or before/after images → capture the missing asserted state, record its path, and render again. Text-boundary scenarios need a grounded `observed` explanation of the received output. `qa-report.ts` refuses a nonvisual or test-surface pass/fail scenario without `observed`.
 - An observation says "the user saw" but no screen was captured → name the real medium (API response, test)
 - Internal jargon (risk numbers, source tags) is visible to the reader → remove it

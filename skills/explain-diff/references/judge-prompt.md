@@ -22,7 +22,7 @@ R12 — the architecture diagram's correspondence to the diff (only when the ste
   If any diagram is present, its node/edge labels must use real identifiers of the actual
   system (service, module path, command, entity names) — they need not all be things the diff
   changed; context nodes the diff leaves untouched are allowed. At least one level must have a
-  change marker (a :::changed class or Before/After contrast) pointing at what this diff
+  change marker (the `focal` class, a `←변경` label, or Before/After contrast) pointing at what this diff
   changed. A picture drawn with generic nouns only ("service" -> "DB") is a picture that fits
   any diff, so it fails. For the 시스템 레벨 specifically: its nodes must be DISTINCT
   processes, services, deployables, or stores. An in-process call chain — functions or modules
@@ -37,7 +37,7 @@ R12 — the architecture diagram's correspondence to the diff (only when the ste
   slot — a file-path node fails). A 도메인 레벨 node must be a real business concept in the
   codebase's own terms; a bare schema-encoding name with no business meaning attached
   (`GenerationIntakeTimeCodesSchema` standing alone) is not a domain object and fails. If a
-  domain classDiagram is drawn, its class boxes must carry members/methods — empty boxes fail.
+  domain class figure is drawn, its `<g data-class>` boxes must carry member lines — empty boxes fail.
   In the pass case put into quote the diagram's label string, the body sentence where the same
   identifier appears, and the phrase that evidences the change marker, together.
   If there is no diagram at all and all three levels have a reasoned

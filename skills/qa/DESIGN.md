@@ -7,21 +7,23 @@ reader-first layout; this change adds evidence judgment, not a visual redesign.
 
 ## 2. Color
 
-Use the existing `qa-report.ts` STYLE variables: `--bg`, `--fg`, `--muted`,
-`--rule`, `--code-bg`, `--accent`, `--pass`, `--fail`, `--na`. Existing light/dark
-values remain authoritative. Supported outcomes use pass; evidence gaps use the
+Use the html-report design tokens in `qa-report.ts` STYLE (`skills/html-report/SKILL.md`
+section 3): `--bg`, `--surface`, `--surface-2`, `--ink`, `--ink-2`, `--ink-3`, `--line`,
+`--line-strong`, `--accent`, and the `--ok`, `--warn`, `--bad` semantic pairs with their
+`-bg` tints, in light and dark. Supported outcomes use ok; evidence gaps use the
 existing unverified/gap state, never a green badge.
 
 ## 3. Typography
 
-Existing system/Pretendard body at 16px/1.7; monospace for audit paths only.
-H1/H2/H3 remain 1.75/1.3/1.05rem. Claim and observation use body text, not tiny
+Korean-first sans stack (IBM Plex Sans KR, then system Korean faces; no font link, so the
+page has zero external reference), body 16px/1.75, monospace for audit paths only.
+H1/H2/H3 follow the html-report scale (clamp 30-46px, 24px, 17px). Claim and observation use body text, not tiny
 path captions. Korean claim phrases must remain readable when wrapped.
 
 ## 4. Spacing & layout
 
-Keep the existing 52rem main column, 1.25rem horizontal padding, vertical story
-and scenario stacks, and evidence-slot spacing. Claim evidence is a vertical
+One 1040px column with 16px minimum side gutters, 720px prose measure, vertical story
+and scenario stacks, and evidence-slot spacing; works from 400px to 1280px. Claim evidence is a vertical
 stack: claim, observation/location, image. This gives each asserted result room
 to be read instead of squeezing several images into a contact sheet.
 

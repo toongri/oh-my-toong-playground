@@ -6,6 +6,7 @@ English | [한국어](authoring.md)
 
 | Skill | Purpose | When to Use |
 |-------|---------|-------------|
+| **html-report** | Shared authoring contract for single-file HTML reports with inline SVG | Referenced by report skills (qa, explain-diff, deep-interview, prometheus, …) |
 | **create-slides** | HTML scrollytelling presentation generator | Tech talks, proposals, pitch decks |
 | **technical-writing** | Korean technical document review/writing | API docs, guides, technical posts |
 | **technical-copywriting** | Technical blog promotion text review | SNS teasers, LinkedIn posts |
@@ -28,6 +29,20 @@ Each skill targets a different output type but operates on shared principles:
 ---
 
 ## 2. Skill Details
+
+### html-report
+
+**Role**: The shared contract for writing a human-facing report directly as one self-contained HTML file, with no Mermaid/`mmdc` pre-render. It is not invoked on its own: consumer skills (deep-interview, prometheus, qa, explain-diff, ultraresearch, review-report, create-slides) reference it one-way as `${CLAUDE_SKILL_DIR}/../html-report/...`. The consumer decides what the page says (content rules); this skill decides how it is built and checked (form rules).
+
+**Features**:
+- One file with no external CSS, JS, or images; light/dark; 400–1280px; Korean-first
+- A directed graph with 3 or more nodes is inline SVG with visible edges; colors and type come from design tokens
+- Mandatory self-critique loop: capture with `capture.sh`, check with `lint.sh`; when lint has 0 errors, `lint.sh --receipt` writes a receipt bound to the exact HTML bytes
+- `make validate` checks that `html-report` is co-deployed with each consumer in the same sync scope and platforms
+
+**When to use**: referenced automatically when a report skill writes HTML
+
+---
 
 ### create-slides
 

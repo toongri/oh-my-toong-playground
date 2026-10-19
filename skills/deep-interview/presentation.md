@@ -3,7 +3,11 @@
 The precise SSOT for deep-interview is the **spec** — a reference for AI, execution, and
 verification that precisely captures requirements, constraints, design decisions, and diagrams.
 This contract governs authoring the **presentation derived** from that spec. The presentation
-is a self-contained, human-readable HTML artifact accompanying the spec.
+is one human-readable HTML file, written directly by you, accompanying the spec. This contract
+owns the content (reader, required content, section order, diagram content, gates). Form,
+layout, diagram drawing, theming, typography and the self-critique loop belong to
+`${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` — **read it in full before authoring** and follow
+its output contract.
 
 ## Two artifacts, two audiences
 - **SSOT (spec)** — for AI, execution, and precise verification. Precise and immutable. Includes
@@ -36,10 +40,19 @@ Restate all the following spec content at maintainer level — omit none:
   What is excluded, module/domain boundaries, and dependency direction.
 - **Completion criteria** — Acceptance Criteria. What must be true and how to prove it.
 - **Known risks** — Risks & Unresolved Forks. What the next editor should watch for.
-- **Diagrams — all of them.** Carry every lens drawn in the spec's `## Diagrams` (System topology,
-  Module/API, Actor scenario, Domain entity, Entity lifecycle, Logic branching). Diagrams are
-  the most important means of conveying this work's system structure, flows, and domain.
-  **`diagram-guide.md` owns lens selection, coverage, and edge fidelity (full-read).**
+- **Diagrams — all of them.** Carry every lens the spec's `## Diagrams` coverage table marks `drawn`
+  (System topology, Module/API, Actor scenario, Domain entity, Entity lifecycle, Logic branching),
+  plus the dependency picture of the spec's `## Boundary Map`. Diagrams are the most important
+  means of conveying this work's system structure, flows, and domain. The spec's Mermaid blocks
+  are the **source diagrams**: redraw each one as an inline SVG with the same nodes, edges,
+  directions and labels (see Diagram content below).
+
+### Section order
+Lead with what changes and why (first screen). Then follow the carry-over list above in its order
+(approach and decisions, constraints and invariants, boundaries and non-goals, completion
+criteria, risks), placing each diagram inside the section it explains, under its own
+Why → Diagram → Interpretation heading. The page anatomy and components come from html-report
+(its design-document skeleton fits).
 
 ### What to remove (interview and AI machinery)
 Remove only interview artifacts the reader does not need: Clarity Breakdown (clarity scores and
@@ -55,18 +68,44 @@ does the presentation; if one is needed, fix that defect in the spec). Combining
 the spec treats separately into one cause, category, or umbrella is also invention. Keep separate
 what the spec separates; call things the same only when the spec says they are the same.
 
-## Diagram discipline
-`diagram-guide.md` owns the six-lens set, coverage table, edge ledger (cite spec text for every
-edge), node naming, and Mermaid validity — **read it fully before authoring.** Additional presentation rules:
+## Diagram content
+What to show; html-report decides how to draw it (SVG recipes, phone behavior, complexity budget
+and splitting). The lens set and the lenses the spec drew come from the spec's coverage table.
+
+| Lens | What the reader must see |
+|---|---|
+| System topology | the components and their dependency arrows, in the direction the spec decides |
+| Module / API | the ordered messages between the modules the approach makes interact |
+| Actor scenario | the ordered messages between the user-facing actor and the system |
+| Domain entity | the entities and their relationships, with multiplicity where the spec states it |
+| Entity lifecycle | the states and the transition (with its trigger) between them |
+| Logic branching | the decision points and the branch each outcome takes |
+| Boundary Map | the domains as groups, dependency arrows in their real direction, the cross-domain or violating edge marked |
+
+- **Draw only what the spec decides.** Before drawing, list every node and edge in your notes with
+  the spec text that decides it (the edge ledger); drop any entry with no spec text. This list is
+  also html-report's source-diagram inventory. The page's node and edge counts must match the
+  spec diagram it redraws; a figure over html-report's budget is split into an overview plus a
+  detail figure, never trimmed.
+- **Name nodes for real elements at one abstraction level** — a module, domain concept, service,
+  store, or actor. Never an internal or private function name, a glob or placeholder (`foo_*`),
+  or a bare DB column standing in for a component. Do not mix services, adapters, concrete
+  classes and columns as siblings in one figure.
+- **A refactor shows before and after,** on one layout with only the difference changed, not just
+  the end state.
 - **Why → Diagram → Interpretation for every diagram.** Explain why the lens is needed, show the
   picture, and give one paragraph interpreting its key message.
-- **Element footnotes (`gloss`) for nodes named with code identifiers.** Below the diagram, use
-  `<ul class="gloss">` to explain each code-named node and arrow style in one plain-language line,
-  so readers without context can understand the elements from this page alone.
+- **Element footnotes (`gloss`) for nodes named with code identifiers.** Below the figure, list
+  each code-named node and each arrow style with a one-line plain-language meaning, so a reader
+  without context understands the elements from this page alone. Meanings come from the spec only.
+  This overrides html-report's "no definitions the source lacks" rule only for meanings the spec
+  states.
 - **Explain arrow and color encodings in a legend.** If arrow styles have multiple meanings, or
-  colors/borders encode something, add a one-line legend explaining them. No unlabeled arrows.
+  colors/borders encode something, add a one-line legend. No unlabeled arrows.
 - **Diagrams invite invention more readily than prose.** Do not draw a source or edge elsewhere
   when the spec mentions it only in one place. Include only nodes and edges whose relationships the spec decides.
+- **Post-draw check:** re-read each figure against the spec — every edge is a decided fact, the
+  node count matches the spec diagram, and the figure is no vaguer than the prose it visualizes.
 
 ## 쓰기 전에 소개 (introduce before you use)
 The reader has no prior context, so **every first-class entity earns a plain-language introduction at
@@ -85,37 +124,41 @@ introduction to what the entity is:
   use one name per concept; no forward references to undefined labels; reconcile
   dual names in the spec by explaining their relationship in one line.
 - A diagram's code-name node/arrow is introduced by the element footnote (`gloss`) below it — see
-  Diagram discipline above; that footnote is where diagram elements get their one-line meaning.
+  Diagram content above; that footnote is where diagram elements get their one-line meaning.
 
 ## Internal document consistency
 - **One partition** — the lead's enumeration and the body sections have the same count, grouping, and order.
 - **The overview is a true subset of the details** — the earlier overview does not conflict with later detail.
 - **Reconcile apparent contradictions** — reconcile in one line two statements that are both true in the spec but look contradictory to readers.
-- **Prose matches its diagram** — "화살표가 왼쪽을 본다" must not conflict with `flowchart LR`.
+- **Prose matches its diagram** — "화살표가 왼쪽을 본다" must not conflict with the drawn arrow direction.
 
-## Format — self-contained HTML
-The presentation delivered to people and submitted to state is **one HTML file**. The Markdown
-below is intermediate renderer input, not a separate deliverable. After rendering, run
-`deep-interview-state.ts submit-presentation --spec-path <spec>.md --html-path <presentation>.html`.
-On success, the source/HTML paths and hashes are stored in `state.presentation`. If either file
-changes, render and submit again.
+## Format and delivery
+The presentation delivered to people and submitted to state is **one HTML file** at
+`$OMT_DIR/deep-interview/{slug}.presentation.html`, written directly (no intermediate Markdown).
+Form follows html-report's output contract (one file, inline CSS/JS/SVG, light and dark themes,
+400px to 1280px, complete at rest).
 
-Render a single self-contained HTML file with `scripts/render.ts` (no external runtime
-dependencies or references). Authors use only constrained Markdown and approved components; the
-renderer owns styling. Mermaid fences become inline SVGs at build time. The renderer may emit one
-optional inline script that adds ESC/Enter keyboard convenience for closing the zoom overlay; the
-document, CSS zoom controls, and print layout remain usable when that enhancement is unavailable.
-Approved components: `doc-meta` · `flow`/`flow-step`/`flow-arrow` · `compare`/`compare-before`/`compare-after`
-· `callout` · `gloss` (element footnotes) · `arch-entity` (element cards) · `diagram`.
-No `<style>`, inline `style=`, or classes outside the approved list. No pasting raw code, schemas,
-or type signatures (identifiers should be glossed, not pasted).
+Voice: this contract's first-person author voice ("Purpose & perspective" above) wins over
+html-report section 13.3. The resulting `author-first-person` lint warnings are expected; every
+other lint warning is fixed or named in the report. Writing dates stay off the page.
 
-Render command:
+Self-critique loop (html-report section 14, mandatory): run capture and lint, look at every frame,
+fix, and repeat in a new directory until lint reports 0 errors and the frame checklist passes.
+
 ```bash
-bun ${CLAUDE_SKILL_DIR}/scripts/render.ts --in <presentation>.md --out <presentation>.html
+OUT=$OMT_DIR/deep-interview/{slug}.visual-check/round-1
+bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh $OMT_DIR/deep-interview/{slug}.presentation.html "$OUT"
+bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh $OMT_DIR/deep-interview/{slug}.presentation.html --source $OMT_DIR/deep-interview/{slug}.md --strict --receipt "$OUT/receipt.json" > "$OUT/lint.json"
 ```
 
-## Self-audit (before rendering)
+Then run `deep-interview-state.ts submit-presentation --spec-path <spec>.md --html-path <presentation>.html --receipt "$OUT/receipt.json"`.
+`lint.sh` writes the receipt only when the run has 0 errors, so a receipt file proves one clean strict lint of exact HTML bytes.
+The submission refuses unless the receipt matches the current HTML bytes, its `--source` is this spec, and it covers all three runs (1280 light, 1280 dark, 400 light).
+It also refuses unless the HTML holds at least as many `<figure>` elements containing an `<svg` as the spec has Mermaid fences in `## Diagrams` and `## Boundary Map` (the refusal states both counts).
+On success, the paths and hashes of the spec, HTML and receipt are stored in `state.presentation`. If any of them changes,
+the submission is no longer current: **re-run `lint.sh` after every edit to the HTML** (a receipt for older bytes is refused), then submit again.
+
+## Self-audit (before submitting)
 - [ ] Does the first screen establish what changes and why — **all reasons from the spec (zero invented motives)**;
       **zero combinations of separate things into one cause/category/umbrella**?
 - [ ] Does it include all spec design content — Goal, approach/design decisions (including rejected alternatives),
@@ -127,6 +170,8 @@ bun ${CLAUDE_SKILL_DIR}/scripts/render.ts --in <presentation>.md --out <presenta
 - [ ] Interview/AI machinery (Clarity Breakdown, Ontology Convergence, Transcript, scoring values) removed.
 - [ ] Lead enumeration = section enumeration; overview is a true subset of details; apparent contradictions reconciled; prose matches diagrams.
 - [ ] Zero invention or contradiction against the SSOT.
+- [ ] html-report read in full; self-critique loop run until lint shows 0 errors and the frame checklist passes (capture + `lint.sh --source` the spec `--strict --receipt`; one `<figure>` with an inline `<svg` per spec Mermaid diagram; re-lint after any HTML edit).
+- [ ] Each redrawn spec diagram has the same node and edge counts as the spec's Mermaid; any split or omission is stated on the page.
 
 The sole passing criterion: **can a colleague or team-lead with no prior context understand from this
 page alone what the work did and what to know or consult when next modifying this code?**

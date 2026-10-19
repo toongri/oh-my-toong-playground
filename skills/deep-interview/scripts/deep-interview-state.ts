@@ -49,7 +49,7 @@
  *          set-topology. Unlike set-topology, an empty array IS allowed — "0 recorded
  *          non-goals" is itself the signal a downstream hook gates on. Refuses any
  *          item with a blank `item` or `decider` (existence check only, not precision).
- *   submit-presentation --spec-path <spec.md> --html-path <presentation.html>
+ *   submit-presentation --spec-path <spec.md> --html-path <presentation.html> --receipt <receipt.json>
  *          Records the source and HTML paths and hashes; required before handoff.
  *   get    Print the state JSON, plus a derived `migration_status` field
  *          ("legacy_missing" | "current") from computeTopologyMigrationStatus,
@@ -442,7 +442,7 @@ export function updateDeepInterviewState(
 		);
 	}
 	validateOutputShape(partial.output_shape, "update");
-	if (partial.current_phase === "handoff" && !presentationSubmissionCurrent(isRecord(prior["state"]) ? prior["state"]["presentation"] : undefined)) {
+	if (partial.current_phase === "handoff" && !presentationSubmissionCurrent(isRecord(prior["state"]) ? prior["state"]["presentation"] : undefined, "spec-diagrams")) {
 		throw new Error("handoff requires a current presentation; run submit-presentation first");
 	}
 
@@ -910,7 +910,7 @@ export function readDeepInterviewState(sessionId: string): Record<string, unknow
 	return readRaw(resolveStatePath(sessionId));
 }
 
-export function submitDeepInterviewPresentation(sessionId: string, specPath: string, htmlPath: string): void {
+export function submitDeepInterviewPresentation(sessionId: string, specPath: string, htmlPath: string, receiptPath: string): void {
 	const specName = basename(specPath);
 	const expectedHtmlPath = resolve(
 		dirname(specPath),
@@ -923,6 +923,8 @@ export function submitDeepInterviewPresentation(sessionId: string, specPath: str
 	const presentation = createPresentationSubmission(
 		specPath,
 		htmlPath,
+		receiptPath,
+		"spec-diagrams",
 		existsSync(presentationMarkdownPath) ? presentationMarkdownPath : undefined,
 	);
 	const path = resolveStatePath(sessionId);
@@ -1248,7 +1250,7 @@ function main(): void {
 		}
 	} else if (subcommand === "submit-presentation") {
 		try {
-			submitDeepInterviewPresentation(sessionId, str(args["spec-path"]) ?? "", str(args["html-path"]) ?? "");
+			submitDeepInterviewPresentation(sessionId, str(args["spec-path"]) ?? "", str(args["html-path"]) ?? "", str(args["receipt"]) ?? "");
 		} catch (e) {
 			process.stderr.write(`deep-interview-state submit-presentation: ${String(e)}\n`);
 			process.exit(1);
@@ -1291,7 +1293,7 @@ function main(): void {
 	} else {
 		process.stderr.write(
 			"Usage: deep-interview-state.ts <init|update|set-topology|set-nongoals|submit-presentation|get|list-others|adopt> [options]\n" +
-				"  submit-presentation --spec-path <spec.md> --html-path <presentation.html>\n" +
+				"  submit-presentation --spec-path <spec.md> --html-path <presentation.html> --receipt <receipt.json>\n" +
 				"  init   --initial-idea <text> [--interview-id <id>] [--type greenfield|brownfield]\n" +
 				"         [--current-phase <phase>] [--threshold <n>] [--codebase-context <text>]\n" +
 				"         [--output-shape task-tickets|ai-execution-plan|domain-output]\n" +

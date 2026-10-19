@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>디스펜서 USB 고착</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; the three mechanism figures break out wider and scroll sideways on their own at phone width. */
+:root {
+  --bg: #F3F4F8;
+  --surface: #FFFFFF;
+  --surface-2: #E9ECF3;
+  --ink: #141821;
+  --ink-2: #444C5C;
+  --ink-3: #5B6477;
+  --line: #D3D8E2;
+  --line-strong: #98A0B3;
+  --accent: #3340C9;
+  --ok: #0B7A57;
+  --ok-bg: #DCF2E8;
+  --bad: #C0301F;
+  --bad-bg: #FBE3DF;
+  --warn: #8F5400;
+  --warn-bg: #FAEAC8;
+  --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1117; --surface: #161A22; --surface-2: #1F242E;
+    --ink: #E8EBF1; --ink-2: #B4BBC9; --ink-3: #8F98AA;
+    --line: #2B313D; --line-strong: #566074;
+    --accent: #9DAAFF;
+    --ok: #4FD6A4; --ok-bg: #11302A;
+    --bad: #FF8A7E; --bad-bg: #3B1B18;
+    --warn: #F3BC5C; --warn-bg: #392B10;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1117; --surface: #161A22; --surface-2: #1F242E;
+  --ink: #E8EBF1; --ink-2: #B4BBC9; --ink-3: #8F98AA;
+  --line: #2B313D; --line-strong: #566074;
+  --accent: #9DAAFF;
+  --ok: #4FD6A4; --ok-bg: #11302A;
+  --bad: #FF8A7E; --bad-bg: #3B1B18;
+  --warn: #F3BC5C; --warn-bg: #392B10;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.75;
+  padding-block: 40px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+.col { max-width: 720px; }
+h1, h2, h3, p, ul, ol, figure, table { margin: 0; }
+h1 { font-size: clamp(32px, 6vw, 48px); line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }
+h2 { font-size: 24px; line-height: 1.35; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+h3 { font-size: 17px; line-height: 1.4; font-weight: 600; }
+p + p { margin-top: 12px; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; background: var(--surface-2); padding: 1px 6px; border-radius: 4px; word-break: normal; overflow-wrap: anywhere; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+section { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.sec-head { display: flex; flex-direction: column; gap: 8px; padding-top: 28px; border-top: 2px solid var(--ink); }
+.sec-head p { color: var(--ink-2); max-width: 720px; }
+.muted { color: var(--ink-3); }
+
+/* masthead */
+.mast { display: flex; flex-direction: column; gap: 20px; }
+.mast .kicker { display: inline-flex; gap: 10px; align-items: center; font-size: 14px; color: var(--ink-2); flex-wrap: wrap; }
+.pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; line-height: 1.6; }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.lede { font-size: 19px; line-height: 1.7; color: var(--ink); max-width: 720px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; overflow: hidden; }
+.fact { padding: 14px 18px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 -1px -1px 0; }
+.fact b { font-size: 28px; line-height: 1.2; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.fact span { font-size: 14px; color: var(--ink-2); }
+.fact.bad b { color: var(--bad); }
+.fact.ok b { color: var(--ok); }
+
+/* impact bars */
+.bars { display: flex; flex-direction: column; gap: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 22px; }
+.bar-row { display: grid; grid-template-columns: 150px 1fr; gap: 6px 18px; align-items: center; }
+.bar-row .lab { font-size: 14px; color: var(--ink-2); line-height: 1.45; }
+.bar { display: flex; height: 34px; border-radius: 6px; overflow: hidden; background: var(--surface-2); }
+.seg { display: flex; align-items: center; padding: 0 12px; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+.seg.ok { background: var(--ok-bg); color: var(--ok); }
+.seg.bad { background: var(--bad); color: var(--surface); justify-content: center; padding: 0; min-width: 6px; }
+.seg.warn { background: var(--warn-bg); color: var(--warn); }
+.bar-note { grid-column: 2; font-size: 14px; color: var(--ink-2); }
+.bar-note b { color: var(--bad); }
+
+/* symptom list */
+.rows { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.row3 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 4px 28px; padding: 16px 20px; border-top: 1px solid var(--line); }
+.row3:first-child { border-top: 0; }
+.row3 .sym { font-weight: 600; }
+.row3 .why { color: var(--ink-2); }
+
+/* figures */
+figure { display: flex; flex-direction: column; gap: 12px; }
+.fig-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px; -webkit-overflow-scrolling: touch; }
+.fig-scroll svg { display: block; width: 100%; min-width: 900px; height: auto; }
+.fig-hint { display: none; margin: 6px 0 0; font-size: 14px; color: var(--ink-3); }
+@media (max-width: 640px) { .fig-hint { display: block; } }
+figcaption { max-width: 760px; font-size: 14.5px; line-height: 1.7; color: var(--ink-2); }
+figcaption b { color: var(--ink); }
+figcaption .vf { display: block; margin-top: 6px; color: var(--ink-3); }
+.hint-scroll { display: none; font-size: 13px; color: var(--ink-3); }
+
+svg text { font-family: var(--font); font-size: 13px; fill: var(--ink); }
+svg .t-b { font-weight: 700; }
+svg .t-s { font-size: 11.5px; }
+svg .t-m { font-family: var(--mono); font-size: 11.5px; }
+svg .t-mut { fill: var(--ink-3); }
+svg .t-ok { fill: var(--ok); }
+svg .t-bad { fill: var(--bad); }
+svg .t-warn { fill: var(--warn); }
+svg .lbl { paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; }
+svg .box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.5; }
+svg .box.big { fill: var(--surface-2); stroke: var(--line-strong); }
+svg .box.new-bad { fill: var(--bad-bg); stroke: var(--bad); stroke-width: 2; }
+svg .box.old-warn { fill: var(--warn-bg); stroke: var(--warn); stroke-width: 2; }
+svg .box.good { fill: var(--ok-bg); stroke: var(--ok); stroke-width: 2; }
+svg .ghost { fill: none; stroke: var(--ink-3); stroke-width: 1.5; stroke-dasharray: 5 4; }
+svg .chip { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; }
+svg .chip.ok { fill: var(--surface); stroke: var(--ok); }
+svg .chip.warn { fill: var(--surface); stroke: var(--warn); }
+svg .port { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1.5; }
+svg .port-held { fill: var(--warn); stroke: none; }
+svg .ln-ok { stroke: var(--ok); stroke-width: 2.5; fill: none; }
+svg .ln-bad { stroke: var(--bad); stroke-width: 2.5; fill: none; }
+svg .ln-mut { stroke: var(--ink-3); stroke-width: 1.5; fill: none; stroke-dasharray: 2 4; }
+svg .mk-ok { fill: var(--ok); }
+svg .mk-bad { fill: var(--bad); }
+svg .verdict-ok { fill: var(--ok-bg); }
+svg .verdict-bad { fill: var(--bad-bg); }
+
+/* sequence of events */
+.steps { list-style: none; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; counter-reset: s; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.steps li { counter-increment: s; padding: 16px 18px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 -1px -1px 0; display: flex; flex-direction: column; gap: 6px; font-size: 15px; line-height: 1.65; }
+.steps li::before { content: counter(s); width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: var(--surface); font-size: 13px; font-weight: 700; display: grid; place-items: center; }
+.steps li b { font-size: 15.5px; }
+.steps li span { color: var(--ink-2); }
+.steps li.hot::before { background: var(--bad); }
+
+/* timeline */
+.tl { list-style: none; padding: 0; display: flex; flex-direction: column; max-width: 820px; }
+.tl li { display: grid; grid-template-columns: 78px 18px minmax(0, 1fr); gap: 0 14px; padding-bottom: 20px; position: relative; }
+.tl li:last-child { padding-bottom: 0; }
+.tl time { font-family: var(--mono); font-size: 14px; color: var(--ink-2); padding-top: 2px; font-variant-numeric: tabular-nums; }
+.tl .dot { position: relative; }
+.tl .dot::before { content: ""; position: absolute; left: 50%; top: 9px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 2.5px solid var(--line-strong); transform: translateX(-50%); z-index: 1; }
+.tl .dot::after { content: ""; position: absolute; left: 50%; top: 21px; bottom: -20px; width: 2px; background: var(--line); transform: translateX(-50%); }
+.tl li:last-child .dot::after { display: none; }
+.tl li.ok .dot::before { border-color: var(--ok); background: var(--ok); }
+.tl li.bad .dot::before { border-color: var(--bad); background: var(--bad); }
+.tl li.gap .dot::after { background: repeating-linear-gradient(to bottom, var(--line-strong) 0 4px, transparent 4px 9px); }
+.tl .body b { display: block; font-weight: 600; }
+.tl .body span { color: var(--ink-2); font-size: 15px; line-height: 1.65; display: block; }
+
+/* verified / not verified */
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.panel h3 { display: flex; align-items: center; gap: 10px; }
+.panel ul { padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 1.65; }
+.panel.verified { border-top: 4px solid var(--ok); }
+.panel.unverified { border-top: 4px solid var(--warn); }
+
+/* fix list */
+.fixes { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.fix { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 6px 22px; padding: 18px 20px; border-top: 1px solid var(--line); }
+.fix:first-child { border-top: 0; }
+.fix .kind { font-size: 13.5px; font-weight: 700; color: var(--accent); line-height: 1.5; padding-top: 3px; }
+.fix h3 { margin-bottom: 4px; }
+.fix p { color: var(--ink-2); font-size: 15px; line-height: 1.7; }
+.fix p + p { margin-top: 6px; }
+
+.cols-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.mini { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 1.65; min-width: 0; }
+.mini h3 { font-size: 16px; }
+.mini ul { padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.mini .tag { font-size: 13px; font-weight: 600; color: var(--ink-3); }
+
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; line-height: 1.6; min-width: 560px; }
+th, td { text-align: left; vertical-align: top; padding: 12px 16px; border-top: 1px solid var(--line); }
+thead th { border-top: 0; font-size: 13.5px; color: var(--ink-3); font-weight: 600; background: var(--surface-2); }
+td.k { font-weight: 600; white-space: nowrap; }
+
+.rollout { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.ro { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 6px 22px; padding: 16px 20px; border-top: 1px solid var(--line); align-items: baseline; }
+.ro:first-child { border-top: 0; }
+.ro .who { font-weight: 700; }
+.ro .who small { display: block; font-weight: 400; color: var(--ink-3); font-size: 13.5px; }
+.ro p { color: var(--ink-2); font-size: 15px; line-height: 1.7; }
+.ro p b { color: var(--ink); }
+
+.repro { padding: 16px 20px; background: var(--surface); border: 1px dashed var(--line-strong); border-radius: 10px; font-size: 15px; max-width: 820px; }
+
+footer { color: var(--ink-3); font-size: 13.5px; border-top: 1px solid var(--line); padding-top: 16px; max-width: 720px; }
+
+@media (max-width: 640px) {
+  body { font-size: 15.5px; padding-block: 28px 56px; }
+  .wrap { gap: 44px; }
+  .lede { font-size: 17px; }
+  .bars { padding: 16px; }
+  .bar-row { grid-template-columns: 1fr; }
+  .bar-note { grid-column: 1; }
+  .row3 { grid-template-columns: 1fr; padding: 14px 16px; }
+  .fix, .ro { grid-template-columns: 1fr; padding: 16px; }
+  .tl li { grid-template-columns: 60px 14px minmax(0, 1fr); gap: 0 10px; }
+  .tl time { font-size: 12.5px; }
+  .hint-scroll { display: block; }
+  .panel { padding: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+
+<!-- shared arrowhead markers -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <marker id="ah-ok" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" class="mk-ok"/></marker>
+    <marker id="ah-bad" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" class="mk-bad"/></marker>
+  </defs>
+</svg>
+
+<main class="wrap">
+
+<header class="mast">
+  <div class="kicker">
+    <span class="pill bad">26대 고착 지속</span>
+    <span>사고 보고서 · 2026-10-17 업데이트 후 · 작성 2026-10-19</span>
+  </div>
+  <h1>디스펜서 USB 고착</h1>
+  <p class="lede">태블릿 앱 3.3.0 설치 뒤 CodePush 3.3.2가 적용되면서, 일부 디스펜서의 태블릿이 메인보드로 명령을 보내지 못하게 됐습니다. 받는 쪽은 정상이라 겉보기엔 멀쩡하지만 토출 버튼을 누르면 「토출 불가」가 뜹니다. 기기를 재부팅하면 풀립니다.</p>
+  <div class="facts" role="list">
+    <div class="fact bad" role="listitem"><b>41대</b><span>업데이트 직후 고착 (전체 약 1,620대의 2.6%)</span></div>
+    <div class="fact bad" role="listitem"><b>26대</b><span>지금도 고착. 모두 가구에 연결된 기기</span></div>
+    <div class="fact ok" role="listitem"><b>15대</b><span>재부팅 뒤 정상 토출</span></div>
+    <div class="fact" role="listitem"><b>0건</b><span>3.3.2 이전 4주간 같은 정지</span></div>
+  </div>
+</header>
+
+<section>
+  <div class="sec-head">
+    <h2>한눈에 보는 원인과 조치</h2>
+  </div>
+  <div class="col">
+    <p><b>원인.</b> CodePush는 JS만 다시 불러오고 앱 프로세스는 그대로 둡니다. 이때 React Native가 시리얼 모듈 인스턴스를 새로 만드는데, 이 모듈에는 정리 코드(포트 닫기, 리시버 해제)가 없습니다. 이전 인스턴스가 포트를 쥔 채 남아 받기만 처리하고, 보내기는 포트를 열지 못한 새 인스턴스가 맡아 실패합니다.</p>
+    <p><b>조치.</b> 3.4.0에서 리로드 직전에 정리하도록 고칩니다. APK 배포가 필요해서 CodePush로는 고칠 수 없습니다. 고착된 26대는 3.4.0 설치만으로 복구됩니다.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <h2>영향 범위</h2>
+    <p>고착은 업데이트 직후 한 번에 발생했고, 이전 4주 동안은 한 건도 없었습니다.</p>
+  </div>
+  <div class="bars">
+    <div class="bar-row">
+      <div class="lab">전체 약 1,620대</div>
+      <div class="bar" role="img" aria-label="전체 약 1,620대 중 41대(2.6%)가 고착, 나머지는 정상">
+        <span class="seg ok" style="width:97.4%">나머지 정상</span><span class="seg bad" style="width:2.6%"></span>
+      </div>
+      <div class="bar-note"><b>고착 41대</b> (2.6%). 막대에서 붉은 조각이 이 비율입니다.</div>
+    </div>
+    <div class="bar-row">
+      <div class="lab">고착 41대의 현재</div>
+      <div class="bar" role="img" aria-label="고착 41대 중 26대는 지속, 15대는 재부팅으로 복구">
+        <span class="seg warn" style="width:63.4%;background:var(--bad-bg);color:var(--bad)">지금도 고착 26대</span><span class="seg ok" style="width:36.6%">복구 15대</span>
+      </div>
+      <div class="bar-note">26대는 가구에 연결된 기기입니다. 15대는 재부팅 뒤 펌웨어 1.8.3을 다시 읽고 정상 토출합니다.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <h2>사용자가 본 증상과 이유</h2>
+    <p>화면과 와이파이는 멀쩡해서 현장에서는 기기 고장으로 보였습니다. 아래는 증상마다 앱 안에서 일어난 일입니다.</p>
+  </div>
+  <div class="rows">
+    <div class="row3"><div class="sym">토출을 누르면 에러 코드 없이 「토출 불가」</div><div class="why">앱이 <code>isBooted=false</code>로 보고 있어서 토출 명령을 아예 보내지 않습니다. 실패한 명령이 없으니 에러 코드도 없습니다.</div></div>
+    <div class="row3"><div class="sym">화면 데이터와 와이파이는 정상</div><div class="why">서버 통신은 USB와 별개라 원격 측정(telemetry)이 계속 올라옵니다.</div></div>
+    <div class="row3"><div class="sym">커버 열기·닫기는 계속 기록됨</div><div class="why">받는 길은 이전 인스턴스를 통해 살아 있습니다.</div></div>
+    <div class="row3"><div class="sym">기다려도 풀리지 않고 재부팅하면 풀림</div><div class="why">재부팅은 프로세스를 새로 만들어 시리얼 모듈 인스턴스가 다시 하나가 됩니다.</div></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <h2>정상일 때의 구조</h2>
+    <p>태블릿 앱은 시리얼 모듈을 거쳐 USB로 메인보드와 말합니다. 시작할 때 앱이 부팅 확인을 보내고 메인보드가 답하면 <code>isBooted=true</code>가 되어 보틀(영양제 용기)을 읽습니다.</p>
+  </div>
+  <figure>
+    <p class="hint-scroll">그림은 좌우로 밀어서 볼 수 있어요.</p>
+    <div class="fig-scroll" tabindex="0" role="region" aria-label="그림 1 정상 구조, 좌우 스크롤">
+      <svg viewBox="0 32 840 352" role="img" aria-label="정상 구조: 태블릿 앱이 보내기 길과 받기 길 모두 시리얼 모듈 인스턴스 하나를 지나 USB로 메인보드와 연결된다.">
+        <!-- columns: JS 16-166 | gap | module 346-516 | port 566-588 | board 656-824 ; lanes: send y=146, receive y=262 -->
+        <rect class="box big" x="16" y="56" width="150" height="268" rx="10"/>
+        <text class="t-b" x="91" y="82" text-anchor="middle">태블릿 앱 (JS)</text>
+        <rect class="chip" x="30" y="96" width="122" height="24" rx="12"/><text class="t-s" x="91" y="112" text-anchor="middle">토출 화면</text>
+        <rect class="chip" x="30" y="126" width="122" height="24" rx="12"/><text class="t-s" x="91" y="142" text-anchor="middle">부팅 관리</text>
+        <text class="t-m t-ok" x="91" y="294" text-anchor="middle">isConnected=true</text>
+        <text class="t-m t-ok" x="91" y="311" text-anchor="middle">isBooted=true</text>
+
+        <rect class="box big" x="346" y="56" width="170" height="268" rx="10"/>
+        <text class="t-b" x="431" y="82" text-anchor="middle">시리얼 모듈</text>
+        <text class="t-s t-mut" x="431" y="100" text-anchor="middle">native · 인스턴스 1개</text>
+        <rect class="chip ok" x="361" y="190" width="140" height="26" rx="13"/><text class="t-s t-ok t-b" x="431" y="207" text-anchor="middle">포트 소유</text>
+
+        <text class="t-s t-mut" x="577" y="46" text-anchor="middle">USB 포트</text>
+        <rect class="port" x="566" y="56" width="22" height="268" rx="4"/>
+
+        <rect class="box big" x="656" y="56" width="168" height="268" rx="10"/>
+        <text class="t-b" x="740" y="82" text-anchor="middle">메인보드</text>
+        <text class="t-s t-mut" x="740" y="100" text-anchor="middle">firmware 1.8.3</text>
+        <text class="t-s t-mut" x="740" y="294" text-anchor="middle">부팅 확인에</text>
+        <text class="t-s t-mut" x="740" y="311" text-anchor="middle">정상 응답</text>
+
+        <!-- send lane -->
+        <text class="t-s t-b" x="256" y="86" text-anchor="middle">보내기</text>
+        <text class="t-s" x="256" y="102" text-anchor="middle">부팅 확인</text>
+        <text class="t-s" x="256" y="118" text-anchor="middle">버전 조회</text>
+        <text class="t-s" x="256" y="134" text-anchor="middle">토출 명령</text>
+        <line class="ln-ok" x1="166" y1="146" x2="344" y2="146" marker-end="url(#ah-ok)"/>
+        <line class="ln-ok" x1="516" y1="146" x2="654" y2="146" marker-end="url(#ah-ok)"/>
+        <text class="t-s lbl" x="586" y="132" text-anchor="middle">USB로 쓰기</text>
+
+        <!-- receive lane -->
+        <text class="t-s t-b" x="256" y="190" text-anchor="middle">받기</text>
+        <text class="t-s" x="256" y="206" text-anchor="middle">부팅 응답</text>
+        <text class="t-s" x="256" y="222" text-anchor="middle">커버·보틀 알림</text>
+        <text class="t-s" x="256" y="238" text-anchor="middle">토출 결과</text>
+        <line class="ln-ok" x1="346" y1="262" x2="168" y2="262" marker-end="url(#ah-ok)"/>
+        <line class="ln-ok" x1="654" y1="262" x2="518" y2="262" marker-end="url(#ah-ok)"/>
+        <text class="t-s lbl" x="586" y="248" text-anchor="middle">USB에서 읽기</text>
+
+        <rect class="verdict-ok" x="16" y="340" width="808" height="32" rx="8"/>
+        <text class="t-s t-ok t-b" x="420" y="361" text-anchor="middle">보내기 ✓ 받기 ✓ → 부팅 확인에 답이 옴 → isBooted=true → 보틀 8개 읽기</text>
+      </svg>
+    </div>
+    <p class="fig-hint">그림은 좌우로 밀어서 볼 수 있어요. 같은 내용을 아래 설명과 단계 목록이 글로 적고 있어요.</p>
+    <figcaption><b>그림 1. 정상 구조에서는 보내기와 받기가 같은 인스턴스 하나를 지납니다.</b> 이 인스턴스가 포트를 열었기 때문에 두 방향이 모두 통합니다.<span class="vf">확인됨: 업데이트 전 4주와, 같은 기기의 03:02 첫 시작(보틀 8개 읽기, 펌웨어 1.8.3)이 이 모양입니다.</span></figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="sec-head">
+    <h2>고착된 구조</h2>
+    <p>그림 1과 같은 배치에서 시리얼 모듈 칸만 둘로 나뉩니다. 보내기는 위쪽 새 인스턴스를, 받기는 아래쪽 이전 인스턴스를 지납니다.</p>
+  </div>
+  <figure>
+    <p class="hint-scroll">그림은 좌우로 밀어서 볼 수 있어요.</p>
+    <div class="fig-scroll" tabindex="0" role="region" aria-label="그림 2 고착 구조, 좌우 스크롤">
+      <svg viewBox="0 32 840 352" role="img" aria-label="고착 구조: 보내기는 포트를 열지 못한 새 인스턴스를 지나 거절되거나 유실되고, 받기와 연결됨 신호는 포트를 점유한 이전 인스턴스에서 새 JS로 도착해 isBooted가 false로 고정된다.">
+        <rect class="box big" x="16" y="56" width="150" height="268" rx="10"/>
+        <text class="t-b" x="91" y="82" text-anchor="middle">태블릿 앱 (JS)</text>
+        <text class="t-s t-mut" x="91" y="100" text-anchor="middle">리로드된 새 JS</text>
+        <rect class="chip" x="30" y="112" width="122" height="24" rx="12"/><text class="t-s" x="91" y="128" text-anchor="middle">토출 화면</text>
+        <rect class="chip" x="30" y="142" width="122" height="24" rx="12"/><text class="t-s" x="91" y="158" text-anchor="middle">부팅 관리</text>
+        <text class="t-m" x="91" y="294" text-anchor="middle">isConnected=true</text>
+        <text class="t-m t-bad t-b" x="91" y="311" text-anchor="middle">isBooted=false</text>
+
+        <!-- new instance (top) -->
+        <rect class="box new-bad" x="346" y="56" width="170" height="134" rx="10"/>
+        <text class="t-b t-bad" x="431" y="80" text-anchor="middle">새 인스턴스</text>
+        <text class="t-m" x="431" y="98" text-anchor="middle">connected=false</text>
+        <text class="t-s" x="431" y="162" text-anchor="middle">쓰기 → 코드 13 거절 4/10</text>
+        <text class="t-s" x="431" y="178" text-anchor="middle">쓰기 → 조용히 유실 6/10</text>
+
+        <!-- old instance (bottom) -->
+        <rect class="box old-warn" x="346" y="206" width="170" height="118" rx="10"/>
+        <text class="t-b t-warn" x="431" y="230" text-anchor="middle">이전 인스턴스</text>
+        <text class="t-s" x="431" y="298" text-anchor="middle">리시버가 살아 있음</text>
+        <text class="t-s t-b" x="431" y="314" text-anchor="middle">포트 점유</text>
+
+        <text class="t-s t-mut" x="577" y="46" text-anchor="middle">USB 포트</text>
+        <rect class="port" x="566" y="56" width="22" height="268" rx="4"/>
+        <rect class="port-held" x="566" y="236" width="22" height="52" rx="4"/>
+
+        <rect class="box big" x="656" y="56" width="168" height="268" rx="10"/>
+        <text class="t-b" x="740" y="82" text-anchor="middle">메인보드</text>
+        <text class="t-s t-mut" x="740" y="100" text-anchor="middle">firmware 1.8.3</text>
+        <text class="t-s t-mut" x="740" y="294" text-anchor="middle">알림은 정상</text>
+        <text class="t-s t-mut" x="740" y="311" text-anchor="middle">송신 중</text>
+
+        <!-- send lane (broken) -->
+        <text class="t-s t-b t-bad" x="256" y="86" text-anchor="middle">보내기</text>
+        <text class="t-s" x="256" y="102" text-anchor="middle">부팅 확인</text>
+        <text class="t-s" x="256" y="118" text-anchor="middle">버전 조회</text>
+        <text class="t-s t-bad" x="256" y="134" text-anchor="middle">500ms마다 반복</text>
+        <line class="ln-bad" x1="166" y1="146" x2="344" y2="146" marker-end="url(#ah-bad)"/>
+        <line class="ln-bad" x1="516" y1="146" x2="550" y2="146"/>
+        <path class="ln-bad" d="M552 138 L562 154 M562 138 L552 154"/>
+        <text class="t-s t-bad lbl" x="533" y="130" text-anchor="middle">막힘</text>
+
+        <!-- receive lane (works via old instance) -->
+        <text class="t-s t-b t-ok" x="256" y="170" text-anchor="middle">받기</text>
+        <text class="t-s" x="256" y="186" text-anchor="middle">부팅 응답</text>
+        <text class="t-s" x="256" y="202" text-anchor="middle">「연결됨」 신호</text>
+        <text class="t-s" x="256" y="218" text-anchor="middle">커버·보틀 알림</text>
+        <text class="t-s" x="256" y="234" text-anchor="middle">토출 결과</text>
+        <line class="ln-ok" x1="346" y1="262" x2="168" y2="262" marker-end="url(#ah-ok)"/>
+        <line class="ln-ok" x1="654" y1="262" x2="518" y2="262" marker-end="url(#ah-ok)"/>
+        <text class="t-s lbl" x="632" y="250" text-anchor="middle">USB에서 읽기</text>
+        <text class="t-s t-mut" x="256" y="284" text-anchor="middle">이벤트 채널(ReactContext)은</text>
+        <text class="t-s t-mut" x="256" y="300" text-anchor="middle">리로드 뒤에도 남아 있음</text>
+
+        <rect class="verdict-bad" x="16" y="340" width="808" height="32" rx="8"/>
+        <text class="t-s t-bad t-b" x="420" y="361" text-anchor="middle">받기 ✓ 는 이전 인스턴스, 보내기 ✗ 는 새 인스턴스 → 부팅 확인에 답을 못 받음 → 「토출 불가」</text>
+      </svg>
+    </div>
+    <p class="fig-hint">그림은 좌우로 밀어서 볼 수 있어요. 같은 내용을 아래 설명과 단계 목록이 글로 적고 있어요.</p>
+    <figcaption><b>그림 2. 이전 인스턴스가 포트와 받기 길을 쥐고 있고, 새 JS는 포트를 열지 못한 새 인스턴스로 보냅니다.</b> 이전 인스턴스가 「연결됨」 신호까지 새 JS에 보내기 때문에 앱은 연결됐다고 믿으면서 보내기는 실패합니다.<span class="vf">확인됨: 고착 기기 10대의 Sentry 이벤트에서 <code>isConnected=true</code>·<code>isBooted=false</code>, 그중 4대에서 쓰기 거절(코드 13). 확인 못 함: 두 인스턴스가 동시에 존재하는 순서는 로그와 네이티브 코드로 재구성한 것이며 실기기에서 재현하지 않았습니다.</span></figcaption>
+  </figure>
+
+  <h3>이렇게 만들어졌습니다</h3>
+  <ol class="steps">
+    <li><b>CodePush가 JS만 다시 불러옴</b><span>프로세스는 살아 있고, 시리얼 모듈 정리 코드(포트 닫기·리시버 해제)가 없습니다.</span></li>
+    <li><b>새 시리얼 모듈 인스턴스 생성</b><span>이전 인스턴스의 브로드캐스트 리시버(앱 컨텍스트에 등록)는 해제되지 않고 남습니다.</span></li>
+    <li><b>이전 리시버가 두 번째 연결을 엶</b><span>새 인스턴스의 USB 권한 결과에 반응해 같은 포트를 직접 엽니다. 포트는 이전 인스턴스 차지가 됩니다.</span></li>
+    <li><b>알림이 새 JS로 도착</b><span>RN 0.86에서는 리로드해도 이벤트 채널이 유지되어(<code>BridgelessReactContext.destroy()</code>가 아무것도 안 함) 이전 인스턴스의 알림과 「연결됨」이 새 JS에 닿습니다.</span></li>
+    <li class="hot"><b>보내기만 실패하며 고정</b><span>새 인스턴스는 <code>connected=false</code>. 부팅 확인·버전 조회를 500ms마다 보내도 거절되거나 유실되어 <code>isBooted</code>는 영원히 false입니다.</span></li>
+  </ol>
+</section>
+
+<section>
+  <div class="sec-head">
+    <h2>기기 하나의 타임라인</h2>
+    <p>2026-10-17(KST). 같은 기기의 로그를 시간순으로 이었습니다.</p>
+  </div>
+  <ol class="tl">
+    <li><time>03:02:13</time><span class="dot"></span><div class="body"><b>APK 3.3.0 설치</b><span>apk_updated 기록, 프로세스 재시작.</span></div></li>
+    <li class="ok"><time>03:02:47</time><span class="dot"></span><div class="body"><b>앱 시작, 메인보드 정상</b><span>보틀 8개 읽음, 펌웨어 1.8.3, 모든 슬롯 error_mask=0.</span></div></li>
+    <li><time>03:06:59</time><span class="dot"></span><div class="body"><b>CodePush 3.3.2 적용</b><span>JS만 다시 시작.</span></div></li>
+    <li class="bad"><time>03:07:16</time><span class="dot"></span><div class="body"><b>device_started 이후 보틀 읽기 없음</b><span>펌웨어 표시가 UNKNOWN.</span></div></li>
+    <li class="bad"><time>03:13:03</time><span class="dot"></span><div class="body"><b>Sentry 「앱 시작 후 하드웨어 미준비 지속」</b><span><code>isConnected=true</code> · <code>isBooted=false</code>.</span></div></li>
+    <li class="bad gap"><time>08:52</time><span class="dot"></span><div class="body"><b>사용자가 토출 시도 (약 5시간 40분 뒤)</b><span>「토출 불가」 3회, 문의 2건 (모달 HARDWARE_NOT_READY).</span></div></li>
+    <li class="bad"><time>현재</time><span class="dot"></span><div class="body"><b>여전히 고착</b><span>업데이트 뒤 토출 0회. 약 1,620대 중 대부분은 두 번째 시작에서 보틀을 정상으로 읽었습니다.</span></div></li>
+  </ol>
+</section>
+
+<section>
+  <div class="sec-head">
+    <h2>로그로 확인한 것, 확인하지 못한 것</h2>
+  </div>
+  <div class="two">
+    <div class="panel verified">
+      <h3><span class="pill ok">확인됨</span> 로그 근거</h3>
+      <ul>
+        <li>Sentry 「시작 후 미준비 지속」이 41건, 41대, 03:08~03:19에 발생. 열어 본 10건 모두 <code>isConnected=true</code>·<code>isBooted=false</code>, 그중 4건은 코드 13.</li>
+        <li>OpenSearch에서 펌웨어 UNKNOWN이 같은 41대. 이전 4주는 0건.</li>
+        <li>재부팅한 15대는 새 device_started 직후 펌웨어 1.8.3을 되찾음.</li>
+        <li>prd 서버·인프라 변경 없음. 거절률 변화 없음.</li>
+      </ul>
+    </div>
+    <div class="panel unverified">
+      <h3><span class="pill warn">확인 못 함</span> 추정과 미해결</h3>
+      <ul>
+        <li>고착 순서(이전 리시버가 두 번째 연결을 여는 과정)는 로그와 네이티브 코드로 재구성한 설명입니다. 실기기에서 재현하지 않았습니다.</li>
+        <li>왜 이번에만 생겼는지는 모릅니다. CodePush 3.2.12(1,647대)와 9/22·10/2의 APK 뒤 CodePush 순서에서는 고착이 0건이었습니다.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <h2>3.4.0의 수정</h2>
+    <p>APK 배포가 필요합니다. 근본 수정 하나와 안전장치 둘로 구성합니다.</p>
+  </div>
+  <div class="fixes">
+    <div class="fix"><div class="kind">근본 수정</div><div><h3>리로드 직전에 정리</h3><p>RN이 JS를 다시 불러오기 직전에 호출하는 <code>invalidate()</code>에서 포트를 닫고, 리시버를 해제하고, 상태를 초기화합니다.</p><p class="muted"><code>patches/react-native-serialport@1.3.1.patch</code></p></div></div>
+    <div class="fix"><div class="kind">안전장치 1</div><div><h3>보낸 인스턴스 표시, 연 인스턴스만 알림</h3><p>브로드캐스트에 보낸 인스턴스 id를 붙여 자기 것만 전달합니다. 포트를 실제로 연 인스턴스만 「연결됨」을 알립니다.</p><p class="muted">같은 패치 파일</p></div></div>
+    <div class="fix"><div class="kind">안전장치 2</div><div><h3>연결됐다고 믿는데 쓰기가 코드 13이면 재연결</h3><p>그 경우 연결 끊김으로 보고 다시 연결합니다. 연결 중에는 멈추지 못하던 <code>stopUsbService()</code>도 함께 고칩니다.</p><p class="muted"><code>apps/dispenser/src/core-hardware/hooks/useRNserialport.ts</code></p></div></div>
+  </div>
+
+  <figure>
+    <p class="hint-scroll">그림은 좌우로 밀어서 볼 수 있어요.</p>
+    <div class="fig-scroll" tabindex="0" role="region" aria-label="그림 3 수정 후 구조, 좌우 스크롤">
+      <svg viewBox="0 32 840 352" role="img" aria-label="수정 후 구조: 이전 인스턴스는 리로드 직전에 정리되어 사라지고, 새 인스턴스 하나가 포트를 열어 보내기와 받기를 모두 처리한다.">
+        <rect class="box big" x="16" y="56" width="150" height="268" rx="10"/>
+        <text class="t-b" x="91" y="82" text-anchor="middle">태블릿 앱 (JS)</text>
+        <text class="t-s t-mut" x="91" y="100" text-anchor="middle">리로드된 새 JS</text>
+        <rect class="chip" x="30" y="112" width="122" height="24" rx="12"/><text class="t-s" x="91" y="128" text-anchor="middle">토출 화면</text>
+        <rect class="chip" x="30" y="142" width="122" height="24" rx="12"/><text class="t-s" x="91" y="158" text-anchor="middle">부팅 관리</text>
+        <text class="t-m t-ok" x="91" y="294" text-anchor="middle">isConnected=true</text>
+        <text class="t-m t-ok" x="91" y="311" text-anchor="middle">isBooted=true</text>
+
+        <rect class="box good" x="346" y="56" width="170" height="268" rx="10"/>
+        <text class="t-b t-ok" x="431" y="82" text-anchor="middle">새 인스턴스</text>
+        <text class="t-s t-mut" x="431" y="100" text-anchor="middle">보내기·받기 모두 담당</text>
+        <rect class="chip ok" x="361" y="190" width="140" height="26" rx="13"/><text class="t-s t-ok t-b" x="431" y="207" text-anchor="middle">포트 소유</text>
+        <rect class="ghost" x="361" y="270" width="140" height="42" rx="8"/>
+        <text class="t-s t-mut" x="431" y="287" text-anchor="middle">이전 인스턴스 ✕</text>
+        <text class="t-s t-mut" x="431" y="303" text-anchor="middle">invalidate()에서 정리</text>
+
+        <text class="t-s t-mut" x="577" y="46" text-anchor="middle">USB 포트</text>
+        <rect class="port" x="566" y="56" width="22" height="268" rx="4"/>
+
+        <rect class="box big" x="656" y="56" width="168" height="268" rx="10"/>
+        <text class="t-b" x="740" y="82" text-anchor="middle">메인보드</text>
+        <text class="t-s t-mut" x="740" y="100" text-anchor="middle">firmware 1.8.3</text>
+        <text class="t-s t-mut" x="740" y="294" text-anchor="middle">변경 없음</text>
+
+        <text class="t-s t-b" x="256" y="86" text-anchor="middle">보내기</text>
+        <text class="t-s" x="256" y="102" text-anchor="middle">부팅 확인</text>
+        <text class="t-s" x="256" y="118" text-anchor="middle">버전 조회</text>
+        <text class="t-s" x="256" y="134" text-anchor="middle">토출 명령</text>
+        <line class="ln-ok" x1="166" y1="146" x2="344" y2="146" marker-end="url(#ah-ok)"/>
+        <line class="ln-ok" x1="516" y1="146" x2="654" y2="146" marker-end="url(#ah-ok)"/>
+        <text class="t-s lbl" x="586" y="132" text-anchor="middle">USB로 쓰기</text>
+
+        <text class="t-s t-b" x="256" y="190" text-anchor="middle">받기</text>
+        <text class="t-s" x="256" y="206" text-anchor="middle">부팅 응답</text>
+        <text class="t-s" x="256" y="222" text-anchor="middle">커버·보틀 알림</text>
+        <text class="t-s" x="256" y="238" text-anchor="middle">토출 결과</text>
+        <line class="ln-ok" x1="346" y1="262" x2="168" y2="262" marker-end="url(#ah-ok)"/>
+        <line class="ln-ok" x1="654" y1="262" x2="518" y2="262" marker-end="url(#ah-ok)"/>
+        <text class="t-s lbl" x="586" y="248" text-anchor="middle">USB에서 읽기</text>
+
+        <rect class="verdict-ok" x="16" y="340" width="808" height="32" rx="8"/>
+        <text class="t-s t-ok t-b" x="420" y="361" text-anchor="middle">새 인스턴스 하나가 보내기와 받기를 모두 처리 → 부팅 확인에 답이 옴 → isBooted=true</text>
+      </svg>
+    </div>
+    <p class="fig-hint">그림은 좌우로 밀어서 볼 수 있어요. 같은 내용을 아래 설명과 단계 목록이 글로 적고 있어요.</p>
+    <figcaption><b>그림 3. 수정 뒤에는 그림 1처럼 인스턴스 하나만 남습니다.</b> 이전 인스턴스는 리로드 직전에 포트와 리시버를 정리하고 사라집니다.<span class="vf">확인 못 함: 아직 구현 전 설계 기준의 그림이며 실기기 검증 전입니다. 에뮬레이터는 확률이 2.6%라 재현하지 못할 수 있어, 그때는 실기기 1대로 검증합니다.</span></figcaption>
+  </figure>
+
+  <div class="cols-list">
+    <div class="mini">
+      <h3>바꾸지 않는 것</h3>
+      <ul>
+        <li>부팅 관리(boot manager)와 메시지 큐</li>
+        <li>기기 id</li>
+        <li>보틀 읽기 JS 로직</li>
+        <li>서버, 인프라, CodePush 라이브러리</li>
+      </ul>
+    </div>
+    <div class="mini">
+      <h3>펌웨어와 에뮬레이터</h3>
+      <ul>
+        <li><b>메인보드 펌웨어:</b> 변경 없음. 명령이 태블릿 밖으로 나가지 않았고, 메인보드는 알림을 정상으로 보냈으며 BootManager 핸드셰이크도 있습니다.</li>
+        <li><b>포트 닫기·다시 열기:</b> APK 설치마다 이미 검증됨.</li>
+        <li><b>에뮬레이터 가상 메인보드:</b> 변경 없음 (켜진 보드에도 PROTOCOL.md의 0x01이 응답).</li>
+        <li><b>에뮬레이터 체크리스트:</b> 「JS 재로드 뒤 부팅」 케이스를 추가.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <h2>배포 계획</h2>
+  </div>
+  <div class="rollout">
+    <div class="ro"><div class="who">고착 26대<small>복구</small></div><p><b>3.4.0 설치만으로 복구됩니다.</b> 업데이트 확인은 서버 통신이라 고착 중에도 동작합니다.</p></div>
+    <div class="ro"><div class="who">3.3.0 미설치 7대<small>건너뛰기</small></div><p>3.3.0을 거치지 않고 <b>바로 3.4.0</b>으로 올립니다.</p></div>
+    <div class="ro"><div class="who">나머지 기기<small>예방</small></div><p>3.4.0 배포 기간과 CodePush 홍보가 겹치지 않게 일정을 나눕니다.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <h2>재현 계획</h2>
+  </div>
+  <p class="repro">APK 설치 → 첫 실행 → 1~3분 뒤 CodePush 재시작. 이 순서를 반복하면서 <code>adb logcat</code>으로 시리얼 모듈 인스턴스가 두 개 뜨는지 봅니다.</p>
+</section>
+
+<footer>근거: Sentry, OpenSearch, 태블릿 앱 네이티브 코드 검토. 서버·인프라 변경 이력과 거절률은 별도 확인했습니다.</footer>
+
+</main>
+</body>
+</html>

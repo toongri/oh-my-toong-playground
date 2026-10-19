@@ -52,6 +52,8 @@ skills:
     - technical-writing
     - humanizer
     - review-report
+    # html-report: deep-interview·prometheus·qa·review-report가 경로로 읽는 공유 스킬 — 소비 스킬과 같은 플랫폼에 배포
+    - html-report
     # hud는 Claude Code 전용 statusline 기능 — settings.local.json·claudeAiOauth를 읽고
     # ${CLAUDE_SKILL_DIR}/../../ 경로로 리졸브하므로 Codex/Gemini/OpenCode엔 존재하지 않음.
     - component: hud

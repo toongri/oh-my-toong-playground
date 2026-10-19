@@ -11,19 +11,20 @@ import {
 	readerEnglishWords,
 	defaultEvidenceReader,
 	scenarioKey,
-	normalizeSvgWidth,
+	sanitizeBigPictureSvg,
+	SVG_CLASSES,
 	MAX_EMBED_BYTES,
 	MAX_TOTAL_EMBED_BYTES,
 	type EvidenceReader,
 	type QaReportNarrative,
-	type MermaidRenderer,
 } from "./qa-report.ts";
+import { hasValidImageSignature, resolveAcMapping, validateNarrative } from "./qa-narrative.ts";
 import type { QaView } from "./qa-state.ts";
 
 // ---------------------------------------------------------------------------
 // Unit tests: renderQaReport is a pure function of (QaView, narrative, evidence
-// reader) — no filesystem access unless the injected reader does it, mirroring
-// explain-diff/scripts/render.ts's renderSvg-injection pattern for testability.
+// reader) — no filesystem access unless the injected reader does it; the reader
+// is a parameter, so tests pass an in-memory stub instead of touching disk.
 // ---------------------------------------------------------------------------
 
 /** Binds a complete evidence review (one supported claim) to every scenario that carries evidence. */
@@ -208,7 +209,7 @@ describe("qa-report renderer", () => {
 		view.scenarios = view.scenarios!.slice(0, 1);
 		view.scenarios[0].evidence_review!.claims[0].sources = Array.from({ length: 9 }, (_, i) => ({ path: `/timing-${i}.log`, location: "시각" }));
 		const reader: EvidenceReader = (path) => path.endsWith(".log") ? { kind: "text", content: "x".repeat(MAX_EMBED_BYTES) } : validImageReader(path);
-		expect(() => renderQaReport(view, { scenarios: { "story-1:sc-1": { observed: "시간 확인" } } }, reader, undefined, undefined, true)).toThrow("claim evidence exceeds total");
+		expect(() => renderQaReport(view, { scenarios: { "story-1:sc-1": { observed: "시간 확인" } } }, reader, true)).toThrow("claim evidence exceeds total");
 	});
 
 	test("큰 주장 로그의 유효성과 첨부 가능 여부를 구분하고 최종 제출은 막는다", () => {
@@ -228,7 +229,7 @@ describe("qa-report renderer", () => {
 			const narrative = { scenarios: { "story-1:sc-1": { observed: "3초 후 실패 안내" } } };
 			const html = renderQaReport(view, narrative)!;
 			expect(html).not.toContain("근거 미검증 — 제품 실패");
-			expect(() => renderQaReport(view, narrative, undefined, undefined, undefined, true)).toThrow("claim evidence not embeddable");
+			expect(() => renderQaReport(view, narrative, undefined, true)).toThrow("claim evidence not embeddable");
 		} finally { rmSync(dir, { recursive: true, force: true }); }
 	});
 
@@ -249,7 +250,7 @@ describe("qa-report renderer", () => {
 			sc.evidence_review!.claims[0].sources = [{ path: corrupt, location: "결과 영역" }];
 			const narrative = { scenarios: { "story-1:sc-1": { observed: "결과 화면 확인" } } };
 
-			expect(() => renderQaReport(view, narrative, undefined, undefined, undefined, true)).toThrow("claim evidence not embeddable");
+			expect(() => renderQaReport(view, narrative, undefined, true)).toThrow("claim evidence not embeddable");
 		} finally { rmSync(dir, { recursive: true, force: true }); }
 	});
 
@@ -280,20 +281,20 @@ describe("qa-report renderer", () => {
 	test("최종 화면 보고서는 관찰 설명으로 누락 이미지를 대신할 수 없음", () => {
 		const view = baseView();
 		const narrative = { scenarios: { "story-1:sc-1": { observed: "내보내기 완료를 확인했다." } } };
-		expect(() => renderQaReport(view, narrative, () => ({ kind: "text", content: "HTTP 200" }), undefined, undefined, true)).toThrow("visual");
+		expect(() => renderQaReport(view, narrative, () => ({ kind: "text", content: "HTTP 200" }), true)).toThrow("visual");
 	});
 
 	test("최종 화면 보고서는 큰 이미지를 경로로만 남기지 않음", () => {
 		const view = baseView();
 		const reader: EvidenceReader = () => ({ kind: "too-large", path: "/capture.png", size: MAX_EMBED_BYTES + 1, media: "image" });
-		expect(() => renderQaReport(view, {}, reader, undefined, undefined, true)).toThrow("visual");
+		expect(() => renderQaReport(view, {}, reader, true)).toThrow("visual");
 	});
 
 	test("최종 화면 보고서에 전후 이미지와 관찰을 함께 표시함", () => {
 		const view = baseView();
 		view.scenarios = view.scenarios!.slice(0, 1);
 		const narrative = { scenarios: { "story-1:sc-1": { observed: "연속 클릭 후에도 완료 화면은 한 번 표시됐다." } } };
-		const html = renderQaReport(view, narrative, validImageReader, undefined, undefined, true)!;
+		const html = renderQaReport(view, narrative, validImageReader, true)!;
 		expect(html).toContain("연속 클릭 후에도 완료 화면은 한 번 표시됐다.");
 		expect(html.match(/<img /g)?.length).toBe(3);
 	});
@@ -303,21 +304,21 @@ describe("qa-report renderer", () => {
 		view.scenarios = view.scenarios!.slice(0, 1);
 		const narrative = { scenarios: { "story-1:sc-1": { observed: "결과 화면 확인" } } };
 		const dataUri = "data:image/png;base64,iVBORw0KGgo" + "A".repeat(MAX_TOTAL_EMBED_BYTES / 2);
-		expect(() => renderQaReport(view, narrative, () => ({ kind: "image", dataUri }), undefined, undefined, true)).toThrow("budget");
+		expect(() => renderQaReport(view, narrative, () => ({ kind: "image", dataUri }), true)).toThrow("budget");
 	});
 
 	test("최종 화면 보고서는 이미지가 있어도 관찰 설명 누락을 거부함", () => {
 		const view = baseView();
 		view.scenarios = view.scenarios!.slice(0, 1);
-		expect(() => renderQaReport(view, {}, validImageReader, undefined, undefined, true)).toThrow("visual observation");
+		expect(() => renderQaReport(view, {}, validImageReader, true)).toThrow("visual observation");
 	});
 
 	test("텍스트·테스트로 증명한 시나리오도 관찰 기록이 없으면 보고서 생성을 거부한다", () => {
 		for (const surface of ["curl", "bash", "test"]) {
 			const view = baseView({ scenarios: [scenario({ id: "sc-1", evidence: { path: "/evidence/api.log", surface } })] });
-			expect(() => renderQaReport(view, {}, fakeReader, undefined, undefined, true)).toThrow(/observation required/);
+			expect(() => renderQaReport(view, {}, fakeReader, true)).toThrow(/observation required/);
 			const narrative = { scenarios: { "story-1:sc-1": { observed: "요청을 보냈더니 정상 응답이 돌아왔다." } } };
-			expect(renderQaReport(view, narrative, fakeReader, undefined, undefined, true)).toContain("요청을 보냈더니 정상 응답이 돌아왔다.");
+			expect(renderQaReport(view, narrative, fakeReader, true)).toContain("요청을 보냈더니 정상 응답이 돌아왔다.");
 		}
 	});
 
@@ -551,7 +552,8 @@ describe("qa-report renderer", () => {
 		expect(audit).toContain('<td class="audit-story" data-label="story / scenario"><code>story-<wbr>1</code><br><code>sc-<wbr>1</code></td>');
 		expect(audit).toContain('<td class="audit-coverage" data-label="priority · risks">H · 1 실패 경로</td>');
 		expect(audit).toContain('<td class="audit-boundary" data-label="driven at">브라우저 경계 미구동<br>');
-		expect(html).toContain("table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.94rem; display: block; overflow-x: auto; }");
+		expect(audit).toContain('<div class="table-scroll"><table class="audit-table"');
+		expect(html).toContain(".table-scroll { overflow-x: auto;");
 		expect(html).toContain(".audit-story { min-width: 6rem; }");
 		expect(html).toContain(".audit-story code { white-space: normal; overflow-wrap: normal; display: inline-block; max-width: 100%; overflow-x: auto; vertical-align: bottom; }");
 		expect(html).toContain(".audit-coverage { min-width: 8rem; word-break: keep-all; overflow-wrap: normal; }");
@@ -631,9 +633,9 @@ describe("qa-report renderer", () => {
 
 	test("최종 화면 보고서는 검증 불가 시나리오의 관찰 서술 누락을 거부하고 화면은 요구하지 않는다", () => {
 		const view = baseView({ scenarios: [scenario({ id: "sc-3", status: "blocked", blocked: { obstacle: "o", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } })] });
-		expect(() => renderQaReport(view, {}, fakeReader, undefined, undefined, true)).toThrow("observation required for story-1:sc-3");
-		expect(() => renderQaReport(view, { scenarios: { "story-1:sc-3": { observed: "  " } } }, fakeReader, undefined, undefined, true)).toThrow("observation required for story-1:sc-3");
-		expect(renderQaReport(view, { scenarios: { "story-1:sc-3": { observed: "첫 화면에서 멈췄다." } } }, fakeReader, undefined, undefined, true)).toContain("첫 화면에서 멈췄다.");
+		expect(() => renderQaReport(view, {}, fakeReader, true)).toThrow("observation required for story-1:sc-3");
+		expect(() => renderQaReport(view, { scenarios: { "story-1:sc-3": { observed: "  " } } }, fakeReader, true)).toThrow("observation required for story-1:sc-3");
+		expect(renderQaReport(view, { scenarios: { "story-1:sc-3": { observed: "첫 화면에서 멈췄다." } } }, fakeReader, true)).toContain("첫 화면에서 멈췄다.");
 	});
 
 	test("최종 화면 보고서는 검증 불가 시나리오에 기록된 전후 화면이 사라졌거나 이미지가 아니면 거부한다", () => {
@@ -641,25 +643,63 @@ describe("qa-report renderer", () => {
 		const blockedWith = (before?: string, after?: string) =>
 			baseView({ scenarios: [scenario({ id: "sc-3", status: "blocked", evidence: { path: "/evidence/log.txt", surface: "agent-device", before, after }, blocked: { obstacle: "o", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } })] });
 		const missingAfter: EvidenceReader = (path) => (path === "/evidence/after.png" ? { kind: "missing", path } : validImageReader(path));
-		expect(() => renderQaReport(blockedWith("/evidence/before.png", "/evidence/after.png"), narrative, missingAfter, undefined, undefined, true)).toThrow("visual evidence missing or not embeddable for story-1:sc-3: /evidence/after.png");
-		expect(() => renderQaReport(blockedWith("/evidence/before.txt"), narrative, fakeReader, undefined, undefined, true)).toThrow("visual evidence missing or not embeddable for story-1:sc-3: /evidence/before.txt");
-		expect(() => renderQaReport(blockedWith("/evidence/before.png"), narrative, fakeReader, undefined, undefined, true)).toThrow("visual evidence missing or not embeddable for story-1:sc-3: /evidence/before.png");
-		expect(renderQaReport(blockedWith("/evidence/before.png"), narrative, validImageReader, undefined, undefined, true)).toContain("첫 화면에서 멈췄다.");
+		expect(() => renderQaReport(blockedWith("/evidence/before.png", "/evidence/after.png"), narrative, missingAfter, true)).toThrow("visual evidence missing or not embeddable for story-1:sc-3: /evidence/after.png");
+		expect(() => renderQaReport(blockedWith("/evidence/before.txt"), narrative, fakeReader, true)).toThrow("visual evidence missing or not embeddable for story-1:sc-3: /evidence/before.txt");
+		expect(() => renderQaReport(blockedWith("/evidence/before.png"), narrative, fakeReader, true)).toThrow("visual evidence missing or not embeddable for story-1:sc-3: /evidence/before.png");
+		expect(renderQaReport(blockedWith("/evidence/before.png"), narrative, validImageReader, true)).toContain("첫 화면에서 멈췄다.");
+	});
+
+	test("SVG 캡처 파일은 서사 검증을 통과하고 임베드되며 <svg> 루트가 없는 .svg 파일은 거부된다", () => {
+		const dir = mkdtempSync(join(tmpdir(), "qa-svg-capture-"));
+		try {
+			const good = join(dir, "good.svg");
+			const bad = join(dir, "bad.svg");
+			writeFileSync(good, '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"></svg>');
+			writeFileSync(bad, "not an svg");
+			const narrative = { scenarios: { "story-1:sc-3": { observed: "첫 화면에서 멈췄다." } } };
+			const viewWith = (before: string) => baseView({ scenarios: [scenario({ id: "sc-3", status: "blocked", evidence: { path: before, surface: "agent-device", before }, blocked: { obstacle: "o", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } })] });
+			const embedProblems = (before: string) => validateNarrative(viewWith(before), narrative, defaultEvidenceReader, { content: true }).filter((problem) => problem.kind === "content").map((problem) => problem.message);
+			expect(embedProblems(good)).toEqual([]);
+			expect(renderQaReport(viewWith(good), narrative, defaultEvidenceReader, true)!.match(/<img /g)?.length).toBe(1);
+			expect(embedProblems(bad)).toContain(`visual evidence missing or not embeddable for story-1:sc-3: ${bad}`);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("SVG 데이터 URI는 문서 루트가 <svg>이고 </svg>로 끝나거나 자기 닫힘일 때만 통과한다", () => {
+		const uri = (body: string) => `data:image/svg+xml;base64,${Buffer.from(body).toString("base64")}`;
+		const ns = 'xmlns="http://www.w3.org/2000/svg"';
+		const accepted = [
+			`<svg ${ns}><rect/></svg>`,
+			`<?xml version="1.0"?>\n<!-- 캡처 -->\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n<svg ${ns}></svg>\n<!-- 끝 -->\n`,
+			`\uFEFF<svg ${ns}></svg>`,
+			`<svg ${ns} data-x="a>b"/>`,
+		];
+		const rejected = [
+			`<!DOCTYPE html><html><body><svg ${ns}></svg></body></html>`,
+			`hello <svg ${ns}></svg>`,
+			`<SVG ${ns}></SVG>`,
+			`<svg ${ns}><rect/>`,
+			`<svgfoo ${ns}></svgfoo>`,
+		];
+		for (const body of accepted) expect(hasValidImageSignature(uri(body))).toBe(true);
+		for (const body of rejected) expect(hasValidImageSignature(uri(body))).toBe(false);
 	});
 
 	test("최종 보고서는 카드에 그릴 어떤 화면 칸이든 이미지 시그니처가 깨졌으면 거부한다", () => {
 		const narrative = { scenarios: { "story-1:sc-3": { observed: "첫 화면에서 멈췄다." } } };
 		const view = baseView({ scenarios: [scenario({ id: "sc-3", status: "blocked", evidence: { path: "/evidence/log.txt", surface: "agent-device", before: "/evidence/before.png", action: "/evidence/action.png", after: "/evidence/after.png" }, blocked: { obstacle: "o", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } })] });
 		const corruptAction: EvidenceReader = (path) => (path === "/evidence/action.png" ? fakeReader(path) : validImageReader(path));
-		expect(() => renderQaReport(view, narrative, corruptAction, undefined, undefined, true)).toThrow("/evidence/action.png");
+		expect(() => renderQaReport(view, narrative, corruptAction, true)).toThrow("/evidence/action.png");
 		const missingAction: EvidenceReader = (path) => (path === "/evidence/action.png" ? { kind: "missing", path } : validImageReader(path));
-		expect(() => renderQaReport(view, narrative, missingAction, undefined, undefined, true)).toThrow("/evidence/action.png");
+		expect(() => renderQaReport(view, narrative, missingAction, true)).toThrow("/evidence/action.png");
 		const svg = (body: string): EvidenceReader => (path) => (path === "/evidence/action.png" ? { kind: "image", dataUri: `data:image/svg+xml;base64,${Buffer.from(body).toString("base64")}` } : validImageReader(path));
-		expect(renderQaReport(view, narrative, svg('<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"></svg>'), undefined, undefined, true)!.match(/<img /g)?.length).toBe(3);
-		expect(() => renderQaReport(view, narrative, svg("not an svg"), undefined, undefined, true)).toThrow("/evidence/action.png");
+		expect(renderQaReport(view, narrative, svg('<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"></svg>'), true)!.match(/<img /g)?.length).toBe(3);
+		expect(() => renderQaReport(view, narrative, svg("not an svg"), true)).toThrow("/evidence/action.png");
 		const missingLog: EvidenceReader = (path) => (path === "/evidence/log.txt" ? { kind: "missing", path } : validImageReader(path));
-		expect(renderQaReport(view, narrative, missingLog, undefined, undefined, true)).toContain("첫 화면에서 멈췄다.");
-		expect(renderQaReport(view, narrative, validImageReader, undefined, undefined, true)!.match(/<img /g)?.length).toBe(3);
+		expect(renderQaReport(view, narrative, missingLog, true)).toContain("첫 화면에서 멈췄다.");
+		expect(renderQaReport(view, narrative, validImageReader, true)!.match(/<img /g)?.length).toBe(3);
 	});
 
 	test("리더 이미지 슬롯에는 증거 파일 경로가 보이지 않고 감사에는 남는다", () => {
@@ -1201,12 +1241,12 @@ describe("qa-report client impact and device profiles", () => {
 		const html = renderQaReport(view, { scenarios: { "story-1:sc-1": { observed: "화면 확인" } } }, fakeReader)!;
 		expect(readerSection(html)).toContain('class="scenario-card sc-unverified"');
 		expect(html).toContain("판정 보류 — 근거 미검증 시나리오가 있음");
-		expect(() => renderQaReport(view, { scenarios: { "story-1:sc-1": { observed: "화면 확인" } } }, fakeReader, undefined, undefined, true)).toThrow("visual evidence missing");
+		expect(() => renderQaReport(view, { scenarios: { "story-1:sc-1": { observed: "화면 확인" } } }, fakeReader, true)).toThrow("visual evidence missing");
 	});
 
 	test("profile이 없고 evidence surface가 test인 시나리오는 시각 증거를 요구하지 않음", () => {
 		const view = baseView({ scenarios: [scenario({ id: "sc-1", evidence: { path: "/evidence/unit.log", surface: "test" } })] });
-		const html = renderQaReport(view, { scenarios: { "story-1:sc-1": { observed: "테스트가 통과함" } } }, fakeReader, undefined, undefined, true)!;
+		const html = renderQaReport(view, { scenarios: { "story-1:sc-1": { observed: "테스트가 통과함" } } }, fakeReader, true)!;
 		expect(readerSection(html)).toContain('class="scenario-card sc-pass"');
 		expect(html).not.toContain("판정 보류");
 	});
@@ -1219,9 +1259,89 @@ describe("qa-report client impact and device profiles", () => {
 // slot with no narrative renders a visible gap marker (the forcing function).
 // ---------------------------------------------------------------------------
 
-// A fake mermaid renderer so tests exercise the diagram wrapping without mmdc.
-const fakeMermaid: MermaidRenderer = (source, index) =>
-	`<svg viewBox="0 0 300 100" width="100%" data-block="${index}">${source}</svg>`;
+// A valid model-authored big-picture diagram: three nodes, two drawn edges, one failure stop.
+const VALID_SVG =
+	'<svg viewBox="0 0 340 200" aria-label="소유자가 재고 화면을 열면 8슬롯 화면이 보이고 부족하면 안내가 뜬다">' +
+	'<defs><marker id="f1-ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="mk" d="M0 0L10 5L0 10z"/></marker>' +
+	'<marker id="f1-ah-bad" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="mk-fail" d="M0 0L10 5L0 10z"/></marker></defs>' +
+	'<path class="edge" d="M170 56 V88" marker-end="url(#f1-ah)"/><text class="t-s lbl" x="182" y="76">화면 열기</text>' +
+	'<path class="edge edge-fail" d="M170 128 V160" marker-end="url(#f1-ah-bad)"/>' +
+	'<rect class="box" x="60" y="8" width="220" height="48" rx="8"/><text class="t-b" x="170" y="36" text-anchor="middle">소유자</text>' +
+	'<rect class="box-focal" x="60" y="88" width="220" height="40" rx="8"/><text x="170" y="113" text-anchor="middle">재고 화면 &amp; 슬롯</text>' +
+	'<rect class="box" x="60" y="160" width="220" height="32" rx="8"/><text x="170" y="181" text-anchor="middle">부족 안내</text>' +
+	"</svg>";
+
+describe("validateNarrative: 렌더 없이 서사의 모든 문제를 모은다", () => {
+	const content = { content: true };
+	const messages = (view: QaView, narrative: QaReportNarrative, reader: EvidenceReader = fakeReader, options = content) =>
+		validateNarrative(view, narrative, reader, options).map((problem) => `${problem.kind}: ${problem.message}`);
+	const noVisual = () => baseView({ actors: [{ id: "actor-1", name: "User", boundary: "home", driver: "bash", reachable: "yes", client_impact: "none", client_impact_reason: "그리는 클라이언트 없음" }], scenarios: [scenario({ id: "sc-1" })] });
+	const observedAll = { scenarios: { "story-1:sc-1": { observed: "화면을 열었더니 재고가 보였다." } } };
+
+	test("옛 bigPicture 필드와 허용되지 않은 bigPictureSvg와 옛 satisfied 필드를 계약 위반으로 한꺼번에 알린다", () => {
+		const narrative = {
+			presentation: {
+				bigPicture: "flowchart LR\n  A --> B",
+				bigPictureSvg: '<svg viewBox="0 0 10 10" aria-label="그림"><script>1</script></svg>',
+				requirementMapping: { "0": { satisfied: "yes", scenarioRefs: [], evidence: "x" } },
+			},
+		} as unknown as QaReportNarrative;
+		const contract = messages(noVisual(), narrative, fakeReader, { content: false }).filter((line) => line.startsWith("contract"));
+		expect(contract).toHaveLength(3);
+		expect(contract.join("\n")).toMatch(/bigPicture is no longer supported.*<script> is not allowed.*requirementMapping\.0\.satisfied is no longer supported/s);
+	});
+
+	test("기능 개요에 QA 결과를 쓰면 내용 위반이지만 최종 렌더가 아닌 검사(content: false)에서는 모으지 않는다", () => {
+		const narrative = { ...observedAll, presentation: { overview: "이번 QA는 예약 제거만 확인했다." } };
+		expect(messages(noVisual(), narrative).join("\n")).toContain('content: 기능 개요 (presentation.overview) must describe the change, not the QA result ("QA")');
+		expect(messages(noVisual(), narrative, fakeReader, { content: false }).join("\n")).not.toContain("content:");
+	});
+
+	test("독자용 문장 어디든 코드 이름이면 필드 경로와 함께 모두 알린다", () => {
+		const narrative = {
+			scenarios: { "story-1:sc-1": { observed: "localStorage의 실행 표시가 비어 있었다." } },
+			presentation: { affectedUsers: { "actor-1": "운영자는 supplementCategories 맵을 본다." }, requirementMapping: { "0": { scenarioRefs: [{ story: "story-1", scenario: "sc-1" }], evidence: "SelfIntakeSections.test.tsx 검증" } } },
+		};
+		const lines = messages(noVisual(), narrative);
+		for (const field of ["scenarios.story-1:sc-1.observed", "presentation.affectedUsers.actor-1", "presentation.requirementMapping.0.evidence"]) {
+			expect(lines.some((line) => line.includes(`${field} names the code identifier`))).toBe(true);
+		}
+	});
+
+	test("관찰 서술이 없는 pass·fail·blocked 시나리오를 각각 알린다", () => {
+		const blocked = scenario({ id: "sc-3", status: "blocked", blocked: { obstacle: "o", attempts: ["a"], deepest_reachable: "d", attempt_log: "/evidence/attempts.txt" } });
+		const view = baseView({ actors: noVisual().actors, scenarios: [scenario({ id: "sc-1" }), scenario({ id: "sc-2", status: "fail" }), blocked] });
+		const lines = messages(view, {});
+		for (const key of ["story-1:sc-1", "story-1:sc-2", "story-1:sc-3"]) expect(lines).toContain(`content: observation required for ${key}`);
+		expect(messages(view, { scenarios: Object.fromEntries(["sc-1", "sc-2", "sc-3"].map((id) => [`story-1:${id}`, { observed: "봤다" }])) }).filter((line) => line.startsWith("content"))).toEqual([]);
+	});
+
+	test("화면 시나리오는 행동 전후 이미지가 임베드 가능해야 하고, 아니면 이유와 함께 알린다", () => {
+		const view = baseView();
+		const lines = messages(view, { scenarios: { "story-1:sc-1": { observed: "화면" }, "story-1:sc-2": { observed: "화면" } } });
+		expect(lines.some((line) => line.includes("visual evidence missing or not embeddable for story-1:sc-1: /evidence/before.png"))).toBe(true);
+		expect(lines.some((line) => line.includes("visual evidence missing or not embeddable for story-1:sc-2: missing before/after screenshot"))).toBe(true);
+		expect(messages(view, {}, validImageReader).some((line) => line.includes("visual observation required for story-1:sc-1"))).toBe(true);
+		const ok = messages(view, { scenarios: { "story-1:sc-1": { observed: "화면" }, "story-1:sc-2": { observed: "화면" } } }, validImageReader);
+		expect(ok.filter((line) => line.startsWith("content")).join()).toContain("story-1:sc-2");
+	});
+
+	test("빈 슬롯과 풀 수 없는 AC 매핑은 gap으로 알리고 갖춘 서사에는 문제가 없다", () => {
+		const view = baseView({ stories: [{ id: "story-1", actor: "actor-1", contract: { goal: "g", given: ["g"], when: ["w"], then: ["t"], acceptance_criteria: [0, 1, 2] } }], acceptance_criteria: ["a", "b", "c"], actors: noVisual().actors, scenarios: [scenario({ id: "sc-1" })] });
+		const lines = messages(view, { ...observedAll, presentation: { requirementMapping: { "1": { scenarioRefs: [{ story: "story-1", scenario: "sc-9" }], evidence: "x" }, "2": { scenarioRefs: [{ story: "story-1", scenario: "sc-1" }], evidence: " " } } } });
+		for (const expected of ["gap: presentation.overview is empty", "gap: presentation.bigPictureSvg is empty", "gap: presentation.affectedUsers.actor-1 is empty", "gap: presentation.scenarioFlows.story-1 is empty", "gap: presentation.requirementMapping.0 is missing", "gap: presentation.requirementMapping.1 cannot be resolved (story-1:sc-9 is not a scenario recorded in the current cycle)", "gap: presentation.requirementMapping.2.evidence is empty"]) {
+			expect(lines.some((line) => line.startsWith(expected))).toBe(true);
+		}
+		const full: QaReportNarrative = {
+			...observedAll,
+			presentation: {
+				overview: "재고 화면을 새 화면으로 바꾼다", affectedUsers: { "actor-1": "소유자가 매일 연다" }, scenarioFlows: { "story-1": "화면을 열면 재고가 보인다" }, bigPictureSvg: VALID_SVG,
+				requirementMapping: Object.fromEntries([0, 1, 2].map((i) => [String(i), { scenarioRefs: [{ story: "story-1", scenario: "sc-1" }], evidence: "통과" }])),
+			},
+		};
+		expect(messages(view, full)).toEqual([]);
+	});
+});
 
 describe("qa-report presentation layer", () => {
 	const AC_START = "요구사항(AC) 충족 현황";
@@ -1233,19 +1353,18 @@ describe("qa-report presentation layer", () => {
 			scenarioFlows: { "story-1": "소유자가 재고 화면에 진입하면 8슬롯 v2 화면이 보인다" },
 			requirementMapping: {
 				"0": {
-					satisfied: "yes",
 					scenarioRefs: [{ story: "story-1", scenario: "sc-1" }],
 					evidence: "재고 화면 진입 시나리오 통과 — before/after 캡처",
 				},
 			},
-			bigPicture: "flowchart LR\n  Owner --> StockScreen",
+			bigPictureSvg: VALID_SVG,
 			bigPictureCaption: "소유자 재고 확인 흐름",
 		},
 	});
 
 	test("renders the presentation layer ABOVE the verification-log sections", () => {
 		const view = baseView({ acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
-		const html = renderQaReport(view, fullPresentation(), fakeReader, fakeMermaid)!;
+		const html = renderQaReport(view, fullPresentation(), fakeReader)!;
 		expect(html.indexOf("기능 개요")).toBeGreaterThanOrEqual(0);
 		expect(html.indexOf("기능 개요")).toBeLessThan(html.indexOf(AC_START));
 		expect(html.indexOf(AC_START)).toBeLessThan(html.indexOf("큰 그림"));
@@ -1253,15 +1372,15 @@ describe("qa-report presentation layer", () => {
 	});
 
 	test("renders the feature overview prose", () => {
-		const html = renderQaReport(baseView(), fullPresentation(), fakeReader, fakeMermaid)!;
+		const html = renderQaReport(baseView(), fullPresentation(), fakeReader)!;
 		expect(html).toContain("flag-ON일 때 재고 화면을 v2로 교체하는 변경");
 	});
 
 	test("최종 보고서의 기능 개요에 QA 결과를 쓰면 렌더를 거부한다", () => {
 		for (const overview of ["판정은 의견과 함께 승인(COMMENT)입니다. 예약을 지웠다.", "운영 로그는 검증 불가였다.", "신뢰도 70/100 LOW 의견이 있다.", "이번 QA는 예약 제거만 확인했다."]) {
-			expect(() => renderQaReport(baseView(), { presentation: { overview } }, fakeReader, fakeMermaid, undefined, true)).toThrow(/기능 개요/);
+			expect(() => renderQaReport(baseView(), { presentation: { overview } }, fakeReader, true)).toThrow(/기능 개요/);
 		}
-		expect(() => renderQaReport(baseView(), { presentation: { overview: "운영자는 매일 새벽 자동 대조 작업에 기대지 않고 필요할 때 직접 실행한다." } }, fakeReader, fakeMermaid, undefined, true)).not.toThrow(/기능 개요/);
+		expect(() => renderQaReport(baseView(), { presentation: { overview: "운영자는 매일 새벽 자동 대조 작업에 기대지 않고 필요할 때 직접 실행한다." } }, fakeReader, true)).not.toThrow(/기능 개요/);
 	});
 
 	test("독자용 문장의 영어 단어를 중복 없이 정렬해 알려준다", () => {
@@ -1275,19 +1394,19 @@ describe("qa-report presentation layer", () => {
 
 	test("최종 보고서의 독자용 문장에 코드 이름을 쓰면 렌더를 거부한다", () => {
 		const reject = [
-			{ presentation: { requirementMapping: { "0": { satisfied: "yes" as const, scenarioRefs: [], evidence: "SelfIntakeSections.test.tsx 검증이 번호 표시를 확인한다." } } } },
+			{ presentation: { requirementMapping: { "0": { scenarioRefs: [], evidence: "SelfIntakeSections.test.tsx 검증이 번호 표시를 확인한다." } } } },
 			{ presentation: { affectedUsers: { a: "운영자는 supplementCategories 맵을 본다." } } },
 			{ scenarios: { "s/x": { observed: "localStorage의 실행 표시가 비어 있었다." } } },
 		];
 		for (const narrative of reject) {
-			expect(() => renderQaReport(baseView(), narrative, fakeReader, fakeMermaid, undefined, true)).toThrow(/names the code identifier/);
+			expect(() => renderQaReport(baseView(), narrative, fakeReader, true)).toThrow(/names the code identifier/);
 		}
-		const plain = { presentation: { requirementMapping: { "0": { satisfied: "yes" as const, scenarioRefs: [], evidence: "보유분 표 화면 테스트가 번호 표시를 확인한다." } } } };
-		expect(() => renderQaReport(baseView(), plain, fakeReader, fakeMermaid, undefined, true)).not.toThrow(/names the code identifier/);
+		const plain = { presentation: { requirementMapping: { "0": { scenarioRefs: [], evidence: "보유분 표 화면 테스트가 번호 표시를 확인한다." } } } };
+		expect(() => renderQaReport(baseView(), plain, fakeReader, true)).not.toThrow(/names the code identifier/);
 	});
 
 	test("공백만 있는 기능 개요 서사는 누락 gap으로 렌더한다", () => {
-		const html = renderQaReport(baseView(), { presentation: { overview: " \t\n " } }, fakeReader, fakeMermaid)!;
+		const html = renderQaReport(baseView(), { presentation: { overview: " \t\n " } }, fakeReader)!;
 		const overview = html.slice(html.indexOf("기능 개요"), html.indexOf(AC_START));
 		expect(overview).toContain('class="gap"');
 		expect(overview).toContain("기능 개요 서사가 없습니다");
@@ -1295,14 +1414,14 @@ describe("qa-report presentation layer", () => {
 
 	test("renders a visible gap marker for each required slot when no presentation is supplied", () => {
 		const view = baseView({ acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
-		const html = renderQaReport(view, {}, fakeReader, fakeMermaid)!;
+		const html = renderQaReport(view, {}, fakeReader)!;
 		const presentation = html.slice(0, html.indexOf(AUDIT_START));
 		expect(presentation).toContain('class="gap"');
 		expect((presentation.match(/class="gap"/g) ?? []).length).toBeGreaterThanOrEqual(4);
 	});
 
 	test("anchors affected-users to the recorded roster: renders prose keyed by actor id", () => {
-		const html = renderQaReport(baseView(), fullPresentation(), fakeReader, fakeMermaid)!;
+		const html = renderQaReport(baseView(), fullPresentation(), fakeReader)!;
 		const affected = html.slice(html.indexOf("<h2>액터"), html.indexOf(READER_START));
 		expect(affected).toContain("Household Owner");
 		expect(affected).toContain("가구 소유자는 매일 재고 화면을 열어 잔량을 확인한다");
@@ -1312,7 +1431,7 @@ describe("qa-report presentation layer", () => {
 		const narrative: QaReportNarrative = {
 			presentation: { affectedUsers: { "ghost-actor": "존재하지 않는 유저 서사" } },
 		};
-		const html = renderQaReport(baseView(), narrative, fakeReader, fakeMermaid)!;
+		const html = renderQaReport(baseView(), narrative, fakeReader)!;
 		expect(html).not.toContain("존재하지 않는 유저 서사");
 	});
 
@@ -1324,7 +1443,7 @@ describe("qa-report presentation layer", () => {
 			],
 		});
 		const narrative: QaReportNarrative = { presentation: { affectedUsers: { "actor-1": "소유자 서사" } } };
-		const html = renderQaReport(view, narrative, fakeReader, fakeMermaid)!;
+		const html = renderQaReport(view, narrative, fakeReader)!;
 		const affected = html.slice(html.indexOf("<h2>액터"), html.indexOf(READER_START));
 		expect(affected).toContain("소유자 서사");
 		expect(affected).toContain("Admin");
@@ -1333,7 +1452,7 @@ describe("qa-report presentation layer", () => {
 
 	test("공백만 있는 기록된 액터의 사용·영향 서사는 누락 gap으로 렌더한다", () => {
 		const narrative: QaReportNarrative = { presentation: { affectedUsers: { "actor-1": " \t\n " } } };
-		const html = renderQaReport(baseView(), narrative, fakeReader, fakeMermaid)!;
+		const html = renderQaReport(baseView(), narrative, fakeReader)!;
 		const affected = html.slice(html.indexOf("<h2>액터"), html.indexOf(READER_START));
 		expect(affected).toContain('class="gap"');
 		expect(affected).toContain("이 유저의 사용·영향 서사가 없습니다");
@@ -1341,7 +1460,7 @@ describe("qa-report presentation layer", () => {
 
 	test("anchors each story's flow narrative inline in the reader scenario section, beside its evidence and its goal", () => {
 		const view = baseView({ stories: [{ id: "story-1", actor: "actor-1", contract: { goal: "재고를 한눈에 확인한다", given: ["g"], when: ["w"], then: ["t"], acceptance_criteria: [0] } }], acceptance_criteria: ["ac"] });
-		const html = renderQaReport(view, fullPresentation(), fakeReader, fakeMermaid)!;
+		const html = renderQaReport(view, fullPresentation(), fakeReader)!;
 		const scenarios = readerSection(html);
 		expect(scenarios).toContain("<h3>Household Owner</h3>");
 		expect(scenarios).toContain("소유자가 재고 화면에 진입하면 8슬롯 v2 화면이 보인다");
@@ -1360,7 +1479,7 @@ describe("qa-report presentation layer", () => {
 
 	test("공백만 있는 시나리오 흐름 서사는 누락 gap으로 렌더한다", () => {
 		const narrative: QaReportNarrative = { presentation: { scenarioFlows: { "story-1": " \t\n " } } };
-		const html = renderQaReport(baseView(), narrative, fakeReader, fakeMermaid)!;
+		const html = renderQaReport(baseView(), narrative, fakeReader)!;
 		const scenarios = readerSection(html);
 		expect(scenarios).toContain('class="gap"');
 		expect(scenarios).toContain("이 스토리에서 어떤 시나리오들을 검증했는지에 대한 개요 서사가 없습니다");
@@ -1368,7 +1487,7 @@ describe("qa-report presentation layer", () => {
 
 	test("maps each recorded acceptance criterion to a satisfaction badge and evidence prose", () => {
 		const view = baseView({ stories: [linkedStory("story-1", [0])], acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
-		const html = renderQaReport(view, fullPresentation(), fakeReader, fakeMermaid)!;
+		const html = renderQaReport(view, fullPresentation(), fakeReader)!;
 		const mapping = acSection(html);
 		expect(mapping).toContain("flag ON이면 v2 재고 화면");
 		expect(mapping).toContain("재고 화면 진입 시나리오 통과 — before/after 캡처");
@@ -1381,11 +1500,11 @@ describe("qa-report presentation layer", () => {
 		const narrative: QaReportNarrative = {
 			presentation: {
 				requirementMapping: {
-					"0": { satisfied: "yes", scenarioRefs: [{ story: "story-1", scenario: "sc-1" }], evidence: " \t\n " },
+					"0": { scenarioRefs: [{ story: "story-1", scenario: "sc-1" }], evidence: " \t\n " },
 				},
 			},
 		};
-		const mapping = acSection(renderQaReport(view, narrative, fakeReader, fakeMermaid)!);
+		const mapping = acSection(renderQaReport(view, narrative, fakeReader)!);
 		expect(mapping).toContain('class="gap"');
 		expect(mapping).toContain("충족 근거 서사가 없습니다");
 	});
@@ -1397,27 +1516,46 @@ describe("qa-report presentation layer", () => {
 	const ref = (id: string) => ({ story: "story-1", scenario: id });
 	const linkedStory = (id: string, acs: number[]) => ({ id, actor: "actor-1", contract: { goal: "재고를 한눈에 확인한다", given: ["g"], when: ["w"], then: ["t"], acceptance_criteria: acs } });
 
-	test("accepts yes, no, partial, and unverified mappings when their current-cycle scenario refs match the claimed status", () => {
+	test("충족 여부를 참조한 시나리오의 기록 결과에서 도출한다: 전부 통과면 충족, 전부 실패면 미충족, 통과와 실패가 섞이면 부분 충족, 검증 불가가 하나라도 있으면 미검증", () => {
 		const cases = [
-			{ satisfied: "yes" as const, scenarios: [passScenario("sc-1")], refs: [ref("sc-1")] },
-			{ satisfied: "no" as const, scenarios: [failScenario("sc-1")], refs: [ref("sc-1")] },
-			{ satisfied: "partial" as const, scenarios: [passScenario("sc-1"), failScenario("sc-2")], refs: [ref("sc-1"), ref("sc-2")] },
-			{ satisfied: "unverified" as const, scenarios: [blockedScenario("sc-1")], refs: [ref("sc-1")] },
-			{ satisfied: "unverified" as const, scenarios: [passScenario("sc-1"), blockedScenario("sc-2")], refs: [ref("sc-1"), ref("sc-2")] },
-		];
+			{ expected: "yes", scenarios: [passScenario("sc-1")], refs: [ref("sc-1")] },
+			{ expected: "yes", scenarios: [passScenario("sc-1"), passScenario("sc-2")], refs: [ref("sc-1"), ref("sc-2")] },
+			{ expected: "no", scenarios: [failScenario("sc-1")], refs: [ref("sc-1")] },
+			{ expected: "no", scenarios: [failScenario("sc-1"), failScenario("sc-2")], refs: [ref("sc-1"), ref("sc-2")] },
+			{ expected: "partial", scenarios: [passScenario("sc-1"), failScenario("sc-2")], refs: [ref("sc-1"), ref("sc-2")] },
+			{ expected: "unverified", scenarios: [blockedScenario("sc-1")], refs: [ref("sc-1")] },
+			{ expected: "unverified", scenarios: [passScenario("sc-1"), blockedScenario("sc-2")], refs: [ref("sc-1"), ref("sc-2")] },
+			{ expected: "unverified", scenarios: [passScenario("sc-1"), failScenario("sc-2"), blockedScenario("sc-3")], refs: [ref("sc-1"), ref("sc-2"), ref("sc-3")] },
+		] as const;
 
 		for (const candidate of cases) {
-			const view = baseView({ stories: [linkedStory("story-1", [0])], acceptance_criteria: [candidate.satisfied], scenarios: candidate.scenarios });
-			const narrative: QaReportNarrative = {
-				presentation: { requirementMapping: { "0": { satisfied: candidate.satisfied, scenarioRefs: candidate.refs, evidence: "상태에 맞는 설명" } } },
-			};
-			const mapping = acSection(renderQaReport(view, narrative, fakeReader, fakeMermaid)!);
-			expect(mapping).toContain(`satisfied-${candidate.satisfied}`);
+			const view = baseView({ stories: [linkedStory("story-1", [0])], acceptance_criteria: ["ac"], scenarios: [...candidate.scenarios] });
+			const narrative: QaReportNarrative = { presentation: { requirementMapping: { "0": { scenarioRefs: [...candidate.refs], evidence: "상태에 맞는 설명" } } } };
+			expect(resolveAcMapping(view, narrative.presentation!.requirementMapping!["0"], 0)).toMatchObject({ ok: true, satisfied: candidate.expected });
+			const mapping = acSection(renderQaReport(view, narrative, fakeReader)!);
+			expect(mapping).toContain(`satisfied-${candidate.expected}`);
 			expect(mapping).not.toContain("미판정");
 		}
 	});
 
-	test("does not let a pass from another story satisfy an AC mapped to a failing story", () => {
+	test("기록된 결과가 없는 시나리오를 참조하면 충족 여부를 도출하지 않고 미판정으로 렌더한다", () => {
+		const view = baseView({ stories: [linkedStory("story-1", [0])], acceptance_criteria: ["ac"], scenarios: [passScenario("sc-1"), scenario({ id: "sc-2", status: undefined })] });
+		const entry = { scenarioRefs: [ref("sc-1"), ref("sc-2")], evidence: "하나는 아직 실행 전" };
+		expect(resolveAcMapping(view, entry, 0)).toMatchObject({ ok: false, reason: expect.stringContaining("no recorded result") });
+		const mapping = acSection(renderQaReport(view, { presentation: { requirementMapping: { "0": entry } } }, fakeReader)!);
+		expect(mapping).toContain("미판정");
+		expect(mapping).not.toMatch(/satisfied-(yes|no|partial|unverified)/);
+	});
+
+	test("서사가 satisfied 필드를 아직 보내면 조용히 무시하거나 덮지 않고 도출 값이라는 안내와 함께 렌더를 거부한다", () => {
+		const view = baseView({ stories: [linkedStory("story-1", [0])], acceptance_criteria: ["ac"], scenarios: [failScenario("sc-1")] });
+		const old = { presentation: { requirementMapping: { "0": { satisfied: "yes", scenarioRefs: [ref("sc-1")], evidence: "모델이 뒤집은 판정" } } } } as unknown as QaReportNarrative;
+		for (const strict of [false, true]) {
+			expect(() => renderQaReport(view, old, fakeReader, strict)).toThrow(/requirementMapping\.0\.satisfied is no longer supported.*derived.*Remove the field/);
+		}
+	});
+
+	test("다른 story의 통과는 AC가 참조한 story의 실패를 덮지 못하고, 도출 결과는 미충족이다", () => {
 		const view = baseView({
 			acceptance_criteria: ["story-1 경로가 성공한다"],
 			actors: [
@@ -1431,11 +1569,10 @@ describe("qa-report presentation layer", () => {
 			scenarios: [failScenario("sc-1"), { ...passScenario("sc-1"), story: "story-2" }],
 		});
 		const narrative = {
-			presentation: { requirementMapping: { "0": { satisfied: "yes", scenarioRefs: [ref("sc-1")], evidence: "다른 story의 통과 설명" } } },
+			presentation: { requirementMapping: { "0": { scenarioRefs: [ref("sc-1")], evidence: "다른 story의 통과 설명" } } },
 		} as QaReportNarrative;
-		const mapping = acSection(renderQaReport(view, narrative, fakeReader, fakeMermaid)!);
-		expect(mapping).toContain("미판정");
-		expect(mapping).toContain('class="gap"');
+		const mapping = acSection(renderQaReport(view, narrative, fakeReader)!);
+		expect(mapping).toContain("satisfied-no");
 		expect(mapping).not.toContain("satisfied-yes");
 	});
 
@@ -1446,42 +1583,31 @@ describe("qa-report presentation layer", () => {
 			scenarios: [{ ...passScenario("s1"), story: "story-B" }],
 		});
 		const narrative: QaReportNarrative = {
-			presentation: { requirementMapping: { "0": { satisfied: "yes", scenarioRefs: [{ story: "story-B", scenario: "s1" }], evidence: "B만 연결된 시나리오" } } },
+			presentation: { requirementMapping: { "0": { scenarioRefs: [{ story: "story-B", scenario: "s1" }], evidence: "B만 연결된 시나리오" } } },
 		};
-		const mapping = acSection(renderQaReport(view, narrative, fakeReader, fakeMermaid)!);
+		const mapping = acSection(renderQaReport(view, narrative, fakeReader)!);
 		expect(mapping).toContain("미판정");
 		expect(mapping).not.toContain("satisfied-yes");
 	});
 
 	test("fails closed for legacy, cell-era, missing, malformed, duplicate, stale-cycle, unknown-story, unknown-scenario, and ineligible refs", () => {
 		const cases: Array<{ label: string; view: QaView; mapping: unknown }> = [
-			{ label: "legacy prose only", view: baseView({ acceptance_criteria: ["legacy"] }), mapping: { satisfied: "yes", evidence: "prose only" } },
-			{ label: "cell-era cellRefs", view: baseView({ acceptance_criteria: ["cells"], scenarios: [passScenario("sc-1")] }), mapping: { satisfied: "yes", cellRefs: [{ story: "story-1", cls: 1 }], evidence: "retired selector" } },
-			{ label: "missing refs", view: baseView({ acceptance_criteria: ["missing"] }), mapping: { satisfied: "yes", scenarioRefs: [], evidence: "empty refs" } },
-			{ label: "malformed ref", view: baseView({ acceptance_criteria: ["malformed"], scenarios: [passScenario("sc-1")] }), mapping: { satisfied: "yes", scenarioRefs: [{ story: "story-1", scenario: 1 }], evidence: "wrong scenario type" } },
-			{ label: "blank ref", view: baseView({ acceptance_criteria: ["blank"], scenarios: [passScenario("sc-1")] }), mapping: { satisfied: "yes", scenarioRefs: [{ story: "story-1", scenario: " " }], evidence: "blank id" } },
-			{ label: "duplicate ref", view: baseView({ acceptance_criteria: ["duplicate"], scenarios: [passScenario("sc-1")] }), mapping: { satisfied: "yes", scenarioRefs: [ref("sc-1"), ref("sc-1")], evidence: "duplicate" } },
-			{ label: "stale cycle", view: baseView({ acceptance_criteria: ["stale"], scenarios: [{ ...passScenario("sc-1"), cycle: 1 }] }), mapping: { satisfied: "yes", scenarioRefs: [ref("sc-1")], evidence: "stale" } },
-			{ label: "unknown story", view: baseView({ acceptance_criteria: ["unknown"], scenarios: [passScenario("sc-1")] }), mapping: { satisfied: "yes", scenarioRefs: [{ story: "ghost", scenario: "sc-1" }], evidence: "unknown" } },
-			{ label: "unknown scenario", view: baseView({ acceptance_criteria: ["selector"], scenarios: [passScenario("sc-1")] }), mapping: { satisfied: "yes", scenarioRefs: [ref("sc-9")], evidence: "no such scenario" } },
-			{ label: "status ineligible", view: baseView({ acceptance_criteria: ["ineligible"], scenarios: [failScenario("sc-1")] }), mapping: { satisfied: "yes", scenarioRefs: [ref("sc-1")], evidence: "fail is not yes" } },
-			{ label: "unrecorded scenario", view: baseView({ acceptance_criteria: ["unrecorded"], scenarios: [scenario({ id: "sc-1", status: undefined })] }), mapping: { satisfied: "yes", scenarioRefs: [ref("sc-1")], evidence: "not run" } },
-			{
-				label: "partial includes blocked",
-				view: baseView({ acceptance_criteria: ["partial includes blocked"], scenarios: [passScenario("sc-1"), failScenario("sc-2"), blockedScenario("sc-3")] }),
-				mapping: { satisfied: "partial", scenarioRefs: [ref("sc-1"), ref("sc-2"), ref("sc-3")], evidence: "blocked must not make partial valid" },
-			},
-			{
-				label: "unverified without a blocked scenario",
-				view: baseView({ acceptance_criteria: ["unverified"], scenarios: [passScenario("sc-1"), failScenario("sc-2")] }),
-				mapping: { satisfied: "unverified", scenarioRefs: [ref("sc-1"), ref("sc-2")], evidence: "no blocked scenario backs this" },
-			},
+			{ label: "legacy prose only", view: baseView({ acceptance_criteria: ["legacy"] }), mapping: { evidence: "prose only" } },
+			{ label: "cell-era cellRefs", view: baseView({ acceptance_criteria: ["cells"], scenarios: [passScenario("sc-1")] }), mapping: { cellRefs: [{ story: "story-1", cls: 1 }], evidence: "retired selector" } },
+			{ label: "missing refs", view: baseView({ acceptance_criteria: ["missing"] }), mapping: { scenarioRefs: [], evidence: "empty refs" } },
+			{ label: "malformed ref", view: baseView({ acceptance_criteria: ["malformed"], scenarios: [passScenario("sc-1")] }), mapping: { scenarioRefs: [{ story: "story-1", scenario: 1 }], evidence: "wrong scenario type" } },
+			{ label: "blank ref", view: baseView({ acceptance_criteria: ["blank"], scenarios: [passScenario("sc-1")] }), mapping: { scenarioRefs: [{ story: "story-1", scenario: " " }], evidence: "blank id" } },
+			{ label: "duplicate ref", view: baseView({ acceptance_criteria: ["duplicate"], scenarios: [passScenario("sc-1")] }), mapping: { scenarioRefs: [ref("sc-1"), ref("sc-1")], evidence: "duplicate" } },
+			{ label: "stale cycle", view: baseView({ acceptance_criteria: ["stale"], scenarios: [{ ...passScenario("sc-1"), cycle: 1 }] }), mapping: { scenarioRefs: [ref("sc-1")], evidence: "stale" } },
+			{ label: "unknown story", view: baseView({ acceptance_criteria: ["unknown"], scenarios: [passScenario("sc-1")] }), mapping: { scenarioRefs: [{ story: "ghost", scenario: "sc-1" }], evidence: "unknown" } },
+			{ label: "unknown scenario", view: baseView({ acceptance_criteria: ["selector"], scenarios: [passScenario("sc-1")] }), mapping: { scenarioRefs: [ref("sc-9")], evidence: "no such scenario" } },
+			{ label: "unrecorded scenario", view: baseView({ acceptance_criteria: ["unrecorded"], scenarios: [scenario({ id: "sc-1", status: undefined })] }), mapping: { scenarioRefs: [ref("sc-1")], evidence: "not run" } },
 		];
 
 		for (const candidate of cases) {
 			const narrative = { presentation: { requirementMapping: { "0": candidate.mapping } } } as QaReportNarrative;
 			const view = { ...candidate.view, stories: [linkedStory("story-1", [0])] };
-			const mapping = acSection(renderQaReport(view, narrative, fakeReader, fakeMermaid)!);
+			const mapping = acSection(renderQaReport(view, narrative, fakeReader)!);
 			if (!mapping.includes("미판정") || !mapping.includes('class="gap"') || /satisfied-(yes|no|partial|unverified)/.test(mapping)) {
 				throw new Error(`${candidate.label}: expected a neutral fail-closed AC mapping`);
 			}
@@ -1490,8 +1616,8 @@ describe("qa-report presentation layer", () => {
 
 	test("매핑이 있으나 검증할 수 없으면 미충족 판정 없이 '시나리오 근거 매핑을 검증할 수 없습니다'를, 매핑이 없으면 '충족 판정이 없습니다'를 구분해 보여줌", () => {
 		const view = baseView({ acceptance_criteria: ["a", "b"] });
-		const narrative: QaReportNarrative = { presentation: { requirementMapping: { "0": { satisfied: "yes", scenarioRefs: [ref("sc-9")], evidence: "x" } } } };
-		const mapping = acSection(renderQaReport(view, narrative, fakeReader, fakeMermaid)!);
+		const narrative: QaReportNarrative = { presentation: { requirementMapping: { "0": { scenarioRefs: [ref("sc-9")], evidence: "x" } } } };
+		const mapping = acSection(renderQaReport(view, narrative, fakeReader)!);
 		expect(mapping).toContain("이 요구사항의 시나리오 근거 매핑을 검증할 수 없습니다");
 		expect(mapping).toContain("이 요구사항의 충족 판정이 없습니다");
 	});
@@ -1505,11 +1631,11 @@ describe("qa-report presentation layer", () => {
 		const narrative: QaReportNarrative = {
 			presentation: {
 				requirementMapping: {
-					"0": { satisfied: "unverified", scenarioRefs: [ref("sc-3")], evidence: "어드민 화면이 부팅되지 않아 유저 경계를 구동하지 못함" },
+					"0": { scenarioRefs: [ref("sc-3")], evidence: "어드민 화면이 부팅되지 않아 유저 경계를 구동하지 못함" },
 				},
 			},
 		};
-		const mapping = acSection(renderQaReport(view, narrative, fakeReader, fakeMermaid)!);
+		const mapping = acSection(renderQaReport(view, narrative, fakeReader)!);
 		expect(mapping).toContain("satisfied-unverified");
 		expect(mapping).toContain("미검증 — 검증 불가 시나리오에 걸림");
 		expect(mapping).not.toContain("충족</span>"); // never rendered as met/partial
@@ -1518,8 +1644,8 @@ describe("qa-report presentation layer", () => {
 	test("연결된 시나리오의 주장 검토가 없으면 매핑이 유효해도 AC는 근거 미검증 gap으로 렌더함", () => {
 		const view = baseView({ stories: [linkedStory("story-1", [0])], acceptance_criteria: ["ac"], scenarios: [passScenario("sc-1")] });
 		delete view.scenarios![0].evidence_review;
-		const narrative: QaReportNarrative = { presentation: { requirementMapping: { "0": { satisfied: "yes", scenarioRefs: [ref("sc-1")], evidence: "통과" } } } };
-		const mapping = acSection(renderQaReport(view, narrative, fakeReader, fakeMermaid)!);
+		const narrative: QaReportNarrative = { presentation: { requirementMapping: { "0": { scenarioRefs: [ref("sc-1")], evidence: "통과" } } } };
+		const mapping = acSection(renderQaReport(view, narrative, fakeReader)!);
 		expect(mapping).toContain("satisfied-unverified");
 		expect(mapping).toContain("근거 미검증 — 연결된 시나리오의 주장 검토가 없거나 부족하거나 오래되었습니다");
 		expect(mapping).not.toContain("satisfied-yes");
@@ -1528,63 +1654,133 @@ describe("qa-report presentation layer", () => {
 	test("renders a gap marker for a recorded AC that has no satisfaction mapping", () => {
 		const view = baseView({ acceptance_criteria: ["매핑된 AC", "매핑 안 된 AC"] });
 		const narrative: QaReportNarrative = {
-			presentation: { requirementMapping: { "0": { satisfied: "yes", scenarioRefs: [ref("sc-1")], evidence: "근거" } } },
+			presentation: { requirementMapping: { "0": { scenarioRefs: [ref("sc-1")], evidence: "근거" } } },
 		};
-		const mapping = acSection(renderQaReport(view, narrative, fakeReader, fakeMermaid)!);
+		const mapping = acSection(renderQaReport(view, narrative, fakeReader)!);
 		expect(mapping).toContain("매핑된 AC");
 		expect(mapping).toContain("매핑 안 된 AC");
 		expect(mapping).toContain('class="gap"');
 	});
 
-	test("bakes the big-picture mermaid source to an inline SVG via the injected renderer", () => {
-		const html = renderQaReport(baseView(), fullPresentation(), fakeReader, fakeMermaid)!;
-		const big = html.slice(html.indexOf("큰 그림"), html.indexOf("<h2>액터"));
-		expect(big).toContain("<svg");
-		expect(big).toContain("소유자 재고 확인 흐름"); // caption
-		// width="100%" is normalized to the viewBox pixel width so labels stay legible
-		expect(big).toContain('width="300"');
-		expect(big).not.toContain('width="100%"');
+	const bigSection = (html: string): string => html.slice(html.indexOf("큰 그림"), html.indexOf("<h2>액터"));
+
+	test("bigPictureSvg는 role=img와 aria-label이 붙은 인라인 SVG로 figure 안에 렌더된다", () => {
+		const big = bigSection(renderQaReport(baseView(), fullPresentation(), fakeReader)!);
+		expect(big).toContain('<figure class="diagram">');
+		expect(big).toContain('<svg style="max-width:340px" viewBox="0 0 340 200"');
+		expect(big).toContain('role="img"');
+		expect(big).toContain('aria-label="소유자가 재고 화면을 열면 8슬롯 화면이 보이고 부족하면 안내가 뜬다"');
+		expect(big).toContain('marker-end="url(#f1-ah)"'); // 그려진 엣지가 그대로 남는다
+		expect(big).toContain("재고 화면 &amp; 슬롯"); // 엔티티는 재직렬화로 보존된다
+		expect(big).toContain("소유자 재고 확인 흐름"); // 캡션
 	});
 
-	test(".diagram은 다크 모드에서도 화살표와 라벨이 읽히도록 흰색 고정 배경 패널이다", () => {
-		const html = renderQaReport(baseView(), fullPresentation(), fakeReader, fakeMermaid)!;
-		const rule = html.match(/\.diagram \{([^}]*)\}/)![1];
-		expect(rule).toContain("background: #ffffff");
-		expect(rule).toContain("color-scheme: light");
-		expect(html).toContain('<figure class="diagram">');
-		// 캡션도 흰 패널 위에서 읽히도록 어두운 고정색을 씀
-		expect(html).toMatch(/\.diagram figcaption \{[^}]*color: #4a4a4a/);
+	test("360px보다 넓은 viewBox는 1:1 폭을 지키고 자체 스크롤 영역 안에서 가로로 민다", () => {
+		const wide = VALID_SVG.replace('viewBox="0 0 340 200"', 'viewBox="0 0 640.5 200"');
+		const big = bigSection(renderQaReport(baseView(), { presentation: { bigPictureSvg: wide } }, fakeReader)!);
+		expect(big).toContain('style="max-width:641px;min-width:641px"');
+		expect(big).toContain('class="diagram-scroll" tabindex="0" role="region"');
 	});
 
-	test("degrades gracefully to the mermaid source when the renderer throws (report never aborts)", () => {
-		const throwingMermaid: MermaidRenderer = () => {
-			throw new Error("mmdc 가 없습니다");
-		};
-		const html = renderQaReport(baseView(), fullPresentation(), fakeReader, throwingMermaid)!;
-		expect(html).not.toBeNull();
-		const big = html.slice(html.indexOf("큰 그림"), html.indexOf("<h2>액터"));
-		expect(big).toContain("flowchart LR");
-		expect(big).toContain("다이어그램 렌더 실패");
+	test(".diagram은 고정 흰 패널이 아니라 페이지 변수로 라이트·다크 양쪽에서 그려진다", () => {
+		const html = renderQaReport(baseView(), fullPresentation(), fakeReader)!;
+		const rule = html.match(/\.diagram-scroll \{([^}]*)\}/)![1];
+		expect(rule).toContain("background: var(--surface)");
+		expect(html).not.toMatch(/\.diagram[^{]*\{[^}]*#ffffff/);
+		for (const cls of SVG_CLASSES) expect(html).toMatch(new RegExp(`\\.diagram svg \\.${cls} \\{`));
+	});
+
+	test("저자가 준 색 속성·스타일은 그리지 못하고 클래스 어휘와 CSS 변수만 쓴다", () => {
+		expect(sanitizeBigPictureSvg(VALID_SVG.replace('<rect class="box"', '<rect fill="var(--accent)" stroke="currentColor" class="box"')).svg).toContain('fill="var(--accent)"');
+		expect(() => sanitizeBigPictureSvg(VALID_SVG.replace('<rect class="box"', '<rect fill="#ffffff" class="box"'))).toThrow(/attribute "fill="#ffffff"".*not a permitted value/);
+		expect(() => sanitizeBigPictureSvg(VALID_SVG.replace('class="box-focal"', 'class="neon"'))).toThrow(/attribute "class="neon"".*not a permitted value/);
+	});
+
+	test("옛 bigPicture(Mermaid) 필드가 남아 있으면 조용히 변환하지 않고 bigPictureSvg를 요구하며 실패한다", () => {
+		const legacy = { presentation: { bigPicture: "flowchart LR\n  A --> B" } } as unknown as QaReportNarrative;
+		expect(() => renderQaReport(baseView(), legacy, fakeReader)).toThrow(/bigPicture is no longer supported.*bigPictureSvg/);
+	});
+
+	describe("bigPictureSvg 새니타이저는 신뢰 경계라서 허용 목록 밖은 위반 구문을 이름 붙여 거부한다", () => {
+		const wrap = (inner: string, root = 'viewBox="0 0 100 50" aria-label="그림"'): string => `<svg ${root}>${inner}</svg>`;
+		const rejects: [string, string, RegExp][] = [
+			["script 요소", wrap("<script>alert(1)</script>"), /<script> is not allowed/],
+			["대문자 SCRIPT 요소", wrap("<SCRIPT>alert(1)</SCRIPT>"), /<SCRIPT> is not allowed/],
+			["foreignObject 요소", wrap("<foreignObject><div>x</div></foreignObject>"), /<foreignObject> is not allowed/],
+			["style 요소", wrap("<style>text{fill:red}</style>"), /<style> is not allowed/],
+			["style 속성", wrap('<rect x="0" y="0" width="1" height="1" style="fill:red"/>'), /style="" attribute/],
+			["on* 속성", wrap('<rect x="0" y="0" width="1" height="1" onload="x()"/>'), /event handler attribute "onload"/],
+			["대문자 ON* 속성", wrap('<rect x="0" y="0" width="1" height="1" ONCLICK="x()"/>'), /event handler attribute "ONCLICK"/],
+			["따옴표 없는 on* 속성", wrap("<rect onmouseover=alert(1) />"), /event handler attribute "onmouseover"/],
+			["image 요소", wrap('<image x="0" y="0" width="1" height="1"/>'), /<image> is not allowed/],
+			["a 요소", wrap("<a><text>x</text></a>"), /<a> is not allowed/],
+			["use 요소", wrap("<use/>"), /<use> is not allowed/],
+			["animate 요소", wrap("<animate/>"), /<animate> is not allowed/],
+			["외부 href", wrap('<path d="M0 0" href="https://evil.example/x"/>'), /"href" attribute/],
+			["xlink:href", wrap('<path d="M0 0" xlink:href="#a"/>'), /"xlink:href" attribute/],
+			["외부 url() 채움", wrap('<rect fill="url(https://evil.example/p.svg#a)"/>'), /url\(\.\.\.\) other than a same-document #id/],
+			["외부 url() 마커", wrap('<path d="M0 0" marker-end="url(//evil.example/m.svg#a)"/>'), /url\(\.\.\.\) other than a same-document #id/],
+			["정의되지 않은 #id 참조", wrap('<path d="M0 0" marker-end="url(#nope)"/>'), /url\(#nope\) points at an id that is not defined/],
+			["허용 목록 밖 속성", wrap('<rect data-x="1"/>'), /attribute "data-x" on <rect> is not in the allowlist/],
+			["HTML 주석", wrap("<!-- hi -->"), /comments, CDATA/],
+			["CDATA", wrap("<![CDATA[x]]>"), /comments, CDATA/],
+			["루트가 아닌 요소", "<g></g>", /root must be <svg>/],
+			["루트 두 개", `${wrap("")}${wrap("")}`, /more than one root element/],
+			["루트 밖 텍스트", `${wrap("")}hello`, /text outside the <svg> root/],
+			["중첩 svg", wrap('<svg viewBox="0 0 1 1"></svg>'), /nested <svg>/],
+			["viewBox 없음", '<svg aria-label="그림"></svg>', /needs a viewBox/],
+			["잘못된 viewBox", '<svg viewBox="0 0 0 50" aria-label="그림"></svg>', /attribute "viewBox/],
+			["aria-label 없음", '<svg viewBox="0 0 100 50"></svg>', /needs a non-empty aria-label/],
+			["루트 width", '<svg viewBox="0 0 100 50" width="900" aria-label="그림"></svg>', /attribute "width" on the <svg> root/],
+			["루트 밖의 aria-label", wrap('<rect aria-label="x"/>'), /only allowed on the <svg> root/],
+			["이름 없는 엔티티", wrap('<text x="1" y="1">a &nbsp; b</text>'), /entity "&nbsp;"/],
+			["이스케이프 안 된 &", wrap('<text x="1" y="1">a & b</text>'), /entity "&"/],
+			["요소 안에 직접 쓴 텍스트", wrap("loose text"), /text inside <svg>/],
+			["닫히지 않은 요소", "<svg viewBox=\"0 0 100 50\" aria-label=\"그림\"><g>", /unclosed <g>/],
+			["짝이 안 맞는 닫는 태그", wrap("<g></text>"), /unbalanced <\/text>|<\/text>/],
+			["손상된 태그", '<svg viewBox="0 0 1 1"aria-label="x">', /malformed markup/],
+			["중복 속성", wrap('<rect x="1" x="2"/>'), /duplicate attribute "x"/],
+		];
+		for (const [name, svg, message] of rejects) {
+			test(`${name}`, () => {
+				expect(() => sanitizeBigPictureSvg(svg)).toThrow(message);
+				expect(() => renderQaReport(baseView(), { presentation: { bigPictureSvg: svg } }, fakeReader)).toThrow(/presentation\.bigPictureSvg rejected/);
+			});
+		}
+
+		test("정상 SVG는 원문이 아니라 파싱한 토큰에서 다시 직렬화한 결과를 돌려준다", () => {
+			const { svg, viewBoxWidth } = sanitizeBigPictureSvg(`  ${VALID_SVG}  `);
+			expect(viewBoxWidth).toBe(340);
+			expect(svg.startsWith('<svg viewBox="0 0 340 200" role="img" aria-label=')).toBe(true);
+		});
+
+		test("텍스트와 속성 값의 따옴표·꺾쇠는 다시 이스케이프된다", () => {
+			const { svg } = sanitizeBigPictureSvg(wrap('<text x="1" y="1">&lt;b&gt; &quot;x&quot;</text>'));
+			expect(svg).toContain("&lt;b&gt; &quot;x&quot;");
+			expect(svg).not.toContain("<b>");
+		});
 	});
 
 	test("renders a gap marker when no big-picture diagram is supplied", () => {
 		const narrative: QaReportNarrative = { presentation: { overview: "개요만 있음" } };
-		const html = renderQaReport(baseView(), narrative, fakeReader, fakeMermaid)!;
+		const html = renderQaReport(baseView(), narrative, fakeReader)!;
 		const big = html.slice(html.indexOf("큰 그림"), html.indexOf("<h2>액터"));
 		expect(big).toContain('class="gap"');
+		const blank = renderQaReport(baseView(), { presentation: { bigPictureSvg: "  " } }, fakeReader)!;
+		expect(blank.slice(blank.indexOf("큰 그림"), blank.indexOf("<h2>액터"))).toContain('class="gap"');
 	});
 
 	test("escapes hostile presentation prose instead of injecting it raw", () => {
 		const narrative: QaReportNarrative = {
 			presentation: { overview: "<script>alert(1)</script>" },
 		};
-		const html = renderQaReport(baseView(), narrative, fakeReader, fakeMermaid)!;
+		const html = renderQaReport(baseView(), narrative, fakeReader)!;
 		expect(html).not.toContain("<script>alert(1)</script>");
 		expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
 	});
 
 	test("keeps the report self-contained even with a baked diagram (no runtime script, no external ref)", () => {
-		const html = renderQaReport(baseView(), fullPresentation(), fakeReader, fakeMermaid)!;
+		const html = renderQaReport(baseView(), fullPresentation(), fakeReader)!;
 		expect(html.match(/<script/g)).toBeNull();
 		expect(html).not.toMatch(/https?:\/\//);
 	});
@@ -1760,32 +1956,23 @@ describe("qa-report CLI", () => {
 		expect(html).not.toContain("<script");
 	});
 
-	test("Mermaid 렌더링 실패 시 필수 CLI는 실패하고 보고서를 성공 생성하지 않는다", () => {
+	test("허용되지 않은 bigPictureSvg면 CLI는 위반 구문을 stderr에 밝히고 실패하며 보고서를 쓰지 않는다", () => {
 		runState("set --phase PLAN");
 		addNoClientActor();
-
-		const binDir = join(tmpDir, "bin");
-		mkdirSync(binDir);
-		writeFileSync(join(binDir, "mmdc"), "#!/bin/sh\nprintf '%s\\n' 'forced mmdc failure' >&2\nexit 17\n", {
-			mode: 0o755,
-		});
-		const narrative = join(tmpDir, "narrative.json");
-		writeFileSync(narrative, JSON.stringify({ presentation: { bigPicture: "flowchart LR\n  A --> B" } }));
 		const out = join(tmpDir, "report.html");
-		const result = spawnSync(
-			process.execPath,
-			[reportScript, "--session", S, "--out", out, "--narrative", narrative],
-			{
-				encoding: "utf8",
-				env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ""}` },
-			},
-		);
-
-		expect(result.status).not.toBe(0);
-		expect(result.stderr).toContain("qa-report: Mermaid rendering failed");
-		expect(result.stderr).toContain("forced mmdc failure");
-		expect(result.stdout).not.toContain(out);
-		expect(existsSync(out)).toBe(false);
+		for (const [presentation, message] of [
+			[{ bigPictureSvg: '<svg viewBox="0 0 10 10" aria-label="그림"><script>1</script></svg>' }, "<script> is not allowed"],
+			[{ bigPicture: "flowchart LR\n  A --> B" }, "provide presentation.bigPictureSvg"],
+		] as const) {
+			const narrative = join(tmpDir, "narrative.json");
+			writeFileSync(narrative, JSON.stringify({ presentation }));
+			const result = spawnSync(process.execPath, [reportScript, "--session", S, "--out", out, "--narrative", narrative], { encoding: "utf8", env: process.env });
+			expect(result.status).not.toBe(0);
+			expect(result.stderr).toContain("qa-report: presentation.");
+			expect(result.stderr.toLowerCase()).toContain(message.toLowerCase());
+			expect(result.stdout).not.toContain(out);
+			expect(existsSync(out)).toBe(false);
+		}
 	});
 
 	test("is a no-op (writes nothing, reports so) when the roster is empty", () => {
@@ -1794,34 +1981,5 @@ describe("qa-report CLI", () => {
 		const stdout = execSync(`bun ${reportScript} --session ${S} --out ${out}`, { encoding: "utf8", env: process.env });
 		expect(stdout).toContain("no roster");
 		expect(existsSync(out)).toBe(false);
-	});
-});
-
-describe("mermaid SVG 폭 정규화 (normalizeSvgWidth)", () => {
-	test("viewBox 원점이 0이 아니고 루트 width가 10이어도 viewBox 폭으로 고친다", () => {
-		const svg = '<svg width="10" viewBox="4 4 1155.625 379"></svg>';
-		expect(normalizeSvgWidth(svg)).toContain('width="1156"');
-	});
-
-	test("중첩 marker의 viewBox가 아니라 루트 SVG의 viewBox 폭을 사용한다", () => {
-		const svg =
-			'<svg width="100%" viewBox="-23.609375 0 1467.28125 244">' +
-			'<defs><marker viewBox="0 0 10 10" /></defs></svg>';
-		expect(normalizeSvgWidth(svg)).toContain('<svg width="1468"');
-	});
-
-	test("루트 width 속성이 없으면 삽입한다", () => {
-		expect(normalizeSvgWidth('<svg viewBox="0 0 300 100"></svg>')).toContain('width="300"');
-	});
-
-	test('원점 0 0의 width="100%"를 viewBox 폭으로 재작성한다', () => {
-		const out = normalizeSvgWidth('<svg width="100%" viewBox="0 0 2261.484375 94">x</svg>');
-		expect(out).toContain('width="2262"');
-		expect(out).not.toContain('width="100%"');
-	});
-
-	test("viewBox가 없으면 손대지 않는다", () => {
-		const noVb = '<svg width="100%" class="flowchart">x</svg>';
-		expect(normalizeSvgWidth(noVb)).toBe(noVb);
 	});
 });

@@ -19,11 +19,17 @@ import {
 	clearPrometheusState,
 	resolveStatePath,
 } from "./prometheus-state.ts";
+import { writeLintReceipt } from "../../../lib/__fixtures__/lint-receipt.ts";
 
 let tmpDir: string;
 const originalOmtDir = process.env.OMT_DIR;
 const originalSessionId = process.env.OMT_SESSION_ID;
 const canonicalNonGoals = "- test exclusion | decider: changes test state";
+
+/** Writes the lint receipt for `html` linted against `plan` and returns the `--receipt` CLI flag. */
+function receiptFlag(html: string, plan: string): string {
+	return `--receipt ${writeLintReceipt(join(tmpDir, "receipt.json"), html, plan)}`;
+}
 
 /** Seed the state file as the PreToolUse hook would (create-if-absent skeleton). */
 function seedFile(sessionId: string): string {
@@ -71,7 +77,7 @@ describe("prometheus state", () => {
 		const html = join(tmpDir, "other.html");
 		writeFileSync(plan, "# Plan");
 		writeFileSync(html, "<html><body>Other</body></html>");
-		expect(() => setPrometheusState("wrong-html", { phase: "S5", plan_path: plan, non_goals: canonicalNonGoals, submit_presentation: html })).toThrow("presentation");
+		expect(() => setPrometheusState("wrong-html", { phase: "S5", plan_path: plan, non_goals: canonicalNonGoals, submit_presentation: html, lint_receipt: writeLintReceipt(join(tmpDir, "receipt.json"), html, plan) })).toThrow("presentation");
 	});
 	test("presentation Markdown 없이 HTML 제출만으로 진행하며 변경 후에는 재제출 필요", () => {
 		const plan = join(tmpDir, "plan.md");
@@ -79,12 +85,32 @@ describe("prometheus state", () => {
 		const html = join(tmpDir, "presentation", "plan.html");
 		writeFileSync(plan, "# Plan");
 		writeFileSync(html, "<html><body>Plan</body></html>");
-		setPrometheusState("html-only", { phase: "S5", plan_path: plan, non_goals: canonicalNonGoals, submit_presentation: html });
+		setPrometheusState("html-only", { phase: "S5", plan_path: plan, non_goals: canonicalNonGoals, submit_presentation: html, lint_receipt: writeLintReceipt(join(tmpDir, "receipt.json"), html, plan) });
 		const cli = join(import.meta.dir, "prometheus-state.ts");
 		const run = () => execSync(`bun '${cli}' set --phase S6`, { env: { ...process.env, OMT_SESSION_ID: "html-only" }, stdio: "pipe" });
 		expect(run).not.toThrow();
 		writeFileSync(html, "<html><body>Changed</body></html>");
 		expect(run).toThrow();
+	});
+	test("영수증 없이 HTML을 제출하면 거부함", () => {
+		const plan = join(tmpDir, "plan.md");
+		mkdirSync(join(tmpDir, "presentation"));
+		const html = join(tmpDir, "presentation", "plan.html");
+		writeFileSync(plan, "# Plan");
+		writeFileSync(html, "<html><body>Plan</body></html>");
+		expect(() => setPrometheusState("no-receipt", { phase: "S5", plan_path: plan, non_goals: canonicalNonGoals, submit_presentation: html })).toThrow("--receipt");
+	});
+	test("plan의 TODO id가 HTML에 data-todo 앵커로 없으면 제출을 거부함", () => {
+		const plan = join(tmpDir, "plan.md");
+		mkdirSync(join(tmpDir, "presentation"));
+		const html = join(tmpDir, "presentation", "plan.html");
+		writeFileSync(plan, "# Plan\n\n## TODOs\n\n- [ ] 1. First\n- [ ] 2. Second\n");
+		writeFileSync(html, '<html><body><section data-todo="1">First</section></body></html>');
+		const lint_receipt = writeLintReceipt(join(tmpDir, "receipt.json"), html, plan);
+		expect(() => setPrometheusState("missing-todo", { phase: "S5", plan_path: plan, non_goals: canonicalNonGoals, submit_presentation: html, lint_receipt })).toThrow("2");
+		writeFileSync(html, '<html><body><section data-todo="1">First</section><section data-todo="2">Second</section></body></html>');
+		writeLintReceipt(join(tmpDir, "receipt.json"), html, plan);
+		expect(() => setPrometheusState("missing-todo", { phase: "S5", plan_path: plan, non_goals: canonicalNonGoals, submit_presentation: html, lint_receipt })).not.toThrow();
 	});
 	test("HTML 파일이 있어도 제출 기록 없이 다음 단계로 이동할 수 없음", () => {
 		const plan = join(tmpDir, "plan.md");
@@ -1060,7 +1086,7 @@ describe("Stage A presentation gate (F7)", () => {
 		utimesSync(presentationMarkdownPath(), authored, authored);
 		const env = { OMT_SESSION_ID: "gateHtmlStale", OMT_DIR: tmpDir };
 		// Submit first so the generic "submission missing or stale" check cannot be the cause.
-		const submit = runPromCliMerged(`set --phase S5 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()}`, env);
+		const submit = runPromCliMerged(`set --phase S5 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()} ${receiptFlag(presentationHtmlPath(), planPath)}`, env);
 		expect(submit.out).toBe("");
 		expect(submit.code).toBe(0);
 		const { code, out } = runPromCliMerged("set --phase S6", env);
@@ -1076,7 +1102,7 @@ describe("Stage A presentation gate (F7)", () => {
 		writePresentation();
 		const planBeforePresentation = new Date(Date.now() - 60_000);
 		utimesSync(planPath, planBeforePresentation, planBeforePresentation);
-		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()}`, {
+		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()} ${receiptFlag(presentationHtmlPath(), planPath)}`, {
 			OMT_SESSION_ID: "gateHtmlFresh",
 			OMT_DIR: tmpDir,
 		});
@@ -1095,7 +1121,7 @@ describe("Stage A presentation gate (F7)", () => {
 		utimesSync(presentationMarkdownPath(), authoredTime, authoredTime);
 		utimesSync(presentationHtmlPath(), renderedTime, renderedTime);
 
-		const { code: submitCode } = runPromCliMerged(`set --phase S5 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()}`, {
+		const { code: submitCode } = runPromCliMerged(`set --phase S5 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()} ${receiptFlag(presentationHtmlPath(), planPath)}`, {
 			OMT_SESSION_ID: "gateRendererInputStale",
 			OMT_DIR: tmpDir,
 		});
@@ -1133,7 +1159,7 @@ describe("Stage A presentation gate (F7)", () => {
 	test("S6 succeeds once the presentation file exists", () => {
 		const planPath = seedPlan("gatePresent");
 		writePresentation();
-		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()}`, {
+		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()} ${receiptFlag(presentationHtmlPath(), planPath)}`, {
 			OMT_SESSION_ID: "gatePresent",
 			OMT_DIR: tmpDir,
 		});
@@ -1192,7 +1218,7 @@ describe("Stage A presentation gate (F7)", () => {
 		const env = { OMT_SESSION_ID: "gateStale", OMT_DIR: tmpDir };
 		// Submit while the render is fresh (submission refuses HTML older than its source),
 		// so the generic "submission missing or stale" check cannot be the cause below.
-		const submit = runPromCliMerged(`set --phase S5 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()}`, env);
+		const submit = runPromCliMerged(`set --phase S5 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()} ${receiptFlag(presentationHtmlPath(), planPath)}`, env);
 		expect(submit.out).toBe("");
 		expect(submit.code).toBe(0);
 		// Then the plan is revised: Markdown and HTML rendered at T-60s, plan at T. Only the
@@ -1220,7 +1246,7 @@ describe("Stage A presentation gate (F7)", () => {
 		utimesSync(planPath, planTime, planTime);
 		utimesSync(presentationHtmlPath(), rendered, rendered);
 		utimesSync(presentationMarkdownPath(), authored, authored);
-		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()}`, {
+		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()} ${receiptFlag(presentationHtmlPath(), planPath)}`, {
 			OMT_SESSION_ID: "gateRerendered",
 			OMT_DIR: tmpDir,
 		});
@@ -1250,7 +1276,7 @@ describe("Stage A presentation gate (F7)", () => {
 		writeFileSync(`${altDir}/plans/presentation/alt.md`, "# presentation\n", "utf8");
 		writeFileSync(`${altDir}/plans/presentation/alt.html`, "<!doctype html><html><body>presentation</body></html>\n", "utf8");
 		writePristinePromState("gateAltDir");
-		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${altDir}/plans/alt.md --submit-presentation ${altDir}/plans/presentation/alt.html`, {
+		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${altDir}/plans/alt.md --submit-presentation ${altDir}/plans/presentation/alt.html ${receiptFlag(`${altDir}/plans/presentation/alt.html`, `${altDir}/plans/alt.md`)}`, {
 			OMT_SESSION_ID: "gateAltDir",
 			OMT_DIR: tmpDir,
 		});

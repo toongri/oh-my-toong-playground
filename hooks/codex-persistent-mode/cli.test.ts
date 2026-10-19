@@ -27,6 +27,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { createPresentationSubmission } from "@lib/state-core";
+import { writeLintReceipt } from "@lib/__fixtures__/lint-receipt";
 
 const CLI_PATH = join(import.meta.dirname, "cli.ts");
 
@@ -892,7 +893,7 @@ describe("codex-persistent-mode cli", () => {
 			writeFileSync(specPath, "# Confirmed design");
 			writeFileSync(htmlPath, "<html><body>Confirmed design</body></html>");
 			const submitted = JSON.parse(readFileSync(statePath, "utf8"));
-			submitted.state.presentation = createPresentationSubmission(specPath, htmlPath);
+			submitted.state.presentation = createPresentationSubmission(specPath, htmlPath, writeLintReceipt(join(omtDir, "receipt.json"), htmlPath, specPath), "spec-diagrams");
 			writeFileSync(statePath, JSON.stringify(submitted));
 			const { exitCode, stdout } = await runCli(
 				"stop",

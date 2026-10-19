@@ -560,9 +560,9 @@ SVG `<defs>` marker pattern:
 </defs>
 ```
 
-> **Caution**: An `id` must be globally unique within an HTML document. When a presentation has multiple `diagram` slides or they coexist with Mermaid, duplicate `id="arrow"` values cause `url(#arrow)` references to malfunction. You must include the slide number (e.g., `diag-arrow-s5`).
+> **Caution**: An `id` must be globally unique within an HTML document. When a presentation has multiple `diagram` slides duplicate `id="arrow"` values cause `url(#arrow)` references to malfunction. You must include the slide number (e.g., `diag-arrow-s5`).
 
-7 nodes or fewer → `diagram` type. More nodes, or sequence/ER diagrams → Use Mermaid CDN.
+7 nodes or fewer → `diagram` type. More nodes, or sequence/ER diagrams → inline SVG per `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` section 7 and `${CLAUDE_SKILL_DIR}/../html-report/references/diagram-recipes.md`: split by the section 12 complexity budget (overview slide plus detail slide) or draw one larger SVG.
 
 ---
 

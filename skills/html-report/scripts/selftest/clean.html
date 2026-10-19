@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lint clean fixture</title>
+<style>
+:root { --bg: #ffffff; --surface: #ffffff; --ink: #1a1a1a; --ink-2: #444444; --line: #888888; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #111111; --surface: #1c1c1c; --ink: #eeeeee; --ink-2: #bbbbbb; --line: #777777; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #111111; --surface: #1c1c1c; --ink: #eeeeee; --ink-2: #bbbbbb; --line: #777777; color-scheme: dark; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, sans-serif; padding: 24px 16px; word-break: keep-all; }
+svg { display: block; width: 100%; max-width: 520px; height: auto; }
+svg text { font-size: 13px; fill: var(--ink); }
+svg .nd { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+svg .ed { fill: none; stroke: var(--ink-2); stroke-width: 2; }
+svg .mk { fill: var(--ink-2); }
+svg .life { stroke: var(--line); stroke-dasharray: 3 3; fill: none; }
+</style>
+</head>
+<body>
+<header class="mast"><div class="kicker">사고 보고서 · <time>2026-10-17</time> (KST) 발생</div><h1>고착 사고</h1></header>
+<p>전체 약 1,620대 중 41대가 고착됐고, 첫 오류는 03:13이었다.</p>
+<figure>
+  <svg viewBox="0 0 340 96" role="img" aria-label="초안, 검토, 승인 세 상태가 전이로 이어진다.">
+    <defs><marker id="c-ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+    <path class="ed" d="M92 48 H128" marker-end="url(#c-ah)"/><path class="ed" d="M212 48 H248" marker-end="url(#c-ah)"/>
+    <rect class="nd" x="12" y="28" width="80" height="40" rx="8"/><text x="52" y="53" text-anchor="middle">초안</text>
+    <rect class="nd" x="132" y="28" width="80" height="40" rx="8"/><text x="172" y="53" text-anchor="middle">검토</text>
+    <rect class="nd" x="252" y="28" width="76" height="40" rx="8"/><text x="290" y="53" text-anchor="middle">승인</text>
+  </svg>
+  <figcaption>그림 1. 초안에서 검토를 거쳐 승인된다.</figcaption>
+</figure>
+<figure>
+  <svg viewBox="0 0 340 160" role="img" aria-label="앱이 서버에 요청하고 서버가 응답하는 시퀀스.">
+    <path class="life" d="M80 64 V148"/><path class="life" d="M260 64 V148"/>
+    <path class="ed" d="M80 96 H252" marker-end="url(#c-ah)"/><text x="170" y="88" text-anchor="middle">요청</text>
+    <path class="ed" d="M260 128 H88" marker-end="url(#c-ah)" stroke-dasharray="5 4"/><text x="170" y="120" text-anchor="middle">응답</text>
+    <rect class="nd" x="32" y="16" width="96" height="40" rx="6"/><text x="80" y="41" text-anchor="middle">앱</text>
+    <rect class="nd" x="212" y="16" width="96" height="40" rx="6"/><text x="260" y="41" text-anchor="middle">서버</text>
+  </svg>
+  <figcaption>그림 2. 앱이 요청하고 서버가 응답한다.</figcaption>
+</figure>
+</body>
+</html>

@@ -1,0 +1,108 @@
+/* diagram-classes.css — html-report 공용 SVG 다이어그램 기준 스타일.
+   테마 토큰(라이트/다크)과 figure.diagram 안 SVG 클래스 팔레트를 한곳에 둔다. 모델이 쓰는 페이지의 <style> 에
+   그대로 붙이고 그 위에서 페이지를 디자인한다. SVG 도형은 리터럴 색 없이 이 클래스(토큰)만 쓰므로
+   라이트·다크에서 같은 그림이 읽힌다. 클래스 이름은 lib/explain-diff-structure.ts 의 DIAGRAM_SVG_CLASSES 와 1:1 이고,
+   문서가 쓰는 클래스는 제출 HTML 의 <style> 에 반드시 규칙이 있어야 한다. 토큰 값 변경은 §3 대비 계약(WCAG)을 다시 확인한다. */
+/* 테마 토큰 — html-report §3 과 같은 이름이다. SVG 가 이 변수만 쓰므로 라이트·다크에서 같은 그림이 읽힌다.
+   --on-badge 는 배지(신설·변경·삭제) 글자색이다. */
+:root {
+  --bg: #F3F4F8; --surface: #FFFFFF; --surface-2: #E9ECF3;
+  --ink: #141821; --ink-2: #444C5C; --ink-3: #5B6477;
+  --line: #D3D8E2; --line-strong: #98A0B3;
+  --accent: #3340C9;
+  --ok: #0B7A57; --ok-bg: #DCF2E8;
+  --bad: #C0301F; --bad-bg: #FBE3DF;
+  --warn: #8F5400; --warn-bg: #FAEAC8;
+  --on-badge: #FFFFFF;
+  --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1117; --surface: #161A22; --surface-2: #1F242E;
+    --ink: #E8EBF1; --ink-2: #B4BBC9; --ink-3: #8F98AA;
+    --line: #2B313D; --line-strong: #566074;
+    --accent: #9DAAFF;
+    --ok: #4FD6A4; --ok-bg: #11302A;
+    --bad: #FF8A7E; --bad-bg: #3B1B18;
+    --warn: #F3BC5C; --warn-bg: #392B10;
+    --on-badge: #0E1117;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1117; --surface: #161A22; --surface-2: #1F242E;
+  --ink: #E8EBF1; --ink-2: #B4BBC9; --ink-3: #8F98AA;
+  --line: #2B313D; --line-strong: #566074;
+  --accent: #9DAAFF;
+  --ok: #4FD6A4; --ok-bg: #11302A;
+  --bad: #FF8A7E; --bad-bg: #3B1B18;
+  --warn: #F3BC5C; --warn-bg: #392B10;
+  --on-badge: #0E1117;
+  color-scheme: dark;
+}
+/* figure.diagram — 저자가 문서에 그린 인라인 SVG. 색은 전부 위의 변수에서 와서 다크 모드에서도 읽힌다.
+   기본은 컬럼 폭에 맞춰 줄어든다(width:100%, height:auto). data-min-width 가 있으면 페이지 저자가
+   SVG 에 min-width 를 주고 .fig-scroll 안에서 좌우로 스크롤시키며 .fig-hint 가 그 사실을 알린다. */
+figure.diagram {
+  margin: 1.25rem 0; padding: 12px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px; min-width: 0;
+}
+figure.diagram svg { display: block; width: 100%; max-width: 100%; height: auto; margin-inline: auto; color: var(--ink); }
+figure.diagram .fig-scroll { overflow-x: auto; }
+/* 넓은 그림: 문서 figure 의 data-min-width="N" 이면 <svg> 를 <div class="fig-scroll"> 로 감싸고 아래처럼 N 을 준다
+   (SVG 자체는 문서와 한 글자도 다르면 안 되므로 폭은 CSS 로만 준다). 예: #fig-3 .fig-scroll > svg { min-width: 760px; }
+   좁은 화면에서 스크롤을 알리는 .fig-hint 문구를 같은 figure 안에 둔다. */
+figure.diagram .fig-scroll svg { max-width: none; }
+figure.diagram .fig-hint { display: none; margin: 0.4rem 0 0; font-size: 13.5px; color: var(--ink-3); }
+figure.diagram figcaption { max-width: 760px; margin-top: 0.6rem; font-size: 14.5px; line-height: 1.6; color: var(--ink-2); }
+figure.diagram figcaption .vf { display: block; margin-top: 6px; color: var(--ink-3); }
+
+/* SVG 팔레트: 클래스 이름은 lib/explain-diff-structure.ts 의 DIAGRAM_SVG_CLASSES 와 1:1 이다.
+   .focal(이 diff가 바꾼 요소의 강조)은 박스·선 규칙보다 뒤에 와야 둘 다에서 이긴다. */
+figure.diagram svg :where(path, rect, circle, ellipse, polygon, polyline, line) { fill: none; stroke: var(--ink-2); }
+figure.diagram svg text { font-family: var(--font); font-size: 13px; fill: var(--ink); stroke: none; }
+figure.diagram svg .t-b { font-weight: 700; }
+figure.diagram svg .t-s { font-size: 12px; fill: var(--ink-2); }
+figure.diagram svg .t-m { font-family: var(--mono); font-size: 12px; }
+figure.diagram svg .t-ok { fill: var(--ok); }
+figure.diagram svg .t-bad { fill: var(--bad); }
+figure.diagram svg .m { font-size: 12px; font-weight: 500; fill: var(--ink-2); }
+figure.diagram svg .lbl { paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; }
+figure.diagram svg .box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.5; }
+figure.diagram svg .head { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1.5; }
+figure.diagram svg .store { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1.5; }
+figure.diagram svg .diamond { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1.5; }
+figure.diagram svg .ext { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1.5; stroke-dasharray: 5 4; }
+figure.diagram svg .group { fill: none; stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 4 4; }
+figure.diagram svg .mask { fill: var(--surface); stroke: none; }
+figure.diagram svg .act { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1.2; }
+figure.diagram svg .verdict-ok { fill: var(--ok-bg); stroke: none; }
+figure.diagram svg .verdict-bad { fill: var(--bad-bg); stroke: none; }
+figure.diagram svg .rel { fill: none; stroke: var(--ink-2); stroke-width: 1.6; }
+figure.diagram svg .rel-ok { fill: none; stroke: var(--ok); stroke-width: 2.5; }
+figure.diagram svg .rel-bad { fill: none; stroke: var(--bad); stroke-width: 2.5; }
+figure.diagram svg .msg { fill: none; stroke: var(--ink-3); stroke-width: 1.4; }
+figure.diagram svg .key { stroke: var(--bad); stroke-width: 2; }
+figure.diagram svg .focal { stroke: var(--accent); stroke-width: 2; }
+figure.diagram svg .ret, figure.diagram svg .ev { stroke-dasharray: 6 5; }
+figure.diagram svg .life { stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 3 3; }
+figure.diagram svg .stop { fill: none; stroke: var(--bad); stroke-width: 1.6; }
+figure.diagram svg .init { fill: var(--ink); stroke: none; }
+figure.diagram svg .fin-ring { fill: none; stroke: var(--ink); stroke-width: 1.6; }
+figure.diagram svg .mk-mut { fill: var(--ink-3); stroke: none; }
+figure.diagram svg .mk-ok { fill: var(--ok); stroke: none; }
+figure.diagram svg .mk-bad { fill: var(--bad); stroke: none; }
+figure.diagram svg .mk-accent { fill: var(--accent); stroke: none; }
+figure.diagram svg .mk-open { fill: none; stroke: var(--ink-3); stroke-width: 1.2; }
+
+@media (max-width: 640px) {
+  figure.diagram { padding: 8px; }
+}
+@media print {
+  figure.diagram { break-inside: avoid; }
+  figure.diagram .fig-scroll { overflow: visible; }
+  figure.diagram .fig-scroll svg { max-width: 100%; min-width: 0 !important; }
+  figure.diagram .fig-hint { display: none !important; }
+}

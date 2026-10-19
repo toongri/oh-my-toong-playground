@@ -44,7 +44,7 @@ describe("frontmatter description — final deliverable claim", () => {
 	});
 
 	test("description names REPORT.md (+ REPORT.html) as what the explicit posture produces", () => {
-		expect(frontmatter).toContain("produces a cited REPORT.md (+ self-contained REPORT.html)");
+		expect(frontmatter).toContain("produces a cited REPORT.md (+ hand-authored REPORT.html)");
 	});
 
 	test("description demotes SYNTHESIS.md to a backing artifact, not the produced deliverable", () => {
@@ -762,8 +762,7 @@ describe("material axis — digest instruction has a goal", () => {
 // demoted to an intermediate citation source of truth, not the deliverable
 // itself. REPORT's table of contents is derived from the Phase 0 axis
 // decomposition rather than SYNTHESIS's fixed eight-section skeleton, and
-// REPORT.html is a single self-contained render copy (no external CSS, JS,
-// fonts, or images).
+// REPORT.html is hand-authored following the shared html-report skill.
 // ---------------------------------------------------------------------------
 
 describe("place axis — REPORT is the deliverable, SYNTHESIS is intermediate", () => {
@@ -835,10 +834,10 @@ describe("place axis — REPORT is the deliverable, SYNTHESIS is intermediate", 
 		expect(count("uv run")).toBe(0);
 	});
 
-	test("REPORT.html is specified as a single self-contained file with no external assets", () => {
+	test("REPORT.html is specified as hand-authored per the shared html-report skill, linted to 0 errors", () => {
 		// "REPORT.html" also appears earlier (Phase 4 overview line, posture
 		// table) — anchor past <Artifact_Contract> so this doesn't match one of
-		// those incidental mentions instead of the actual self-containedness
+		// those incidental mentions instead of the actual html-report
 		// contract sentence. Bound the search to the enclosing section (through
 		// the next heading) rather than a fixed char count — a 200-char window
 		// only has single-digit slack past the contract phrase (measured: ~8
@@ -852,8 +851,11 @@ describe("place axis — REPORT is the deliverable, SYNTHESIS is intermediate", 
 		const endIdx = skill.indexOf("## Epistemic-instrumentation artifacts", idx);
 		expect(endIdx).toBeGreaterThan(idx);
 		const context = skill.slice(idx, endIdx);
-		expect(context).toContain("self-contained");
-		expect(context).toContain("no external CSS, JS, fonts, or images");
+		expect(context).toContain("${CLAUDE_SKILL_DIR}/../html-report/SKILL.md");
+		expect(context).toContain("${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh");
+		expect(context).toContain("${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh REPORT.html --source");
+		expect(context).toContain("0 errors");
+		expect(context).not.toContain("no external CSS, JS, fonts, or images");
 	});
 });
 
@@ -1154,10 +1156,10 @@ describe("REPORT.html expressiveness contract", () => {
 		expect(sectionOf()).toMatch(/has not been rendered — it has been transcoded/);
 	});
 
-	test("self-containedness constraint survives the rewrite (regression guard)", () => {
+	test("html-report reference survives the rewrite (regression guard)", () => {
 		const context = sectionOf();
-		expect(context).toContain("self-contained");
-		expect(context).toContain("no external CSS, JS, fonts, or images");
+		expect(context).toContain("${CLAUDE_SKILL_DIR}/../html-report/SKILL.md");
+		expect(context).toContain("hand");
 	});
 });
 

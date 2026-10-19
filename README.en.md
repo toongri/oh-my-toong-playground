@@ -34,6 +34,7 @@ oh-my-toong is an **agent central-management project**. It keeps skills, agents,
 - **Multi-platform support** — Claude / Gemini / Codex / OpenCode abstracted via adapters
 - **Codex configuration ownership** — retain the default `.codex/config.toml` and track owned keys and last-applied values in `.omt/codex-config-state.json`, independently of comments. Existing keys require explicit adoption; conflicts preserve user settings. `make sync-dry` also checks the real target for required adoption and conflicts (see [Platform YAML Configuration Deployment](docs/platform-yaml-config-deployment.en.md)).
 - **Surface-specific E2E routing** — validate web/Electron with `agent-browser`, and iOS, tvOS, macOS, Android, and Vega OS TV with `agent-device`
+- **Shared HTML report contract (`html-report`)** — human-facing reports (qa, explain-diff, deep-interview, prometheus, ultraresearch, review-report, create-slides) are written directly as one self-contained HTML file with inline SVG diagrams, with no Mermaid/`mmdc` pre-render. The shared `html-report` skill owns the authoring contract (a graph of 3+ nodes must be SVG with visible edges, light/dark, 400–1280px, Korean-first) and the mandatory self-critique loop (`capture.sh` + `lint.sh`); `lint.sh --receipt` writes a receipt bound to the exact HTML bytes when lint has 0 errors. Consumer skills reference it one-way as `${CLAUDE_SKILL_DIR}/../html-report/...`, and `make validate` checks that `html-report` is co-deployed in the same sync scope and platforms. deep-interview and prometheus have the model write the presentation HTML itself and require a matching lint receipt plus source coverage at submission (prometheus: `data-todo="<id>"` per plan TODO; deep-interview: one SVG figure per spec Mermaid diagram; its AI-facing spec intentionally stays Mermaid). qa's big picture is a model-authored, sanitized `bigPictureSvg`, AC satisfaction is derived from the referenced scenario results (there is no authored `satisfied` field), and `qa-state.ts validate-narrative` checks the narrative before rendering. review-report has no runtime CDN; the model writes an escaped HTML body into the template. In explain-diff the Markdown document stays the step-checked SSOT; at the render step the model authors the final HTML per `html-report` and the CLI proves the page carries the document's exact facts (diagram SVG byte-identical, code blocks verbatim, heading order, every text block (paragraphs, list items, table cells, component text) verbatim, commit hashes and changed paths, lint receipt).
 - **QA enforcement gates** — qa blocks phase transitions, drivers, Stop, and completion until the actor-roster → story → user scenario → record → verdict → complete chain is satisfied (PLAN reachability probing remains available); Claude/Codex `qa-driver-guard.sh` / `codex-qa-driver-guard.sh` and the Codex `codex-qa-seed.sh` enforce the same state. Visual outcomes require claim reviews bound to evidence files; completion also requires an inspected final HTML receipt
 - **QA story contracts and optional reusable cases** — qa reads the plan/issue/spec/PR itself and writes ACs as user-observable outcomes in the report language (a state file is never the source of requirements). The target environment is local unless the user names another; source or caller items for deploying, post-deploy observation, production records or follow-up PRs go to `## Out of QA Scope`, and PR/wiki provenance is requirements input only. An item qa cannot place is asked of the user before `set-acceptance`. Each actor carries `client_impact` (none|contract|render) with a reason, and a screen-render actor needs a screen-driven scenario with before/after screenshots (a scenario proven by an automated test carries no profile) per device profile in the per-project `~/.qa-cases/<projectKey>/device-profiles.yaml` (`qa-device-profiles.ts get|set|upsert|remove`; if unconfigured, show the built-in defaults and ask once, save them with `set --defaults` when the user does not know, `remove` unsupported platforms, `upsert` to fix a size or add a project screen; sizes are never guessed). Each such scenario's evidence review includes a layout claim checking clipping, overlap, horizontal scroll, and text wrap. New stories require a goal, non-empty Given/When/Then string arrays, and zero-based acceptance-criteria links, plus at least one H-priority scenario per story; each of the six risk tags must be covered by a scenario or declared with `declare-risk-na` and a reason. Old records remain readable but are not execution-ready. Once a cycle has evidence, contract changes are rejected. The optional case store records only its pointer and mode in the fixed external `~/.qa-cases/<projectKey>/manifest.yaml`; the store is on by default, keeping case metadata and assets in `~/.qa-cases/<projectKey>/cases`, and is `disabled` only when the user asks. The feature map (`~/.feature-maps/<project-key>/store`) is on by default too. A case is one scenario, found by feature (`feature_refs` are feature-map ids; `list --feature`). Each H scenario that passes by driving its boundary is recorded while driven, saved, replayed as the flaky-rerun, and linked with `record-case` (or `--none` with a reason); `complete` refuses while one has neither. A scenario that already has a result and is itself wrong is corrected with `amend-scenario --reason` (reason required): its result resets so it is re-run and re-recorded, the prior record stays in `scenario_amendments`, a stored verdict is removed, and no cycle is consumed. No project files are created without explicit opt-in, and native `.ad`, agent-browser command scripts, and Maestro formats remain unchanged. The `qa-replay.ts --help` replay command checks the active session's complete actor→story→scenario chain, current story/scenario/cycle, and hashes, then creates a receipt without recording PASS; optionally bind it with `qa-state.ts record-scenario --case-run` alongside actual boundary evidence (see the [Reusable QA Cases](skills/qa/reusable-cases.md) guide)
 - **Ultragoal final-review convergence** — converge by priority: HIGH requires repair, checks, and a fresh review; MEDIUM requires repair and checks without re-review; LOW is notes-only. The deterministic CLI denies COMMENT/APPROVE dispatch and re-review while retaining the five-dispatch window
@@ -54,7 +55,7 @@ oh-my-toong is an **agent central-management project**. It keeps skills, agents,
 
 ## Documentation
 
-The details of the library's skills (47) and agents (12) live under `docs/`.
+The details of the library's skills (48) and agents (13) live under `docs/`.
 
 | Doc | Contents |
 |-----|----------|
@@ -62,7 +63,7 @@ The details of the library's skills (47) and agents (12) live under `docs/`.
 | [Review/Quality](docs/skills/review-quality.en.md) | code-review · design-review · slides-review · qa · explain-diff (optional reusable QA cases: [guide](skills/qa/reusable-cases.md)) |
 | [Frontend Design](docs/skills/frontend-design.en.md) | frontend · visual-qa — web UI design, implementation, and independent rendered-result verification |
 | [Research](docs/skills/research.en.md) | ultraresearch · insane-browsing — saturation research engine and blocked-source browsing |
-| [Authoring/Utilities](docs/skills/authoring.en.md) | create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |
+| [Authoring/Utilities](docs/skills/authoring.en.md) | html-report · create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |
 | [Knowledge Graph (pins)](docs/skills/knowledge-graph-pins.en.md) | pins knowledge graph — pin-setup · record · query · audit · wrap-up |
 | [Utilities & Personal Workflows](docs/skills/utilities-personal.en.md) | agent-device · agent-browser · dogfood · hud · read-db · resume · jd · mock-interview, etc. |
 | [Orchestration Guide](docs/ORCHESTRATION.en.md) | deep-interview → craft-tasks → optional prometheus → ultragoal → sisyphus workflow (sisyphus is ultragoal's internal executor, not a direct route) and usage |
@@ -76,34 +77,12 @@ The details of the library's skills (47) and agents (12) live under `docs/`.
 
 - Claude Code CLI installed
 - Node.js v18+ (for HUD functionality)
-- `npm`/`npx` (for Mermaid renderer provisioning)
+- `agent-browser` CLI (the `html-report` skill's `capture.sh` and `lint.sh` use it to drive headless Chrome)
 - `jq` (hooks parse payloads with it — most guards fail open when it is unavailable, but `codex-spawn-context-gate.sh` and `codex-spawn-role-gate.sh` deny the call)
 - `sqlite3` (the Codex detector queries the `state_5.sqlite` state database with it — when unavailable, the detector counts zero and emits one stderr diagnostic)
 - macOS or Linux
 
-`mmdc` and Puppeteer's `chrome-headless-shell` are external tools, not vendored in
-the repository, and are needed when rendering presentations directly. `make sync`
-applies the root `sync.yaml` provision items to each deploy target in declaration
-order. If `mmdc` is missing, it runs `npm i -g @mermaid-js/mermaid-cli`, then renders
-a tiny flowchart to a temporary SVG with the real `mmdc` command to check the
-headless shell. If that smoke check fails, it installs `chrome-headless-shell` with
-the Puppeteer bundled inside `mmdc`. `npx puppeteer` would fetch the latest Puppeteer
-from npm and install that version's Chrome, which can differ from the one `mmdc`'s
-Puppeteer looks for.
-
-Provisioning is per-target and non-fatal, and `make sync-dry` only previews the
-intent without executing it. The renderer itself never installs npm packages. If a
-presentation renderer is run directly without `make sync`, or provisioning failed,
-run these commands manually:
-
-```bash
-npm i -g @mermaid-js/mermaid-cli
-"$(dirname "$(realpath "$(command -v mmdc)")")/../node_modules/.bin/puppeteer" browsers install chrome-headless-shell
-```
-
-The Mermaid render-gate hook fails open when `mmdc` is absent so ordinary Markdown
-writes are not blocked, but mandatory presentation renders require both `mmdc` and
-the headless shell to be ready.
+The `mmdc`/Mermaid renderer is no longer provisioned. Human-facing reports are written directly as one HTML file with inline SVG, following the `html-report` skill.
 
 ### Setup
 

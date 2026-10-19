@@ -133,23 +133,20 @@ const FENCE_RE = /^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^(?:`{3,}|~{3,})[^\n]*$/gm;
 /** Raw HTML preformatted blocks, which are not visible Markdown content. */
 const RAW_PRE_RE = /<pre\b[^>]*>[\s\S]*?(?:<\/pre\s*>|$)/gi;
 
-/** Fenced code with its info string and body captured, so a mermaid-only or
- *  empty fence can be told apart from an actual core-logic fence. */
+/** Fenced code with its info string and body captured, so an empty fence can be
+ *  told apart from an actual core-logic fence. */
 const CODE_FENCE = /^(`{3,}|~{3,})([^\n]*)\n([\s\S]*?)^(?:`{3,}|~{3,})[^\n]*$/gm;
 
 /**
- * A change block satisfies R13's core-logic requirement only with a fence that is
- * NOT a mermaid diagram and is NOT empty. The template reserves mermaid for
- * diagrams and requires real code/pseudocode per change, so a mermaid-only or
- * blank fence is not the logic R13 guarantees.
+ * A change block satisfies R13's core-logic requirement only with a NON-EMPTY
+ * code fence. Diagrams are `figure.diagram` HTML blocks, not fences, so a figure
+ * never counts here and a blank fence is not the logic R13 guarantees.
  */
 function hasCoreCodeFence(body: string): boolean {
 	CODE_FENCE.lastIndex = 0;
 	let m: RegExpExecArray | null = CODE_FENCE.exec(body);
 	while (m !== null) {
-		const info = (m[2] ?? "").trim().toLowerCase();
-		const content = (m[3] ?? "").trim();
-		if (info !== "mermaid" && content !== "") return true;
+		if ((m[3] ?? "").trim() !== "") return true;
 		m = CODE_FENCE.exec(body);
 	}
 	return false;
@@ -734,79 +731,189 @@ function hasArchWaiver(text: string): boolean {
 /** The three system-contract axes the 시스템 레벨 must enumerate (R14). */
 const SYSTEM_CONTRACT_AXES = ["서버 API", "DB 스키마", "클라이언트 의존"] as const;
 
-/** The slice of `text` from a `### <level>` heading to the next heading of depth <= 3. */
-function levelSlice(text: string, level: string): string | null {
+/** The offsets of `text` from a `### <level>` heading to the next heading of depth <= 3. */
+function levelRange(text: string, level: string): { start: number; end: number } | null {
 	const re = new RegExp(`^###\\s*${level}.*$`, "m");
 	const m = re.exec(text);
 	if (!m) return null;
 	const start = m.index + m[0].length;
 	const next = text.slice(start).search(/^#{2,3}\s/m);
-	return next >= 0 ? text.slice(start, start + next) : text.slice(start);
+	return { start, end: next >= 0 ? start + next : text.length };
 }
 
-/** The bodies of every ` ```mermaid ` fence in a raw (unmasked) slice. */
-function mermaidFences(rawSlice: string): string[] {
-	const out: string[] = [];
-	const re = /```mermaid\r?\n([\s\S]*?)```/g;
-	let m: RegExpExecArray | null = re.exec(rawSlice);
+/** The slice of `text` from a `### <level>` heading to the next heading of depth <= 3. */
+function levelSlice(text: string, level: string): string | null {
+	const range = levelRange(text, level);
+	return range === null ? null : text.slice(range.start, range.end);
+}
+
+/** The visible diagram figures of one `### <level>` section, or null when the heading is absent. */
+function levelFigures(text: string, level: string): DiagramFigure[] | null {
+	// Offsets are computed on a same-length masked copy, then applied to the raw text.
+	const range = levelRange(maskNonVisibleMarkdown(text), level);
+	return range === null ? null : diagramFigures(text.slice(range.start, range.end));
+}
+
+/**
+ * Diagram figures — the document's only way to draw a diagram.
+ *
+ * A diagram is a raw-HTML block the author writes into the Markdown:
+ *
+ *   <figure class="diagram" data-kind="flow">
+ *     <svg viewBox="0 0 340 200" role="img" aria-label="…">…</svg>
+ *     <figcaption>…</figcaption>
+ *   </figure>
+ *
+ * `data-kind` is one of {@link DIAGRAM_KINDS}. The block starts at a line that
+ * opens `<figure class="diagram"` (at most 3 spaces of indent) and runs to the
+ * first `</figure>`. The submitted HTML page must carry the block's `<svg>` span
+ * byte-identical (checked at the render step), so the Markdown stays the single
+ * source of truth for both the structure checks and the page's diagrams.
+ */
+export const DIAGRAM_KINDS = ["flow", "sequence", "state", "class", "er", "architecture"] as const;
+export type DiagramKind = (typeof DIAGRAM_KINDS)[number];
+
+/** Kinds that show how a use-case runs — the only ones R15 accepts as a capability's flow diagram. */
+const FLOW_KINDS: readonly string[] = ["flow", "sequence", "state"];
+
+/** Regex source for one figure block (no anchors, no flags); callers anchor it to their own block start. */
+export const DIAGRAM_FIGURE_PATTERN = String.raw`<figure\b[^>]*\bclass\s*=\s*(?:"(?:[^"]*\s)?diagram(?:\s[^"]*)?"|'(?:[^']*\s)?diagram(?:\s[^']*)?')[^>]*>[\s\S]*?<\/figure\s*>`;
+
+/**
+ * The SVG classes the html-report reference stylesheet (`diagram-classes.css`) defines
+ * and the submitted HTML must style. SVG shapes take their colors from these
+ * classes (tokens), never from literal colors in attributes, so a figure follows the
+ * page's light/dark theme. Anything outside this set and SANCTIONED_CLASSES is an invented style.
+ */
+export const DIAGRAM_SVG_CLASSES = [
+	"box", "head", "focal", "ext", "group", "store", "mask", "act",
+	"rel", "rel-ok", "rel-bad", "ret", "msg", "ev", "key", "life", "stop",
+	"init", "fin-ring", "diamond", "verdict-ok", "verdict-bad",
+	"mk-mut", "mk-ok", "mk-bad", "mk-open", "mk-accent",
+	"t-b", "t-s", "t-m", "t-ok", "t-bad", "lbl", "m", "vf",
+] as const;
+
+/** Elements a figure may contain: SVG drawing elements plus the inline text a figcaption needs. */
+const FIGURE_ELEMENTS = new Set([
+	"figure", "figcaption", "b", "strong", "em", "i", "span", "code", "br", "small",
+	"svg", "g", "defs", "marker", "path", "line", "polyline", "polygon", "rect", "circle", "ellipse",
+	"text", "tspan", "title", "desc",
+]);
+
+export interface DiagramFigure {
+	/** The whole block, `<figure …>` through `</figure>`, with comments and raw `<pre>` blanked. */
+	html: string;
+	/** The `<figure …>` opening tag. */
+	openTag: string;
+	/** The `data-kind` value, or null when the attribute is absent. */
+	kind: string | null;
+	/** The `<svg …>…</svg>` span, or null when the figure draws nothing. */
+	svg: string | null;
+}
+
+function attrValue(tag: string, name: string): string | null {
+	const m = new RegExp(`(?<![\\w-])${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, "i").exec(tag);
+	return m === null ? null : (m[1] ?? m[2] ?? "");
+}
+
+function parseFigure(html: string): DiagramFigure {
+	const openTag = /^<figure\b[^>]*>/i.exec(html)?.[0] ?? "";
+	return {
+		html,
+		openTag,
+		kind: attrValue(openTag, "data-kind"),
+		svg: /<svg\b[\s\S]*<\/svg\s*>/i.exec(html)?.[0] ?? null,
+	};
+}
+
+/** Blanks comments and raw `<pre>` (and fenced code) so figures inside them are not read as drawn. */
+function maskForFigures(text: string): string {
+	return maskFenced(text)
+		.replace(/<!--[\s\S]*?(?:-->|$)/g, (m) => m.replace(/[^\n]/g, " "))
+		.replace(RAW_PRE_RE, (m) => m.replace(/[^\n]/g, " "));
+}
+
+/** Every visible `figure.diagram` block of `text`, in document order. */
+export function diagramFigures(text: string): DiagramFigure[] {
+	const masked = maskForFigures(text);
+	const re = new RegExp(`^ {0,3}(${DIAGRAM_FIGURE_PATTERN})`, "gim");
+	const out: DiagramFigure[] = [];
+	let m: RegExpExecArray | null = re.exec(masked);
 	while (m !== null) {
-		if (m[1] !== undefined) out.push(m[1]);
-		m = re.exec(rawSlice);
+		out.push(parseFigure(m[1] ?? ""));
+		m = re.exec(masked);
 	}
 	return out;
 }
 
-/** A node/label token that is a source file path (including root-level files). */
-const FILE_PATH_TOKEN = /(?:^|[\s"'([{])(?:[\w.@-]+\/)*[\w.@-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py|md|json|sql|yaml|yml|css|scss)\b/i;
+function isDiagramKind(kind: string | null): boolean {
+	return DIAGRAM_KINDS.some((k) => k === kind);
+}
 
-const DIAGRAM_TOKEN = "[A-Za-z0-9_./@-]+";
-const DIAGRAM_NON_NODE_LINE = /^(?:flowchart|graph|classDiagram|erDiagram|sequenceDiagram|stateDiagram(?:-v2)?|subgraph|end|direction|title|accTitle|accDescr|note|classDef|style|linkStyle|click)\b/i;
-const DIAGRAM_NODE_DECLARATION = new RegExp(
-	`(?:^|[\\s,])(${DIAGRAM_TOKEN})\\s*(?:\\[\\[([^\\]\\r\\n]*)\\]\\]|\\[([^\\]\\r\\n]*)\\]|\\(\\(([^)\\r\\n]*)\\)\\)|\\(([^)\\r\\n]*)\\)\\)|\\{\\{([^}\\r\\n]*)\\}\\}|\\{([^}\\r\\n]*)\\})`,
-	"g",
-);
-const DIAGRAM_RELATION = new RegExp(
-	`(?:^|[\\s,])(${DIAGRAM_TOKEN}?)\\s*(?:["'][^"\\r\\n]*["']\\s*)?[<|>*o.{}-]{2,}\\s*(?:["'][^"\\r\\n]*["']\\s*)?(${DIAGRAM_TOKEN})`,
-	"g",
-);
+/** A figure that actually draws: a known kind and an SVG. */
+function isDrawnFigure(f: DiagramFigure): boolean {
+	return f.svg !== null && isDiagramKind(f.kind);
+}
 
-function diagramNodeLabels(fence: string): string[] {
-	const labels: string[] = [];
-	for (const rawLine of fence.split(/\r?\n/)) {
-		const line = rawLine.replace(/%%.*$/, "").trim();
-		if (line === "" || DIAGRAM_NON_NODE_LINE.test(line)) continue;
+function decodeEntities(s: string): string {
+	return s
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
+		.replace(/&quot;/g, '"')
+		.replace(/&#39;|&apos;/g, "'")
+		.replace(/&#(\d+);/g, (_m, n: string) => String.fromCodePoint(Number(n)))
+		.replace(/&amp;/g, "&");
+}
 
-		const classDeclaration = new RegExp(`^class\\s+(${DIAGRAM_TOKEN})\\b`, "i").exec(line);
-		if (classDeclaration?.[1] !== undefined) {
-			labels.push(classDeclaration[1]);
-			continue;
-		}
-
-		const withoutEdgeLabels = line.replace(/\|[^|\r\n]*\|/g, "");
-		DIAGRAM_NODE_DECLARATION.lastIndex = 0;
-		let declaration: RegExpExecArray | null = DIAGRAM_NODE_DECLARATION.exec(withoutEdgeLabels);
-		while (declaration !== null) {
-			for (const value of declaration.slice(1)) {
-				if (value !== undefined) labels.push(value);
-			}
-			declaration = DIAGRAM_NODE_DECLARATION.exec(withoutEdgeLabels);
-		}
-
-		const block = new RegExp(`^(${DIAGRAM_TOKEN})\\s*\\{$`).exec(withoutEdgeLabels);
-		if (block?.[1] !== undefined) labels.push(block[1]);
-
-		DIAGRAM_RELATION.lastIndex = 0;
-		let relationship: RegExpExecArray | null = DIAGRAM_RELATION.exec(withoutEdgeLabels);
-		while (relationship !== null) {
-			if (relationship[1] !== undefined) labels.push(relationship[1]);
-			if (relationship[2] !== undefined) labels.push(relationship[2]);
-			relationship = DIAGRAM_RELATION.exec(withoutEdgeLabels);
-		}
-
-		const standalone = new RegExp(`^(${DIAGRAM_TOKEN})$`).exec(withoutEdgeLabels);
-		if (standalone?.[1] !== undefined) labels.push(standalone[1]);
+/** The visible text of every `<text>` element in an SVG fragment (`<tspan>` lines joined by a space). */
+function svgTexts(svg: string, skipClasses: readonly string[] = []): string[] {
+	const out: string[] = [];
+	for (const m of svg.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text\s*>/gi)) {
+		const classes = (attrValue(m[1] ?? "", "class") ?? "").split(/\s+/);
+		if (skipClasses.some((c) => classes.includes(c))) continue;
+		const label = decodeEntities((m[2] ?? "").replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
+		if (label !== "") out.push(label);
 	}
-	return labels;
+	return out;
+}
+
+/** Text classes that mark an edge or message label (`lbl` on arrows, `m` on sequence messages): not a node name. */
+const EDGE_LABEL_CLASSES = ["lbl", "m"] as const;
+
+/** The node labels of a figure: every `<text>` that is not an edge or message label. */
+function diagramNodeLabels(figure: DiagramFigure): string[] {
+	return figure.svg === null ? [] : svgTexts(figure.svg, EDGE_LABEL_CLASSES);
+}
+
+/**
+ * A class box of a `data-kind="class"` figure is `<g data-class="Name">…</g>`.
+ * Inside it, an optional stereotype text («interface» / <<interface>>) is ignored,
+ * the first remaining `<text>` is the class name, and every later `<text>` is one
+ * member or method line.
+ */
+function classBoxes(svg: string): Array<{ name: string; members: string[] }> {
+	const out: Array<{ name: string; members: string[] }> = [];
+	const open = /<g\b[^>]*\bdata-class\s*=\s*(["'])([^"']*)\1[^>]*>/gi;
+	let m: RegExpExecArray | null = open.exec(svg);
+	while (m !== null) {
+		const bodyStart = m.index + m[0].length;
+		const tokens = /<g\b[^>]*?(\/?)>|<\/g\s*>/gi;
+		tokens.lastIndex = bodyStart;
+		let depth = 1;
+		let bodyEnd = svg.length;
+		for (let t = tokens.exec(svg); t !== null; t = tokens.exec(svg)) {
+			if (t[0].startsWith("</")) depth -= 1;
+			else if (t[1] !== "/") depth += 1;
+			if (depth === 0) {
+				bodyEnd = t.index;
+				break;
+			}
+		}
+		const texts = svgTexts(svg.slice(bodyStart, bodyEnd)).filter((t) => !/^(?:«.*»|<<.*>>)$/.test(t));
+		out.push({ name: m[2] ?? "", members: texts.slice(1) });
+		m = open.exec(svg);
+	}
+	return out;
 }
 
 // Component/domain diagram nodes must name a MODULE/concept (a feature, use case,
@@ -814,92 +921,40 @@ function diagramNodeLabels(fence: string): string[] {
 // lives (the card's `패키지` slot), not WHAT the component is. Measured gap: the
 // component diagram nodes were full file paths that truncated mid-path
 // (`health-`, `proposal-`) and told the reader a location, not a module.
-function diagramFilePathNodes(rawSlice: string): boolean {
-	return mermaidFences(rawSlice).some((fence) =>
-		diagramNodeLabels(fence).some((label) => FILE_PATH_TOKEN.test(label)),
-	);
+/** A node/label token that is a source file path (including root-level files). */
+const FILE_PATH_TOKEN = /(?:^|[\s"'([{])(?:[\w.@-]+\/)*[\w.@-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py|md|json|sql|yaml|yml|css|scss)\b/i;
+
+function diagramFilePathNodes(figures: DiagramFigure[]): boolean {
+	return figures.some((f) => diagramNodeLabels(f).some((label) => FILE_PATH_TOKEN.test(label)));
 }
 
-// A domain object diagram (`classDiagram`) drawn with empty class bodies is an
-// opaque box. Measured gap: the domain classDiagram showed only class names with
-// no members or methods, so a reader could not tell what each object holds or
-// does. Every rendered class must carry at least one member/method — explicit
-// declarations, relationship endpoints, and `Class : +field` declarations all
-// create class boxes in Mermaid.
-function classDiagramMissingMembers(rawSlice: string): boolean {
-	const fences = mermaidFences(rawSlice).filter((f) => /\bclassDiagram\b/.test(f));
-	if (fences.length === 0) return false;
-	return fences.some((fence) => {
-		const lines = fence.split(/\r?\n/);
-		const classes = new Map<string, boolean>();
-		const declareClass = (name: string, hasMember = false): void => {
-			classes.set(name, (classes.get(name) ?? false) || hasMember);
-		};
-
-		for (const line of lines) {
-			const member = line.match(/^\s*([A-Za-z_][\w-]*)\s*:\s*[+\-#~]?\s*\S/);
-			if (member?.[1] !== undefined) declareClass(member[1], true);
-
-			const relationship = line.match(
-				/^\s*([A-Za-z_][\w-]*)\s*(?:["'][^"']*["']\s+)?[<|>*o.-]{2,}(?:\s+["'][^"']*["'])?\s*([A-Za-z_][\w-]*)\b/,
-			);
-			if (relationship?.[1] !== undefined && relationship[2] !== undefined) {
-				declareClass(relationship[1]);
-				declareClass(relationship[2]);
-			}
-		}
-
-		for (let index = 0; index < lines.length; index += 1) {
-			const declaration = lines[index]?.match(/^\s*class\s+([A-Za-z_][\w-]*)\b(.*)$/);
-			if (declaration?.[1] === undefined) continue;
-
-			const name = declaration[1];
-			const tail = declaration[2] ?? "";
-			const openBrace = tail.indexOf("{");
-			if (openBrace < 0) {
-				declareClass(name);
-				continue;
-			}
-
-			const sameLineBody = tail.slice(openBrace + 1);
-			const closeBrace = sameLineBody.indexOf("}");
-			if (closeBrace >= 0) {
-				declareClass(name, sameLineBody.slice(0, closeBrace).trim().length > 0);
-				continue;
-			}
-
-			let hasMember = false;
-			for (let bodyIndex = index + 1; bodyIndex < lines.length; bodyIndex += 1) {
-				const bodyLine = lines[bodyIndex]?.trim() ?? "";
-				if (bodyLine === "}") {
-					index = bodyIndex;
-					break;
-				}
-				if (bodyLine !== "" && !bodyLine.startsWith("%%") && !/^<<.*>>$/.test(bodyLine)) {
-					hasMember = true;
-				}
-			}
-			declareClass(name, hasMember);
-		}
-
-		return classes.size > 0 && [...classes.values()].some((hasMember) => !hasMember);
-	});
+// A domain object diagram (`data-kind="class"`) drawn with empty class bodies is
+// an opaque box. Measured gap: the domain diagram showed only class names with no
+// members or methods, so a reader could not tell what each object holds or does.
+// Every class box must carry at least one member/method line, and a class figure
+// with no `<g data-class>` box at all cannot be checked, so it fails too.
+function classFiguresMissingMembers(figures: DiagramFigure[]): boolean {
+	return figures
+		.filter((f) => f.kind === "class" && f.svg !== null)
+		.some((f) => {
+			const boxes = classBoxes(f.svg ?? "");
+			return boxes.length === 0 || boxes.some((box) => box.members.length === 0);
+		});
 }
 
-// R9 — the three architecture levels, each with a mermaid diagram or a reasoned waiver.
+// R9 — the three architecture levels, each with a diagram figure or a reasoned waiver.
 function checkR9(text: string): CheckItem {
 	const problems: string[] = [];
 	for (const level of ARCH_LEVELS) {
 		const slice = levelSlice(maskNonVisibleMarkdown(text), level);
-		const diagramSlice = levelSlice(maskNonVisibleContainers(text), level);
 		if (slice === null) {
 			problems.push(`${level} 헤딩(### ${level})이 없습니다`);
 			continue;
 		}
-		const hasDiagram = diagramSlice !== null && /```mermaid/.test(diagramSlice);
+		const hasDiagram = (levelFigures(text, level) ?? []).some(isDrawnFigure);
 		if (!hasDiagram && !hasArchWaiver(slice)) {
 			problems.push(
-				`${level}에 mermaid 다이어그램도, 사유를 단 생략 마커("구조 변화 없음: <사유>")도 없습니다`,
+				`${level}에 다이어그램 figure(<figure class="diagram" data-kind="…"> 안의 <svg>)도, 사유를 단 생략 마커("구조 변화 없음: <사유>")도 없습니다`,
 			);
 		}
 	}
@@ -980,22 +1035,9 @@ function capabilityChapters(rawSlice: string): { title: string; body: string }[]
 	return out;
 }
 
-/** Visible capability diagrams must be flow/sequence diagrams, not domain models. */
-function capabilityFlowDiagrams(rawSlice: string): string[] {
-	const visible = maskNonVisibleContainers(rawSlice);
-	const out: string[] = [];
-	CODE_FENCE.lastIndex = 0;
-	let match: RegExpExecArray | null = CODE_FENCE.exec(visible);
-	while (match !== null) {
-		if (
-			(match[2] ?? "").trim().toLowerCase() === "mermaid" &&
-			/^(?:flowchart|graph|sequenceDiagram)\b/im.test(match[3] ?? "")
-		) {
-			out.push(match[3] ?? "");
-		}
-		match = CODE_FENCE.exec(visible);
-	}
-	return out;
+/** Visible capability diagrams must show how the use-case runs (flow/sequence/state), not a domain model. */
+function capabilityFlowDiagrams(rawSlice: string): DiagramFigure[] {
+	return diagramFigures(rawSlice).filter((f) => isDrawnFigure(f) && FLOW_KINDS.includes(f.kind ?? ""));
 }
 
 /**
@@ -1053,7 +1095,7 @@ function checkR15(text: string): CheckItem {
 		const masked = maskNonVisibleMarkdown(ch.body);
 		const missing: string[] = CAPABILITY_SLOTS.filter((label) => !masked.includes(label));
 		const hasFlow = capabilityFlowDiagrams(ch.body).length > 0 || hasArchWaiver(masked);
-		if (!hasFlow) missing.push("흐름 다이어그램(mermaid)");
+		if (!hasFlow) missing.push('흐름 다이어그램(figure data-kind="flow|sequence|state")');
 		if (missing.length > 0) problems.push(`「${ch.title}」: ${missing.join(", ")}`);
 	}
 	return {
@@ -1062,7 +1104,7 @@ function checkR15(text: string): CheckItem {
 		pass: problems.length === 0,
 		detail:
 			problems.length > 0
-				? `기능 단위 챕터에 없는 슬롯 — ${problems.join(" · ")}. 각 캐피빌리티(### 챕터)는 구현체·버전·소속 도메인·입구·영향범위를 적고 흐름을 mermaid로 보인다 (architecture-boundaries rule 참조)`
+				? `기능 단위 챕터에 없는 슬롯 — ${problems.join(" · ")}. 각 캐피빌리티(### 챕터)는 구현체·버전·소속 도메인·입구·영향범위를 적고 흐름을 figure.diagram(data-kind=flow|sequence|state)로 보인다 (architecture-boundaries rule 참조)`
 				: "",
 	};
 }
@@ -1156,9 +1198,9 @@ function archEntityCards(slice: string): ArchEntityCard[] {
 // and interface (functions), plus a change kind. Measured gap: the component
 // diagram was bare class names — `CurrentBoostPackInfoCard` alone read as opaque.
 function checkR18(text: string): CheckItem {
-	const diagramSlice = levelSlice(maskNonVisibleContainers(text), "컴포넌트 레벨");
+	const figures = levelFigures(text, "컴포넌트 레벨");
 	const slice = levelSlice(maskNonVisibleMarkdown(text), "컴포넌트 레벨");
-	if (slice === null || diagramSlice === null) {
+	if (slice === null || figures === null) {
 		return {
 			id: "R18",
 			title: "R18 컴포넌트 레벨 노드 카드",
@@ -1168,7 +1210,7 @@ function checkR18(text: string): CheckItem {
 	}
 	// The diagram-node ban applies whether or not the level is waived — a waiver
 	// says "no structural change", not "file paths are fine as nodes".
-	const pathNode = diagramFilePathNodes(diagramSlice);
+	const pathNode = diagramFilePathNodes(figures);
 	if (hasArchWaiver(slice) && !pathNode) {
 		return { id: "R18", title: "R18 컴포넌트 레벨 노드 카드", pass: true, detail: "" };
 	}
@@ -1214,9 +1256,9 @@ const DOMAIN_CARD_MARKERS = ["책임", "핵심 멤버", "변경점"] as const;
 // this diff added or modified, or what it now guarantees. A reasoned
 // `구조 변화 없음: <사유>` waiver stands in when the diff changes no domain object.
 function checkR21(text: string): CheckItem {
-	const diagramSlice = levelSlice(maskNonVisibleContainers(text), "도메인 레벨");
+	const figures = levelFigures(text, "도메인 레벨");
 	const slice = levelSlice(maskNonVisibleMarkdown(text), "도메인 레벨");
-	if (slice === null || diagramSlice === null) {
+	if (slice === null || figures === null) {
 		return {
 			id: "R21",
 			title: "R21 도메인 레벨 엔티티 카드",
@@ -1227,13 +1269,13 @@ function checkR21(text: string): CheckItem {
 	const missing: string[] = [];
 	// The diagram bans hold even under a waiver: an object diagram, if drawn, must
 	// name domain concepts (not file paths) and must show each object's members.
-	if (diagramFilePathNodes(diagramSlice))
+	if (diagramFilePathNodes(figures))
 		missing.push(
 			"다이어그램 노드가 파일 경로 — 도메인 노드는 실재 비즈니스 개념/엔티티 이름으로 적는다",
 		);
-	if (classDiagramMissingMembers(diagramSlice))
+	if (classFiguresMissingMembers(figures))
 		missing.push(
-			"객체 다이어그램의 클래스 박스가 비어 있음 — 각 객체의 멤버 변수와 메소드(메시지)를 채운다",
+			"객체 다이어그램(data-kind=class)의 클래스 박스(<g data-class>)가 없거나 비어 있음 — 각 박스에 클래스 이름 다음 줄부터 멤버 변수와 메소드(메시지)를 <text>로 채운다",
 		);
 	const hasStructuredCoreMemberRow = (body: string): boolean => {
 		const withoutComments = body.replace(/<!--[\s\S]*?(?:-->|$)/g, "");
@@ -1445,7 +1487,7 @@ function checkR13(
 	if (blocks.length === 0) problems.push("변경 블록(#### 변경 N: …)이 하나도 없습니다");
 	const noCode = blocks.filter((b) => !hasCoreCodeFence(b.body)).map((b) => b.heading);
 	if (noCode.length > 0)
-		problems.push(`핵심 로직 코드 펜스(mermaid·빈 펜스 제외)가 없는 변경: ${noCode.join(", ")}`);
+		problems.push(`핵심 로직 코드 펜스(빈 펜스 제외)가 없는 변경: ${noCode.join(", ")}`);
 	return {
 		id: "R13",
 		title: "R13 커밋 뼈대 + 핵심 로직 코드",
@@ -1455,10 +1497,11 @@ function checkR13(
 }
 
 /**
- * The component classes render.ts ships CSS for. Anything outside this set is
- * styling the renderer does not know, i.e. an invented visual language.
+ * The component classes the explain-diff reference stylesheet (`components.css`)
+ * defines and the submitted HTML must style. Anything outside this set is a class
+ * the document vocabulary does not know, i.e. an invented visual language.
  */
-const SANCTIONED_CLASSES = new Set([
+export const SANCTIONED_CLASSES = new Set([
 	"flow",
 	"flow-step",
 	"flow-arrow",
@@ -1477,22 +1520,92 @@ const SANCTIONED_CLASSES = new Set([
 	"gloss",
 ]);
 
-// R11 — the document authors content, the renderer owns presentation.
+// R11 — the Markdown document authors content only; presentation lives in the HTML page.
+// Outside a figure: no <style>/<script>/style=, only SANCTIONED_CLASSES. Inside a
+// `figure.diagram`: SVG drawing elements and presentation attributes are allowed,
+// classes come from SANCTIONED_CLASSES + DIAGRAM_SVG_CLASSES (CSS the reference stylesheets define),
+// and <style>, style=, <script>, <foreignObject>, event handlers, links and literal
+// colors stay banned, so the figure follows the page theme.
+const FIGURE_CLASSES = new Set<string>([...SANCTIONED_CLASSES, ...DIAGRAM_SVG_CLASSES]);
+const FIGURE_COLOR_ATTR = /(?<![\w-])(fill|stroke|stop-color|flood-color|color)\s*=\s*(["'])(.*?)\2/gi;
+const FIGURE_THEME_COLOR = /^(?:none|currentcolor|inherit|url\(#[^)]+\)|var\(--[\w-]+\))$/i;
+const MIN_WIDTH_RANGE = { min: 240, max: 1400 } as const;
+
+function classProblems(source: string, allowed: ReadonlySet<string>): string[] {
+	const unknown = new Set<string>();
+	for (const m of source.matchAll(/(?<![\w-])class\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
+		for (const cls of (m[1] ?? m[2] ?? "").split(/\s+/).filter(Boolean)) {
+			if (!allowed.has(cls)) unknown.add(cls);
+		}
+	}
+	return unknown.size === 0
+		? []
+		: [`승인 목록 밖의 class: ${[...unknown].sort().join(", ")} (허용: ${[...allowed].sort().join(", ")})`];
+}
+
+function figureProblems(figure: DiagramFigure, index: number): string[] {
+	const label = `figure ${index + 1}`;
+	const out: string[] = [];
+	const body = figure.html.replace(/<!--[\s\S]*?(?:-->|$)/g, "");
+	if (!isDiagramKind(figure.kind))
+		out.push(`${label}: data-kind 가 없거나 잘못됐습니다 (허용: ${DIAGRAM_KINDS.join(", ")})`);
+	const minWidth = attrValue(figure.openTag, "data-min-width");
+	if (minWidth !== null && !(/^\d+$/.test(minWidth) && Number(minWidth) >= MIN_WIDTH_RANGE.min && Number(minWidth) <= MIN_WIDTH_RANGE.max))
+		out.push(`${label}: data-min-width 는 ${MIN_WIDTH_RANGE.min}~${MIN_WIDTH_RANGE.max} 사이 정수(px)여야 합니다`);
+	if (figure.svg === null) {
+		out.push(`${label}: <svg> 가 없습니다`);
+	} else {
+		const svgTag = /^<svg\b[^>]*>/i.exec(figure.svg)?.[0] ?? "";
+		if (attrValue(svgTag, "viewBox") === null) out.push(`${label}: <svg> 에 viewBox 가 없습니다`);
+		if (attrValue(svgTag, "role") !== "img" || (attrValue(svgTag, "aria-label") ?? attrValue(svgTag, "aria-labelledby") ?? "").trim() === "")
+			out.push(`${label}: <svg> 에 role="img" 와 aria-label(그림이 말하는 바 한 문장)이 필요합니다`);
+	}
+	if (/<style\b/i.test(body)) out.push(`${label}: <style> 금지`);
+	if (/(?<![\w-])style\s*=\s*["']/i.test(body)) out.push(`${label}: 인라인 style="…" 금지 — 색·굵기는 승인된 SVG 클래스로`);
+	if (/<script\b/i.test(body)) out.push(`${label}: <script> 금지`);
+	if (/<foreignObject\b/i.test(body)) out.push(`${label}: <foreignObject> 금지 — 라벨은 <text>/<tspan> 으로`);
+	if (/\son[a-z]+\s*=/i.test(body)) out.push(`${label}: 이벤트 핸들러 속성 금지`);
+	if (/(?<![\w-])(?:xlink:)?href\s*=/i.test(body)) out.push(`${label}: href 금지`);
+	const tags = new Set<string>();
+	for (const m of body.matchAll(/<\/?([A-Za-z][\w:-]*)/g)) tags.add((m[1] ?? "").toLowerCase());
+	const badTags = [...tags].filter((t) => !FIGURE_ELEMENTS.has(t) && t !== "foreignobject" && t !== "style" && t !== "script");
+	if (badTags.length > 0) out.push(`${label}: 허용되지 않은 요소: ${badTags.sort().join(", ")}`);
+	const badColors = new Set<string>();
+	for (const m of body.matchAll(FIGURE_COLOR_ATTR)) {
+		if (!FIGURE_THEME_COLOR.test((m[3] ?? "").trim())) badColors.add(`${m[1]}="${m[3]}"`);
+	}
+	if (badColors.size > 0)
+		out.push(`${label}: 리터럴 색 ${[...badColors].sort().join(", ")} — 라이트·다크에서 깨집니다. 승인된 SVG 클래스나 currentColor 를 쓰세요`);
+	out.push(...classProblems(body, FIGURE_CLASSES).map((p) => `${label}: ${p}`));
+	return out;
+}
+
 function checkR11(text: string): CheckItem {
 	const prose = withoutMarkdownCode(text);
 	const problems: string[] = [];
-	if (/<style/i.test(prose)) problems.push("<style> 블록은 금지입니다 — 스타일은 render.ts가 소유합니다");
-	if (/style\s*=\s*["']/i.test(prose)) problems.push('인라인 style="…" 속성은 금지입니다 — 승인된 컴포넌트 클래스를 쓰세요');
-	const unknown = new Set<string>();
-	for (const m of prose.matchAll(/class\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
-		for (const cls of (m[1] ?? m[2] ?? "").split(/\s+/).filter(Boolean)) {
-			if (!SANCTIONED_CLASSES.has(cls)) unknown.add(cls);
+	const figureHtml: string[] = [];
+	const outside = prose.replace(new RegExp(`^ {0,3}${DIAGRAM_FIGURE_PATTERN}`, "gim"), (block) => {
+		figureHtml.push(block.trimStart());
+		return block.replace(/[^\n]/g, " ");
+	});
+	if (/<style/i.test(outside)) problems.push("<style> 블록은 금지입니다 — 문서(Markdown)에는 스타일을 두지 않습니다. 스타일은 render 스텝에서 쓰는 HTML 페이지에만 둡니다");
+	if (/<script\b/i.test(outside)) problems.push("<script> 는 금지입니다");
+	if (/style\s*=\s*["']/i.test(outside)) problems.push('인라인 style="…" 속성은 금지입니다 — 승인된 컴포넌트 클래스를 쓰세요');
+	problems.push(...classProblems(outside, SANCTIONED_CLASSES));
+	const figures = figureHtml.map(parseFigure);
+	figures.forEach((f, i) => problems.push(...figureProblems(f, i)));
+	const seen = new Set<string>();
+	const dup = new Set<string>();
+	for (const f of figures) {
+		for (const m of f.html.matchAll(/(?<![\w-])id\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
+			const id = m[1] ?? m[2] ?? "";
+			if (seen.has(id)) dup.add(id);
+			seen.add(id);
 		}
 	}
-	if (unknown.size > 0)
-		problems.push(
-			`승인 목록 밖의 class: ${[...unknown].sort().join(", ")} (허용: ${[...SANCTIONED_CLASSES].sort().join(", ")})`,
-		);
+	if (dup.size > 0) problems.push(`figure 사이에 중복된 id: ${[...dup].sort().join(", ")} — 화살촉 marker id 는 figure 별 접두사(f1-ah)로 문서 전체에서 유일해야 합니다`);
+	if (/^ {0,3}(?:`{3,}|~{3,})[ \t]*mermaid\b/im.test(text))
+		problems.push("```mermaid 펜스는 더 이상 렌더되지 않습니다 — <figure class=\"diagram\" data-kind=\"…\"> 안의 인라인 SVG 로 그리세요");
 	return {
 		id: "R11",
 		title: "R11 스타일 발명 금지",
@@ -1545,7 +1658,7 @@ export function checkStructure(text: string, input: StructureInput): StructureRe
 		case "render":
 		case "quiz":
 			// Neither reaches this function in production: `render` is scored by
-			// checkRenderOutput (explain-diff-state.ts), `quiz` by a separate
+			// checkHtmlSubmission (explain-diff-state.ts), `quiz` by a separate
 			// grading path.
 			throw new Error(`checkStructure는 '${input.step}' 스텝을 채점하지 않습니다`);
 		default:
@@ -1557,4 +1670,44 @@ export function checkStructure(text: string, input: StructureInput): StructureRe
 
 	const failedItems = items.filter((i) => !i.pass).map((i) => `${i.title}: ${i.detail}`);
 	return { pass: failedItems.length === 0, items, failedItems };
+}
+
+// ---------------------------------------------------------------------------
+// Document facts the submitted HTML page must carry (render-step content proof)
+// ---------------------------------------------------------------------------
+
+/** Inline Markdown in a heading reduced to the text a reader sees. */
+function plainHeadingText(raw: string): string {
+	return raw
+		.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+		.replace(/<[^>]+>/g, "")
+		.replace(/[`*]/g, "")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+/** The `##` / `###` heading texts a reader sees, in document order, code and comments excluded. */
+export function documentHeadings(text: string): string[] {
+	const masked = maskNonVisibleMarkdown(text);
+	const out: string[] = [];
+	for (const m of masked.matchAll(/^ {0,3}#{2,3}[ \t]+(.+?)[ \t]*$/gm)) {
+		const plain = plainHeadingText(m[1] ?? "");
+		if (plain !== "") out.push(plain);
+	}
+	return out;
+}
+
+/**
+ * The classes of {@link SANCTIONED_CLASSES} ∪ {@link DIAGRAM_SVG_CLASSES} the document
+ * actually uses (inline Markdown code excluded). The submitted page must define each.
+ */
+export function usedStyleClasses(text: string): string[] {
+	const vocabulary = new Set<string>([...SANCTIONED_CLASSES, ...DIAGRAM_SVG_CLASSES]);
+	const used = new Set<string>();
+	for (const m of withoutMarkdownCode(text).matchAll(/(?<![\w-])class\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
+		for (const cls of (m[1] ?? m[2] ?? "").split(/\s+/).filter(Boolean)) {
+			if (vocabulary.has(cls)) used.add(cls);
+		}
+	}
+	return [...used].sort();
 }
