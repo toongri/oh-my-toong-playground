@@ -15,157 +15,25 @@
  * prose, and oracle diagnosis. See skills/qa/SKILL.md "HTML Report".
  */
 import { createHash } from "crypto";
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "fs";
-import { dirname, extname, resolve } from "path";
+import { mkdirSync, readFileSync, writeFileSync } from "fs";
+import { dirname, extname } from "path";
 import { getOmtDir } from "@lib/omt-dir";
-import { RISK_AXES, actorReach, scenarioNeedsVisualProof, evidenceReviewComplete, type QaActor, type QaBaseline, type QaReachability, type QaResult, type QaRunCheck, type QaScenario, type QaStory } from "@lib/qa-chain-core";
-import { CODE_IDENTIFIER, readQaView, recordRenderedReport, stateProbe, type QaView } from "./qa-state.ts";
+import { RISK_AXES, actorReach, scenarioNeedsVisualProof, evidenceReviewComplete, type QaActor, type QaBaseline, type QaReachability, type QaResult, type QaRunCheck, type QaScenario } from "@lib/qa-chain-core";
+import { readQaView, recordRenderedReport, stateProbe, type QaView } from "./qa-state.ts";
+import {
+	IMAGE_MIME, MAX_TOTAL_EMBED_BYTES, NarrativeError, actorFor, assertRenderable, defaultEvidenceReader, escapeHtml, hasValidImageSignature, resolveAcMapping, sanitizeBigPictureSvg, scenarioKey, scenariosForStory, validateNarrative,
+	type EvidenceEmbed, type EvidenceReader, type QaReportNarrative, type QaReportPresentation,
+} from "./qa-narrative.ts";
 
-// Keep individual evidence files small enough to inspect, and cap the total
-// embedded payload so a full scenario matrix cannot produce an impractical
-// self-contained document.
-export const MAX_EMBED_BYTES = 2 * 1024 * 1024;
-export const MAX_TOTAL_EMBED_BYTES = 16 * 1024 * 1024;
-
-export type EvidenceEmbed =
-	| { kind: "image"; dataUri: string }
-	| { kind: "text"; content: string }
-	| { kind: "missing"; path: string }
-	// `media` records whether the oversized file was an image or plain text, so
-	// `imageSlot` can tell a too-large screenshot (still shows the placeholder)
-	// from too-large text/API/CLI evidence (never a screenshot placeholder).
-	// Absent (existing injected test readers) behaves as before: image.
-	| { kind: "too-large"; path: string; size: number; media?: "image" | "text" };
-
-export type EvidenceReader = (path: string) => EvidenceEmbed;
-
-const IMAGE_MIME: Record<string, string> = {
-	".png": "image/png",
-	".jpg": "image/jpeg",
-	".jpeg": "image/jpeg",
-	".gif": "image/gif",
-	".webp": "image/webp",
-	".svg": "image/svg+xml",
-};
-
-/** Reads evidence off disk: images embed as base64 data URIs (capped), everything else renders as text. */
-export function defaultEvidenceReader(path: string): EvidenceEmbed {
-	const absolute = resolve(path);
-	try {
-		const size = statSync(absolute).size;
-		const mime = IMAGE_MIME[extname(absolute).toLowerCase()];
-		if (size > MAX_EMBED_BYTES) return { kind: "too-large", path, size, media: mime ? "image" : "text" };
-		if (mime) {
-			const data = readFileSync(absolute);
-			return { kind: "image", dataUri: `data:${mime};base64,${data.toString("base64")}` };
-		}
-		return { kind: "text", content: readFileSync(absolute, "utf8") };
-	} catch {
-		return { kind: "missing", path };
-	}
-}
-
-export interface QaReportNarrativeIssue {
-	severity: "CRITICAL" | "LOW";
-	description: string;
-	location?: string;
-	what?: string;
-}
-
-export interface QaReportScenarioNarrative {
-	/**
-	 * Reader-facing: what was done at this scenario's user boundary and what the
-	 * real software rendered, in plain language. This IS the reader evidence for a
-	 * scenario verified at a non-visual boundary (API/CLI) — it stands in for the
-	 * raw transcript, which stays in the audit. For a UI scenario it narrates the
-	 * screenshots beside it. Required for every verified (pass/fail) scenario that
-	 * has no screenshot; its absence there renders a loud gap.
-	 */
-	observed?: string;
-	expectedVsActual?: string;
-	oracleDiagnosis?: string;
-}
-
-/**
- * One recorded acceptance criterion's satisfaction judgment (render-time).
- * `unverified` is distinct from `no`: the requirement was NOT driven at its user
- * boundary (unreachable environment / NOT-RUN scenarios), so it is neither proven
- * met nor proven broken — it reads loudly as "미검증", never as a quiet partial.
- */
-export interface QaReportAcMapping {
-	satisfied?: "yes" | "no" | "partial" | "unverified";
-	/** Structured current-cycle scenario selectors; prose-only or cell-era mappings fail closed. */
-	scenarioRefs?: Array<{
-		story: string;
-		scenario: string;
-	}>;
-	/** Which stories/scenarios/evidence prove (or fail) this criterion, in prose. */
-	evidence?: string;
-}
-
-/**
- * The reader-facing presentation layer — the product/user-centric narrative a
- * context-free PO/designer reads first to judge whether the change met the
- * requirements, without opening code or the verification log below it.
- *
- * It is NOT a code-diff summary. Every part is anchored to a recorded fact so
- * the layer cannot drift from what qa actually ran:
- * - `affectedUsers` is keyed by recorded actor id (roster is authoritative);
- *   prose for an id absent from the roster is ignored, never invented onto the page.
- * - `scenarioFlows` is keyed by recorded story id.
- * - `requirementMapping` is keyed by the recorded acceptance-criterion index
- *   (as a string); the criterion text itself always comes from qa-state records.
- * Only the prose and the big-picture diagram originate here. A required slot with
- * no narrative renders a visible gap marker instead of silently vanishing.
- */
-export interface QaReportPresentation {
-	/** 기능 개요 — what the change is and why, at the product level. */
-	overview?: string;
-	/** actor id → how this user uses the product + how the change affects them. */
-	affectedUsers?: Record<string, string>;
-	/** story id → the rich, user-boundary flow the reader should expect. */
-	scenarioFlows?: Record<string, string>;
-	/** AC index (as string) → its satisfaction judgment. */
-	requirementMapping?: Record<string, QaReportAcMapping>;
-	/**
-	 * The big-picture diagram: ONE model-authored inline <svg> element, drawn with
-	 * the class vocabulary in `SVG_CLASSES`. It is sanitized (see `sanitizeBigPictureSvg`)
-	 * and rejected, never repaired, on any disallowed construct.
-	 */
-	bigPictureSvg?: string;
-	bigPictureCaption?: string;
-}
-
-/**
- * The subjective half of the report — never persisted to qa-state. Scenario
- * narratives are keyed by `${story}:${scenario id}`.
- */
-export interface QaReportNarrative {
-	/**
-	 * Legacy input kept for JSON compatibility. Acceptance criteria are only
-	 * authoritative when recorded in QaView and this value is ignored.
-	 */
-	acceptanceCriteria?: string[];
-	issues?: QaReportNarrativeIssue[];
-	scenarios?: Record<string, QaReportScenarioNarrative>;
-	presentation?: QaReportPresentation;
-}
-
-function escapeHtml(s: string): string {
-	return String(s)
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;");
-}
+// The narrative contract and its validation live in qa-narrative.ts; these names stay importable from here.
+export {
+	BigPictureSvgError, MAX_EMBED_BYTES, MAX_TOTAL_EMBED_BYTES, NarrativeError, SVG_CLASSES, defaultEvidenceReader, sanitizeBigPictureSvg, scenarioKey,
+	type EvidenceEmbed, type EvidenceReader, type QaReportAcMapping, type QaReportNarrative, type QaReportNarrativeIssue, type QaReportPresentation, type QaReportScenarioNarrative,
+} from "./qa-narrative.ts";
 
 /** Escapes an audit ID and offers line breaks only after `_ - / .` (never mid-token). */
 function breakableId(id: string): string {
 	return escapeHtml(id).replace(/([_\-/.])/g, "$1<wbr>");
-}
-
-export function scenarioKey(scenario: { story: string; id: string }): string {
-	return `${scenario.story}:${scenario.id}`;
 }
 
 function currentCycle(view: QaView): number {
@@ -181,15 +49,6 @@ function recordedResult(value: RecordedCheck): QaResult | "blocked" | null {
 
 function recordedNote(value: RecordedCheck): string | undefined {
 	return typeof value === "string" || value === null || value === undefined ? undefined : value.note;
-}
-
-function actorFor(view: QaView, story: QaStory): QaActor | undefined {
-	const id = story.actor ?? story.actor_id;
-	return (view.actors ?? []).find((actor) => actor.id === id);
-}
-
-function scenariosForStory(view: QaView, storyId: string): QaScenario[] {
-	return (view.scenarios ?? []).filter((scenario) => scenario.story === storyId);
 }
 
 const STATUS_LABEL: Record<string, string> = { pass: "통과", fail: "실패", blocked: "검증 불가", unverified: "근거 미검증", unrecorded: "미실행" };
@@ -209,19 +68,6 @@ function embeddedByteLength(embed: EvidenceEmbed): number {
 	if (embed.kind === "image") return Buffer.byteLength(embed.dataUri, "utf8");
 	if (embed.kind === "text") return Buffer.byteLength(embed.content, "utf8");
 	return 0;
-}
-
-function hasValidImageSignature(dataUri: string): boolean {
-	const match = /^data:image\/(png|jpeg|webp|gif);base64,(.*)$/.exec(dataUri);
-	if (!match) return false;
-	const bytes = Buffer.from(match[2], "base64");
-	if (bytes.length < 24) return false;
-	return (
-		bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
-		(bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) ||
-		/^GIF8[79]a/.test(bytes.toString("ascii", 0, 6)) ||
-		(bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP")
-	);
 }
 
 /**
@@ -288,158 +134,7 @@ function proseOrGap(prose: string | undefined, whatMissing: string): string {
 	return prose?.trim() ? `<p>${escapeHtml(prose)}</p>` : gap(whatMissing);
 }
 
-/** A big-picture diagram the renderer refuses (fail closed): the message names the offending construct. */
-export class BigPictureSvgError extends Error {}
-
-// The SVG is a trust boundary: it comes from the model and lands in the report
-// verbatim-looking. So it is parsed with a small strict tokenizer, checked
-// against allowlists, and re-serialized from the parsed tokens — the original
-// string is never echoed. Anything outside the allowlists throws.
-const SVG_ELEMENTS = new Set(["svg", "g", "defs", "marker", "path", "line", "polyline", "polygon", "rect", "circle", "ellipse", "text", "tspan", "title", "desc"]);
-const SVG_TEXT_ELEMENTS = new Set(["text", "tspan", "title", "desc"]);
-const SVG_ELEMENT_HINTS: Record<string, string> = {
-	script: "scripts can run code",
-	foreignobject: "embedded HTML does not scale or theme",
-	style: "colors come from the report's class vocabulary",
-	image: "external or embedded bitmaps are not allowed",
-	a: "links are not allowed",
-	use: "references can pull in external content",
-	animate: "animation is not allowed",
-	set: "animation is not allowed",
-	animatetransform: "animation is not allowed",
-	iframe: "embedding is not allowed",
-};
-/** Classes the renderer's CSS themes (light + dark); the only way an author colors a shape. */
-export const SVG_CLASSES = ["box", "box-focal", "zone", "edge", "edge-pass", "edge-fail", "edge-dash", "mk", "mk-pass", "mk-fail", "t-b", "t-s", "lbl", "stop"] as const;
-const NUM = /^-?(\d+\.?\d*|\.\d+)(e-?\d+)?$/i;
-const NUM_LIST = /^[-0-9.,\s]+$/;
-const PATH_DATA = /^[MmLlHhVvCcSsQqTtAaZz0-9eE.,\s+-]+$/;
-const TRANSFORM = /^\s*((translate|scale|rotate)\([-0-9.,\s]+\)\s*)+$/;
-const COLOR = /^(none|currentColor|var\(--[a-z-]+\))$/;
-const URL_FRAGMENT = /^url\(#([A-Za-z][\w-]*)\)$/;
-const ENUM = (...values: string[]) => (v: string) => values.includes(v);
-const ATTRIBUTE_RULES: Record<string, (value: string) => boolean> = {
-	id: (v) => /^[A-Za-z][\w-]*$/.test(v),
-	class: (v) => v.trim().split(/\s+/).every((c) => SVG_CLASSES.some((known) => known === c)),
-	viewBox: (v) => { const p = v.trim().split(/[\s,]+/); return p.length === 4 && p.every((n) => NUM.test(n)) && Number(p[2]) > 0 && Number(p[3]) > 0; },
-	x: (v) => NUM.test(v), y: (v) => NUM.test(v), x1: (v) => NUM.test(v), y1: (v) => NUM.test(v), x2: (v) => NUM.test(v), y2: (v) => NUM.test(v),
-	cx: (v) => NUM.test(v), cy: (v) => NUM.test(v), r: (v) => NUM.test(v), rx: (v) => NUM.test(v), ry: (v) => NUM.test(v),
-	width: (v) => NUM.test(v), height: (v) => NUM.test(v), refX: (v) => NUM.test(v), refY: (v) => NUM.test(v),
-	markerWidth: (v) => NUM.test(v), markerHeight: (v) => NUM.test(v),
-	"stroke-width": (v) => NUM.test(v), opacity: (v) => NUM.test(v), "fill-opacity": (v) => NUM.test(v), "stroke-opacity": (v) => NUM.test(v),
-	"stroke-dasharray": (v) => NUM_LIST.test(v),
-	d: (v) => PATH_DATA.test(v), points: (v) => NUM_LIST.test(v), transform: (v) => TRANSFORM.test(v),
-	fill: (v) => COLOR.test(v), stroke: (v) => COLOR.test(v),
-	"marker-start": (v) => URL_FRAGMENT.test(v), "marker-mid": (v) => URL_FRAGMENT.test(v), "marker-end": (v) => URL_FRAGMENT.test(v),
-	"text-anchor": ENUM("start", "middle", "end"),
-	"font-weight": ENUM("normal", "bold", "500", "600", "700"),
-	"stroke-linecap": ENUM("butt", "round", "square"), "stroke-linejoin": ENUM("miter", "round", "bevel"),
-	"fill-rule": ENUM("nonzero", "evenodd"),
-	orient: (v) => v === "auto" || v === "auto-start-reverse" || NUM.test(v),
-	markerUnits: ENUM("strokeWidth", "userSpaceOnUse"),
-	preserveAspectRatio: ENUM("xMidYMid meet", "none"),
-	"aria-label": (v) => v.trim() !== "", "aria-labelledby": (v) => /^[A-Za-z][\w-]*( [A-Za-z][\w-]*)*$/.test(v),
-	"aria-hidden": ENUM("true"),
-	role: ENUM("img"),
-	xmlns: ENUM("http://www.w3.org/2000/svg"),
-};
-const ROOT_ONLY_ATTRIBUTES = new Set(["xmlns", "role", "aria-label", "aria-labelledby"]);
-const SVG_ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
-
-function svgFail(message: string): never {
-	throw new BigPictureSvgError(`presentation.bigPictureSvg rejected: ${message}`);
-}
-
-function decodeSvgText(raw: string, where: string): string {
-	return raw.replace(/&([^;\s&]*);?/g, (whole, name: string) => {
-		if (!whole.endsWith(";") || !Object.hasOwn(SVG_ENTITIES, name)) svgFail(`${where} contains the entity "${whole}" (only &amp; &lt; &gt; &quot; &apos; are allowed)`);
-		return SVG_ENTITIES[name];
-	});
-}
-
-/**
- * Validates one model-authored `<svg>` and returns a re-serialized, renderer-
- * owned copy. The root keeps only its viewBox; the renderer adds role="img" and
- * sizing. Throws {@link BigPictureSvgError} naming the first offending construct.
- */
-export function sanitizeBigPictureSvg(source: string): { svg: string; viewBoxWidth: number } {
-	const tokenizer = /<!--|<!|<\?|<(\/?)([A-Za-z][\w:-]*)((?:\s+[^\s=>/"']+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>"']+))?)*)\s*(\/?)>|<|[^<]+/g;
-	const out: string[] = [];
-	const stack: string[] = [];
-	const ids = new Set<string>();
-	const references: string[] = [];
-	let rootSeen = false;
-	let viewBoxWidth = 0;
-	let rootLabel = "";
-	const trimmed = source.trim();
-	for (let token = tokenizer.exec(trimmed); token; token = tokenizer.exec(trimmed)) {
-		const text = token[0];
-		if (text.startsWith("<!--") || text.startsWith("<!") || text.startsWith("<?")) svgFail(`"${text}" (comments, CDATA, doctype and processing instructions are not allowed)`);
-		if (text.startsWith("<") && token[2] === undefined) svgFail(`malformed markup near "${text.slice(0, 30)}"`);
-		if (!text.startsWith("<")) {
-			const whole = decodeSvgText(text, "text");
-			if (stack.length === 0) { if (whole.trim() !== "") svgFail("text outside the <svg> root"); continue; }
-			if (!SVG_TEXT_ELEMENTS.has(stack[stack.length - 1])) { if (whole.trim() !== "") svgFail(`text inside <${stack[stack.length - 1]}> (text belongs in <text>, <tspan>, <title> or <desc>)`); continue; }
-			out.push(escapeHtml(whole));
-			continue;
-		}
-		const closing = token[1] === "/";
-		const name = token[2];
-		if (!SVG_ELEMENTS.has(name)) svgFail(`<${name}> is not allowed${SVG_ELEMENT_HINTS[name.toLowerCase()] ? ` (${SVG_ELEMENT_HINTS[name.toLowerCase()]})` : ""}`);
-		if (closing) {
-			if (stack.pop() !== name) svgFail(`unbalanced </${name}>`);
-			out.push(`</${name}>`);
-			continue;
-		}
-		if (stack.length === 0) { if (rootSeen) svgFail("more than one root element (exactly one <svg> is allowed)"); if (name !== "svg") svgFail(`root must be <svg>, got <${name}>`); rootSeen = true; }
-		else if (name === "svg") svgFail("nested <svg> is not allowed");
-		const attrs: string[] = [];
-		const seenAttrs = new Set<string>();
-		for (const match of (token[3] ?? "").matchAll(/([^\s=>/"']+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>"']+)))?/g)) {
-			const attr = match[1];
-			if (/^on/i.test(attr)) svgFail(`event handler attribute "${attr}" on <${name}>`);
-			if (/^style$/i.test(attr)) svgFail(`style="" attribute on <${name}> (use the class vocabulary)`);
-			if (/(^|:)href$/i.test(attr)) svgFail(`"${attr}" attribute on <${name}> (external references are not allowed)`);
-			const rule = ATTRIBUTE_RULES[attr];
-			if (!rule) svgFail(`attribute "${attr}" on <${name}> is not in the allowlist`);
-			if (match[2] === undefined && match[3] === undefined) svgFail(`attribute "${attr}" on <${name}> needs a quoted value`);
-			if (seenAttrs.has(attr)) svgFail(`duplicate attribute "${attr}" on <${name}>`);
-			seenAttrs.add(attr);
-			if (ROOT_ONLY_ATTRIBUTES.has(attr) && name !== "svg") svgFail(`attribute "${attr}" is only allowed on the <svg> root, found on <${name}>`);
-			if (attr === "viewBox" && name !== "svg" && name !== "marker") svgFail(`attribute "viewBox" on <${name}>`);
-			if (attr === "width" || attr === "height") { if (name === "svg") svgFail(`attribute "${attr}" on the <svg> root (the renderer sizes it from viewBox)`); }
-			const value = decodeSvgText(match[2] ?? match[3] ?? "", `attribute "${attr}"`);
-			if (/url\(/i.test(value) && !URL_FRAGMENT.test(value)) svgFail(`attribute "${attr}" on <${name}> uses url(...) other than a same-document #id`);
-			if (!rule(value)) svgFail(`attribute "${attr}="${value.slice(0, 40)}"" on <${name}> is not a permitted value`);
-			if (attr === "id") ids.add(value);
-			const ref = URL_FRAGMENT.exec(value);
-			if (ref) references.push(ref[1]);
-			if (name === "svg" && attr === "viewBox") viewBoxWidth = Number(value.trim().split(/[\s,]+/)[2]);
-			if (name === "svg" && attr === "aria-label") rootLabel = value;
-			if (name !== "svg" || !ROOT_ONLY_ATTRIBUTES.has(attr)) attrs.push(`${attr}="${escapeHtml(value)}"`);
-		}
-		if (name === "svg") {
-			if (!seenAttrs.has("viewBox")) svgFail("the <svg> root needs a viewBox");
-			if (!rootLabel.trim()) svgFail('the <svg> root needs a non-empty aria-label (a one-sentence statement of what the diagram shows)');
-		}
-		const selfClosing = token[4] === "/";
-		if (name === "svg") attrs.push(`role="img"`, `aria-label="${escapeHtml(rootLabel)}"`);
-		out.push(`<${name}${attrs.length ? ` ${attrs.join(" ")}` : ""}${selfClosing ? "/" : ""}>`);
-		if (!selfClosing) stack.push(name);
-	}
-	if (!rootSeen) svgFail("no <svg> root element found");
-	if (stack.length) svgFail(`unclosed <${stack[stack.length - 1]}>`);
-	for (const ref of references) if (!ids.has(ref)) svgFail(`url(#${ref}) points at an id that is not defined inside the <svg>`);
-	return { svg: out.join(""), viewBoxWidth };
-}
-
-/** The pre-rename field name; kept only to refuse it loudly. */
-const LEGACY_BIG_PICTURE_FIELD = "bigPicture";
-
 function renderBigPicture(presentation: QaReportPresentation | undefined): string {
-	if (presentation && LEGACY_BIG_PICTURE_FIELD in presentation) {
-		throw new BigPictureSvgError(`presentation.${LEGACY_BIG_PICTURE_FIELD} is no longer supported (it held Mermaid source). Provide presentation.bigPictureSvg: one inline <svg> element authored per skills/qa/presentation.md`);
-	}
 	const source = presentation?.bigPictureSvg;
 	if (!source?.trim()) return `<h2>큰 그림</h2>${gap("큰 그림 다이어그램이 없습니다")}`;
 	const { svg, viewBoxWidth } = sanitizeBigPictureSvg(source);
@@ -461,46 +156,6 @@ const SATISFIED_LABEL: Record<string, string> = {
 	partial: "부분 충족",
 	unverified: "미검증 — 검증 불가 시나리오에 걸림",
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-type ValidAcMapping = Omit<QaReportAcMapping, "satisfied" | "scenarioRefs"> & {
-	satisfied: NonNullable<QaReportAcMapping["satisfied"]>;
-	scenarioRefs: NonNullable<QaReportAcMapping["scenarioRefs"]>;
-};
-
-function validateAcMapping(view: QaView, value: unknown, acIndex: number): ValidAcMapping | null {
-	if (!isRecord(value)) return null;
-	const satisfied = value.satisfied;
-	if (satisfied !== "yes" && satisfied !== "no" && satisfied !== "partial" && satisfied !== "unverified") return null;
-	if (!Array.isArray(value.scenarioRefs) || value.scenarioRefs.length === 0) return null;
-	const refs: NonNullable<QaReportAcMapping["scenarioRefs"]> = [];
-	const seen = new Set<string>();
-	const statuses: string[] = [];
-	for (const ref of value.scenarioRefs) {
-		if (!isRecord(ref) || typeof ref.story !== "string" || ref.story.trim() === "" || typeof ref.scenario !== "string" || ref.scenario.trim() === "") return null;
-		const key = scenarioKey({ story: ref.story, id: ref.scenario });
-		if (seen.has(key)) return null;
-		seen.add(key);
-		const matches = (view.scenarios ?? []).filter((scenario) => scenario.story === ref.story && scenario.id === ref.scenario && scenario.cycle === view.cycle);
-		if (matches.length !== 1) return null;
-		const story = (view.stories ?? []).find((s) => s.id === ref.story);
-		if (!story?.contract?.acceptance_criteria?.includes(acIndex)) return null;
-		const status = matches[0].status;
-		if (status !== "pass" && status !== "fail" && status !== "blocked") return null;
-		refs.push({ story: ref.story, scenario: ref.scenario });
-		statuses.push(status);
-	}
-	const validStatus =
-		(satisfied === "yes" && statuses.every((status) => status === "pass")) ||
-		(satisfied === "no" && statuses.every((status) => status === "fail")) ||
-		(satisfied === "partial" && !statuses.includes("blocked") && statuses.includes("pass") && statuses.includes("fail")) ||
-		(satisfied === "unverified" && statuses.includes("blocked"));
-	if (!validStatus) return null;
-	return { satisfied, scenarioRefs: refs, ...(typeof value.evidence === "string" ? { evidence: value.evidence } : {}) };
-}
 
 /**
  * The reader-facing head: feature overview, affected users (anchored to the
@@ -559,15 +214,16 @@ function renderActors(view: QaView, narrative: QaReportNarrative): string {
 			);
 		})
 		.join("");
-	return `<h2>액터 · 영향받는 유저</h2>` + (blocks || `<p class="evidence-note">기록된 actor 없음</p>`);
+	return `<h2>액터 · 영향받는 유저</h2>` + (blocks ? `<div class="actors">${blocks}</div>` : `<p class="evidence-note">기록된 actor 없음</p>`);
 }
 
 /**
  * Acceptance Criteria + fulfillment, MERGED into one board near the top: each
  * recorded acceptance criterion shown with its satisfaction verdict
  * (yes/no/partial/unverified) and the backing evidence prose. Criterion text is
- * authoritative from `qa-state` records; the verdict and its backing come from
- * `narrative.presentation.requirementMapping`, keyed by AC index. This is the
+ * authoritative from `qa-state` records; the verdict is DERIVED from the recorded
+ * results of the scenarios named in `narrative.presentation.requirementMapping`
+ * (keyed by AC index), and only the evidence prose comes from the narrative. This is the
  * PO's at-a-glance "were the requirements met?" answer — the AC text alone (no
  * verdict) is no longer a separate section.
  */
@@ -577,7 +233,8 @@ function renderRequirementFulfillment(view: QaView, narrative: QaReportNarrative
 	const acRows = acItems
 		.map((criterion, i) => {
 			const m = p?.requirementMapping?.[String(i)];
-			const valid = validateAcMapping(view, m, i);
+			const resolved = resolveAcMapping(view, m, i);
+			const valid = resolved.ok ? resolved : null;
 			if (valid?.scenarioRefs.some((ref) => unverified.has(scenarioKey({ story: ref.story, id: ref.scenario })))) return `<div class="ac-map"><h3><span class="badge satisfied-unverified">미검증</span> ${escapeHtml(criterion)}</h3>${gap("근거 미검증 — 연결된 시나리오의 주장 검토가 없거나 부족하거나 오래되었습니다")}</div>`;
 			const badge = valid
 				? `<span class="badge satisfied-${escapeHtml(valid.satisfied)}">${escapeHtml(SATISFIED_LABEL[valid.satisfied])}</span>`
@@ -590,7 +247,7 @@ function renderRequirementFulfillment(view: QaView, narrative: QaReportNarrative
 		.join("");
 	return (
 		`<h2>요구사항(AC) 충족 현황 · ${acItems.length}개</h2>` +
-		(acRows || `<p class="evidence-note">기록된 요구사항이 없습니다</p>`)
+		(acRows ? `<div class="ac-board">${acRows}</div>` : `<p class="evidence-note">기록된 요구사항이 없습니다</p>`)
 	);
 }
 
@@ -738,7 +395,7 @@ function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidenc
 	const inert = view.inert?.declared && (view.inert.cycle === undefined || view.inert.cycle === currentCycle(view))
 		? `<p class="evidence-note">동작이 바뀌지 않는 변경으로 선언됨: ${escapeHtml(view.inert.reason ?? "")}</p>`
 		: "";
-	return `<h2>유저 시나리오 · 근거</h2>` + inert + (stories || `<p class="evidence-note">기록된 story 없음</p>`) + renderRiskNotApplicable(view);
+	return `<h2>유저 시나리오 · 근거</h2>` + inert + (stories ? `<div class="stories">${stories}</div>` : `<p class="evidence-note">기록된 story 없음</p>`) + renderRiskNotApplicable(view);
 }
 
 /** Recorded obstacle of actors whose boundary was blocked; the reader block shows only a neutral badge. */
@@ -808,9 +465,9 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
 		})
 		.join("");
 	const table = rows
-		? `<table class="audit-table" tabindex="0"><thead><tr><th class="audit-story">story / scenario</th><th class="audit-coverage">priority · risks</th><th>scenario · why needed</th><th class="audit-boundary">driven at</th><th>result · evidence</th></tr></thead><tbody>${rows}</tbody></table>`
+		? `<div class="table-scroll"><table class="audit-table" tabindex="0"><thead><tr><th class="audit-story">story / scenario</th><th class="audit-coverage">priority · risks</th><th>scenario · why needed</th><th class="audit-boundary">driven at</th><th>result · evidence</th></tr></thead><tbody>${rows}</tbody></table></div>`
 		: `<p class="evidence-note">기록된 시나리오 없음</p>`;
-	return `<h2>시나리오 상세 기록 (감사)</h2>${table}${renderUnreachedActorsAudit(view)}${renderBlockedRerunAudit(view)}${renderStoryProvenance(view, storyAnchors)}${renderRawEvidence(scenarios, readEvidence, context)}${renderBaselineAudit(view, readEvidence, context)}`;
+	return `<h2>시나리오 상세 기록 (감사)</h2><div class="audit">${table}${renderUnreachedActorsAudit(view)}${renderBlockedRerunAudit(view)}${renderStoryProvenance(view, storyAnchors)}${renderRawEvidence(scenarios, readEvidence, context)}${renderBaselineAudit(view, readEvidence, context)}</div>`;
 }
 
 /**
@@ -1004,7 +661,9 @@ function renderVerdictSummary(view: QaView, unverified: Set<string>): string {
 		.filter(([, n]) => n > 0)
 		.map(([label, n]) => `${label} ${n}`);
 	const verdict = unverified.size ? "판정 보류 — 근거 미검증 시나리오가 있음" : VERDICT_LABEL[view.verdict ?? ""] ?? "판정 전";
-	return `<p class="verdict-summary"><strong>${escapeHtml(verdict)}</strong> · 유저 시나리오 ${scenarios.length}개${parts.length ? ` (${escapeHtml(parts.join(" · "))})` : ""}</p>`;
+	// Border tone only; the words stay the recorded verdict. A held verdict reads as caution.
+	const tone = unverified.size ? "warn" : view.verdict === "APPROVE" ? "ok" : view.verdict === "REQUEST_CHANGES" ? "bad" : view.verdict === "COMMENT" ? "warn" : "neutral";
+	return `<div class="verdict-banner tone-${tone}"><p class="verdict-summary"><strong>${escapeHtml(verdict)}</strong> · 유저 시나리오 ${scenarios.length}개${parts.length ? ` (${escapeHtml(parts.join(" · "))})` : ""}</p></div>`;
 }
 
 function renderVerdict(view: QaView): string {
@@ -1084,78 +743,31 @@ export function renderQaReport(
 			if ((scenario.status === "pass" || scenario.status === "fail") && !evidenceReviewComplete(scenario, probe)) unverified.add(scenarioKey(scenario));
 		}
 	}
-	if (strictVisualEvidence) {
-		// The summary line, banner and AC board render the QA result; the overview describes the change itself.
-		const overviewResult = narrative.presentation?.overview?.match(/APPROVE|COMMENT|REQUEST_CHANGES|QA|판정|검증 불가|미검증|신뢰도/);
-		if (overviewResult) throw new Error(`기능 개요 (presentation.overview) must describe the change, not the QA result ("${overviewResult[0]}"); the summary line, banner and AC board already show it`);
-		// Reader prose names what the user sees; file and code names belong to the audit section.
-		const p = narrative.presentation;
-		const readerProse: [string, string | undefined][] = [
-			["presentation.overview", p?.overview],
-			...Object.entries(p?.requirementMapping ?? {}).map(([index, entry]): [string, string | undefined] => [`presentation.requirementMapping.${index}.evidence`, entry.evidence]),
-			...Object.entries(p?.affectedUsers ?? {}).map(([id, text]): [string, string | undefined] => [`presentation.affectedUsers.${id}`, text]),
-			...Object.entries(p?.scenarioFlows ?? {}).map(([id, text]): [string, string | undefined] => [`presentation.scenarioFlows.${id}`, text]),
-			...Object.entries(narrative.scenarios ?? {}).map(([key, entry]): [string, string | undefined] => [`scenarios.${key}.observed`, entry.observed]),
-		];
-		for (const [field, text] of readerProse) {
-			const identifier = text?.match(CODE_IDENTIFIER);
-			if (identifier) throw new Error(`${field} names the code identifier "${identifier[0]}"; write what the reader sees (a test is "보유분 표 화면 테스트", not its file name)`);
-		}
-		for (const story of view.stories ?? []) {
-			const actor = actorFor(view, story);
-			for (const scenario of scenariosForStory(view, story.id)) {
-				if (scenario.status !== "pass" && scenario.status !== "fail" && scenario.status !== "blocked") continue;
-				const key = scenarioKey(scenario);
-				const embeddableScreenshot = (path: string | undefined): boolean => {
-					const embed = path ? readEvidence(path) : undefined;
-					return embed?.kind === "image" && hasValidImageSignature(embed.dataUri);
-				};
-				if (scenario.status === "blocked") {
-					if (!narrative.scenarios?.[key]?.observed?.trim()) throw new Error(`observation required for ${key}`);
-					// Captures are optional for blocked, but a recorded one must still render.
-					for (const path of [scenario.evidence?.before, scenario.evidence?.after]) {
-						if (path && !embeddableScreenshot(path)) throw new Error(`visual evidence missing or not embeddable for ${key}: ${path}`);
-					}
-					continue;
-				}
-				if (!scenarioNeedsVisualProof(scenario, actor?.driver)) {
-					if (!narrative.scenarios?.[key]?.observed?.trim()) throw new Error(`observation required for ${key}`);
-					continue;
-				}
-				for (const source of scenario.evidence_review?.claims.flatMap((claim) => claim.sources) ?? []) {
-					const embed = readEvidence(source.path);
-					if (embed.kind === "missing" || embed.kind === "too-large") throw new Error(`visual claim evidence not embeddable for ${key}: ${source.path}; record a bounded source and review again`);
-					if (embed.kind === "image" && !hasValidImageSignature(embed.dataUri)) throw new Error(`visual claim evidence not embeddable for ${key}: ${source.path}; record a bounded source and review again`);
-				}
-				for (const path of [scenario.evidence?.before, scenario.evidence?.after]) {
-					if (!embeddableScreenshot(path)) throw new Error(`visual evidence missing or not embeddable for ${key}: ${path ?? "missing before/after screenshot"}`);
-				}
-				if (!narrative.scenarios?.[key]?.observed?.trim()) throw new Error(`visual observation required for ${key}`);
-			}
-		}
-	}
+	assertRenderable(validateNarrative(view, narrative, readEvidence, { content: strictVisualEvidence }), strictVisualEvidence);
 	const title = `QA 보고서 — ${view.target || view.phase}`;
 	const evidenceContext: EvidenceRenderContext = { embeddedBytes: 0, renderedPaths: new Set(), strictVisualEvidence };
+	const section = (html: string): string => `<section>${html}</section>`;
 	const body = [
-		`<h1>${escapeHtml(title)}</h1>`,
-		`<ul class="doc-meta"><li><strong>검증 대상</strong> ${escapeHtml(view.target)}</li>` +
+		`<header class="mast"><h1>${escapeHtml(title)}</h1>` +
+			`<ul class="doc-meta"><li><strong>검증 대상</strong> ${escapeHtml(view.target)}</li>` +
 			`<li><strong>사이클</strong> ${escapeHtml(String(view.cycle))}</li>` +
-			`<li><strong>생성 시각</strong> ${escapeHtml(view.last_touched_at)}</li></ul>`,
-		renderVerdictSummary(view, unverified),
+			`<li><strong>생성 시각</strong> ${escapeHtml(view.last_touched_at)}</li></ul>` +
+			renderVerdictSummary(view, unverified) +
+			renderBlockedBanner(view) +
+			`</header>`,
 		// Reader-first order: what was asked (overview + AC·충족), how it flows (큰
 		// 그림), who is affected (액터), what we observed per scenario (시나리오·근거) —
 		// then the record-faithful audit below (per-cell detail, technical roster,
 		// failures, verdict, evidence files).
-		renderBlockedBanner(view),
-		renderOverview(narrative),
-			renderRequirementFulfillment(view, narrative, unverified),
-		renderBigPicture(narrative.presentation),
-		renderActors(view, narrative),
-			renderScenarios(view, narrative, readEvidence, evidenceContext, unverified),
-		renderScenarioAudit(view, narrative, readEvidence, evidenceContext),
-		renderFailures(view, narrative),
-			unverified.size ? gap("검증 미완료 — 근거 미검증 시나리오가 있어 기존 판정을 승인 근거로 사용할 수 없습니다") : renderVerdict(view),
-		renderEvidenceFiles(view),
+		section(renderOverview(narrative)),
+		section(renderRequirementFulfillment(view, narrative, unverified)),
+		section(renderBigPicture(narrative.presentation)),
+		section(renderActors(view, narrative)),
+		section(renderScenarios(view, narrative, readEvidence, evidenceContext, unverified)),
+		section(renderScenarioAudit(view, narrative, readEvidence, evidenceContext)),
+		section(renderFailures(view, narrative)),
+		section(unverified.size ? gap("검증 미완료 — 근거 미검증 시나리오가 있어 기존 판정을 승인 근거로 사용할 수 없습니다") : renderVerdict(view)),
+		section(renderEvidenceFiles(view)),
 	].join("\n");
 	return `<!doctype html>
 <html lang="ko">
@@ -1174,136 +786,207 @@ ${body}
 `;
 }
 
-// One page, no external references, readable in either theme — same design
-// contract as explain-diff's renderer, a fresh instance so qa carries no
-// runtime dependency on that skill.
+// One page, no <script>, no external reference (not even the Google Fonts link
+// html-report allows), readable in either theme from 400px to 1280px. Tokens,
+// type scale and component shapes follow skills/html-report/SKILL.md sections 3 to 6.
+// The font stack lists IBM Plex Sans KR first and falls back to the system Korean faces.
 const STYLE = `
+/* Layout: one reading column; the diagram, tables and screenshots break out wider and scroll on their own at phone width. */
 :root {
-  --bg: #ffffff; --fg: #1a1a1a; --muted: #666; --rule: #e3e3e3;
-  --code-bg: #f6f6f4; --accent: #2b5fa8;
-  --pass: #2e7d4f; --fail: #b0563a; --na: #9a8a2e;
+  --bg: #F3F4F8; --surface: #FFFFFF; --surface-2: #E9ECF3;
+  --ink: #141821; --ink-2: #444C5C; --ink-3: #5B6477;
+  --line: #D3D8E2; --line-strong: #98A0B3;
+  --accent: #3340C9;
+  --ok: #0B7A57; --ok-bg: #DCF2E8;
+  --bad: #C0301F; --bad-bg: #FBE3DF;
+  --warn: #8F5400; --warn-bg: #FAEAC8;
+  --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16181c; --fg: #e6e6e6; --muted: #9aa0a6; --rule: #2e3238;
-    --code-bg: #1e2126; --accent: #7aa7e6;
-    --pass: #7ec99a; --fail: #e0937a; --na: #d8c874;
+  :root:not([data-theme="light"]) {
+    --bg: #0E1117; --surface: #161A22; --surface-2: #1F242E;
+    --ink: #E8EBF1; --ink-2: #B4BBC9; --ink-3: #8F98AA;
+    --line: #2B313D; --line-strong: #566074;
+    --accent: #9DAAFF;
+    --ok: #4FD6A4; --ok-bg: #11302A;
+    --bad: #FF8A7E; --bad-bg: #3B1B18;
+    --warn: #F3BC5C; --warn-bg: #392B10;
+    color-scheme: dark;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #0E1117; --surface: #161A22; --surface-2: #1F242E;
+  --ink: #E8EBF1; --ink-2: #B4BBC9; --ink-3: #8F98AA;
+  --line: #2B313D; --line-strong: #566074;
+  --accent: #9DAAFF;
+  --ok: #4FD6A4; --ok-bg: #11302A;
+  --bad: #FF8A7E; --bad-bg: #3B1B18;
+  --warn: #F3BC5C; --warn-bg: #392B10;
+  color-scheme: dark;
+}
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Pretendard", sans-serif; }
-main { max-width: 52rem; margin: 0 auto; padding: 2rem 1.25rem 6rem; }
-h1, h2, h3 { line-height: 1.3; margin: 2.25rem 0 0.75rem; word-break: keep-all; overflow-wrap: break-word; }
-h1 { font-size: 1.75rem; margin-top: 0; }
-h2 { font-size: 1.3rem; border-bottom: 1px solid var(--rule); padding-bottom: 0.35rem; }
-h3 { font-size: 1.05rem; }
-p, li, figcaption { word-break: keep-all; overflow-wrap: break-word; }
-code, pre { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace; }
-pre { background: var(--code-bg); padding: 0.7rem 0.85rem; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; white-space: pre-wrap; }
-code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
-table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.94rem; display: block; overflow-x: auto; }
-th, td { border: 1px solid var(--rule); padding: 0.45rem 0.6rem; text-align: left; min-width: 8rem; word-break: keep-all; }
-th { background: var(--code-bg); }
-img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--rule); }
-.image-view summary { cursor: pointer; color: var(--accent); font-size: 0.85rem; }
-.image-frame { overflow: auto; }
-.image-view[open] + .image-frame img { max-width: none; }
-.doc-meta { display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem; list-style: none; margin: 0 0 1.5rem; padding: 0.8rem 1.1rem; background: var(--code-bg); border-radius: 8px; font-size: 0.9rem; color: var(--muted); }
-.doc-meta strong { color: var(--fg); font-weight: 600; }
-.evidence-note { color: var(--muted); font-size: 0.92rem; }
-.badge { display: inline-block; padding: 0.1em 0.55em; border-radius: 999px; font-size: 0.8rem; border: 1px solid var(--rule); background: var(--code-bg); }
-.badge-pass { color: var(--pass); border-color: var(--pass); }
-.badge-fail { color: var(--fail); border-color: var(--fail); }
-.badge-blocked { color: var(--fail); border-color: var(--fail); }
-.coverage { font-size: 0.88rem; color: var(--muted); margin: 0.75rem 0 0; }
-.cov { display: inline-block; margin: 0.15rem 0; }
-.cov::after { content: ""; }
-.cov-pass { color: var(--pass); }
-.cov-fail { color: var(--fail); font-weight: 600; }
-.cov-unverified { color: var(--fail); font-weight: 600; }
-.cov-blocked { color: var(--fail); font-weight: 600; }
-.cov-unrecorded { color: var(--fail); font-weight: 600; }
-.audit-note { color: var(--muted); font-size: 0.85rem; }
-.story-block { margin: 1.75rem 0; }
-.story-block > h3 { border-bottom: 1px solid var(--rule); padding-bottom: 0.3rem; }
-.scenarios { display: flex; flex-direction: column; gap: 0.85rem; margin: 0.85rem 0; }
-.scenario-card { border: 1px solid var(--rule); border-left: 3px solid var(--rule); border-radius: 10px; padding: 0.75rem 0.9rem; }
-.scenario-card.sc-pass { border-left-color: var(--pass); }
-.scenario-card.sc-fail { border-left-color: var(--fail); }
-.scenario-card.sc-unverified { border-left-color: var(--fail); }
-.scenario-card.sc-blocked { border-left-color: var(--fail); }
-.scenario-card.sc-unrecorded { border-left-color: var(--fail); }
-.sc-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.3rem 0.6rem; margin-bottom: 0.5rem; }
-.sc-title { font-weight: 600; word-break: keep-all; overflow-wrap: break-word; }
-.sc-meta { display: inline-flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
-.sc-profile { font-size: 0.8rem; color: var(--muted); }
-.sc-expected { margin: 0 0 0.4rem; }
-.sc-steps summary, .risk-na summary { cursor: pointer; color: var(--accent); font-size: 0.88rem; }
-.sc-risks { font-size: 0.85rem; color: var(--muted); margin: 0.3rem 0 0.6rem; }
-.story-goal { margin: 0.4rem 0; }
-.profile-coverage { font-size: 0.9rem; }
-.profile-coverage ul { margin: 0.2rem 0; padding-left: 1.2rem; }
-.risk-na { margin: 0.75rem 0; border: 1px solid var(--rule); border-radius: 8px; padding: 0.5rem 0.75rem; }
-.client-impact { font-size: 0.92rem; }
-.verdict-summary { font-size: 1.05rem; padding: 0.7rem 1rem; border: 1px solid var(--rule); border-radius: 8px; }
-.sc-observed { margin: 0 0 0.6rem; }
-.sc-muted { color: var(--muted); font-size: 0.9rem; }
-.sc-shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem; }
-.evidence-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem; margin: 0.75rem 0; }
-.evidence-slot { border: 1px solid var(--rule); border-radius: 8px; padding: 0.5rem; }
-.evidence-slot-label { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.03em; color: var(--muted); margin-bottom: 0.35rem; }
-.raw-evidence { margin: 0.4rem 0; border: 1px solid var(--rule); border-radius: 6px; padding: 0.35rem 0.6rem; }
-.raw-evidence summary { cursor: pointer; font-size: 0.75rem; color: var(--muted); word-break: break-all; }
-.raw-evidence pre { margin-top: 0.5rem; }
-.verdict { font-size: 1.2rem; font-weight: 700; }
-.issue-CRITICAL { color: var(--fail); }
-.issue-LOW { color: var(--na); }
-.presentation { margin-bottom: 1rem; }
-.sc-amended { border: 1px dashed var(--fail); border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.92rem; background: var(--code-bg); }
-.sc-amended p, .sc-amended ul { margin: 0.2rem 0; }
-.gap { color: var(--fail); background: var(--code-bg); border: 1px dashed var(--fail); border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.92rem; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.75 var(--font);
+  padding-block: 40px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  word-break: keep-all; overflow-wrap: break-word;
+}
+@media (max-width: 640px) { body { font-size: 15.5px; padding-block: 28px 56px; } }
+main { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 48px; }
+section { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+h1, h2, h3, p, ul, ol, figure, table { margin: 0; }
+h1 { font-size: clamp(30px, 6vw, 46px); line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }
+h2 { font-size: 24px; line-height: 1.35; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; padding-top: 24px; border-top: 2px solid var(--ink); }
+h3 { font-size: 17px; line-height: 1.4; font-weight: 600; }
+p, li { max-width: 720px; }
+p + p { margin-top: 12px; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+code, pre { font-family: var(--mono); }
+code { background: var(--surface-2); padding: 1px 6px; border-radius: 4px; font-size: 0.88em; word-break: normal; overflow-wrap: anywhere; }
+pre { background: var(--surface-2); padding: 12px 16px; border-radius: 8px; overflow-x: auto; font-size: 14px; line-height: 1.6; white-space: pre; margin: 8px 0 0; }
+pre code { background: none; padding: 0; font-size: inherit; }
+img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); }
+
+/* masthead */
+.mast { display: flex; flex-direction: column; gap: 20px; }
+.doc-meta { display: flex; flex-wrap: wrap; gap: 4px 24px; list-style: none; padding: 0; font-size: 14px; color: var(--ink-2); }
+.doc-meta li { max-width: none; }
+.doc-meta strong { color: var(--ink-3); font-weight: 600; margin-right: 6px; }
+.verdict-banner { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 22px; }
+.verdict-banner.tone-ok { border-color: var(--ok); }
+.verdict-banner.tone-warn { border-color: var(--warn); }
+.verdict-banner.tone-bad { border-color: var(--bad); }
+.verdict-summary { font-size: 19px; line-height: 1.7; max-width: 720px; }
+.verdict-summary strong { font-weight: 700; }
+.tone-ok .verdict-summary strong { color: var(--ok); }
+.tone-warn .verdict-summary strong { color: var(--warn); }
+.tone-bad .verdict-summary strong { color: var(--bad); }
+
+/* pills carry state in text as well as color */
+.badge, .cov { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; line-height: 1.6; background: var(--surface-2); color: var(--ink-2); vertical-align: baseline; }
+.badge-pass, .cov-pass, .satisfied-yes { background: var(--ok-bg); color: var(--ok); }
+.badge-fail, .badge-blocked, .cov-fail, .cov-blocked, .satisfied-no { background: var(--bad-bg); color: var(--bad); }
+.cov-unverified, .cov-unrecorded, .satisfied-partial { background: var(--warn-bg); color: var(--warn); }
+/* unverified = the user boundary was never driven; render it LOUD, never quiet — a PO must read it as "not done", not as a mild partial */
+.satisfied-unverified { background: var(--bad); color: var(--surface); }
+.evidence-note { color: var(--ink-3); font-size: 14.5px; }
+.audit-note { color: var(--ink-3); font-size: 14px; }
+.coverage { font-size: 14.5px; color: var(--ink-2); }
+
+/* gaps: a required slot nobody wrote, or a banner the reader must see first */
+.gap { color: var(--bad); background: var(--bad-bg); border: 1px dashed var(--bad); border-radius: 8px; padding: 10px 14px; font-size: 14.5px; line-height: 1.65; max-width: 720px; }
+.waive-banner { font-weight: 600; }
+
+/* requirement board */
+.ac-board, .actors, .stories { display: flex; flex-direction: column; gap: 16px; }
+.ac-board { gap: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.ac-map { display: flex; flex-direction: column; gap: 8px; padding: 16px 20px; border-top: 1px solid var(--line); }
+.ac-map:first-child { border-top: 0; }
+.ac-map h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.ac-map p { color: var(--ink-2); }
+
+/* actors, story flows */
+.affected-user, .scenario-flow { display: flex; flex-direction: column; gap: 8px; }
+.affected-user { padding: 16px 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.affected-user h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.client-impact { font-size: 14.5px; color: var(--ink-2); }
+.client-impact strong { color: var(--ink); }
+
+/* scenarios */
+.story-block { display: flex; flex-direction: column; gap: 14px; }
+.story-block > h3 { font-size: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+.story-goal { color: var(--ink-2); }
+.story-goal strong { color: var(--ink); margin-right: 6px; }
+.scenarios { display: flex; flex-direction: column; gap: 14px; }
+.scenario-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 22px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.scenario-card.sc-fail { border-color: var(--bad); }
+.sc-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; }
+.sc-title { font-size: 17px; font-weight: 600; line-height: 1.4; }
+.sc-meta { display: inline-flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.sc-profile { font-size: 13px; color: var(--ink-3); }
+.sc-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.sc-expected strong, .sc-observed strong { color: var(--ink-3); margin-right: 6px; }
+.sc-observed { padding: 12px 16px; background: var(--surface-2); border-radius: 8px; }
+.sc-risks { font-size: 14px; color: var(--ink-3); }
+.sc-amended { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 12px 16px; font-size: 14.5px; }
+.sc-amended p, .sc-amended ul { max-width: none; }
+.sc-amended ul { padding-left: 20px; }
+details > summary { cursor: pointer; color: var(--accent); font-size: 14px; }
+.sc-steps > p { margin-top: 8px; color: var(--ink-2); }
+.sc-steps ol { padding-left: 22px; margin-top: 6px; color: var(--ink-2); }
+.risk-na { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 12px 18px; }
+.risk-na ul { padding-left: 20px; margin-top: 8px; }
+.profile-coverage { font-size: 14.5px; }
+.profile-coverage ul { list-style: none; padding: 0; margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px 10px; }
+
+/* screenshots and claim evidence */
+.sc-shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; }
+.evidence-slot { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; background: var(--surface); }
+.evidence-slot-label { font-size: 13.5px; font-weight: 600; color: var(--ink-3); }
+.evidence-slot p { font-size: 14.5px; color: var(--ink-2); }
+.evidence-slot p strong { color: var(--ink); }
+.image-view summary { font-size: 13.5px; }
+.sc-body > .evidence-slot { align-self: flex-start; max-width: 100%; }
+.image-frame { overflow: auto; border-radius: 6px; }
+.image-frame img { width: auto; max-height: 440px; }
+.image-view[open] + .image-frame img { max-width: none; max-height: none; }
+
+/* diagram: the model-drawn SVG takes every color from this class vocabulary, so it themes with the page */
+.diagram { display: flex; flex-direction: column; gap: 12px; }
+.diagram-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.diagram svg { display: block; width: 100%; height: auto; margin: 0 auto; }
+.diagram svg text { fill: var(--ink); font-family: var(--font); font-size: 13px; }
+.diagram svg .t-b { font-weight: 700; }
+.diagram svg .t-s { fill: var(--ink-2); font-size: 13px; }
+.diagram svg .lbl { paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; }
+.diagram svg .box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.5; }
+.diagram svg .box-focal { fill: var(--surface-2); stroke: var(--accent); stroke-width: 2.5; }
+.diagram svg .zone { fill: var(--surface-2); stroke: var(--line); stroke-width: 1; }
+.diagram svg .edge { fill: none; stroke: var(--ink-3); stroke-width: 1.6; }
+.diagram svg .edge-pass { stroke: var(--ok); stroke-width: 2.5; }
+.diagram svg .edge-fail { stroke: var(--bad); stroke-width: 2.5; }
+.diagram svg .edge-dash { stroke-dasharray: 5 4; }
+.diagram svg .mk { fill: var(--ink-3); stroke: none; }
+.diagram svg .mk-pass { fill: var(--ok); stroke: none; }
+.diagram svg .mk-fail { fill: var(--bad); stroke: none; }
+.diagram svg .stop { fill: none; stroke: var(--bad); stroke-width: 2.5; }
+.diagram figcaption { max-width: 760px; font-size: 14.5px; line-height: 1.7; color: var(--ink-2); }
+
+/* audit: the record-faithful trail, quieter than the reader layer */
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; line-height: 1.6; }
+th, td { text-align: left; vertical-align: top; padding: 12px 16px; border-top: 1px solid var(--line); word-break: keep-all; }
+thead th { border-top: 0; font-size: 13.5px; color: var(--ink-3); font-weight: 600; background: var(--surface-2); }
 .audit-story { min-width: 6rem; }
 .audit-story code { white-space: normal; overflow-wrap: normal; display: inline-block; max-width: 100%; overflow-x: auto; vertical-align: bottom; }
 .audit-coverage { min-width: 8rem; word-break: keep-all; overflow-wrap: normal; }
 .audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: anywhere; }
-.audit-evidence { display: block; margin-top: 0.4rem; font-size: 0.8rem; }
-.audit-evidence code { display: block; word-break: break-all; margin-top: 0.2rem; }
+.audit-evidence { display: block; margin-top: 8px; font-size: 13px; }
+.audit-evidence code { display: block; margin-top: 4px; }
 .audit-story-link { color: var(--accent); text-decoration: underline; }
-.audit-story-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* A phone cannot fit five columns: each audit row becomes a card whose cells carry their column name. */
 @media (max-width: 40rem) {
-  .audit-table tr { display: block; border: 1px solid var(--rule); border-radius: 8px; margin: 0 0 0.75rem; padding: 0.35rem 0.6rem; }
+  .audit-table tr { display: block; border-top: 1px solid var(--line); padding: 6px 4px; }
   .audit-table thead { display: none; }
-  .audit-table td { display: block; min-width: 0; border: 0; padding: 0.3rem 0; }
-  .audit-table td::before { content: attr(data-label); display: block; color: var(--muted); font-size: 0.75rem; }
+  .audit-table td { display: block; min-width: 0; border: 0; padding: 4px 12px; }
+  .audit-table td::before { content: attr(data-label); display: block; color: var(--ink-3); font-size: 13px; }
 }
-.affected-user, .scenario-flow, .ac-map { margin: 1rem 0; padding: 0.85rem 1rem; border: 1px solid var(--rule); border-radius: 10px; }
-.affected-user h3, .scenario-flow h3, .ac-map h3 { margin-top: 0; }
-.satisfied-yes { color: var(--pass); border-color: var(--pass); }
-.satisfied-no { color: var(--fail); border-color: var(--fail); }
-.satisfied-partial { color: var(--na); border-color: var(--na); }
-/* unverified = the user boundary was never driven; render it LOUD, never quiet — a PO must read it as "not done", not as a mild partial */
-.satisfied-unverified { color: var(--bg); background: var(--fail); border-color: var(--fail); font-weight: 700; }
-/* The big-picture SVG is model-authored but takes every color from this class vocabulary, so it themes with the page in light and dark. */
-.diagram { margin: 1rem 0; border: 1px solid var(--rule); border-radius: 10px; background: var(--bg); padding: 0.75rem; }
-.diagram-scroll { overflow-x: auto; }
-.diagram svg { display: block; width: 100%; height: auto; margin: 0 auto; }
-.diagram svg text { fill: var(--fg); font-family: inherit; font-size: 13px; }
-.diagram svg .t-b { font-weight: 700; }
-.diagram svg .t-s { fill: var(--muted); font-size: 13px; }
-.diagram svg .lbl { paint-order: stroke; stroke: var(--bg); stroke-width: 5px; stroke-linejoin: round; }
-.diagram svg .box { fill: var(--bg); stroke: var(--muted); stroke-width: 1.5; }
-.diagram svg .box-focal { fill: var(--code-bg); stroke: var(--accent); stroke-width: 2.5; }
-.diagram svg .zone { fill: var(--code-bg); stroke: var(--rule); stroke-width: 1; }
-.diagram svg .edge { fill: none; stroke: var(--muted); stroke-width: 1.6; }
-.diagram svg .edge-pass { stroke: var(--pass); stroke-width: 2.5; }
-.diagram svg .edge-fail { stroke: var(--fail); stroke-width: 2.5; }
-.diagram svg .edge-dash { stroke-dasharray: 5 4; }
-.diagram svg .mk { fill: var(--muted); stroke: none; }
-.diagram svg .mk-pass { fill: var(--pass); stroke: none; }
-.diagram svg .mk-fail { fill: var(--fail); stroke: none; }
-.diagram svg .stop { fill: none; stroke: var(--fail); stroke-width: 2.5; }
-.diagram figcaption { color: var(--muted); font-size: 0.88rem; margin-top: 0.4rem; }
+.audit { display: flex; flex-direction: column; gap: 14px; }
+.audit h3 { font-size: 17px; margin-top: 10px; }
+.provenance-record { display: flex; flex-direction: column; gap: 8px; }
+.raw-evidence { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 8px 14px; }
+.raw-evidence summary { font-size: 13.5px; color: var(--ink-2); word-break: break-all; }
+.issue-CRITICAL { color: var(--bad); }
+.issue-LOW { color: var(--warn); }
+section > ul { padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+.verdict { font-size: 22px; font-weight: 700; }
 `;
 
 // ---------------------------------------------------------------------------
@@ -1333,7 +1016,7 @@ function main(): void {
 	try {
 		html = renderQaReport(view, narrative, defaultEvidenceReader, true);
 	} catch (error) {
-		if (!(error instanceof BigPictureSvgError)) throw error;
+		if (!(error instanceof NarrativeError)) throw error;
 		process.stderr.write(`qa-report: ${error.message}\n`);
 		process.exit(1);
 	}

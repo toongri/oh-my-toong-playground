@@ -1022,19 +1022,23 @@ describe("new-prose: requirement mappings are structurally grounded", () => {
 		expect(mapping).toContain("`fail`, or `blocked`");
 	});
 
-	test("presentation.md defines grounded status invariants for all four verdicts", () => {
+	test("presentation.md defines how the four verdicts are derived from recorded statuses and refuses a written satisfied field", () => {
 		const mapping = mappingSection();
-		expect(mapping).toMatch(/`yes` requires\s+every referenced\s+scenario to be `pass`/);
-		expect(mapping).toMatch(/`no` requires every referenced scenario to be\s+`fail`/);
-		expect(mapping).toMatch(/`partial`\s+requires at least one `pass` and one `fail` and no\s+`blocked`/);
-		expect(mapping).toMatch(/`unverified` requires at least one valid `blocked`/);
+		expect(mapping).toContain("derived, never written");
+		expect(mapping).toMatch(/All referenced scenarios `pass` → 충족; all `fail` → 미충족; any\s+`blocked` → 미검증; otherwise \(a mix of `pass` and `fail`\) → 부분 충족/);
+		expect(mapping).toMatch(/`satisfied` field is refused/);
 	});
 
 	test("invalid mappings fail closed and prose cannot establish a verdict", () => {
 		const mapping = mappingSection();
-    expect(mapping).toMatch(/Missing\/legacy\/malformed\/duplicate\/stale\/unknown\/ineligible\s+mappings fail closed/);
-		expect(mapping).toContain("visible neutral gap");
+		expect(mapping).toMatch(/Missing\/legacy\/malformed\/duplicate\/stale\/unknown mappings/);
+		expect(mapping).toMatch(/cannot be derived and fail closed to a\s+visible neutral gap/);
 		expect(mapping).toContain("Prose evidence explains a verdict but cannot establish it");
+	});
+
+	test("presentation.md and SKILL.md tell authors to run validate-narrative before rendering", () => {
+		expect(presentationMd).toContain("qa-state.ts validate-narrative --narrative <presentation>.json");
+		expect(skillMd).toContain("qa-state.ts validate-narrative --narrative <json-file>");
 	});
 
 	test("the JSON example shows the structured scenarioRefs shape", () => {

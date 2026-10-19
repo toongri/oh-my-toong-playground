@@ -1,7 +1,7 @@
 import { recordResource, releaseResource, unreleasedResources } from "@lib/session-resources";
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, readFileSync, writeFileSync, existsSync } from "fs";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -859,6 +859,51 @@ describe("qa-state CLI wiring", () => {
 		const out = run(`set-acceptance --json-file ${file}`);
 		expect(rawState().acceptance_criteria).toEqual(criteria);
 		expect(out).toContain("적용되지 않는다.");
+	});
+
+	test("validate-narrative는 렌더 없이 서사의 모든 문제를 한 번에 나열하고 계약·내용 위반이면 실패한다", () => {
+		authorCompleteChain();
+		run("record-baseline --story story-1 --result pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
+		for (const [id] of SCENARIOS) recordPass(id);
+		const narrativePath = join(tmpDir, "bad-narrative.json");
+		writeFileSync(narrativePath, JSON.stringify({
+			presentation: {
+				overview: "판정은 승인이다.",
+				affectedUsers: { "actor-1": "운영자는 supplementCategories 맵을 본다." },
+				bigPicture: "flowchart LR\n  A --> B",
+				bigPictureSvg: '<svg viewBox="0 0 10 10" aria-label="그림"><script>1</script></svg>',
+				requirementMapping: { "0": { satisfied: "yes", scenarioRefs: [{ story: "story-1", scenario: "s1" }], evidence: "통과" } },
+			},
+			scenarios: { "story-1:s2": { observed: "명령을 실행했더니 기대한 결과가 출력됐다." } },
+		}));
+		const result = spawnSync(process.execPath, [script, "validate-narrative", "--narrative", narrativePath], { encoding: "utf8", env: process.env });
+		expect(result.stderr).toBe("");
+		expect(result.status).toBe(1);
+		for (const expected of [
+			"presentation.bigPicture is no longer supported",
+			"<script> is not allowed",
+			"requirementMapping.0.satisfied is no longer supported",
+			'기능 개요 (presentation.overview) must describe the change, not the QA result ("판정")',
+			'presentation.affectedUsers.actor-1 names the code identifier "supplementCategories"',
+			"observation required for story-1:s1",
+			"observation required for story-1:s3",
+		]) expect(result.stdout).toContain(expected);
+		expect(result.stdout).not.toContain("observation required for story-1:s2");
+		expect(result.stdout).toMatch(/gap: presentation\.scenarioFlows\.story-1 is empty/);
+		expect(rawState().report).toBeUndefined();
+	});
+
+	test("validate-narrative는 문제가 없으면 0으로 끝나고 빈 슬롯은 gap으로만 알린다", () => {
+		authorCompleteChain();
+		for (const [id] of SCENARIOS) recordPass(id);
+		const narrativePath = observedNarrative();
+		const result = spawnSync(process.execPath, [script, "validate-narrative", "--narrative", narrativePath], { encoding: "utf8", env: process.env });
+		expect(result.stderr).toBe("");
+		expect(result.status).toBe(0);
+		expect(result.stdout).toContain("0 error(s)");
+		expect(result.stdout).toContain("gap: presentation.overview is empty");
+		expect(result.stdout).toContain("gap: presentation.requirementMapping.0 is missing; the requirement renders as 미판정");
+		expect(spawnSync(process.execPath, [script, "validate-narrative"], { encoding: "utf8", env: process.env }).status).toBe(1);
 	});
 
 	test("새 CLI story는 구조화 계약과 AC 링크가 없으면 거부한다", () => {
