@@ -21,6 +21,8 @@ skills:
     - diagnose
     - design-review
     - qa
+    # html-report: deep-interview·qa가 경로로 읽는 공유 스킬 — 소비 스킬과 같은 플랫폼에 배포
+    - html-report
     - resume-apply
     - review-resume
     - tech-claim-rubric
