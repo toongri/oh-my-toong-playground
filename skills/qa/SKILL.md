@@ -67,7 +67,7 @@ A caller that has one composes a QA REQUEST using this structure:
 - `Required Verification` is used when sisyphus explicitly passes verification commands and evidence paths — BASELINE and ADVERSARIAL E2E execute the section's commands verbatim and store evidence at the declared paths, for each item that checks product behavior in the target environment (see *Target environment*).
 - When a delegation prompt is included, its sections become `###` headings under `## Spec`
 
-To understand what changed, use `git diff $(git merge-base HEAD main) -- <path>` for context. If `main` does not exist, substitute `master`. To verify correctness, read the actual files directly (Read tool). Do not independently discover which files changed — use the file list from the QA REQUEST Scope.
+The comparison base is the branch the change merges into. Use the base that the source material names (the plan, the PR, or the user). Otherwise use the remote default branch: `git symbolic-ref --short refs/remotes/origin/HEAD` (for example `origin/main`). Never compare against a local branch such as `main`. A local branch can lag the remote, and the merged work it lacks then reads as this branch's change. Run `git fetch origin` first. Then use `git diff <base>...HEAD -- <path>` (three dots) for context. To verify correctness, read the actual files directly (Read tool). Use the changed-file list from the QA REQUEST Scope when there is one. When there is none, build it with `git diff --name-only <base>...HEAD`. This list is PRE-FLIGHT's changed files.
 
 ---
 
