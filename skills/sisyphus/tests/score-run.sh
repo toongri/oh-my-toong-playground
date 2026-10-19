@@ -50,8 +50,11 @@ emit() {
   # and pick out the defined roles it names rather than taking its first word.
   local values self
   values=$(printf '%s' "$msgs" | grep -oE '\| routing: [^|]*' | sed 's/.*routing: //' || true)
+  # Whole-token match: split values on non [A-Za-z0-9_-] so `sisyphus-junior` does not match inside `sisyphus-junior-light`.
+  local tokens_list
+  tokens_list=$(printf '%s' "$values" | tr -c 'A-Za-z0-9_-' '\n')
   routes=$(printf '%s\n' "$known_roles" | while read -r r; do
-    [ -n "$r" ] && printf '%s' "$values" | grep -qF "$r" && printf '%s\n' "$r"
+    [ -n "$r" ] && printf '%s\n' "$tokens_list" | grep -qxF "$r" && printf '%s\n' "$r"
   done | sort -u | paste -sd, - || true)
   # bare `me` must not match inside `implement`; BSD grep has no \b here.
   self=$(printf '%s' "$values" | grep -cE 'inline|self|(^|[^a-z])me([^a-z]|$)' || true)
