@@ -109,9 +109,7 @@ function imageSlot(label: string, path: string | undefined, readEvidence: Eviden
 	if (context.strictVisualEvidence && embed.kind === "missing" && IMAGE_MIME[extname(path).toLowerCase()]) throw new Error(`visual evidence missing: ${path}; record the capture again and render again`);
 	if (embed.kind !== "image") return ""; // text/missing → audit, not the reader
 	// The reader classifies images by extension; a corrupt capture would render as a broken <img>.
-	// SVG is text, so it has no magic bytes: check that it holds an <svg> root instead.
-	const svg = /^data:image\/svg\+xml;base64,(.*)$/.exec(embed.dataUri);
-	const validImage = svg ? /<svg[\s>]/i.test(Buffer.from(svg[1], "base64").toString("utf8")) : hasValidImageSignature(embed.dataUri);
+	const validImage = hasValidImageSignature(embed.dataUri);
 	if (context.strictVisualEvidence && !validImage) throw new Error(`visual evidence is not a valid image: ${path}; record the capture again and render again`);
 	const embedBytes = embeddedByteLength(embed);
 	if (embedBytes > 0 && context.embeddedBytes + embedBytes > MAX_TOTAL_EMBED_BYTES) {

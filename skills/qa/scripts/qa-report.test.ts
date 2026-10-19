@@ -649,6 +649,24 @@ describe("qa-report renderer", () => {
 		expect(renderQaReport(blockedWith("/evidence/before.png"), narrative, validImageReader, true)).toContain("첫 화면에서 멈췄다.");
 	});
 
+	test("SVG 캡처 파일은 서사 검증을 통과하고 임베드되며 <svg> 루트가 없는 .svg 파일은 거부된다", () => {
+		const dir = mkdtempSync(join(tmpdir(), "qa-svg-capture-"));
+		try {
+			const good = join(dir, "good.svg");
+			const bad = join(dir, "bad.svg");
+			writeFileSync(good, '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"></svg>');
+			writeFileSync(bad, "not an svg");
+			const narrative = { scenarios: { "story-1:sc-3": { observed: "첫 화면에서 멈췄다." } } };
+			const viewWith = (before: string) => baseView({ scenarios: [scenario({ id: "sc-3", status: "blocked", evidence: { path: before, surface: "agent-device", before }, blocked: { obstacle: "o", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } })] });
+			const embedProblems = (before: string) => validateNarrative(viewWith(before), narrative, defaultEvidenceReader, { content: true }).filter((problem) => problem.kind === "content").map((problem) => problem.message);
+			expect(embedProblems(good)).toEqual([]);
+			expect(renderQaReport(viewWith(good), narrative, defaultEvidenceReader, true)!.match(/<img /g)?.length).toBe(1);
+			expect(embedProblems(bad)).toContain(`visual evidence missing or not embeddable for story-1:sc-3: ${bad}`);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
 	test("최종 보고서는 카드에 그릴 어떤 화면 칸이든 이미지 시그니처가 깨졌으면 거부한다", () => {
 		const narrative = { scenarios: { "story-1:sc-3": { observed: "첫 화면에서 멈췄다." } } };
 		const view = baseView({ scenarios: [scenario({ id: "sc-3", status: "blocked", evidence: { path: "/evidence/log.txt", surface: "agent-device", before: "/evidence/before.png", action: "/evidence/action.png", after: "/evidence/after.png" }, blocked: { obstacle: "o", attempts: ["a"], deepest_reachable: "d", attempt_log: "/l.txt" } })] });

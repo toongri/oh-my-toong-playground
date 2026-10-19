@@ -67,7 +67,13 @@ export function defaultEvidenceReader(path: string): EvidenceEmbed {
 		return { kind: "missing", path };
 	}
 }
+/**
+ * True when a base64 image data URI holds a real image: raster formats (png/jpeg/webp/gif) by magic bytes,
+ * SVG by its root element (SVG is text and has no magic bytes, so the decoded text must hold an <svg> root).
+ */
 export function hasValidImageSignature(dataUri: string): boolean {
+	const svg = /^data:image\/svg\+xml;base64,(.*)$/.exec(dataUri);
+	if (svg) return /<svg[\s>]/i.test(Buffer.from(svg[1], "base64").toString("utf8"));
 	const match = /^data:image\/(png|jpeg|webp|gif);base64,(.*)$/.exec(dataUri);
 	if (!match) return false;
 	const bytes = Buffer.from(match[2], "base64");
