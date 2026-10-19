@@ -23,8 +23,8 @@ import type { QaView } from "./qa-state.ts";
 
 // ---------------------------------------------------------------------------
 // Unit tests: renderQaReport is a pure function of (QaView, narrative, evidence
-// reader) — no filesystem access unless the injected reader does it, mirroring
-// explain-diff/scripts/render.ts's renderSvg-injection pattern for testability.
+// reader) — no filesystem access unless the injected reader does it; the reader
+// is a parameter, so tests pass an in-memory stub instead of touching disk.
 // ---------------------------------------------------------------------------
 
 /** Binds a complete evidence review (one supported claim) to every scenario that carries evidence. */

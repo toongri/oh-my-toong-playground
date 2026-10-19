@@ -3,10 +3,9 @@
  * qa-report — renders a self-contained HTML report from a `qa-state get`
  * (QaView) snapshot.
  *
- * Forks skills/explain-diff/scripts/render.ts's mechanics (inline <style>,
- * zero runtime <script>, escapeHtml on every interpolated value, no external
- * CSS/JS/font/image reference) without a runtime import from that skill — the
- * two skills stay independent; only the technique is reused.
+ * Self-contained mechanics: inline <style>, zero runtime <script>, escapeHtml
+ * on every interpolated value, no external CSS/JS/font/image reference, and no
+ * runtime import from another skill — qa stays independent of other skills.
  *
  * The report's AC/actor/story/scenario/evidence/verdict facts come from the
  * recorded QaView only — this file never re-derives or re-judges them. The
