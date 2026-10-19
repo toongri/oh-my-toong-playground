@@ -13,6 +13,7 @@ import { execFileSync } from "child_process";
 import { createHash } from "crypto";
 import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { getOmtDir } from "@lib/omt-dir";
+import { Lexer, Parser, type Token } from "marked";
 import { findMarkdownBlocks } from "@lib/markdown-blocks";
 import { lintReceiptProblem, nowStamp, resolveSessionIdOrThrow, STATE_PREFIX } from "@lib/state-core";
 import {
@@ -27,6 +28,7 @@ import {
 } from "@lib/explain-diff-core";
 import {
 	checkStructure,
+	DIAGRAM_FIGURE_PATTERN,
 	diagramFigures,
 	documentHeadings,
 	usedStyleClasses,
@@ -677,11 +679,11 @@ function checkChecklistReport(checklistPath: string | undefined, failedItems: st
 	}
 }
 
-const BASIC_ENTITIES: Record<string, string> = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" };
+const BASIC_ENTITIES: Record<string, string> = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'", nbsp: "\u00a0" };
 
-/** Decodes the five basic named entities and numeric entities in one pass (no double decoding). */
+/** Decodes the five basic named entities, `&nbsp;` and numeric entities in one pass (no double decoding). */
 function decodeHtmlEntities(text: string): string {
-	return text.replace(/&(#x[0-9a-f]+|#\d+|lt|gt|amp|quot|apos);/gi, (whole, body: string) => {
+	return text.replace(/&(#x[0-9a-f]+|#\d+|lt|gt|amp|quot|apos|nbsp);/gi, (whole, body: string) => {
 		if (body[0] !== "#") return BASIC_ENTITIES[body.toLowerCase()] ?? whole;
 		const code = body[1]?.toLowerCase() === "x" ? Number.parseInt(body.slice(2), 16) : Number.parseInt(body.slice(1), 10);
 		return Number.isSafeInteger(code) && code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
@@ -713,6 +715,63 @@ function documentCodeBodies(doc: string): string[] {
 	return bodies;
 }
 
+/**
+ * The one text normal form both sides of the prose check are compared in: tags dropped,
+ * entities decoded, no-break space read as a space, zero-width characters removed,
+ * whitespace runs collapsed to one space.
+ */
+function normalizeProse(htmlFragment: string): string {
+	return collapseSpace(htmlText(htmlFragment).replace(/\u00a0/g, " ").replace(/[\u200b\u2060\ufeff]/g, ""));
+}
+
+/**
+ * The document's text blocks a page must carry verbatim, each in {@link normalizeProse} form:
+ * paragraphs, list items' own text, table cells and the text of raw HTML component blocks
+ * (callout, compare, cf, gloss, …). Headings, fenced code, diagram figures, HTML comments
+ * and front matter are skipped — other checks cover them.
+ */
+function documentTextUnits(doc: string): string[] {
+	const stripped = doc
+		.replace(/\r\n?/g, "\n")
+		.replace(/^---\n[\s\S]*?\n---[ \t]*(?:\n|$)/, "")
+		.replace(new RegExp(`^ {0,3}${DIAGRAM_FIGURE_PATTERN}`, "gim"), "\n");
+	const units: string[] = [];
+	const add = (htmlFragment: string): void => {
+		const text = normalizeProse(htmlFragment);
+		if (text !== "") units.push(text);
+	};
+	const inline = (tokens: Token[] | undefined, fallback: string): string => (tokens ? Parser.parseInline(tokens) : fallback);
+	const walk = (tokens: Token[]): void => {
+		for (const token of tokens) {
+			switch (token.type) {
+				case "paragraph":
+				case "text":
+					add(inline(token.tokens, token.raw));
+					break;
+				case "list":
+					for (const item of token.items ?? []) walk(item.tokens ?? []);
+					break;
+				case "blockquote":
+					walk(token.tokens ?? []);
+					break;
+				case "table": {
+					const cells: Array<{ tokens?: Token[]; text: string }> = [...(token.header ?? []), ...(token.rows ?? []).flat()];
+					for (const cell of cells) add(inline(cell.tokens, cell.text));
+					break;
+				}
+				case "html":
+					// Each text node of the block is its own unit, so tags between nodes cannot glue words together.
+					for (const node of token.raw.replace(/<!--[\s\S]*?(?:-->|$)/g, "").split(/<[^>]*>/)) add(node);
+					break;
+				default:
+					break;
+			}
+		}
+	};
+	walk(Lexer.lex(stripped));
+	return units;
+}
+
 const trimOneTrailingNewline = (text: string): string => text.replace(/\r\n/g, "\n").replace(/\n$/, "");
 
 export interface HtmlSubmissionInput {
@@ -731,7 +790,7 @@ export interface HtmlSubmissionInput {
  * document stays the content SSOT, and the submitted page must carry its exact
  * facts — every diagram's SVG byte-identical and in order, every fenced code block
  * verbatim in a `<pre>`, every commit hash and changed path, every `##`/`###`
- * heading in order, a style rule for each reference class the document uses, and no
+ * heading in order, every text block (paragraph, list item, table cell, component text) verbatim, a style rule for each reference class the document uses, and no
  * `<foreignObject>`. A clean strict lint receipt for these exact HTML bytes proves
  * the page was captured and looked at in both themes and at phone width. The
  * technical-writing report and final checklist close with their machine-checkable lines.
@@ -830,6 +889,16 @@ export function checkHtmlSubmission(input: HtmlSubmissionInput): { pass: boolean
 			continue;
 		}
 		headingCursor = at + 1;
+	}
+
+	// f2. every text block of the document verbatim somewhere in the page's visible text
+	const pageProse = normalizeProse(/<body\b[^>]*>([\s\S]*?)(?:<\/body\s*>|$)/i.exec(visible)?.[1] ?? "");
+	const missingUnits = documentTextUnits(doc).filter((unit) => !pageProse.includes(unit));
+	if (missingUnits.length > 0) {
+		const shown = missingUnits.slice(0, 5).map((u) => `"${u.length > 60 ? `${u.slice(0, 60)}…` : u}"`);
+		failedItems.push(
+			`문서 본문 텍스트 ${missingUnits.length}개가 HTML 에 글자 그대로 없습니다: ${shown.join(", ")}${missingUnits.length > shown.length ? " …" : ""} — 문단·목록 항목·표 셀·컴포넌트(callout 등)의 텍스트를 문서와 같은 글자로 모두 싣고, 배치·꾸밈만 자유롭게 하세요.`,
+		);
 	}
 
 	// g. labels are SVG <text>; a fixed-width <foreignObject> box clips when the viewer font is wider

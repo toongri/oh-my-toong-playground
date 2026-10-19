@@ -8,7 +8,8 @@ import {
 	STEP_ORDER,
 	type Step,
 } from "@lib/explain-diff-core";
-import { diagramFigures, usedStyleClasses } from "@lib/explain-diff-structure";
+import { Lexer, Parser } from "marked";
+import { DIAGRAM_FIGURE_PATTERN, diagramFigures, usedStyleClasses } from "@lib/explain-diff-structure";
 import { writeLintReceipt } from "@lib/__fixtures__/lint-receipt";
 import type { RenderSubmission } from "./explain-diff-state";
 
@@ -1020,7 +1021,7 @@ const escapeHtml = (text: string): string => text.replace(/&/g, "&amp;").replace
 
 /**
  * 문서에서 손으로 짠 것과 같은 모양의 최소 HTML 페이지: 기준 스타일시트, 문서 헤딩(h2/h3),
- * figure 의 SVG 그대로, 코드 펜스를 구문 강조 span 이 든 <pre> 로, 커밋 해시와 경로 문장.
+ * 문서 본문(문단·목록·표·컴포넌트)을 marked 로 렌더한 섹션, figure 의 SVG 그대로, 코드 펜스를 구문 강조 span 이 든 <pre> 로, 커밋 해시와 경로 문장.
  */
 function authorHtml(doc: string): string {
 	const headings = [...doc.matchAll(/^(#{2,3})\s+(.+)$/gm)]
@@ -1032,6 +1033,11 @@ function authorHtml(doc: string): string {
 	const code = [...doc.matchAll(/^```[^\n]*\n([\s\S]*?)^```/gm)]
 		.map((m) => `<pre><code><span class="kw">${escapeHtml(m[1] ?? "")}</span></code></pre>`)
 		.join("\n");
+	// 헤딩·코드·figure 는 위에서 따로 싣는다 — 본문(문단·목록·표·컴포넌트)만 marked 로 렌더한다.
+	const bodyTokens = Lexer.lex(doc.replace(new RegExp(`^ {0,3}${DIAGRAM_FIGURE_PATTERN}`, "gim"), "\n")).filter(
+		(t) => t.type !== "heading" && t.type !== "code",
+	);
+	const prose = Parser.parse(bodyTokens);
 	return `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>설명</title><style>${REFERENCE_CSS}</style></head>
@@ -1041,6 +1047,7 @@ function authorHtml(doc: string): string {
 ${headings}
 ${figures}
 ${code}
+<section class="prose">${prose}</section>
 </main></body></html>
 `;
 }
@@ -1313,6 +1320,43 @@ describe("render 산출물 검사 (모델이 쓴 HTML + 내용 증명)", () => {
 		test("헤딩 안의 태그와 공백은 무시하고 글자로 비교한다", async () => {
 			const { submitStep, doc } = await driveToRender();
 			const page = preparePage(doc, (html) => html.replace("<h2>Evidence</h2>", "<h2>  <span>Evi</span>dence\n</h2>"));
+			expect(submitStep(SID, "render", doc, [], [], page.render)).toBe(0);
+		});
+	});
+
+	describe("본문 텍스트 verbatim", () => {
+		const withoutProse = (html: string): string => html.replace(/<section class="prose">[\s\S]*<\/section>/, "");
+
+		test("헤딩·figure·코드만 있는 얇은 페이지는 빠진 본문 텍스트 개수를 짚어 실패한다", async () => {
+			const { submitStep, doc } = await driveToRender();
+			const page = preparePage(doc, withoutProse);
+			expect(submitStep(SID, "render", doc, [], [], page.render)).toBe(1);
+			expect(state().last_failure.items.join(" ")).toContain("문서 본문 텍스트 60개");
+		});
+
+		test("문단의 단어 하나를 바꾸면 실패한다", async () => {
+			const { submitStep, doc } = await driveToRender();
+			const page = preparePage(doc, (html) => html.replace("한 파일로 모은다", "한 파일로 합친다"));
+			expectRejected(submitStep(SID, "render", doc, [], [], page.render), "한 파일로 모은다");
+		});
+
+		test("표 셀 하나가 빠지면 실패한다", async () => {
+			const { submitStep, doc } = await driveToRender();
+			const page = preparePage(doc, (html) => html.replace("변경 없음: 상태는 JSON 파일이다", "변경 없음"));
+			expectRejected(submitStep(SID, "render", doc, [], [], page.render), "상태는 JSON 파일이다");
+		});
+
+		test("컴포넌트 카드의 텍스트가 빠지면 실패한다", async () => {
+			const { submitStep, doc } = await driveToRender();
+			const page = preparePage(doc, (html) => html.replace("두 CLI가 같은 락을 쓴다", ""));
+			expectRejected(submitStep(SID, "render", doc, [], [], page.render), "두 CLI가 같은 락을 쓴다");
+		});
+
+		test("텍스트를 span·style 로 감싸고 &nbsp; 를 써도 글자가 같으면 통과한다", async () => {
+			const { submitStep, doc } = await driveToRender();
+			const page = preparePage(doc, (html) =>
+				html.replace("한 파일로 모은다", '<span style="color:red">한&nbsp;파일로</span>\u200b <em>모은다</em>'),
+			);
 			expect(submitStep(SID, "render", doc, [], [], page.render)).toBe(0);
 		});
 	});

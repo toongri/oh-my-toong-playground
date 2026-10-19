@@ -360,7 +360,7 @@ The Markdown document is the content source of truth. At this step **you author 
 3. **Facts.** Every commit hash (first 7 characters) and every changed file path of the range appears in the page text.
 4. **Headings.** The document's `##` / `###` heading texts appear in the same order as the page's `<h2>` / `<h3>` texts (tags, entities and whitespace do not matter; keep the words).
 5. **Styles.** Each class from the sanctioned component list and the SVG class list that the document uses has a `.class` selector in the page `<style>`.
-6. **Content.** Carry all of the document's prose, tables and cards. A page that is prettier but thinner than the document fails the technical-writing and presentation reviews below.
+6. **Text blocks.** Every text block of the document — each paragraph, list item, table cell, and the text of component cards (callout, compare, cf, gloss, doc-meta) — appears verbatim in the page text. The check compares text after dropping tags, decoding entities (`&nbsp;` is a space), removing zero-width characters and collapsing whitespace, so extra `<span>`s, styling and layout are free; a changed, reworded or missing word fails and the failure lists the missing blocks. A page that is prettier but thinner than the document also fails the technical-writing and presentation reviews below.
 
 **Capture, lint, look, repeat** (html-report §14). Build the evidence folder first: the range's `git diff` saved as a `.patch` file plus the files of the `### 원천` table. `--source` is required here, because the lint receipt records it. From the document's folder:
 
