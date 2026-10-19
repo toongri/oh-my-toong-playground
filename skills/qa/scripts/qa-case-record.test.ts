@@ -67,6 +67,22 @@ test("재생된 case를 pass 시나리오에 saved로 연결한다", async () =>
 	expect(scenarioOf()?.case).toEqual({ kind: "saved", id: "case", revision: fx.savedRevision, receipt_path: fx.result.receipt.artifact_paths.receipt, attempt_id: fx.result.receipt.attempt_id });
 });
 
+test("재생 뒤 driven-at을 적어 pass로 기록해도 case를 saved로 연결한다", async () => {
+	const fx = await fixture({ markPass: false });
+	recordScenario(sid, { story: "story", scenario: "s1", status: "pass", evidencePath: fx.boundary, evidenceSurface: "bash", drivenAt: "terminal, replay 1" });
+	recordCase(sid, { story: "story", scenario: "s1", caseId: "case", store: store() });
+	expect(scenarioOf()?.case?.kind).toBe("saved");
+});
+
+test("재생 영수증으로 다시 기록하며 driven-at만 고쳐도 받아들인다", async () => {
+	const fx = await fixture({ markPass: false });
+	const receipt = fx.result.receipt.artifact_paths.receipt;
+	recordScenario(sid, { story: "story", scenario: "s1", status: "pass", evidencePath: fx.boundary, evidenceSurface: "bash", caseRun: receipt, drivenAt: "wrong text" });
+	recordScenario(sid, { story: "story", scenario: "s1", status: "pass", evidencePath: fx.boundary, evidenceSurface: "bash", caseRun: receipt, drivenAt: "corrected text" });
+	expect(scenarioOf()?.driven_at).toBe("corrected text");
+	expect(scenarioOf()?.case_run).toBeDefined();
+});
+
 test("--none은 사유를 none으로 저장하고 빈 사유는 거부한다", async () => {
 	await fixture();
 	expect(() => recordCase(sid, { story: "story", scenario: "s1", none: "   ", store: store() })).toThrow("record-case: --none requires a nonblank reason");

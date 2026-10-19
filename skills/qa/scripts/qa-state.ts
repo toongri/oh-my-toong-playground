@@ -519,9 +519,10 @@ function mergeWrite(sessionId: string, next: Partial<ChainState>): QaState {
 	return withStateLock(resolveStatePath(sessionId), () => mergeWriteUnlocked(sessionId, next));
 }
 
-/** Hash of a scenario's authored fields (result fields excluded); any rewrite of the scenario changes it, recording a result does not. */
+/** Hash of a scenario's authored fields (the run record, including `driven_at`, is excluded); any rewrite of the scenario changes it, recording a result does not. */
 export function authoredScenarioSha256(scenario: QaScenario): string {
-	return createHash("sha256").update(JSON.stringify(clearScenarioRecord(scenario))).digest("hex");
+	const { driven_at: _drivenAt, ...authored } = clearScenarioRecord(scenario);
+	return createHash("sha256").update(JSON.stringify(authored)).digest("hex");
 }
 
 /**
