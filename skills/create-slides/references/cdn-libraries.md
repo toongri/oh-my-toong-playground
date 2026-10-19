@@ -37,19 +37,6 @@ Markup: `<pre><code class="language-{lang}">...</code></pre>`. The `language-` p
 Markup: `<canvas id="myChart"></canvas>` + initialization script.
 **Caution**: Set `animation: false` to prevent flickering during scrolling. For the dark theme, adjust `color`/`borderColor` to match the theme.
 
-## Mermaid — Diagrams
-
-**Inclusion condition**: When architecture diagrams, flowcharts, sequence diagrams, Gantt charts, or ER diagrams are needed. Use when drawing them with CSS+HTML would be complex.
-
-```html
-<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
-<script>
-  mermaid.initialize({ theme: 'dark', startOnLoad: true });
-</script>
-```
-
-Markup: `<pre class="mermaid">graph LR; A-->B;</pre>`. For the light theme, change to `theme: 'default'`.
-
 ## KaTeX — Mathematical Formulas
 
 **Inclusion condition**: When LaTeX mathematical formulas appear (academic presentations, algorithm explanations).

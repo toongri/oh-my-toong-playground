@@ -4,7 +4,7 @@
 - [Injection Guard (card-body)](#injection-guard-card-body)
 - [Injection Guard (prose)](#injection-guard-prose)
 - [Unverified Entries](#unverified-entries)
-- [Mermaid Validity](#mermaid-validity)
+- [SVG Figures](#svg-figures)
 - [Translation](#translation)
 - [Placeholder Table](#placeholder-table)
 - [Write Command](#write-command)
@@ -25,10 +25,10 @@ Assemble the report markdown with these top-level sections (omit optional sectio
 [Phase 1 prose — module narrative, data flow, design decisions]
 
 ### Architecture Diagram
-[Phase 1 — ```mermaid class/component diagram, or "No structural changes — existing architecture preserved"]
+[Phase 1 — an inline-SVG `<figure>` (class/component diagram), or "No structural changes — existing architecture preserved"]
 
 ### Sequence Diagram
-[Phase 1 — ```mermaid sequence diagram, or "No call flow changes"]
+[Phase 1 — an inline-SVG `<figure>` (sequence diagram), or "No call flow changes"]
 
 ---
 
@@ -94,9 +94,17 @@ Use `data-verdict="PLAUSIBLE"` for plausible findings.
 
 **Unverified entries — plain markdown, no card**: `Unverified (verifier unavailable)` entries have no verdict by design (they are coverage gaps, not findings). Do NOT wrap them in `<div class="finding" data-verdict>`. Leave them as plain markdown list items.
 
-## Mermaid Validity
+## SVG Figures
 
-**Mermaid validity**: The Architecture and Sequence diagrams derive from the reviewed change. mermaid treats `;` as a statement separator — a raw `;` inside sequence-message text (common in code, e.g. `mkdir -p; rm`) silently splits the line and the whole diagram renders as an error SVG. mermaid source MUST be syntactically valid: keep sequence-message text free of raw `;` (rephrase to `then`, a comma, or omit the problematic fragment), and avoid unescaped mermaid control tokens throughout all mermaid fences.
+The Architecture and Sequence diagrams are inline SVG `<figure>` blocks authored per `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` (section 7 diagram rules, section 12 complexity budget, section 13 fidelity) and `${CLAUDE_SKILL_DIR}/../html-report/references/diagram-recipes.md`. A finished example is in `output-example.md`. The template already defines the CSS those recipes use (`svg .box`, `.rel`, `.msg`, `.life`, `.act`, `.mask`, `.halo`, `.t-b`, `.t-s`, `.t-m`, `.fig-scroll`, `.fig-hint`, `.edge-table`) and the token names they read (`--surface`, `--ink`, `--line-strong`, `--bad`, ...) as aliases of the template's own tokens, so no literal color belongs in an SVG attribute.
+
+- **Drawn edges.** Every relation is a `<path>`/`<line>` with a `<marker>` arrowhead and a verb label. Marker ids are unique in the document (`f1-ah`, `f2-ah`).
+- **Light and dark.** Colors come from the template classes (`box new` and `box mod` mark NEW and MODIFIED elements; a second cue, the text tag inside the box, carries the same fact without color).
+- **Size.** Labels render at 12px or more. A viewBox wider than about 360px goes inside `<div class="fig-scroll" tabindex="0" role="region" aria-label="...">` with `style="min-width:{viewBox width}px"` on the `<svg>` (at most 840px, so it fits the desktop reading column without scrolling), followed by `<p class="fig-hint">` and a `<div class="edge-table">` listing every edge (from, label, to; for a sequence: order, from, to, message). Both are hidden on wide screens.
+- **Budget.** At most 9 nodes, 12 edges per figure; a sequence has at most 5 lifelines and 12 messages. Over budget, split into an overview and a detail figure (html-report section 12).
+- **Markdown block rules.** The figure is raw HTML inside the markdown, and marked ends an HTML block at the first blank line. Start `<figure>` at the beginning of a line and keep the whole figure, SVG and table included, free of blank lines.
+- **Injection guard (SVG labels).** Labels come from the reviewed change and reach `innerHTML` as live markup, exactly like prose. HTML-escape every label (`&lt;`, `&gt;`, `&amp;`), including generics and operators in method signatures (`List&lt;Order&gt;`). No `<script>`, `<foreignObject>`, `on*` attributes, or `href`/`xlink:href` in the SVG. Keep a label short; put long signatures in the caption inside `<code>`.
+- **Caption.** `<figcaption>` states the claim in bold, then what the figure does not show.
 
 ## Translation
 

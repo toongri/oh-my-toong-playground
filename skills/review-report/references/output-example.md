@@ -25,47 +25,54 @@ Implements end-to-end order payment flow for the e-commerce platform, spanning t
 `PaymentEventProducer.kt` publishes to `payment-events` keyed by `orderId` for partition affinity — events for the same order keep ordering. No dead-letter topic is configured for the consumer group.
 
 ### Architecture Diagram
-```mermaid
-classDiagram
-    class OrderController { +createOrder(req); +initiatePayment(orderId) }
-    class OrderService { +initiatePayment(orderId); -canTransition(from,to) }
-    class OrderPaymentController { +processPayment(orderId,req); +handleWebhook(payload,sig) }
-    class StripeGatewayAdapter { +charge(cmd); +verifyWebhookSignature(payload,sig) }
-    class PaymentEventProducer { +publishConfirmed(event) }
-    class InventoryService { +reserveStock(event) }
-    class PaymentGateway { <<interface>> +charge(cmd) }
-
-    OrderController --> OrderService : delegates
-    OrderService --> PaymentGateway : payment delegation
-    OrderPaymentController --> StripeGatewayAdapter : charge
-    OrderPaymentController --> PaymentEventProducer : publish
-    StripeGatewayAdapter ..|> PaymentGateway : implements
-    PaymentEventProducer --> InventoryService : Kafka payment-events
-
-    note for OrderPaymentController "NEW"
-    note for StripeGatewayAdapter "NEW"
-    note for PaymentEventProducer "NEW"
-    note for OrderService "MODIFIED"
-```
+<figure>
+<div class="fig-scroll" tabindex="0" role="region" aria-label="Figure 1 architecture, scrolls sideways on a phone">
+<svg viewBox="0 0 728 312" style="min-width:728px" role="img" aria-label="Order payment architecture: OrderController delegates to OrderService, which pays through the PaymentGateway interface. The new StripeGatewayAdapter implements that interface. The new OrderPaymentController charges through the adapter and publishes to the new PaymentEventProducer, which feeds InventoryService over Kafka.">
+<defs><marker id="f1-ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" class="mk-mut"/></marker></defs>
+<!-- columns x=16, 272, 528 (w=184); rows y=24, 136, 248 (h=48) -->
+<path class="rel" d="M200 48 H272" marker-end="url(#f1-ah)"/><text class="t-s halo" x="236" y="38" text-anchor="middle">delegates</text>
+<path class="rel" d="M456 48 H528" marker-end="url(#f1-ah)"/><text class="t-s halo" x="492" y="38" text-anchor="middle">payment</text>
+<path class="rel ret" d="M620 136 V72" marker-end="url(#f1-ah)"/><text class="t-s halo" x="632" y="108">implements</text>
+<path class="rel" d="M200 160 H528" marker-end="url(#f1-ah)"/><text class="t-s halo" x="364" y="150" text-anchor="middle">charge</text>
+<path class="rel" d="M108 184 V248" marker-end="url(#f1-ah)"/><text class="t-s halo" x="120" y="220">publish</text>
+<path class="rel" d="M200 272 H528" marker-end="url(#f1-ah)"/><text class="t-s halo" x="364" y="262" text-anchor="middle">Kafka payment-events</text>
+<rect class="box" x="16" y="24" width="184" height="48" rx="8"/><text class="t-b" x="108" y="46" text-anchor="middle">OrderController</text>
+<rect class="box mod" x="272" y="24" width="184" height="48" rx="8"/><text class="t-b" x="364" y="46" text-anchor="middle">OrderService</text><text class="t-s" x="364" y="64" text-anchor="middle">MODIFIED</text>
+<rect class="box" x="528" y="24" width="184" height="48" rx="8"/><text class="t-b" x="620" y="46" text-anchor="middle">PaymentGateway</text><text class="t-s" x="620" y="64" text-anchor="middle">interface</text>
+<rect class="box new" x="16" y="136" width="184" height="48" rx="8"/><text class="t-b" x="108" y="158" text-anchor="middle">OrderPaymentController</text><text class="t-s" x="108" y="176" text-anchor="middle">NEW</text>
+<rect class="box new" x="528" y="136" width="184" height="48" rx="8"/><text class="t-b" x="620" y="158" text-anchor="middle">StripeGatewayAdapter</text><text class="t-s" x="620" y="176" text-anchor="middle">NEW</text>
+<rect class="box new" x="16" y="248" width="184" height="48" rx="8"/><text class="t-b" x="108" y="270" text-anchor="middle">PaymentEventProducer</text><text class="t-s" x="108" y="288" text-anchor="middle">NEW</text>
+<rect class="box" x="528" y="248" width="184" height="48" rx="8"/><text class="t-b" x="620" y="270" text-anchor="middle">InventoryService</text>
+</svg>
+</div>
+<p class="fig-hint">The figure scrolls sideways. Every edge is also in the table below.</p>
+<div class="edge-table"><table><thead><tr><th>From</th><th>Label</th><th>To</th></tr></thead><tbody><tr><td>OrderController</td><td>delegates</td><td>OrderService</td></tr><tr><td>OrderService</td><td>payment</td><td>PaymentGateway</td></tr><tr><td>StripeGatewayAdapter</td><td>implements</td><td>PaymentGateway</td></tr><tr><td>OrderPaymentController</td><td>charge</td><td>StripeGatewayAdapter</td></tr><tr><td>OrderPaymentController</td><td>publish</td><td>PaymentEventProducer</td></tr><tr><td>PaymentEventProducer</td><td>Kafka payment-events</td><td>InventoryService</td></tr></tbody></table></div>
+<figcaption><b>Figure 1. Payment goes through a new gateway adapter, and the confirmation event reaches inventory over Kafka.</b> Green boxes are new, the amber box is modified, the dashed edge is an interface implementation.</figcaption>
+</figure>
 
 ### Sequence Diagram
-```mermaid
-sequenceDiagram
-    participant Client
-    participant OrderCtrl as OrderController
-    participant PayCtrl as OrderPaymentController
-    participant Stripe as StripeGatewayAdapter
-    participant Kafka
-    participant InvSvc as InventoryService
-
-    Client->>OrderCtrl: POST /orders/{id}/pay
-    OrderCtrl->>PayCtrl: processPayment(orderId, req)
-    PayCtrl->>Stripe: charge(PaymentCommand)
-    Stripe-->>PayCtrl: PaymentResult(COMPLETED)
-    PayCtrl->>Kafka: publish PaymentConfirmedEvent
-    Kafka->>InvSvc: consume PaymentConfirmedEvent
-    InvSvc->>InvSvc: reserveStock (SELECT FOR UPDATE, decrement)
-```
+<figure>
+<div class="fig-scroll" tabindex="0" role="region" aria-label="Figure 2 sequence, scrolls sideways on a phone">
+<svg viewBox="0 0 866 400" style="min-width:840px" role="img" aria-label="Payment sequence: a client posts the pay request to OrderController, which calls OrderPaymentController. That controller charges through StripeGatewayAdapter and gets a result back, then publishes an event to Kafka. Kafka delivers the event to InventoryService, which reserves stock.">
+<defs><marker id="f2-ah" viewBox="0 0 8 6" refX="7" refY="3" markerWidth="8" markerHeight="6" orient="auto"><path d="M0 0L8 3L0 6z" class="mk-mut"/></marker></defs>
+<!-- lifelines x=164, 320, 476, 632, 788; message rows every 40px from y=100 -->
+<line class="life" x1="164" y1="72" x2="164" y2="388"/><line class="life" x1="320" y1="72" x2="320" y2="388"/><line class="life" x1="476" y1="72" x2="476" y2="388"/><line class="life" x1="632" y1="72" x2="632" y2="388"/><line class="life" x1="788" y1="72" x2="788" y2="388"/>
+<rect class="act" x="159" y="100" width="10" height="40"/><rect class="act" x="315" y="140" width="10" height="120"/><rect class="act" x="471" y="180" width="10" height="40"/><rect class="act" x="783" y="300" width="10" height="64"/>
+<circle class="dot" cx="8" cy="100" r="3"/>
+<path class="msg" d="M8 100 H159" marker-end="url(#f2-ah)"/><rect class="mask" x="9" y="76" width="150" height="18" rx="2"/><text class="m" x="84" y="90" text-anchor="middle">POST /orders/{id}/pay</text>
+<path class="msg" d="M169 140 H315" marker-end="url(#f2-ah)"/><rect class="mask" x="183" y="116" width="118" height="18" rx="2"/><text class="m" x="242" y="130" text-anchor="middle">processPayment()</text>
+<path class="msg" d="M325 180 H471" marker-end="url(#f2-ah)"/><rect class="mask" x="342" y="156" width="112" height="18" rx="2"/><text class="m" x="398" y="170" text-anchor="middle">charge(command)</text>
+<path class="msg ret" d="M471 220 H325" marker-end="url(#f2-ah)"/><rect class="mask" x="349" y="196" width="98" height="18" rx="2"/><text class="m" x="398" y="210" text-anchor="middle">PaymentResult</text>
+<path class="msg" d="M325 260 H632" marker-end="url(#f2-ah)"/><rect class="mask" x="506" y="236" width="98" height="18" rx="2"/><text class="m" x="555" y="250" text-anchor="middle">publish event</text>
+<path class="msg" d="M632 300 H783" marker-end="url(#f2-ah)"/><rect class="mask" x="658" y="276" width="98" height="18" rx="2"/><text class="m" x="707" y="290" text-anchor="middle">consume event</text>
+<path class="msg" d="M793 340 H814 Q822 340 822 348 V356 Q822 364 814 364 H793" marker-end="url(#f2-ah)"/><rect class="mask" x="670" y="320" width="104" height="18" rx="2"/><text class="m" x="772" y="334" text-anchor="end">reserveStock()</text>
+<rect class="box" x="94" y="20" width="140" height="52" rx="6"/><text class="t-b" x="164" y="40" text-anchor="middle">Order</text><text class="t-b" x="164" y="58" text-anchor="middle">Controller</text><rect class="box" x="250" y="20" width="140" height="52" rx="6"/><text class="t-b" x="320" y="40" text-anchor="middle">OrderPayment</text><text class="t-b" x="320" y="58" text-anchor="middle">Controller</text><rect class="box" x="406" y="20" width="140" height="52" rx="6"/><text class="t-b" x="476" y="40" text-anchor="middle">StripeGateway</text><text class="t-b" x="476" y="58" text-anchor="middle">Adapter</text><rect class="box" x="562" y="20" width="140" height="52" rx="6"/><text class="t-b" x="632" y="40" text-anchor="middle">Kafka</text><text class="t-b" x="632" y="58" text-anchor="middle"></text><rect class="box" x="718" y="20" width="140" height="52" rx="6"/><text class="t-b" x="788" y="40" text-anchor="middle">Inventory</text><text class="t-b" x="788" y="58" text-anchor="middle">Service</text>
+</svg>
+</div>
+<p class="fig-hint">The figure scrolls sideways. Every message is also in the table below.</p>
+<div class="edge-table"><table><thead><tr><th>Order</th><th>From</th><th>To</th><th>Message</th></tr></thead><tbody><tr><td>1</td><td>Client</td><td>OrderController</td><td>POST /orders/{id}/pay</td></tr><tr><td>2</td><td>OrderController</td><td>OrderPaymentController</td><td>processPayment()</td></tr><tr><td>3</td><td>OrderPaymentController</td><td>StripeGatewayAdapter</td><td>charge(command)</td></tr><tr><td>4</td><td>StripeGatewayAdapter</td><td>OrderPaymentController</td><td>PaymentResult (return)</td></tr><tr><td>5</td><td>OrderPaymentController</td><td>Kafka</td><td>publish event</td></tr><tr><td>6</td><td>Kafka</td><td>InventoryService</td><td>consume event</td></tr><tr><td>7</td><td>InventoryService</td><td>InventoryService</td><td>reserveStock()</td></tr></tbody></table></div>
+<figcaption><b>Figure 2. Confirmation flows from the charge result to a Kafka event and then to inventory reservation.</b> The event is <code>PaymentConfirmedEvent</code>; <code>reserveStock()</code> decrements stock under <code>SELECT ... FOR UPDATE</code>.</figcaption>
+</figure>
 
 ---
 

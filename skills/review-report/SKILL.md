@@ -1,12 +1,12 @@
 ---
 name: review-report
-description: Use when you want the rich human-facing code review experience — a walkthrough with prose explanation plus mermaid architecture/sequence diagrams plus an HTML report of verified findings, not just terminal findings. Triggers include "review report", "코드리뷰 리포트", "리뷰 HTML", "다이어그램 리뷰", "리뷰 다이어그램", "walkthrough 리뷰", "PR 리뷰 리포트".
+description: Use when you want the rich human-facing code review experience — a walkthrough with prose explanation plus inline-SVG architecture/sequence diagrams plus an HTML report of verified findings, not just terminal findings. Triggers include "review report", "코드리뷰 리포트", "리뷰 HTML", "다이어그램 리뷰", "리뷰 다이어그램", "walkthrough 리뷰", "PR 리뷰 리포트".
 disable-model-invocation: true
 ---
 
 # Review Report
 
-The human-facing code-review comprehension orchestrator. It reads the diff, synthesizes a walkthrough (prose Change Summary + Core Logic Analysis + mermaid Architecture & Sequence diagrams) from the diff directly, dispatches a `code-reviewer` agent to obtain verified findings in an isolated context, and renders the combined walkthrough + findings into a standalone HTML report.
+The human-facing code-review comprehension orchestrator. It reads the diff, synthesizes a walkthrough (prose Change Summary + Core Logic Analysis + inline-SVG Architecture & Sequence diagrams) from the diff directly, dispatches a `code-reviewer` agent to obtain verified findings in an isolated context, and renders the combined walkthrough + findings into a standalone HTML report.
 
 This is a **report**. It does not gate — there is no Assessment / "Ready to merge" section. The full report lives only in the HTML; the terminal receives counts and a path, not the report body.
 
@@ -38,7 +38,7 @@ review-report
 ## Flow
 
 1. **Read the diff / review target** — determine the range and read the diff (Step 1).
-2. **Synthesize the walkthrough** — prose Change Summary + Core Logic Analysis + mermaid Architecture Diagram + Sequence Diagram, from the diff directly (Step 2).
+2. **Synthesize the walkthrough** — prose Change Summary + Core Logic Analysis + inline-SVG Architecture Diagram + Sequence Diagram, from the diff directly (Step 2).
 3. **Obtain findings** — dispatch a `code-reviewer` agent in an isolated context; it returns findings as render-time markdown finding cards (Step 3).
 4. **Render the HTML** — assemble the render-time markdown (walkthrough + findings), substitute the template placeholders, write `$OMT_DIR/reviews/{slug}.html`, open it, print the terminal pointer (Step 4 / R1–R5).
 
@@ -118,13 +118,13 @@ Produce all four sections, in order.
 - Level of detail: enough to understand the full change WITHOUT reading the code.
 
 #### Architecture Diagram
-- Mermaid class diagram or component diagram.
+- Inline SVG figure (class or component diagram), authored per `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` section 7 and `${CLAUDE_SKILL_DIR}/../html-report/references/diagram-recipes.md` (Structure recipe).
 - Show changed classes/modules and their relationships (inheritance, composition, dependency).
 - Distinguish new vs modified elements.
 - If no structural changes (e.g., logic-only changes within existing methods): write "No structural changes — existing architecture preserved".
 
 #### Sequence Diagram
-- Mermaid sequence diagram visualizing the primary call flow(s) affected by the changes.
+- Inline SVG sequence figure (diagram-recipes.md Sequence recipe) visualizing the primary call flow(s) affected by the changes.
 - Include actors, method calls, return values, and significant conditional branches.
 - If no call flow changes (e.g., variable rename, config change): write "No call flow changes".
 
@@ -148,9 +148,9 @@ Assemble the render-time markdown (walkthrough from Step 2 + findings from Step 
 
 Assemble the report markdown with the top-level sections — the Walkthrough (Step 2), then the findings the `code-reviewer` agent returned (Step 3), in the order the agent produced them.
 
-**MANDATORY READ: `${CLAUDE_SKILL_DIR}/references/render-assembly.md`** — card format, injection guard rules (card-body + prose), mermaid validity constraints, translation rules, unverified-entry handling, and the placeholder table / write command. Read it now before assembling.
+**MANDATORY READ: `${CLAUDE_SKILL_DIR}/references/render-assembly.md`** — card format, injection guard rules (card-body + prose), SVG figure rules, translation rules, unverified-entry handling, and the placeholder table / write command. Read it now before assembling.
 
-The findings cards arrive from the agent already in the render-time markdown contract — splice them into the Findings section as-is. The walkthrough sections you author here must follow the same injection-guard and mermaid-validity rules in that reference (e.g. keep sequence-message text free of raw `;`).
+The findings cards arrive from the agent already in the render-time markdown contract — splice them into the Findings section as-is. The walkthrough sections you author here must follow the same injection-guard and SVG figure rules in that reference (e.g. HTML-escape every label derived from reviewed code, and keep each figure's HTML free of blank lines).
 
 ### Step R2: Read the Template
 
@@ -169,6 +169,19 @@ where `{repo-basename}` = `basename -s .git $(git remote get-url origin)`, or `b
 ### Step R4: Substitute Placeholders and Write
 
 (Placeholder substitution and write procedure: **see `${CLAUDE_SKILL_DIR}/references/render-assembly.md`** — read it if you have not already done so at Step R1. The template carries 10 placeholders; substitute every one, HTML-escaping every active-HTML placeholder, then write to `$OMT_DIR/reviews/{slug}.html`.)
+
+### Step R4b: Capture and Lint the Assembled HTML
+
+Before reporting, run the self-critique loop of `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` section 14 on the file just written. The diff is not a source directory on disk, so omit `--source` and say so in the report.
+
+```bash
+OUT="$OMT_DIR/reviews/.visual-check/round-1"
+bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh "$OMT_DIR/reviews/{slug}.html" "$OUT"
+bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh "$OMT_DIR/reviews/{slug}.html" > "$OUT/lint.json"
+jq '.summary' "$OUT/lint.json"
+```
+
+Look at every frame, fix the walkthrough markdown (never the findings cards' verdicts), re-substitute and rewrite the file, and repeat until lint reports 0 errors and a full visual pass finds nothing to fix. Walkthrough figures are the usual source of errors (`svg-text-overlap`, `svg-text-small`, `figure-scrolls`). Findings cards are not figures and keep their card format.
 
 ### Step R5: Open and Print Terminal Pointer
 
@@ -201,5 +214,5 @@ These files live in `${CLAUDE_SKILL_DIR}/references/` alongside this skill. Each
 
 | Reference file | What it contains | When to read |
 |---|---|---|
-| `references/render-assembly.md` | Card format, injection guards (card-body + prose), mermaid validity constraints, translation rules, unverified-entry handling, placeholder table and write command | Step R1 (assemble render markdown) and Step R4 (substitute placeholders and write) |
+| `references/render-assembly.md` | Card format, injection guards (card-body + prose), SVG figure rules, translation rules, unverified-entry handling, placeholder table and write command | Step R1 (assemble render markdown) and Step R4 (substitute placeholders and write) |
 | `references/output-example.md` | A complete worked review example synthesized from 3 chunks | When producing your first review output, to match expected format and enrichment depth |
