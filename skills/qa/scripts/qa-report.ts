@@ -14,11 +14,9 @@
  * are never persisted to qa-state: issue descriptions, expected-vs-actual
  * prose, and oracle diagnosis. See skills/qa/SKILL.md "HTML Report".
  */
-import { execFileSync } from "child_process";
 import { createHash } from "crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
-import { dirname, extname, join, resolve } from "path";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "fs";
+import { dirname, extname, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
 import { RISK_AXES, actorReach, scenarioNeedsVisualProof, evidenceReviewComplete, type QaActor, type QaBaseline, type QaReachability, type QaResult, type QaRunCheck, type QaScenario, type QaStory } from "@lib/qa-chain-core";
 import { CODE_IDENTIFIER, readQaView, recordRenderedReport, stateProbe, type QaView } from "./qa-state.ts";
@@ -129,8 +127,12 @@ export interface QaReportPresentation {
 	scenarioFlows?: Record<string, string>;
 	/** AC index (as string) → its satisfaction judgment. */
 	requirementMapping?: Record<string, QaReportAcMapping>;
-	/** A big-picture mermaid source, baked to inline SVG at render time. */
-	bigPicture?: string;
+	/**
+	 * The big-picture diagram: ONE model-authored inline <svg> element, drawn with
+	 * the class vocabulary in `SVG_CLASSES`. It is sanitized (see `sanitizeBigPictureSvg`)
+	 * and rejected, never repaired, on any disallowed construct.
+	 */
+	bigPictureSvg?: string;
 	bigPictureCaption?: string;
 }
 
@@ -148,9 +150,6 @@ export interface QaReportNarrative {
 	scenarios?: Record<string, QaReportScenarioNarrative>;
 	presentation?: QaReportPresentation;
 }
-
-/** Renders one mermaid source to an SVG string. Injected so tests skip mmdc. */
-export type MermaidRenderer = (source: string, index: number) => string;
 
 function escapeHtml(s: string): string {
 	return String(s)
@@ -171,62 +170,6 @@ export function scenarioKey(scenario: { story: string; id: string }): string {
 
 function currentCycle(view: QaView): number {
 	return typeof view.cycle === "number" ? view.cycle : 0;
-}
-
-/**
- * Rewrites a mermaid SVG's root width to its viewBox pixel width so a wide
- * diagram renders at natural size and its figure scrolls, rather than shrinking
- * to the column and collapsing its labels to a few illegible pixels. mmdc emits
- * `width="100%"` for a `0 0 W H` viewBox, but with a non-zero origin
- * (`viewBox="4 4 W H"`) Mermaid can emit `width="10"`; any existing root width
- * is replaced, and one is inserted when absent. The viewBox is read from the
- * root tag only, because nested marker elements carry their own viewBox. Forked
- * from explain-diff/scripts/render.ts — technique reused, no runtime dependency
- * on that skill.
- */
-export function normalizeSvgWidth(svg: string): string {
-	const rootTag = svg.match(/^<svg\b[^>]*>/)?.[0];
-	if (!rootTag) return svg;
-	const viewBox = rootTag
-		.match(/\bviewBox=(['"])(.*?)\1/)?.[2]
-		?.trim()
-		.split(/[\s,]+/)
-		.map(Number);
-	const viewBoxWidth = viewBox?.[2];
-	if (
-		viewBox?.length !== 4 ||
-		viewBoxWidth === undefined ||
-		!Number.isFinite(viewBoxWidth) ||
-		viewBoxWidth <= 0
-	) {
-		return svg;
-	}
-	const width = Math.ceil(viewBoxWidth);
-	const normalizedRoot = /\swidth=(['"])[^"']*\1/.test(rootTag)
-		? rootTag.replace(/\swidth=(['"])[^"']*\1/, ` width="${width}"`)
-		: rootTag.replace(/^<svg\b/, `<svg width="${width}"`);
-	return svg.replace(/^<svg\b[^>]*>/, normalizedRoot);
-}
-
-/**
- * Renders one mermaid source to SVG through mmdc (real mermaid inside headless
- * Chromium — the same engine the mermaid-render-gate hook uses). Forked from
- * explain-diff/scripts/render.ts. The `my-svg` id mmdc mints is de-duplicated
- * per block so two diagrams on one page do not style each other.
- */
-export function mmdcRenderSvg(source: string, index: number): string {
-	const dir = mkdtempSync(join(tmpdir(), "qa-report-mmd-"));
-	try {
-		const src = join(dir, "block.mmd");
-		const out = join(dir, "block.svg");
-		writeFileSync(src, source, "utf8");
-		execFileSync("mmdc", ["-i", src, "-o", out, "-b", "transparent", "-q"], {
-			stdio: ["ignore", "pipe", "pipe"],
-		});
-		return readFileSync(out, "utf8").replaceAll("my-svg", `mmd-${index}`);
-	} finally {
-		rmSync(dir, { recursive: true, force: true });
-	}
 }
 
 type RecordedCheck = QaBaseline | QaRunCheck | QaResult | null | undefined;
@@ -345,28 +288,171 @@ function proseOrGap(prose: string | undefined, whatMissing: string): string {
 	return prose?.trim() ? `<p>${escapeHtml(prose)}</p>` : gap(whatMissing);
 }
 
-function renderBigPicture(
-	presentation: QaReportPresentation | undefined,
-	renderMermaid: MermaidRenderer,
-	onMermaidRenderError?: (error: unknown) => void,
-): string {
-	const source = presentation?.bigPicture;
-	if (!source) return `<h2>큰 그림</h2>${gap("큰 그림 다이어그램이 없습니다")}`;
-	const caption = presentation?.bigPictureCaption;
-	let figure: string;
-	try {
-		figure = `<figure class="diagram">${normalizeSvgWidth(renderMermaid(source, 0))}` +
-			(caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : "") +
-			`</figure>`;
-	} catch (e) {
-			onMermaidRenderError?.(e);
-			// Never abort the terminal report over a diagram: keep the raw source so
-			// the reader still sees the intended structure, and name the failure.
-		figure =
-			`<p class="evidence-note">다이어그램 렌더 실패 (${escapeHtml(String(e))})</p>` +
-			`<pre>${escapeHtml(source)}</pre>`;
+/** A big-picture diagram the renderer refuses (fail closed): the message names the offending construct. */
+export class BigPictureSvgError extends Error {}
+
+// The SVG is a trust boundary: it comes from the model and lands in the report
+// verbatim-looking. So it is parsed with a small strict tokenizer, checked
+// against allowlists, and re-serialized from the parsed tokens — the original
+// string is never echoed. Anything outside the allowlists throws.
+const SVG_ELEMENTS = new Set(["svg", "g", "defs", "marker", "path", "line", "polyline", "polygon", "rect", "circle", "ellipse", "text", "tspan", "title", "desc"]);
+const SVG_TEXT_ELEMENTS = new Set(["text", "tspan", "title", "desc"]);
+const SVG_ELEMENT_HINTS: Record<string, string> = {
+	script: "scripts can run code",
+	foreignobject: "embedded HTML does not scale or theme",
+	style: "colors come from the report's class vocabulary",
+	image: "external or embedded bitmaps are not allowed",
+	a: "links are not allowed",
+	use: "references can pull in external content",
+	animate: "animation is not allowed",
+	set: "animation is not allowed",
+	animatetransform: "animation is not allowed",
+	iframe: "embedding is not allowed",
+};
+/** Classes the renderer's CSS themes (light + dark); the only way an author colors a shape. */
+export const SVG_CLASSES = ["box", "box-focal", "zone", "edge", "edge-pass", "edge-fail", "edge-dash", "mk", "mk-pass", "mk-fail", "t-b", "t-s", "lbl", "stop"] as const;
+const NUM = /^-?(\d+\.?\d*|\.\d+)(e-?\d+)?$/i;
+const NUM_LIST = /^[-0-9.,\s]+$/;
+const PATH_DATA = /^[MmLlHhVvCcSsQqTtAaZz0-9eE.,\s+-]+$/;
+const TRANSFORM = /^\s*((translate|scale|rotate)\([-0-9.,\s]+\)\s*)+$/;
+const COLOR = /^(none|currentColor|var\(--[a-z-]+\))$/;
+const URL_FRAGMENT = /^url\(#([A-Za-z][\w-]*)\)$/;
+const ENUM = (...values: string[]) => (v: string) => values.includes(v);
+const ATTRIBUTE_RULES: Record<string, (value: string) => boolean> = {
+	id: (v) => /^[A-Za-z][\w-]*$/.test(v),
+	class: (v) => v.trim().split(/\s+/).every((c) => SVG_CLASSES.some((known) => known === c)),
+	viewBox: (v) => { const p = v.trim().split(/[\s,]+/); return p.length === 4 && p.every((n) => NUM.test(n)) && Number(p[2]) > 0 && Number(p[3]) > 0; },
+	x: (v) => NUM.test(v), y: (v) => NUM.test(v), x1: (v) => NUM.test(v), y1: (v) => NUM.test(v), x2: (v) => NUM.test(v), y2: (v) => NUM.test(v),
+	cx: (v) => NUM.test(v), cy: (v) => NUM.test(v), r: (v) => NUM.test(v), rx: (v) => NUM.test(v), ry: (v) => NUM.test(v),
+	width: (v) => NUM.test(v), height: (v) => NUM.test(v), refX: (v) => NUM.test(v), refY: (v) => NUM.test(v),
+	markerWidth: (v) => NUM.test(v), markerHeight: (v) => NUM.test(v),
+	"stroke-width": (v) => NUM.test(v), opacity: (v) => NUM.test(v), "fill-opacity": (v) => NUM.test(v), "stroke-opacity": (v) => NUM.test(v),
+	"stroke-dasharray": (v) => NUM_LIST.test(v),
+	d: (v) => PATH_DATA.test(v), points: (v) => NUM_LIST.test(v), transform: (v) => TRANSFORM.test(v),
+	fill: (v) => COLOR.test(v), stroke: (v) => COLOR.test(v),
+	"marker-start": (v) => URL_FRAGMENT.test(v), "marker-mid": (v) => URL_FRAGMENT.test(v), "marker-end": (v) => URL_FRAGMENT.test(v),
+	"text-anchor": ENUM("start", "middle", "end"),
+	"font-weight": ENUM("normal", "bold", "500", "600", "700"),
+	"stroke-linecap": ENUM("butt", "round", "square"), "stroke-linejoin": ENUM("miter", "round", "bevel"),
+	"fill-rule": ENUM("nonzero", "evenodd"),
+	orient: (v) => v === "auto" || v === "auto-start-reverse" || NUM.test(v),
+	markerUnits: ENUM("strokeWidth", "userSpaceOnUse"),
+	preserveAspectRatio: ENUM("xMidYMid meet", "none"),
+	"aria-label": (v) => v.trim() !== "", "aria-labelledby": (v) => /^[A-Za-z][\w-]*( [A-Za-z][\w-]*)*$/.test(v),
+	"aria-hidden": ENUM("true"),
+	role: ENUM("img"),
+	xmlns: ENUM("http://www.w3.org/2000/svg"),
+};
+const ROOT_ONLY_ATTRIBUTES = new Set(["xmlns", "role", "aria-label", "aria-labelledby"]);
+const SVG_ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+
+function svgFail(message: string): never {
+	throw new BigPictureSvgError(`presentation.bigPictureSvg rejected: ${message}`);
+}
+
+function decodeSvgText(raw: string, where: string): string {
+	return raw.replace(/&([^;\s&]*);?/g, (whole, name: string) => {
+		if (!whole.endsWith(";") || !Object.hasOwn(SVG_ENTITIES, name)) svgFail(`${where} contains the entity "${whole}" (only &amp; &lt; &gt; &quot; &apos; are allowed)`);
+		return SVG_ENTITIES[name];
+	});
+}
+
+/**
+ * Validates one model-authored `<svg>` and returns a re-serialized, renderer-
+ * owned copy. The root keeps only its viewBox; the renderer adds role="img" and
+ * sizing. Throws {@link BigPictureSvgError} naming the first offending construct.
+ */
+export function sanitizeBigPictureSvg(source: string): { svg: string; viewBoxWidth: number } {
+	const tokenizer = /<!--|<!|<\?|<(\/?)([A-Za-z][\w:-]*)((?:\s+[^\s=>/"']+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>"']+))?)*)\s*(\/?)>|<|[^<]+/g;
+	const out: string[] = [];
+	const stack: string[] = [];
+	const ids = new Set<string>();
+	const references: string[] = [];
+	let rootSeen = false;
+	let viewBoxWidth = 0;
+	let rootLabel = "";
+	const trimmed = source.trim();
+	for (let token = tokenizer.exec(trimmed); token; token = tokenizer.exec(trimmed)) {
+		const text = token[0];
+		if (text.startsWith("<!--") || text.startsWith("<!") || text.startsWith("<?")) svgFail(`"${text}" (comments, CDATA, doctype and processing instructions are not allowed)`);
+		if (text.startsWith("<") && token[2] === undefined) svgFail(`malformed markup near "${text.slice(0, 30)}"`);
+		if (!text.startsWith("<")) {
+			const whole = decodeSvgText(text, "text");
+			if (stack.length === 0) { if (whole.trim() !== "") svgFail("text outside the <svg> root"); continue; }
+			if (!SVG_TEXT_ELEMENTS.has(stack[stack.length - 1])) { if (whole.trim() !== "") svgFail(`text inside <${stack[stack.length - 1]}> (text belongs in <text>, <tspan>, <title> or <desc>)`); continue; }
+			out.push(escapeHtml(whole));
+			continue;
+		}
+		const closing = token[1] === "/";
+		const name = token[2];
+		if (!SVG_ELEMENTS.has(name)) svgFail(`<${name}> is not allowed${SVG_ELEMENT_HINTS[name.toLowerCase()] ? ` (${SVG_ELEMENT_HINTS[name.toLowerCase()]})` : ""}`);
+		if (closing) {
+			if (stack.pop() !== name) svgFail(`unbalanced </${name}>`);
+			out.push(`</${name}>`);
+			continue;
+		}
+		if (stack.length === 0) { if (rootSeen) svgFail("more than one root element (exactly one <svg> is allowed)"); if (name !== "svg") svgFail(`root must be <svg>, got <${name}>`); rootSeen = true; }
+		else if (name === "svg") svgFail("nested <svg> is not allowed");
+		const attrs: string[] = [];
+		const seenAttrs = new Set<string>();
+		for (const match of (token[3] ?? "").matchAll(/([^\s=>/"']+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>"']+)))?/g)) {
+			const attr = match[1];
+			if (/^on/i.test(attr)) svgFail(`event handler attribute "${attr}" on <${name}>`);
+			if (/^style$/i.test(attr)) svgFail(`style="" attribute on <${name}> (use the class vocabulary)`);
+			if (/(^|:)href$/i.test(attr)) svgFail(`"${attr}" attribute on <${name}> (external references are not allowed)`);
+			const rule = ATTRIBUTE_RULES[attr];
+			if (!rule) svgFail(`attribute "${attr}" on <${name}> is not in the allowlist`);
+			if (match[2] === undefined && match[3] === undefined) svgFail(`attribute "${attr}" on <${name}> needs a quoted value`);
+			if (seenAttrs.has(attr)) svgFail(`duplicate attribute "${attr}" on <${name}>`);
+			seenAttrs.add(attr);
+			if (ROOT_ONLY_ATTRIBUTES.has(attr) && name !== "svg") svgFail(`attribute "${attr}" is only allowed on the <svg> root, found on <${name}>`);
+			if (attr === "viewBox" && name !== "svg" && name !== "marker") svgFail(`attribute "viewBox" on <${name}>`);
+			if (attr === "width" || attr === "height") { if (name === "svg") svgFail(`attribute "${attr}" on the <svg> root (the renderer sizes it from viewBox)`); }
+			const value = decodeSvgText(match[2] ?? match[3] ?? "", `attribute "${attr}"`);
+			if (/url\(/i.test(value) && !URL_FRAGMENT.test(value)) svgFail(`attribute "${attr}" on <${name}> uses url(...) other than a same-document #id`);
+			if (!rule(value)) svgFail(`attribute "${attr}="${value.slice(0, 40)}"" on <${name}> is not a permitted value`);
+			if (attr === "id") ids.add(value);
+			const ref = URL_FRAGMENT.exec(value);
+			if (ref) references.push(ref[1]);
+			if (name === "svg" && attr === "viewBox") viewBoxWidth = Number(value.trim().split(/[\s,]+/)[2]);
+			if (name === "svg" && attr === "aria-label") rootLabel = value;
+			if (name !== "svg" || !ROOT_ONLY_ATTRIBUTES.has(attr)) attrs.push(`${attr}="${escapeHtml(value)}"`);
+		}
+		if (name === "svg") {
+			if (!seenAttrs.has("viewBox")) svgFail("the <svg> root needs a viewBox");
+			if (!rootLabel.trim()) svgFail('the <svg> root needs a non-empty aria-label (a one-sentence statement of what the diagram shows)');
+		}
+		const selfClosing = token[4] === "/";
+		if (name === "svg") attrs.push(`role="img"`, `aria-label="${escapeHtml(rootLabel)}"`);
+		out.push(`<${name}${attrs.length ? ` ${attrs.join(" ")}` : ""}${selfClosing ? "/" : ""}>`);
+		if (!selfClosing) stack.push(name);
 	}
-	return `<h2>큰 그림</h2>${figure}`;
+	if (!rootSeen) svgFail("no <svg> root element found");
+	if (stack.length) svgFail(`unclosed <${stack[stack.length - 1]}>`);
+	for (const ref of references) if (!ids.has(ref)) svgFail(`url(#${ref}) points at an id that is not defined inside the <svg>`);
+	return { svg: out.join(""), viewBoxWidth };
+}
+
+/** The pre-rename field name; kept only to refuse it loudly. */
+const LEGACY_BIG_PICTURE_FIELD = "bigPicture";
+
+function renderBigPicture(presentation: QaReportPresentation | undefined): string {
+	if (presentation && LEGACY_BIG_PICTURE_FIELD in presentation) {
+		throw new BigPictureSvgError(`presentation.${LEGACY_BIG_PICTURE_FIELD} is no longer supported (it held Mermaid source). Provide presentation.bigPictureSvg: one inline <svg> element authored per skills/qa/presentation.md`);
+	}
+	const source = presentation?.bigPictureSvg;
+	if (!source?.trim()) return `<h2>큰 그림</h2>${gap("큰 그림 다이어그램이 없습니다")}`;
+	const { svg, viewBoxWidth } = sanitizeBigPictureSvg(source);
+	// Natural size is the cap. A drawing wider than a phone keeps 1:1 labels and scrolls inside its own frame.
+	const width = Math.ceil(viewBoxWidth);
+	const sizing = `max-width:${width}px${width > 360 ? `;min-width:${width}px` : ""}`;
+	const caption = presentation?.bigPictureCaption;
+	return (
+		`<h2>큰 그림</h2><figure class="diagram">` +
+		`<div class="diagram-scroll" tabindex="0" role="region" aria-label="큰 그림, 좌우 스크롤">${svg.replace(/^<svg/, `<svg style="${sizing}"`)}</div>` +
+		(caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : "") +
+		`</figure>`
+	);
 }
 
 const SATISFIED_LABEL: Record<string, string> = {
@@ -982,8 +1068,6 @@ export function renderQaReport(
 	view: QaView,
 	narrative: QaReportNarrative = {},
 	readEvidence: EvidenceReader = defaultEvidenceReader,
-	renderMermaid: MermaidRenderer = mmdcRenderSvg,
-	onMermaidRenderError?: (error: unknown) => void,
 	strictVisualEvidence = false,
 ): string | null {
 	if ((view.actors ?? []).length === 0) return null;
@@ -1065,7 +1149,7 @@ export function renderQaReport(
 		renderBlockedBanner(view),
 		renderOverview(narrative),
 			renderRequirementFulfillment(view, narrative, unverified),
-		renderBigPicture(narrative.presentation, renderMermaid, onMermaidRenderError),
+		renderBigPicture(narrative.presentation),
 		renderActors(view, narrative),
 			renderScenarios(view, narrative, readEvidence, evidenceContext, unverified),
 		renderScenarioAudit(view, narrative, readEvidence, evidenceContext),
@@ -1200,10 +1284,26 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .satisfied-partial { color: var(--na); border-color: var(--na); }
 /* unverified = the user boundary was never driven; render it LOUD, never quiet — a PO must read it as "not done", not as a mild partial */
 .satisfied-unverified { color: var(--bg); background: var(--fail); border-color: var(--fail); font-weight: 700; }
-/* Mermaid draws with its light theme; a fixed light panel keeps arrows and edge labels legible in dark mode too. */
-.diagram { margin: 1rem 0; overflow-x: auto; background: #ffffff; color-scheme: light; border: 1px solid var(--rule); border-radius: 10px; padding: 1rem; }
-.diagram svg { max-width: none; height: auto; }
-.diagram figcaption { color: #4a4a4a; font-size: 0.88rem; margin-top: 0.4rem; }
+/* The big-picture SVG is model-authored but takes every color from this class vocabulary, so it themes with the page in light and dark. */
+.diagram { margin: 1rem 0; border: 1px solid var(--rule); border-radius: 10px; background: var(--bg); padding: 0.75rem; }
+.diagram-scroll { overflow-x: auto; }
+.diagram svg { display: block; width: 100%; height: auto; margin: 0 auto; }
+.diagram svg text { fill: var(--fg); font-family: inherit; font-size: 13px; }
+.diagram svg .t-b { font-weight: 700; }
+.diagram svg .t-s { fill: var(--muted); font-size: 13px; }
+.diagram svg .lbl { paint-order: stroke; stroke: var(--bg); stroke-width: 5px; stroke-linejoin: round; }
+.diagram svg .box { fill: var(--bg); stroke: var(--muted); stroke-width: 1.5; }
+.diagram svg .box-focal { fill: var(--code-bg); stroke: var(--accent); stroke-width: 2.5; }
+.diagram svg .zone { fill: var(--code-bg); stroke: var(--rule); stroke-width: 1; }
+.diagram svg .edge { fill: none; stroke: var(--muted); stroke-width: 1.6; }
+.diagram svg .edge-pass { stroke: var(--pass); stroke-width: 2.5; }
+.diagram svg .edge-fail { stroke: var(--fail); stroke-width: 2.5; }
+.diagram svg .edge-dash { stroke-dasharray: 5 4; }
+.diagram svg .mk { fill: var(--muted); stroke: none; }
+.diagram svg .mk-pass { fill: var(--pass); stroke: none; }
+.diagram svg .mk-fail { fill: var(--fail); stroke: none; }
+.diagram svg .stop { fill: none; stroke: var(--fail); stroke-width: 2.5; }
+.diagram figcaption { color: var(--muted); font-size: 0.88rem; margin-top: 0.4rem; }
 `;
 
 // ---------------------------------------------------------------------------
@@ -1229,14 +1329,12 @@ function main(): void {
 		process.stderr.write(`qa-report: no state found for session "${session}"\n`);
 		process.exit(1);
 	}
-	let mermaidRenderFailed = false;
-	let mermaidRenderError: unknown;
-	const html = renderQaReport(view, narrative, defaultEvidenceReader, mmdcRenderSvg, (error) => {
-		mermaidRenderFailed = true;
-		mermaidRenderError = error;
-	}, true);
-	if (mermaidRenderFailed) {
-		process.stderr.write(`qa-report: Mermaid rendering failed — ${String(mermaidRenderError)}\n`);
+	let html: string | null;
+	try {
+		html = renderQaReport(view, narrative, defaultEvidenceReader, true);
+	} catch (error) {
+		if (!(error instanceof BigPictureSvgError)) throw error;
+		process.stderr.write(`qa-report: ${error.message}\n`);
 		process.exit(1);
 	}
 	if (html === null) {
