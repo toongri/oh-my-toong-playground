@@ -158,13 +158,11 @@ skills:
     # bakeSkillDirToken이 절대경로로 굽는다 — 그래서 이 둘로만 좁힌다.
     - component: explain-diff
       platforms: [claude, codex]
-    # html-report는 공유 스킬이다 — deep-interview·prometheus·qa·explain-diff·ultraresearch·
-    # review-report·create-slides가 ${CLAUDE_SKILL_DIR}/../html-report/ 경로로 직접 읽으므로
-    # 소비 스킬과 같은 타겟·같은 플랫폼에 함께 배포돼야 경로가 풀린다
-    # (make validate-components의 validateSiblingSkillCoDeploy가 강제).
-    # 이 스코프의 tracked 소비자(deep-interview·explain-diff)는 claude·codex 한정이다.
-    - component: html-report
-      platforms: [claude, codex]
+    # html-report는 리포트 작성용 공유 스킬이다 — deep-interview·prometheus·qa·explain-diff·
+    # ultraresearch·review-report·create-slides가 ${CLAUDE_SKILL_DIR}/../html-report/ sibling
+    # 경로로 직접 읽는다. 어느 소비 스킬의 플랫폼에서든 경로가 풀리도록 기본 스킬 플랫폼 전체에
+    # 배포한다 (make validate-components의 validateSiblingSkillCoDeploy가 강제).
+    - html-report
 
 scripts:
   items:
