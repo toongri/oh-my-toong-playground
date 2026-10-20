@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lint regression translucent body themed html</title>
+<style>
+/* the palette lives on html and switches with the theme; the translucent body on top must not hide it */
+:root { --bg: #ffffff; --ink: #1a1a1a; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #111111; --ink: #eeeeee; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #111111; --ink: #eeeeee; color-scheme: dark; }
+html { background: var(--bg); }
+body { margin: 0; background: rgba(0, 0, 0, 0.3); color: var(--ink); font: 16px/1.6 system-ui, sans-serif; padding: 24px 16px; }
+</style>
+</head>
+<body>
+<p>Translucent body over a themed html background.</p>
+</body>
+</html>

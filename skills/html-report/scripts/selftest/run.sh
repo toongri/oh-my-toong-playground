@@ -9,6 +9,8 @@ RTOK=$(bash "$HERE/../lint.sh" "$HERE/regress-token-media.html")
 RDARK=$(bash "$HERE/../lint.sh" "$HERE/regress-dark-transparent.html")
 RHTML=$(bash "$HERE/../lint.sh" "$HERE/regress-html-palette.html")
 EDGE=$(bash "$HERE/../lint.sh" "$HERE/edge-cases.html")
+RTRANS=$(bash "$HERE/../lint.sh" "$HERE/regress-translucent-body.html")
+RTHEMED=$(bash "$HERE/../lint.sh" "$HERE/regress-translucent-body-themed-html.html")
 fail=0
 expect() { # <check> <theme> <viewport> [json-var-name, default OUT]
   local src=${4:-OUT}
@@ -77,6 +79,9 @@ present_in RTOK "theme-token-scope: a token defined only in a width media query 
 present_in RDARK "body-bg-transparent: opaque in light, transparent in dark is reported exactly once" '([.findings[] | select(.check=="body-bg-transparent")] | length) == 1 and .summary.byCheck["body-bg-transparent"] == 1'
 present_in RHTML "theme-state-mismatch: html-only palette with a transparent body is not a mismatch" '[.findings[] | select(.check=="theme-state-mismatch")] | length == 0'
 present_in RHTML "html-only palette: no body-bg-transparent either" '[.findings[] | select(.check=="body-bg-transparent")] | length == 0'
+present_in RTRANS "body-bg-transparent: translucent body over a transparent html is reported exactly once" '([.findings[] | select(.check=="body-bg-transparent")] | length) == 1 and .summary.byCheck["body-bg-transparent"] == 1'
+present_in RTHEMED "translucent body over a themed html: no theme-state-mismatch" '[.findings[] | select(.check=="theme-state-mismatch")] | length == 0'
+present_in RTHEMED "translucent body over an opaque html: no body-bg-transparent" '[.findings[] | select(.check=="body-bg-transparent")] | length == 0'
 present_in CLEAN "html-level base token (--tint) with a dark override is not theme-token-scope" '[.findings[] | select(.check=="theme-token-scope")] | length == 0'
 present_in CLEAN "clipPath literal fill is exempt from svg-literal-color" '[.findings[] | select(.check=="svg-literal-color")] | length == 0'
 present_in EDGE "html-only background: no body-bg-transparent" '[.findings[] | select(.check=="body-bg-transparent")] | length == 0'
