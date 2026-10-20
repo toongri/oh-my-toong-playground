@@ -980,3 +980,20 @@ describe("no-safe-default: an uncertain finding allows a local repair and escala
 		expect(completionGateMd).toContain("accept the risk and record it as a non-goal");
 	});
 });
+
+describe("external stall: the user reopens this session within the retention window", () => {
+	test("completion-gate tells the user to reopen this session and resume within 7 days", () => {
+		expect(completionGateMd).toContain("claude --resume");
+		expect(completionGateMd).toContain("codex resume");
+		expect(completionGateMd).toContain("within 7 days");
+		expect(completionGateMd).not.toContain("OS temp directory");
+	});
+
+	test("SKILL.md await-user row and bullet carry the reopen note", () => {
+		expect(skillMd.match(/reopen this session/g)?.length).toBeGreaterThanOrEqual(2);
+	});
+
+	test("validate-review-artifact has no advisory warnings in the prose", () => {
+		expect(completionGateMd).not.toContain("advisory warnings");
+	});
+});

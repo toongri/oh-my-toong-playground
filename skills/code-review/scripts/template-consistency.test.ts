@@ -387,6 +387,7 @@ describe("finder page notes are free prose with no citation rule", () => {
 		expect(protocol).not.toMatch(/must cite/i);
 		expect(protocol).not.toMatch(STRUCTURED_LABELS);
 		expect(protocol).not.toMatch(/do not pad notes/i);
+		expect(protocol).not.toContain('pages whose note says "check later"');
 	});
 
 	it("no member prompt says the cursor refuses uncited notes", () => {

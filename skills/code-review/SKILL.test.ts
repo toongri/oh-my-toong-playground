@@ -1165,7 +1165,17 @@ describe("external stall: record, then resume the same review", () => {
 		expect(skillMd).toContain("current HEAD equals `reviewed_head_sha`");
 		expect(skillMd).toContain("resume-member --job <jobDir> --member <angle> --retry-stalled");
 		expect(skillMd).toContain("without `external_stall`");
-		expect(skillMd).toContain("OS temp cleanup");
+		expect(skillMd).not.toContain("job dir and ledger root still exist");
+		expect(skillMd).toContain("restores the ledger root from the job's backup");
+		expect(skillMd).toContain("Known limit: a lost job dir");
+		expect(skillMd).not.toContain("OS temp cleanup");
+	});
+
+	test("prose carries the slimmed cursor and progress facts", () => {
+		expect(skillMd).toContain("checklist item updates");
+		expect(skillMd).not.toMatch(/advisory warnings/);
+		expect(skillMd).not.toContain('`resume` points to the notes');
+		expect(skillMd).not.toContain("kind=");
 	});
 
 	test("wall cap restarts only for an external-cause --retry-stalled", () => {
