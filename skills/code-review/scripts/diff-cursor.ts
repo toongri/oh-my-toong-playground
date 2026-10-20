@@ -1521,12 +1521,17 @@ function reviewedTree(plan: Plan): TreeSource {
 	return head === null ? fsSource(plan.repo) : gitSource(plan.repo, head);
 }
 
-/** Validates a repo-relative path and returns its normalized form; the file must exist in the reviewed tree. */
-function existingRepoFile(plan: Plan, raw: string, flag: string): string {
+/**
+ * Validates a repo-relative path and returns its normalized form; the file must exist in the
+ * reviewed tree, or (with `allowChanged`) be one of the plan's changed files, so a defect in a
+ * deleted or renamed-away file can be filed at its real location.
+ */
+function existingRepoFile(plan: Plan, raw: string, flag: string, allowChanged = false): string {
 	const p = raw.trim();
 	if (p === "") throw refuse(`${flag} must not be blank`);
 	if (p.startsWith("/") || p.split("/").includes(".."))
 		throw refuse(`${flag} must be a repo-relative path without "..", got: ${raw}`);
+	if (allowChanged && (plan.files.includes(p) || plan.fileKinds.some((f) => f.path === p))) return p;
 	if (reviewedTree(plan).kind(p) !== "file")
 		throw refuse(`${flag} ${p} is not a file in the reviewed tree`);
 	return p;
@@ -1568,7 +1573,7 @@ function cmdCandidate(v: Values, env: NodeJS.ProcessEnv, sub: string | undefined
 		const summary = required(v.summary, "--summary").trim();
 		const failure = required(v["failure-scenario"], "--failure-scenario").trim();
 		const pageId = required(v.page, "--page");
-		existingRepoFile(ctx.plan, file, "--file");
+		existingRepoFile(ctx.plan, file, "--file", true);
 		if (!Number.isInteger(lineNo) || lineNo < 1) throw refuse("--line must be a positive integer");
 		if (summary === "" || failure === "")
 			throw refuse("--summary and --failure-scenario must not be blank");

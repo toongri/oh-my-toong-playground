@@ -803,6 +803,39 @@ function miniRepo(
 	return { root, repo, range, files, out, plan: p };
 }
 
+describe("삭제된 파일에 후보 등록", () => {
+	test("candidate add는 변경 목록의 삭제된 파일을 받아들이고, 변경 밖의 없는 파일은 계속 거부한다", () => {
+		const root = path.join(fx.tmp, "deleted");
+		const repo = path.join(root, "repo");
+		fs.mkdirSync(repo, { recursive: true });
+		git(repo, "init", "-q", "-b", "main");
+		write(repo, "src/gone.ts", "export const a = 1;\nexport const b = 2;\n");
+		write(repo, "src/keep.ts", "export const c = 1;\n");
+		git(repo, "add", "-A");
+		git(repo, "commit", "-q", "-m", "base");
+		const base = git(repo, "rev-parse", "HEAD").trim();
+		fs.rmSync(path.join(repo, "src/gone.ts"));
+		write(repo, "src/keep.ts", "export const c = 2;\n");
+		git(repo, "add", "-A");
+		git(repo, "commit", "-q", "-m", "head");
+		const head = git(repo, "rev-parse", "HEAD").trim();
+		const out = path.join(root, "plan");
+		const planned = run([
+			"plan", "--repo", repo, "--range", `${base}...${head}`,
+			"--files", JSON.stringify(["src/gone.ts", "src/keep.ts"]), "--out", out,
+		]);
+		expect(planned.code).toBe(0);
+		const ledger = path.join(root, "ledger");
+		expect(run(["init", "--plan", out, "--angle", "regression", "--ledger", ledger]).code).toBe(0);
+		const page = pageIdOf(cli(ledger, "next").stdout);
+		const add = (file: string) =>
+			cli(ledger, "candidate", "add", "--page", page, "--file", file, "--line", "1",
+				"--summary", "s", "--failure-scenario", "f");
+		expect(add("src/gone.ts").stdout).toContain("c001 recorded (src/gone.ts:1)");
+		expect(add("src/never-existed.ts").code).toBe(1);
+	});
+});
+
 describe("git 설정과 무관한 diff 해석", () => {
 	test("diff.noprefix·mnemonicPrefix가 켜진 사용자 설정에서도 경로가 그대로 읽힌다", () => {
 		const cfg = path.join(fx.tmp, "noprefix.gitconfig");

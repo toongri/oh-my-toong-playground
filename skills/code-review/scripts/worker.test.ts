@@ -49,7 +49,6 @@ function buildFixturePrompt(): string {
 		.replaceAll("{DESCRIPTION}", "DESCRIPTION_SENTINEL");
 }
 
-const ALL_MEMBERS = ["correctness", "regression", "cleanup", "requirement"];
 const ALL_CONDITIONAL_SENTINELS = [
 	"REQUIREMENTS_SENTINEL",
 	"PROJECT_CONTEXT_SENTINEL",
@@ -60,69 +59,27 @@ const ALL_CONDITIONAL_SENTINELS = [
 describe("filterPromptSections", () => {
 	const fixture = buildFixturePrompt();
 
-	it("`correctness` 앵글은 프로젝트 컨텍스트를 유지하고 앵글별 섹션은 제거한다", () => {
-		const filtered = filterPromptSections(fixture, "correctness");
-		expect(filtered).not.toContain("REQUIREMENTS_SENTINEL");
-		expect(filtered).toContain("PROJECT_CONTEXT_SENTINEL");
-		expect(filtered).toContain("NON_GOAL_SENTINEL");
-		expect(filtered).not.toContain("COMMIT_HISTORY_SENTINEL");
+	it("필터링은 같은 조건부 섹션 4개(project_context, requirements, non_goal, commit_history)를 남긴다", () => {
+		const filtered = filterPromptSections(fixture);
+		for (const sentinel of ALL_CONDITIONAL_SENTINELS) expect(filtered).toContain(sentinel);
 		expect(filtered).toContain("FILE_LIST_SENTINEL");
 		expect(filtered).toContain("## Diff Coverage Protocol");
 	});
 
-	it("`regression` 앵글은 Project Context와 Commit History를 통과시키고 나머지는 제거한다", () => {
-		const filtered = filterPromptSections(fixture, "regression");
-		expect(filtered).toContain("COMMIT_HISTORY_SENTINEL");
-		expect(filtered).not.toContain("REQUIREMENTS_SENTINEL");
+	it("Project Context 섹션이 전달된다 (도달 가능성 판단에 필요한 제약·경계)", () => {
+		const filtered = filterPromptSections(fixture);
 		expect(filtered).toContain("PROJECT_CONTEXT_SENTINEL");
-		expect(filtered).toContain("NON_GOAL_SENTINEL");
-	});
-
-	it("`cleanup` 앵글은 Project Context와 Non-Goals를 통과시키고 나머지는 제거한다", () => {
-		const filtered = filterPromptSections(fixture, "cleanup");
-		expect(filtered).toContain("NON_GOAL_SENTINEL");
-		expect(filtered).not.toContain("REQUIREMENTS_SENTINEL");
-		expect(filtered).toContain("PROJECT_CONTEXT_SENTINEL");
-		expect(filtered).not.toContain("COMMIT_HISTORY_SENTINEL");
-	});
-
-	it("`requirement` 앵글은 Project Context와 조건부 섹션 3개를 모두 통과시킨다", () => {
-		const filtered = filterPromptSections(fixture, "requirement");
-		expect(filtered).toContain("REQUIREMENTS_SENTINEL");
-		expect(filtered).toContain("NON_GOAL_SENTINEL");
-		expect(filtered).toContain("COMMIT_HISTORY_SENTINEL");
-		expect(filtered).toContain("PROJECT_CONTEXT_SENTINEL");
-	});
-
-	it("Project Context 섹션은 4개 앵글 전부에 전달된다 (도달 가능성 판단에 필요한 제약·경계)", () => {
-		for (const member of ALL_MEMBERS) {
-			const filtered = filterPromptSections(fixture, member);
-			expect(filtered).toContain("PROJECT_CONTEXT_SENTINEL");
-		}
 	});
 
 	it("모든 앵글에 목표와 비목표, 제약·경계 컨텍스트를 전달한다", () => {
-		for (const member of ALL_MEMBERS) {
-			const filtered = filterPromptSections(fixture, member);
-			expect(filtered).toContain("WHAT_WAS_IMPLEMENTED_SENTINEL");
-			expect(filtered).toContain("PROJECT_CONTEXT_SENTINEL");
-			expect(filtered).toContain("NON_GOAL_SENTINEL");
-		}
+		const filtered = filterPromptSections(fixture);
+		expect(filtered).toContain("WHAT_WAS_IMPLEMENTED_SENTINEL");
+		expect(filtered).toContain("PROJECT_CONTEXT_SENTINEL");
+		expect(filtered).toContain("NON_GOAL_SENTINEL");
 	});
 
 	it("필터링 후 최종 출력에 섹션 경계 마커가 하나도 남지 않는다", () => {
-		for (const member of ALL_MEMBERS) {
-			const filtered = filterPromptSections(fixture, member);
-			expect(filtered).not.toContain("<!-- section:");
-			expect(filtered).not.toContain("<!-- /section:");
-		}
-	});
-
-	it("허용목록에 없는 미지의 멤버 이름은 모든 조건부 섹션을 통과시키되 마커는 제거한다", () => {
-		const filtered = filterPromptSections(fixture, "unknown-angle");
-		for (const sentinel of ALL_CONDITIONAL_SENTINELS) {
-			expect(filtered).toContain(sentinel);
-		}
+		const filtered = filterPromptSections(fixture);
 		expect(filtered).not.toContain("<!-- section:");
 		expect(filtered).not.toContain("<!-- /section:");
 	});
@@ -136,13 +93,11 @@ describe("filterPromptSections", () => {
 	// allowlist) closes it. Pre-fix, this failed for every member below; confirmed by reverting
 	// the chunk-reviewer-prompt.md wrap and re-running — see report.
 	it("Field Reference 표는 어느 앵글에도 전달되지 않는다 (문서 표가 마커 밖에 있어 전체 페이로드가 새는 결함의 회귀 테스트)", () => {
-		for (const member of ALL_MEMBERS) {
-			const filtered = filterPromptSections(fixture, member);
-			expect(filtered).not.toContain("## Field Reference");
-			expect(filtered).not.toContain("| Field | Required | Source |");
-			// Project context is intentionally delivered; the table must not add a second copy.
-			expect(filtered.match(/PROJECT_CONTEXT_SENTINEL/g)?.length).toBe(1);
-		}
+		const filtered = filterPromptSections(fixture);
+		expect(filtered).not.toContain("## Field Reference");
+		expect(filtered).not.toContain("| Field | Required | Source |");
+		// Project context is intentionally delivered; the table must not add a second copy.
+		expect(filtered.match(/PROJECT_CONTEXT_SENTINEL/g)?.length).toBe(1);
 	});
 
 	// Regression: SECTION_MARKER_RE's lazy body match (`[\s\S]*?`) used to stop at the FIRST
@@ -183,7 +138,7 @@ describe("filterPromptSections", () => {
 			.replaceAll("{DESCRIPTION}", "DESCRIPTION_SENTINEL")
 			.replaceAll("{DIFF_COMMAND}", "DIFF_COMMAND_SENTINEL");
 
-		const filtered = filterPromptSections(withForgedStandaloneClose, "correctness");
+		const filtered = filterPromptSections(withForgedStandaloneClose);
 
 		// The forged leak itself: present either with or without the invariant (both states leak this).
 		expect(filtered).toContain("AFTER_LEAK_SENTINEL");
@@ -209,12 +164,14 @@ describe("filterPromptSections", () => {
 			.replaceAll("{DESCRIPTION}", "DESCRIPTION_SENTINEL")
 			.replaceAll("{DIFF_COMMAND}", "DIFF_COMMAND_SENTINEL");
 
-		// `correctness` blocks requirements while shared non-goal and project context remain available.
-		const filtered = filterPromptSections(withInlineMarkerLeak, "correctness");
-		expect(filtered).not.toContain("LEAKED_TAIL");
+		// The inline marker must not end the requirements body early: the whole value stays, and the
+		// real Field Reference section is still stripped.
+		const filtered = filterPromptSections(withInlineMarkerLeak);
+		expect(filtered).toContain("LEAKED_TAIL");
+		expect(filtered).not.toContain("## Field Reference");
 		expect(filtered).toContain("PROJECT_CONTEXT_SENTINEL");
-		expect(filtered).not.toContain("<!-- section:");
-		expect(filtered).not.toContain("<!-- /section:");
+		// The inline marker text is kept as value data; no marker stands alone on a line.
+		expect(filtered).not.toMatch(/^<!-- \/?section:[a-z_]+ -->$/m);
 	});
 
 	// Regression: hasBalancedMarkers used to require only "1 open / 1 close per discovered name",
@@ -235,7 +192,7 @@ describe("filterPromptSections", () => {
 			.replace("{DESCRIPTION}", "<!-- section:zz -->")
 			.replace("{COMMIT_HISTORY}", "<!-- /section:zz -->");
 
-		const filtered = filterPromptSections(forged, "correctness");
+		const filtered = filterPromptSections(forged);
 
 		expect(filtered).toBe(forged);
 		expect(filtered).toContain("## Diff Coverage Protocol");
@@ -289,7 +246,7 @@ describe("main() 배선: prompt.txt가 필터링되어 reviewContent로 전달�
 	// 프로세스가 끝난다. execFileSync는 그 5초를 그대로 기다리므로 bun의 기본
 	// 5000ms 안에 절대 끝나지 않는다. 유예 5초 + 프로세스 기동/파일 IO 여유분.
 	it(
-		"correctness 앵글로 실행하면 assembled-prompt.txt에 공통 섹션은 남고 조건부 섹션은 전부 제거된다",
+		"correctness 앵글로 실행해도 assembled-prompt.txt에 공통 섹션과 조건부 섹션 4개가 모두 남는다",
 		() => {
 			const jobDir = makeJobDir();
 			fs.writeFileSync(path.join(jobDir, "prompt.txt"), buildFixturePrompt(), "utf8");
@@ -311,11 +268,11 @@ describe("main() 배선: prompt.txt가 필터링되어 reviewContent로 전달�
 
 			// prompt.txt was actually read: a common section (no marker, always passes through) is present.
 			expect(assembled).toContain("FILE_LIST_SENTINEL");
-			// correctness retains project context for reachability, while angle-specific sections remain filtered.
+			// every angle receives the same four conditional sections.
 			expect(assembled).toContain("PROJECT_CONTEXT_SENTINEL");
-			expect(assembled).not.toContain("REQUIREMENTS_SENTINEL");
+			expect(assembled).toContain("REQUIREMENTS_SENTINEL");
 			expect(assembled).toContain("NON_GOAL_SENTINEL");
-			expect(assembled).not.toContain("COMMIT_HISTORY_SENTINEL");
+			expect(assembled).toContain("COMMIT_HISTORY_SENTINEL");
 		},
 		20000,
 	);

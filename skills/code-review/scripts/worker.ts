@@ -29,18 +29,12 @@ const PROMPTS_DIR = path.resolve(import.meta.dirname, "prompts");
 export const DIFF_CURSOR_PATH = path.resolve(import.meta.dirname, "diff-cursor.ts");
 
 /**
- * Per-angle allowlist of the conditional sections in chunk-reviewer-prompt.md
- * (spec: orchestrate-review-4angle-redesign.md §2.3). The 4 common sections — Review
- * Premises, Review Scope, What Was Implemented, Diff Coverage Protocol — carry no marker and
- * always pass through; `project_context` is shared by every angle so finders can judge
- * whether a candidate is reachable in the reviewed system.
+ * Conditional sections of chunk-reviewer-prompt.md that every finder receives. The 4 common
+ * sections — Review Premises, Review Scope, What Was Implemented, Diff Coverage Protocol —
+ * carry no marker and always pass through. Only `field_reference` (a documentation table that
+ * would repeat every placeholder value) is stripped.
  */
-const ANGLE_SECTION_ALLOWLIST: Record<string, string[]> = {
-	correctness: ["project_context", "non_goal"],
-	regression: ["project_context", "non_goal", "commit_history"],
-	cleanup: ["project_context", "non_goal"],
-	requirement: ["project_context", "requirements", "non_goal", "commit_history"],
-};
+const KEPT_SECTIONS = ["project_context", "requirements", "non_goal", "commit_history"];
 
 /**
  * Both markers are anchored to start (`^`) and end (`$`) of their own line (`m` flag) since a
@@ -89,27 +83,15 @@ function hasBalancedMarkers(promptContent: string): boolean {
 }
 
 /**
- * Strip the conditional sections a given angle's allowlist doesn't cover, then remove every
- * section marker from what remains — a marker left in the final prompt is noise the finder
- * could misread as an instruction.
- *
- * Unknown member (an angle name absent from ANGLE_SECTION_ALLOWLIST): fails OPEN, passing
- * every section through rather than killing the job, logged via logError so the drift is
- * visible in this job's own worker log.
+ * Strip the conditional sections outside KEPT_SECTIONS, then remove every section marker from
+ * what remains — a marker left in the final prompt is noise the finder could misread as an
+ * instruction.
  */
-export function filterPromptSections(promptContent: string, member: string): string {
+export function filterPromptSections(promptContent: string): string {
 	// Forged marker count (open/close != 1 for some name) → skip filtering entirely rather than risk truncating on the fake boundary.
 	if (!hasBalancedMarkers(promptContent)) return promptContent;
-
-	const allowlist = ANGLE_SECTION_ALLOWLIST[member];
-	if (!allowlist) {
-		logError(
-			`filterPromptSections: unknown member "${member}" — passing all sections through unfiltered`,
-		);
-		return promptContent.replace(SECTION_MARKER_RE, (_match, _name: string, body: string) => body);
-	}
 	return promptContent.replace(SECTION_MARKER_RE, (_match, name: string, body: string) =>
-		allowlist.includes(name) ? body : "",
+		KEPT_SECTIONS.includes(name) ? body : "",
 	);
 }
 
@@ -392,7 +374,7 @@ async function main() {
 
 	const promptPath = path.join(jobDir, "prompt.txt");
 	const rawPromptContent = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, "utf8") : "";
-	const promptContent = filterPromptSections(rawPromptContent, member);
+	const promptContent = filterPromptSections(rawPromptContent);
 
 	const EXECUTION_INSTRUCTION = coverage
 		? COVERAGE_EXECUTION_INSTRUCTION
