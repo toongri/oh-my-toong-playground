@@ -3457,10 +3457,9 @@ describe("story layer: code-review INCONCLUSIVE status (TODO 2)", () => {
 // ---------------------------------------------------------------------------
 
 describe("requirement-gap class: validator accepts and gate keys on verdict", () => {
-	// AC18: requirement-gap must be in BOTH the class union AND VALID_CLASSES.
-	// A PLAUSIBLE requirement-gap finding must NOT block completion — the gate
-	// keys only on verdict===CONFIRMED, class is informational.
-	// RED: currently VALID_CLASSES=['correctness','cleanup'] → artifact null → false (not true).
+	// `class` is free text, so requirement-gap is accepted like any non-blank class.
+	// The gate keys on scope, verdict and priority: an IN_SCOPE PLAUSIBLE
+	// HIGH/MEDIUM finding routes to ADJUDICATE and blocks; PLAUSIBLE LOW is a note.
 	test("PLAUSIBLE requirement-gap finding requires adjudication", () => {
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact);

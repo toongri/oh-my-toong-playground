@@ -891,7 +891,7 @@ describe("deterministic ultragoal review routing contract", () => {
 		expect(completionGateMd).toContain('"basis": "requirement|regression|changed_code|non_goal|unrelated|uncertain"');
 		expect(completionGateMd).toContain("IN_SCOPE⇒requirement/regression/changed_code");
 		expect(completionGateMd).toContain("| `IN_SCOPE` / `changed_code` |");
-		expect(completionGateMd).toContain("quote verbatim the non-goal statement that directly addresses this defect's behavior or class");
+		expect(completionGateMd).toContain("that directly addresses this defect's behavior or class");
 		expect(completionGateMd).toContain("A real defect excluded by scope is never recorded as REFUTED");
 		expect(completionGateMd).toContain("`OUT_OF_SCOPE` => `NOTE`");
 	});

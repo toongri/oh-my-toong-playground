@@ -19,7 +19,7 @@ import {
 // Guards the T1 EXTERNAL contract for the code-review completion lane:
 //   - every verdict in {CONFIRMED, PLAUSIBLE}  (readCodeReviewArtifact rejects
 //     the whole artifact on any enum violation — never-false-complete)
-//   - every class in {correctness, cleanup, requirement-gap}
+//   - every class a non-blank string  (class is free text, not an enum)
 //   - zero serialized `confidence` in any finding  (readCodeReviewArtifact
 //     ignores extra keys so it will NOT reject a leaked confidence; only this
 //     raw-string scan catches that — ADR D-3, risk R1)
