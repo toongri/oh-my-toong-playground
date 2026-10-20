@@ -21,26 +21,7 @@ Read the diff only as `## Diff Coverage Protocol` in the REVIEW CONTENT describe
 
 ## Page notes
 
-On every production, schema, migration, or config page, the note is a check, not a summary, and it checks the whole page span by span. Split the page's added code into spans of at most 80 lines, following function or block boundaries, and write one entry per span. In each entry, try to break the code in that span through your lens: name a concrete input, state, or timing that could make it wrong (`breaks-if:`). Then either state why it does not break, citing a line inside the span (`holds-because:`), or record a candidate for this page with `{CURSOR} candidate add --page <this page id>` and name its id (`candidate:`). If you cannot state why the span holds, record the candidate. A candidate id counts only on the page it was recorded for. Separate entries with ` || ` (a newline also works). The cursor refuses a code-page note unless:
-
-- every entry starts with its span, `L<a>-L<b>:`, in the new-file line numbers the page shows; the span lies inside one run of lines the page shows and contains an added line;
-- each span covers at most 80 lines, and spans in the same file do not overlap;
-- the spans cover at least 70% of the added non-blank lines of each code file on the page, with at least one entry per 60 added lines of that file;
-- when the page shows two or more code files, each span starts with its file path: `path:L<a>-L<b>:`.
-
-```text
-L<a>-L<b>: breaks-if: <input, state or timing that could make L<a>-L<b> wrong>; holds-because: <why not, citing a line inside L<a>-L<b>> | candidate: <id added for this page> || L<c>-L<d>: ... (one entry per span of at most 80 lines, spans not overlapping, covering 70% of each code file's added lines; write path:L<a>-L<b> when the page shows 2+ code files)
-```
-
-For example:
-
-```text
-L12-L48: breaks-if: an empty list reaches the loop at L20; holds-because: L14 returns early when the list is empty || L52-L90: breaks-if: the second write fails after the first one commits; candidate: c004
-```
-
-A page whose code files show no added line (only deletions, or the middle of one long line) takes one entry without a span: `breaks-if: ...; holds-because: ... | candidate: ...`, citing a line or identifier from the page.
-
-Labels stay in English; the content may be in any language. A note that only describes what the code does checks nothing. Do not pad: a `breaks-if:` you can dismiss with a cited line is a valid entry, and a candidate still needs a nameable failure scenario.
+On every production, schema, migration, or config page, write the note as free prose in your own angle's words. Cite the lines or identifiers you checked on this page and say what you concluded about what could make the code wrong. Record open questions that need another page as "check later: <what, where>", and revisit them before `finish`. If you cannot say why the change holds, record a candidate with `{CURSOR} candidate add --page <this page id>` and name its id in the note. The cursor refuses a code-page note that cites no line number or identifier from the page. Do not invent a candidate you cannot ground in the code; a candidate still needs a nameable failure scenario.
 
 ## Your angle
 

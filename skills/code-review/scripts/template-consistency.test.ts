@@ -3,7 +3,6 @@ import { readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { setGoalState, serializeReviewContext } from "../../ultragoal/scripts/ultragoal-state.ts";
-import { ANGLE_NOTES } from "./diff-cursor.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
 const SKILL_MD = join(REPO_ROOT, "skills", "code-review", "SKILL.md");
@@ -357,43 +356,35 @@ describe("finder prompts use the diff cursor and state only their own lens", () 
 	});
 });
 
-describe("finder page notes are checks through the angle, not summaries", () => {
+describe("finder page notes are free prose that cite the page", () => {
 	const template = readFileSync(TEMPLATE_MD, "utf-8");
 	const protocol = template.slice(
 		template.indexOf("## Diff Coverage Protocol"),
 		template.indexOf("<!-- section:commit_history -->"),
 	);
 	const read = (m: string) => readFileSync(join(MEMBER_PROMPT_DIR, `${m}.md`), "utf-8");
+	const STRUCTURED_LABELS = /breaks-if:|holds-because:|changed-contract:|dependents:|branches:|quality:|maps:|verdict:/;
 
-	it("the cursor defines a note template for exactly the four dedicated angles", () => {
-		expect(Object.keys(ANGLE_NOTES).sort()).toEqual(["cleanup", "correctness", "regression", "requirement"]);
-	});
-
-	it("each dedicated angle prompt carries the cursor's exact template, its labels, and the check-not-summary rule", () => {
-		for (const [angle, rule] of Object.entries(ANGLE_NOTES)) {
-			const content = read(angle);
-			expect(content, `${angle}.md must quote the cursor template verbatim`).toContain(rule.template);
-			for (const label of rule.labels) expect(content, `${angle}.md must name ${label}:`).toContain(`${label}:`);
-			expect(content, `${angle}.md`).toMatch(/check, not a summary/i);
-			expect(content, `${angle}.md`).toMatch(/try to break/i);
-			expect(content, `${angle}.md`).toContain("{CURSOR} candidate add");
-		}
-	});
-
-	it("the Diff Coverage Protocol describes every angle template and keeps the no-padding rule", () => {
-		expect(protocol).toMatch(/check, not a summary/i);
-		expect(protocol).toMatch(/try to break/i);
-		for (const rule of Object.values(ANGLE_NOTES))
-			for (const label of rule.labels) expect(protocol, `protocol must name ${label}:`).toContain(`${label}:`);
-		expect(protocol).toMatch(/do not pad/i);
+	it("the Diff Coverage Protocol states the free-prose note rule the cursor enforces", () => {
+		expect(protocol).toMatch(/free prose/i);
+		expect(protocol).toContain("check later:");
+		expect(protocol).toMatch(/cites no line number or identifier/i);
 		expect(protocol).toMatch(/do not invent/i);
 		expect(protocol).toMatch(/doc page or a test-data page may take a short note/i);
+		expect(protocol).not.toMatch(STRUCTURED_LABELS);
+		expect(protocol).not.toMatch(/do not pad notes/i);
 	});
 
-	it("the fallback prompt keeps the citation-only note", () => {
-		const fallback = read("default");
-		for (const rule of Object.values(ANGLE_NOTES))
-			for (const label of rule.labels) expect(fallback).not.toContain(`${label}:`);
+	it("each angle prompt carries the same free-prose note guidance and no structured labels", () => {
+		for (const angle of ["correctness", "regression", "requirement", "cleanup"]) {
+			const content = read(angle);
+			expect(content, `${angle}.md`).toMatch(/free prose/i);
+			expect(content, `${angle}.md`).toContain("check later:");
+			expect(content, `${angle}.md`).toContain("{CURSOR} candidate add");
+			expect(content, `${angle}.md`).not.toMatch(STRUCTURED_LABELS);
+			expect(content, `${angle}.md`).not.toMatch(/ \|\| /);
+		}
+		expect(read("default")).not.toMatch(STRUCTURED_LABELS);
 	});
 
 	it("correctness carries the two general lenses with no project-specific terms", () => {

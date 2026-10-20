@@ -6,7 +6,7 @@ import os from "os";
 import path from "path";
 import { execFileSync } from "child_process";
 
-import { run, loadPlan, ANGLE_NOTES, type Plan } from "./diff-cursor.ts";
+import { run, loadPlan, type Plan } from "./diff-cursor.ts";
 import {
 	initMemberLedger,
 	memberLedgerDir,
@@ -101,66 +101,16 @@ const cli = (angle: string, ...args: string[]) => run([...args, "--ledger", ledg
 const ackOf = (out: string) => /### ACK (\S+): ([0-9a-f]{8}) ###/.exec(out)?.[2] ?? "";
 const pageIdOf = (out: string) => /\[PAGE (\S+) ·/.exec(out)?.[1] ?? "";
 
-/** One `path:L<a>-L<b>:` entry per run of at most 60 consecutive added lines of each code file. */
-function perSpan(out: string, body: (a: number) => string): string {
-	const entries: string[] = [];
-	let file = "";
-	let code = false;
-	let run: number[] = [];
-	const flush = () => {
-		for (let i = 0; i < run.length; i += 60) {
-			const s = run.slice(i, i + 60);
-			entries.push(`${file}:L${s[0]}-L${s[s.length - 1]}: ${body(s[0] ?? 0)}`);
-		}
-		run = [];
-	};
-	for (const line of out.split("\n")) {
-		const f = /^=== FILE (.+) \[(\w+)\]/.exec(line);
-		if (f) {
-			flush();
-			file = f[1] ?? "";
-			code = ["production", "schema", "migration", "config"].includes(f[2] ?? "");
-			continue;
-		}
-		const m = /^ {0,5}(\d+) \|\+/.exec(line);
-		if (!m || !code) continue;
-		const n = Number(m[1]);
-		if (run.length > 0 && n !== (run[run.length - 1] ?? 0) + 1) flush();
-		run.push(n);
-	}
-	flush();
-	return entries.join(" || ");
-}
-
 /**
- * The note each scripted finder writes: a short note on doc and test pages; on code pages its
- * angle's template (a page that holds, or one whose `candidateId` was recorded first), or the
- * plain citation for an angle without a template.
+ * The note each scripted finder writes: a short note on doc and test pages; on code pages a free
+ * note citing the page, naming `candidateId` when one was recorded first.
  */
-function noteFor(angle: string, out: string, candidateId?: string): string {
+function noteFor(out: string, candidateId?: string): string {
 	const line = /^ {0,5}(\d+) \|/m.exec(out)?.[1];
 	const cite = line !== undefined ? `L${line}` : (/^FILES ON THIS PAGE:\n {2}(\S+)/m.exec(out)?.[1] ?? "");
-	const verdict = (pass: string) => (candidateId ? `candidate ${candidateId}` : pass);
 	const kind = /^PAGE \S+ {2}kind=(\w+)$/m.exec(out)?.[1] ?? "";
 	if (kind === "doc" || kind === "test") return `관련 메커니즘 없음: ${kind} 페이지`;
-	switch (angle) {
-		case "correctness":
-			return (
-				perSpan(out, (a) =>
-					candidateId
-						? `breaks-if: 음수 입력이 들어온다; candidate: ${candidateId}`
-						: `breaks-if: 음수 입력; holds-because: L${a}은 더하기만 한다`,
-				) || `breaks-if: 음수 입력; ${candidateId ? `candidate: ${candidateId}` : `holds-because: ${cite} 확인함`}`
-			);
-		case "regression":
-			return `changed-contract: none: 새 함수만 추가 ${cite}; dependents: 호출부 없음; verdict: ${verdict("holds")}`;
-		case "requirement":
-			return `maps: none; branches: 해당 규칙 없음 ${cite}; verdict: ${verdict("met")}`;
-		case "cleanup":
-			return `rules: none; quality: ${candidateId ? `후보 ${candidateId}` : "none: 단순함"} ${cite}`;
-		default:
-			return `${cite} 확인함`;
-	}
+	return `${cite} ${candidateId ? `후보 ${candidateId} 기록함` : "확인함"}`;
 }
 
 /**
@@ -182,7 +132,7 @@ function walk(angle: string, opts: { leave?: number; onFirstPage?: (pageId: stri
 			candidateId = opts.onFirstPage?.(pageIdOf(out));
 			first = false;
 		}
-		const r = cli(angle, "done", pageIdOf(out), "--ack", ackOf(out), "--note", noteFor(angle, out, candidateId), "--next");
+		const r = cli(angle, "done", pageIdOf(out), "--ack", ackOf(out), "--note", noteFor(out, candidateId), "--next");
 		if (r.code !== 0) throw new Error(r.stderr);
 		out = r.stdout;
 	}
@@ -242,12 +192,10 @@ describe("diff-cursor E2E: 네 finder가 diff를 100% 읽는 경로", () => {
 			});
 			const fin = cli(angle, "finish");
 			expect(fin.code).toBe(0);
-			if (angle === "correctness") {
-				const codePages = seen.filter((o) => /^PAGE \S+ {2}kind=production$/m.test(o));
-				expect(codePages.length).toBeGreaterThan(0);
-				for (const o of codePages)
-					expect(o).toContain(`--note "${ANGLE_NOTES.correctness?.template}" --next`);
-			}
+			const codePages = seen.filter((o) => /^PAGE \S+ {2}kind=production$/m.test(o));
+			expect(codePages.length).toBeGreaterThan(0);
+			for (const o of codePages)
+				expect(o).toContain('--note "<full note: cite a line from this page (L120 or path:120) or an identifier in backticks>" --next');
 		}
 
 		const verify = run(["verify", "--plan", coverage.planDir, "--ledgers", ...ANGLES.map(ledgerOf)]);

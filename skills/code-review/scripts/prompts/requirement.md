@@ -22,13 +22,7 @@ Read the diff only as `## Diff Coverage Protocol` in the REVIEW CONTENT describe
 
 ## Page notes
 
-On every production, schema, migration, or config page, the note is a check, not a summary. Try to break the change through your lens: name the AC ids and decision-rule ids this page bears on, or `none` (`maps:`); for each mapped rule, list every branch it names and whether the code on this page satisfies it (`branches:`); then give the verdict (`verdict:`) — `met`, or `candidate <id>` after you record the gap with `{CURSOR} candidate add`. On the intent-inference path, write `maps: none` and check the branches of the inferred intent. If you cannot show that a branch is met, record the candidate. The cursor refuses a code-page note without these fields:
-
-```text
-maps: <AC / decision-rule ids this page bears on, or none>; branches: <each branch the mapped rule names: met or not>; verdict: met | candidate <id>
-```
-
-Labels stay in English; the content may be in any language. A note that only describes what the code does checks nothing. Do not pad: a candidate still needs a nameable requirement gap.
+On every production, schema, migration, or config page, write the note as free prose in your own angle's words. Cite the lines or identifiers you checked on this page and say what you concluded about whether the page meets the criteria and decision rules it bears on. Record open questions that need another page as "check later: <what, where>", and revisit them before `finish`. If you cannot say why the change holds, record a candidate with `{CURSOR} candidate add --page <this page id>` and name its id in the note. The cursor refuses a code-page note that cites no line number or identifier from the page. Do not invent a candidate you cannot ground in the code; a candidate still needs a nameable failure scenario.
 
 ## Your angle
 

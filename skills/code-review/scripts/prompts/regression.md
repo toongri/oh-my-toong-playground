@@ -21,13 +21,7 @@ Read the diff only as `## Diff Coverage Protocol` in the REVIEW CONTENT describe
 
 ## Page notes
 
-On every production, schema, migration, or config page, the note is a check, not a summary. Try to break the change through your lens: name the prior behavior or caller-visible contract this page changes, or `none: <why>` (`changed-contract:`); name the callers and consumers you checked against it (`dependents:`); then give the verdict (`verdict:`) — `holds`, or `candidate <id>` after you record the candidate with `{CURSOR} candidate add`. If you cannot state why the old guarantee still holds, record the candidate. The cursor refuses a code-page note without these fields:
-
-```text
-changed-contract: <prior behavior or caller-visible contract this page changes, or none: <why>>; dependents: <callers/consumers checked>; verdict: holds | candidate <id>
-```
-
-Labels stay in English; the content may be in any language. A note that only describes what the code does checks nothing. Do not pad: a candidate still needs a nameable failure scenario.
+On every production, schema, migration, or config page, write the note as free prose in your own angle's words. Cite the lines or identifiers you checked on this page and say what you concluded about what the change breaks for existing callers. Record open questions that need another page as "check later: <what, where>", and revisit them before `finish`. If you cannot say why the change holds, record a candidate with `{CURSOR} candidate add --page <this page id>` and name its id in the note. The cursor refuses a code-page note that cites no line number or identifier from the page. Do not invent a candidate you cannot ground in the code; a candidate still needs a nameable failure scenario.
 
 ## Your angle
 

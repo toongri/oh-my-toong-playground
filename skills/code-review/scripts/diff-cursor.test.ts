@@ -14,7 +14,6 @@ import {
 	parseRuleFrontmatter,
 	DYNAMIC_RESERVE,
 	TOOL_OUTPUT_CEILING,
-	ANGLE_NOTES,
 	type Plan,
 } from "./diff-cursor.ts";
 
@@ -169,7 +168,6 @@ const cli = (ledger: string, ...args: string[]) => run([...args, "--ledger", led
 const ackOf = (out: string) => /### ACK (\S+): ([0-9a-f]{8}) ###/.exec(out)?.[2] ?? "";
 const pageIdOf = (out: string) => /\[PAGE (\S+) ·/.exec(out)?.[1] ?? "";
 const kindOf = (out: string) => /^PAGE \S+ {2}kind=(\w+)$/m.exec(out)?.[1] ?? "";
-const angleOf = (out: string) => /· angle (\S+) ·/.exec(out)?.[1] ?? "";
 
 /** A citation of the page: a new-file line number, or the file name when the page has none. */
 function citeOf(out: string): string {
@@ -178,65 +176,10 @@ function citeOf(out: string): string {
 	return /^FILES ON THIS PAGE:\n {2}(\S+)/m.exec(out)?.[1] ?? "";
 }
 
-const CODE_KINDS = ["production", "schema", "migration", "config"];
+/** A note that cites the page (a scripted finder that holds every page). */
+const noteFor = (out: string) => `${citeOf(out)} 확인함`;
 
-/** Spans of at most 60 consecutive added lines per code file on the page, in page order. */
-function spanEntries(out: string): { path: string; a: number; b: number }[] {
-	const spans: { path: string; a: number; b: number }[] = [];
-	let file = "";
-	let code = false;
-	let run: number[] = [];
-	const flush = () => {
-		for (let i = 0; i < run.length; i += 60) {
-			const s = run.slice(i, i + 60);
-			spans.push({ path: file, a: s[0] ?? 0, b: s[s.length - 1] ?? 0 });
-		}
-		run = [];
-	};
-	for (const line of out.split("\n")) {
-		const f = /^=== FILE (.+) \[(\w+)\]/.exec(line);
-		if (f) {
-			flush();
-			file = f[1] ?? "";
-			code = CODE_KINDS.includes(f[2] ?? "");
-			continue;
-		}
-		const m = /^ {0,5}(\d+) \|\+/.exec(line);
-		if (!m || !code) continue;
-		const n = Number(m[1]);
-		if (run.length > 0 && n !== (run[run.length - 1] ?? 0) + 1) flush();
-		run.push(n);
-	}
-	flush();
-	return spans;
-}
-
-/** A correctness note with one `path:L<a>-L<b>:` entry per span of the page's added code lines. */
-const perSpan = (out: string, body: (a: number, b: number) => string) =>
-	spanEntries(out)
-		.map((e) => `${e.path}:L${e.a}-L${e.b}: ${body(e.a, e.b)}`)
-		.join(" || ");
-
-/** A note that passes the page's angle template (a scripted finder that holds every page). */
-function noteFor(out: string): string {
-	const cite = citeOf(out);
-	switch (angleOf(out)) {
-		case "correctness":
-			return spanEntries(out).length === 0
-				? `breaks-if: 음수 입력; holds-because: ${cite} 확인함`
-				: perSpan(out, (a) => `breaks-if: 음수 입력; holds-because: L${a} 확인함`);
-		case "regression":
-			return `changed-contract: none: 새 코드 ${cite}; dependents: 호출부 없음; verdict: holds`;
-		case "requirement":
-			return `maps: none; branches: 해당 규칙 없음 ${cite}; verdict: met`;
-		case "cleanup":
-			return `rules: none; quality: none: ${cite} 단순함`;
-		default:
-			return `${cite} 확인함`;
-	}
-}
-
-/** Acknowledges pages with template notes until the current page has the wanted kind. */
+/** Acknowledges pages until the current page has the wanted kind. */
 function advanceTo(ledger: string, kinds: readonly string[]): string {
 	let cur = cli(ledger, "next").stdout;
 	while (!kinds.includes(kindOf(cur))) {
@@ -497,7 +440,7 @@ describe("ledger 진행 규칙", () => {
 			"--ack",
 			ackOf(out),
 			"--note",
-			"maps: none; branches: 전반적으로 확인함; verdict: met",
+			"전반적으로 확인함",
 		);
 		expect(vague.code).toBe(1);
 		expect(vague.stderr).toContain("must cite");
@@ -811,284 +754,48 @@ describe("ledger 진행 규칙", () => {
 });
 
 // ---------------------------------------------------------------------------
-// angle note templates
+// free-form page notes
 // ---------------------------------------------------------------------------
 
-describe("각도별 코드 페이지 메모 템플릿", () => {
+describe("모든 각도의 코드 페이지 메모는 자유 서술이고 페이지 인용만 요구한다", () => {
+	const ANGLES = ["correctness", "regression", "requirement", "cleanup"];
 	const DEEP = ["production", "schema", "migration", "config"];
 	const doneWith = (ledger: string, out: string, note: string) =>
 		cli(ledger, "done", pageIdOf(out), "--ack", ackOf(out), "--note", note);
-	const addCandidate = (ledger: string, page: string) =>
-		cli(
-			ledger,
-			"candidate",
-			"add",
-			"--page",
-			page,
-			"--file",
-			"src/app.ts",
-			"--line",
-			"3",
-			"--summary",
-			"경계값 누락",
-			"--failure-scenario",
-			"음수 입력에서 합계가 틀린다",
-		);
 
-	interface Case {
-		angle: string;
-		/** A citing note that lacks the listed labels; `out` is the page output. */
-		missing: (cite: string, out: string) => string;
-		missingLabels: string[];
-		/** Other refused notes: [note, text the refusal must name]. */
-		refused: ((cite: string, out: string) => [string, string])[];
-		/** A complete note that holds through a recorded candidate id, when the angle has one. */
-		viaCandidate?: (cite: string, id: string, out: string) => string;
-	}
-	const CASES: Case[] = [
-		{
-			angle: "correctness",
-			missing: (_, o) => perSpan(o, () => "breaks-if: 음수 입력이 들어온다"),
-			missingLabels: ["holds-because:", "candidate:"],
-			refused: [
-				(_, o) => [perSpan(o, (a) => `holds-because: L${a} 확인함`), "breaks-if:"],
-				(_, o) => [perSpan(o, () => "breaks-if: 음수 입력; candidate: c999"), "c999"],
-				(_, o) => [perSpan(o, () => "breaks-if: 음수 입력; holds-because: 괜찮아 보임"), "holds-because: must cite"],
-			],
-			viaCandidate: (_, id, o) => perSpan(o, () => `breaks-if: 음수 입력; candidate: ${id}`),
-		},
-		{
-			angle: "regression",
-			missing: (c) => `changed-contract: none: 새 코드 ${c}; verdict: holds`,
-			missingLabels: ["dependents:"],
-			refused: [
-				(c) => [`changed-contract: 반환값 변경 ${c}; dependents: 호출부 2곳; verdict: candidate c999`, "c999"],
-				(c) => [`changed-contract: 반환값 변경 ${c}; dependents: 호출부 2곳; verdict: 괜찮음`, "verdict:"],
-				(c) => [`changed-contract: none; dependents: 호출부 2곳 ${c}; verdict: holds`, "none: <why>"],
-			],
-			viaCandidate: (c, id) => `changed-contract: 반환값 변경 ${c}; dependents: 호출부 2곳; verdict: candidate ${id}`,
-		},
-		{
-			angle: "requirement",
-			missing: (c) => `maps: none ${c}; verdict: met`,
-			missingLabels: ["branches:"],
-			refused: [
-				(c) => [`maps: D-1; branches: null 분기 미충족 ${c}; verdict: candidate c999`, "c999"],
-				(c) => [`maps: D-1; branches: 모두 충족 ${c}; verdict: holds`, "verdict:"],
-			],
-			viaCandidate: (c, id) => `maps: D-1; branches: null 분기 미충족 ${c}; verdict: candidate ${id}`,
-		},
-		{
-			angle: "cleanup",
-			missing: (c) => `rules: none ${c}`,
-			missingLabels: ["quality:"],
-			refused: [(c) => [`rules: r001; quality: none ${c}`, "none: <why>"]],
-		},
-	];
-
-	for (const k of CASES) {
-		test(`${k.angle}: 빠진 필드·없는 후보·채우지 않은 템플릿은 거부되고 모든 필드를 채운 메모는 통과한다`, () => {
-			const template = ANGLE_NOTES[k.angle]?.template as string;
-			expect(template).toBeTruthy();
-			const ledger = newLedger(k.angle);
-			const out = cli(ledger, "next").stdout;
-			expect(DEEP).toContain(kindOf(out));
-			expect(out).toMatch(new RegExp(`^NEXT: done .*${template.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "m"));
-			expect(cli(ledger, "resume").stdout).toContain(template);
-			const cite = citeOf(out);
-
-			const miss = doneWith(ledger, out, k.missing(cite, out));
-			expect(miss.code).toBe(1);
-			for (const label of k.missingLabels) expect(miss.stderr).toContain(label);
-			expect(miss.stderr).toContain("not a summary");
-			expect(miss.stderr).toContain(`Template: ${template}`);
-			expect(doneWith(ledger, out, template).code).toBe(1);
-			for (const make of k.refused) {
-				const [note, named] = make(cite, out);
-				const r = doneWith(ledger, out, note);
-				expect(r.code).toBe(1);
-				expect(r.stderr).toContain(named);
-			}
-
-			if (k.viaCandidate) {
-				expect(addCandidate(ledger, pageIdOf(out)).code).toBe(0);
-				expect(doneWith(ledger, out, k.viaCandidate(cite, "c001", out)).code).toBe(0);
-			} else expect(doneWith(ledger, out, noteFor(out)).code).toBe(0);
-			const second = cli(ledger, "next").stdout;
-			expect(doneWith(ledger, second, noteFor(second)).code).toBe(0);
-		});
-	}
-
-	test("문서 페이지는 모든 각도에서 짧은 메모로 충분하고 NEXT에 템플릿을 보이지 않는다", () => {
-		for (const k of CASES) {
-			const ledger = newLedger(k.angle);
-			const page = advanceTo(ledger, ["doc"]);
-			expect(page).toContain("short note is enough");
-			expect(page).not.toContain(ANGLE_NOTES[k.angle]?.template as string);
-			expect(doneWith(ledger, page, "관련 메커니즘 없음: 안내 문서").code).toBe(0);
-		}
-	});
-
-	test("default 각도와 모르는 각도는 인용 규칙만 그대로 적용한다", () => {
-		for (const angle of ["default", "security"]) {
-			expect(ANGLE_NOTES[angle]).toBeUndefined();
+	for (const angle of ANGLES) {
+		test(`${angle}: 페이지를 인용한 메모는 통과하고 인용이 없는 메모는 거부된다`, () => {
 			const ledger = newLedger(angle);
 			const out = cli(ledger, "next").stdout;
-			expect(out).toContain("full note: cite a line from this page");
-			expect(cli(ledger, "resume").stdout).not.toContain("NOTE TEMPLATE");
+			expect(DEEP).toContain(kindOf(out));
 			const vague = doneWith(ledger, out, "전반적으로 확인함");
 			expect(vague.code).toBe(1);
 			expect(vague.stderr).toContain("must cite");
 			expect(doneWith(ledger, out, `${citeOf(out)} 확인함`).code).toBe(0);
-		}
-	});
-});
-
-describe("correctness 메모는 span별 항목으로 페이지의 코드 파일을 덮는다", () => {
-	// src/many.ts gains 11 hunks of 30 added lines: hunk k adds L(70k+41)-L(70k+70)
-	// (330 added lines, ~17KB, one default-size page); src/small.ts is a new 2-line file.
-	let bigPlan: string;
-	const added = (k: number) => `L${70 * k + 41}-L${70 * k + 70}`;
-	const entry = (k: number) =>
-		`src/many.ts:${added(k)}: breaks-if: 음수 입력; holds-because: L${70 * k + 45}에서 0으로 막는다`;
-	const small = "src/small.ts:L1-L2: breaks-if: 빈 문자열; holds-because: L1이 기본값을 둔다";
-	const covering = [...Array.from({ length: 8 }, (_, k) => entry(k)), small];
-
-	beforeAll(() => {
-		const repo = path.join(fx.tmp, "many-repo");
-		fs.mkdirSync(repo);
-		git(repo, "init", "-q", "-b", "main");
-		const base = Array.from({ length: 440 }, (_, i) => `export const keep${i} = ${i};`);
-		write(repo, "src/many.ts", base.join("\n") + "\n");
-		git(repo, "add", "-A");
-		git(repo, "commit", "-q", "-m", "base");
-		const from = git(repo, "rev-parse", "HEAD").trim();
-		const head: string[] = [];
-		base.forEach((l, i) => {
-			head.push(l);
-			const k = (i + 1) / 40 - 1;
-			if ((i + 1) % 40 === 0 && k < 11)
-				for (let j = 0; j < 30; j++) head.push(`export const added${k}_${j} = keep${i} + ${j};`);
 		});
-		write(repo, "src/many.ts", head.join("\n") + "\n");
-		write(repo, "src/small.ts", 'export const label = "";\nexport const size = label.length;\n');
-		git(repo, "add", "-A");
-		git(repo, "commit", "-q", "-m", "head");
-		const to = git(repo, "rev-parse", "HEAD").trim();
-		bigPlan = path.join(fx.tmp, "many-plan");
-		const r = run([
-			"plan",
-			"--repo",
-			repo,
-			"--range",
-			`${from}...${to}`,
-			"--files",
-			JSON.stringify(["src/many.ts", "src/small.ts"]),
-			"--out",
-			bigPlan,
-		]);
-		if (r.code !== 0) throw new Error(r.stderr);
-	});
 
-	/** A fresh correctness ledger on the big plan, with its only page issued. */
-	function bigPage(): { ledger: string; out: string } {
-		const ledger = path.join(fx.tmp, "ledgers", `many-${++ledgerSeq}`);
-		expect(run(["init", "--plan", bigPlan, "--angle", "correctness", "--ledger", ledger]).code).toBe(0);
-		const out = cli(ledger, "next").stdout;
-		expect(kindOf(out)).toBe("production");
-		expect((out.match(/^@@ /gm) ?? []).length).toBe(12);
-		expect((out.match(/^ {0,5}\d+ \|\+/gm) ?? []).length).toBeGreaterThanOrEqual(300);
-		return { ledger, out };
+		test(`${angle}: 메모 안의 \`a || b\`는 항목 구분자로 쪼개지지 않고 통과한다`, () => {
+			const ledger = newLedger(angle);
+			const out = cli(ledger, "next").stdout;
+			expect(doneWith(ledger, out, `${citeOf(out)}: a || b 둘 다 확인함`).code).toBe(0);
+		});
+
+		test(`${angle}: NEXT와 resume은 각도별 템플릿을 보이지 않는다`, () => {
+			const ledger = newLedger(angle);
+			const out = cli(ledger, "next").stdout;
+			expect(out).toContain("full note: cite a line from this page");
+			expect(out).not.toMatch(/breaks-if|changed-contract|dependents:|branches:|quality:/);
+			expect(cli(ledger, "resume").stdout).not.toContain("NOTE TEMPLATE");
+		});
 	}
-	const done = (ledger: string, out: string, note: string) =>
-		cli(ledger, "done", pageIdOf(out), "--ack", ackOf(out), "--note", note);
 
-	test("hunk가 많은 페이지에 breaks-if 하나만 쓴 메모는 거부되고 덮지 않은 span을 이름으로 알려 준다", () => {
-		const { ledger, out } = bigPage();
-		const r = done(ledger, out, `${entry(0)} || ${small}`);
-		expect(r.code).toBe(1);
-		expect(r.stderr).toContain("src/many.ts");
-		expect(r.stderr).toContain("uncovered");
-		expect(r.stderr).toContain(added(1));
-		expect(r.stderr).toContain(added(10));
-	});
-
-	test("span마다 breaks-if를 쓰고 추가된 줄의 70% 이상을 덮은 메모는 통과한다", () => {
-		const { ledger, out } = bigPage();
-		expect(done(ledger, out, covering.join(" || ")).code).toBe(0);
-		const { ledger: l2, out: o2 } = bigPage();
-		expect(done(l2, o2, covering.join("\n")).code).toBe(0);
-	});
-
-	test("코드 파일이 둘 이상인 페이지에서 파일 경로 없는 span은 거부된다", () => {
-		const { ledger, out } = bigPage();
-		const r = done(ledger, out, [...covering, small.replace("src/small.ts:", "")].join(" || "));
-		expect(r.code).toBe(1);
-		expect(r.stderr).toContain("file label");
-	});
-
-	test("겹치는 span과 80줄보다 긴 span은 거부된다", () => {
-		const { ledger, out } = bigPage();
-		const overlap = done(
-			ledger,
-			out,
-			[...covering, "src/many.ts:L60-L73: breaks-if: 경계; holds-because: L61이 막는다"].join(" || "),
-		);
-		expect(overlap.code).toBe(1);
-		expect(overlap.stderr).toContain("overlap");
-		const long = done(
-			ledger,
-			out,
-			[...covering, "src/many.ts:L600-L700: breaks-if: 경계; holds-because: L601이 막는다"].join(" || "),
-		);
-		expect(long.code).toBe(1);
-		expect(long.stderr).toContain("at most 80 lines");
-	});
-
-	test("holds-because가 자기 span 밖의 줄을 인용하면 거부된다", () => {
-		const { ledger, out } = bigPage();
-		const outside = covering.map((e, i) => (i === 0 ? e.replace("L45에서", "L120에서") : e));
-		const r = done(ledger, out, outside.join(" || "));
-		expect(r.code).toBe(1);
-		expect(r.stderr).toContain(`${added(0)}: holds-because: must cite a line inside`);
-	});
-
-	test("다른 페이지에 기록한 후보 id는 거부되고 이 페이지에 기록한 후보 id는 통과한다", () => {
-		const ledger = newLedger("correctness");
-		/** Acknowledges pages until one shows added code lines to span. */
-		const toSpanPage = (out: string) => {
-			let cur = out;
-			while (spanEntries(cur).length === 0)
-				cur = cli(ledger, "done", pageIdOf(cur), "--ack", ackOf(cur), "--note", noteFor(cur), "--next").stdout;
-			return cur;
-		};
-		const first = toSpanPage(cli(ledger, "next").stdout);
-		const add = (page: string, summary: string) =>
-			cli(
-				ledger,
-				"candidate",
-				"add",
-				"--page",
-				page,
-				"--file",
-				"src/app.ts",
-				"--line",
-				"3",
-				"--summary",
-				summary,
-				"--failure-scenario",
-				"음수 입력에서 합계가 틀린다",
-			).stdout;
-		expect(add(pageIdOf(first), "첫 페이지 후보")).toContain("c001 recorded");
-		const second = toSpanPage(
-			cli(ledger, "done", pageIdOf(first), "--ack", ackOf(first), "--note", noteFor(first), "--next").stdout,
-		);
-		expect(CODE_KINDS).toContain(kindOf(second));
-		const viaOther = done(ledger, second, perSpan(second, () => "breaks-if: 음수 입력; candidate: c001"));
-		expect(viaOther.code).toBe(1);
-		expect(viaOther.stderr).toContain(`c001 was recorded for page ${pageIdOf(first)}`);
-		expect(add(pageIdOf(second), "둘째 페이지 후보")).toContain("c002 recorded");
-		expect(done(ledger, second, perSpan(second, () => "breaks-if: 음수 입력; candidate: c002")).code).toBe(0);
+	test("문서 페이지는 모든 각도에서 짧은 메모로 충분하다", () => {
+		for (const angle of ANGLES) {
+			const ledger = newLedger(angle);
+			const page = advanceTo(ledger, ["doc"]);
+			expect(page).toContain("short note is enough");
+			expect(doneWith(ledger, page, "관련 메커니즘 없음: 안내 문서").code).toBe(0);
+		}
 	});
 });
 
