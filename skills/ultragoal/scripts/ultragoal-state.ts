@@ -63,7 +63,7 @@
  */
 
 import { readFileSync, unlinkSync, statSync } from "node:fs";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { createHash } from "crypto";
 import { getOmtDir } from "@lib/omt-dir";
 import { withStateLock } from "@lib/persistent-mode-core/state-lock";
@@ -247,6 +247,12 @@ export interface GoalState {
 	 * CLI branch below for why.
 	 */
 	codex_goal_objective: string;
+	/**
+	 * Full `git rev-parse HEAD` of the repo the pursuit runs in, recorded when the pursuit
+	 * first enters `pursuing`. Omitted when git could not report a HEAD; states that predate
+	 * the field also lack it. serializeReviewContext turns it into the review range line.
+	 */
+	review_base_commit?: string;
 	/** Last observed repository HEAD used by progress-fingerprint callers. */
 	last_seen_head?: string;
 	/** Digest of the last observed story set used by progress-fingerprint callers. */
@@ -431,6 +437,7 @@ function mergeWriteLocked(sessionId: string, stateFilePath: string, next: Partia
 		// write (there are none once phase=complete, but the pattern is uniform) would drop it.
 		forced_complete: "forced_complete" in next ? next.forced_complete : prior.forced_complete,
 		forced_reason: "forced_reason" in next ? next.forced_reason : prior.forced_reason,
+		review_base_commit: "review_base_commit" in next ? next.review_base_commit : prior.review_base_commit,
 	};
 	const state: GoalState = mergeWithHeartbeat(partial, {});
 	try {
@@ -770,6 +777,8 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 				// leaving ordinary merge writes' preservation behavior unchanged.
 				next.forced_complete = undefined;
 				next.forced_reason = undefined;
+				// A fresh goal reviews its own range, not the dead goal's.
+				next.review_base_commit = undefined;
 				// The review-dispatch budget is a RECORDED resource: once a pursuit exhausts it
 				// (used >= cap) it parks in `renewal-required`, whose only sanctioned exits are
 				// `approve-review-dispatch-renewal --reason` (+5, recorded) and the user-only
@@ -811,6 +820,14 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 		completion_evidence_paths: opts.completion_evidence_paths,
 		codex_goal_objective: opts.codex_goal_objective,
 	};
+	// The pursuit's review range starts where it first enters `pursuing`; later pursuing
+	// writes and re-plan loop-backs of the same goal keep the recorded base.
+	if (readPrior(sessionId).review_base_commit === undefined) {
+		const head = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" });
+		const sha = head.status === 0 ? head.stdout.trim() : "";
+		if (/^[0-9a-f]{40,64}$/.test(sha)) next.review_base_commit = sha;
+		else console.error("set: review_base_commit omitted — `git rev-parse HEAD` failed here, so no review range is recorded");
+	}
 	mergeWrite(sessionId, next);
 }
 
@@ -1476,7 +1493,8 @@ export interface CodeReviewFinding {
 
 export interface CodeReviewArtifact {
 	status: "COMPLETE" | "INCONCLUSIVE";
-	scope_contract_sha256: string;
+	/** Required for COMPLETE. An INCONCLUSIVE artifact may omit it (damaged/missing contract); it then matches no contract. */
+	scope_contract_sha256?: string;
 	findings: CodeReviewFinding[];
 	/** Path to the findings.md card report — the full 7-field cards the summary findings were cut from. */
 	findings_report?: string;
@@ -1627,10 +1645,8 @@ function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
 	// Required top-level fields
 	const VALID_STATUS = ["COMPLETE", "INCONCLUSIVE"];
 	if (!isOneOf(value["status"], VALID_STATUS)) return false;
-	if (
-		typeof value["scope_contract_sha256"] !== "string" ||
-		!/^[0-9a-f]{64}$/.test(value["scope_contract_sha256"])
-	)
+	const contractHash = value["scope_contract_sha256"];
+	if (contractHash === undefined ? value["status"] === "COMPLETE" : typeof contractHash !== "string" || !/^[0-9a-f]{64}$/.test(contractHash))
 		return false;
 	if (!Array.isArray(value["findings"])) return false;
 	const reviewer = value["reviewer"];
@@ -1722,7 +1738,6 @@ function emptyReviewGroups(): ReviewResult["findings"] {
 
 function reviewResultFromArtifact(raw: string, artifact: CodeReviewArtifact, state: Partial<GoalState>, dismissed: DismissedReviewFinding[] = []): ReviewResult {
 	const result: ReviewResult = { verdict: "APPROVE", artifact_sha256: sha256(raw), findings: emptyReviewGroups() };
-	if (artifact.status !== "COMPLETE") return { ...result, verdict: "REQUEST_CHANGES", reason: "inconclusive review" };
 	const degraded: string[] = [];
 	for (const original of artifact.findings) {
 		const problem = scopeEvidenceProblem(original, state);
@@ -1740,6 +1755,8 @@ function reviewResultFromArtifact(raw: string, artifact: CodeReviewArtifact, sta
 	// Degradation is not silent: surface each invalid finding and the fix so the
 	// caller sees why it blocks (never-false-complete) instead of a mystery UNKNOWN.
 	if (degraded.length > 0) result.reason = `scope evidence degraded to blocking UNKNOWN — ${degraded.join("; ")}`;
+	// An unfinished review still lists what it found, but it can never pass the gate.
+	if (artifact.status !== "COMPLETE") return { ...result, verdict: "REQUEST_CHANGES", reason: "inconclusive review" };
 	if (result.findings.adjudicate.length > 0 || result.findings.repair.some((f) => classifyReviewFindingOutcome(f) === "BLOCK")) result.verdict = "REQUEST_CHANGES";
 	else if (result.findings.repair.length > 0 || result.findings.notes.length > 0) result.verdict = "COMMENT";
 	const resolution = state.review_resolution;
@@ -1756,7 +1773,8 @@ export function getReviewResult(sessionId: string): ReviewResult {
 	const reviewed = readCodeReviewArtifactRaw(sessionId);
 	if (!state || !state.active || state.phase !== "pursuing") return invalidReviewResult("no active pursuing parent");
 	if (!reviewed) return invalidReviewResult("missing or invalid review artifact");
-	if (reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(state)) return invalidReviewResult("stale scope contract");
+	// A hashless INCONCLUSIVE artifact claims no contract, so there is nothing to compare; a present hash must match.
+	if (reviewed.artifact.scope_contract_sha256 !== undefined && reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(state)) return invalidReviewResult("stale scope contract");
 	// A finding with invalid scope evidence no longer nulls the whole result; the
 	// reducer degrades it to a blocking UNKNOWN (effectiveReviewFinding) while valid
 	// siblings still route. A stale contract hash above stays a whole-artifact reject.
@@ -1793,7 +1811,7 @@ function isCompletionEligibleCodeReview(
 	currentScopeContractSha: string,
 	currentState: Partial<GoalState>,
 ): boolean {
-	if (reviewed.artifact.scope_contract_sha256 !== currentScopeContractSha) return false;
+	if (reviewed.artifact.status !== "COMPLETE" || reviewed.artifact.scope_contract_sha256 !== currentScopeContractSha) return false;
 	// Invalid scope evidence degrades to a blocking UNKNOWN in the reducer (never
 	// completion-eligible), so no whole-artifact reject is needed here.
 	const result = reviewResultFromArtifact(reviewed.raw, reviewed.artifact, currentState, dismissed);
@@ -1941,7 +1959,7 @@ export function validateReviewArtifact(sessionId: string): { ok: boolean; proble
 		return { ok: false, problems: ["no valid code-review artifact (missing or schema-invalid)"], warnings: [] };
 	const problems: string[] = [];
 	const warnings: string[] = [];
-	if (reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(state))
+	if (reviewed.artifact.scope_contract_sha256 !== undefined && reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(state))
 		problems.push("scope_contract_sha256 is stale — re-copy the current [SCOPE_CONTRACT] hash and re-publish");
 	reviewed.artifact.findings.forEach((f, i) => {
 		const label = `finding[${i}]${f.ref ? ` (${f.ref})` : ""}`;
@@ -2205,6 +2223,8 @@ export function tryDismissReviewFinding(
 
 			const reviewed = readCodeReviewArtifactRaw(sessionId);
 			if (reviewed === null) return refuse("no valid code-review artifact for this session (missing or schema-invalid)");
+			if (reviewed.artifact.scope_contract_sha256 === undefined)
+				return refuse("the code-review artifact carries no scope_contract_sha256 (inconclusive review); re-review first");
 			if (reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(prior))
 				return refuse("the code-review artifact was made against a different scope contract (stale scope_contract_sha256); re-review first");
 			const artifactSha = sha256(reviewed.raw);
@@ -2500,18 +2520,38 @@ const ADR_HEADING = /^#{3,4} (D-\d+)[ \t]*[:\u2014-][ \t]*(.*?)[ \t]*$/;
 const ANY_HEADING = /^#{1,6}[ \t]/;
 // Any heading that names a decision record (`D-<n>` or `ADR-<n>`, any level, any separator).
 const DECISION_LIKE_HEADING = /^#{1,6}[ \t]+(?:D|ADR)-\d+\b/;
-const DECISION_FIELD = /^(?:-[ \t]+)?(?:\*\*)?Decision(?:[ \t]*\([^)]*\))?(?:\*\*)?:(?:\*\*)?[ \t]*(.*)$/;
+const adrField = (label: string) =>
+	new RegExp(`^(?:-[ \\t]+)?(?:\\*\\*)?${label}(?:[ \\t]*\\([^)]*\\))?(?:\\*\\*)?:(?:\\*\\*)?[ \\t]*(.*)$`);
+const DECISION_FIELD = adrField("Decision");
+const OWNS_FIELD = adrField("Owns");
+const MUST_NOT_OWN_FIELD = adrField("Must NOT own");
 // Plan ADR field labels (see skills/prometheus/plan-template.md). A continuation line
 // like `Applies when: x` is Decision text, not a field, so only these end the field.
 const FIELD_LABEL =
 	/^(?:-[ \t]+)?(?:\*\*)?(?:Tier|Context|Decision Drivers|Considered Options|Decision|Rationale|Consequences|Follow-ups|Why|Invalidated alternative|Cites|Owns|Must NOT own|Edges)(?:[ \t]*\([^)]*\))?(?:\*\*)?:/;
 
 /**
+ * One ADR field's text: its first line plus every following line up to the next field
+ * label or `---` (blank lines inside the field are skipped), joined by single spaces.
+ * The caller bounds `body` at the next heading. Null when the field is absent.
+ */
+function adrFieldText(body: string[], field: RegExp): string | null {
+	const start = body.findIndex((l) => field.test(l));
+	if (start === -1) return null;
+	const parts = [field.exec(body[start])?.[1] ?? ""];
+	for (let k = start + 1; k < body.length; k++) {
+		if (body[k].trim() === "---" || FIELD_LABEL.test(body[k])) break;
+		parts.push(body[k]);
+	}
+	return parts.map((l) => l.trim()).filter((l) => l !== "").join(" ");
+}
+
+/**
  * Explicit decision rules of the plan at `planPath`: one `[D-N] <title> — <text>`
  * line per `### D-<n>: <title>` ADR item (`###` or `####`; `:`, em dash or `-` separator), under a `Decision rules:` header, with
  * a trailing newline. <text> is the item's `Decision` field (its first line plus
- * continuation lines up to a blank line or the next field label, joined by single
- * spaces); an item with no `Decision` field is omitted (its body holds rationale
+ * continuation lines up to the next field label or `---`, blank lines skipped, joined by single
+ * spaces), followed by ` | Owns: <text>` and ` | Must NOT own: <text>` when the item has them; an item with no `Decision` field is omitted (its body holds rationale
  * and alternatives, which must not become binding rules). Headings inside code blocks and comments are ignored. Returns ""
  * for a missing/unreadable plan or a plan without decision headings — the plan is an
  * optional enrichment, so no error. When the plan has decision headings (`D-<n>` or
@@ -2537,16 +2577,13 @@ function planDecisionRules(planPath: string): string {
 		let end = i + 1;
 		while (end < lines.length && !ANY_HEADING.test(lines[end])) end++;
 		const body = lines.slice(i + 1, end);
-		const start = body.findIndex((l) => DECISION_FIELD.test(l));
-		const first = start === -1 ? null : DECISION_FIELD.exec(body[start]);
-		if (first === null) continue;
-		const decision = [first[1]];
-		for (let k = start + 1; k < body.length; k++) {
-			if (body[k].trim() === "" || body[k].trim() === "---" || FIELD_LABEL.test(body[k])) break;
-			decision.push(body[k]);
-		}
-		const rule = decision.map((l) => l.trim()).filter((l) => l !== "").join(" ");
-		entries.push(`[${heading[1]}] ${heading[2]} — ${rule}`);
+		const rule = adrFieldText(body, DECISION_FIELD);
+		if (rule === null) continue;
+		const owns = adrFieldText(body, OWNS_FIELD);
+		const mustNotOwn = adrFieldText(body, MUST_NOT_OWN_FIELD);
+		entries.push(
+			`[${heading[1]}] ${heading[2]} — ${rule}${owns === null ? "" : ` | Owns: ${owns}`}${mustNotOwn === null ? "" : ` | Must NOT own: ${mustNotOwn}`}`,
+		);
 	}
 	if (entries.length > 0) return `Decision rules:\n${entries.join("\n")}\n`;
 	// Decision headings the parser could not read must not vanish silently: one plain
@@ -2658,7 +2695,12 @@ export function serializeReviewContext(sessionId: string): {
 	const non_goals = nonGoals.trim() !== "" ? nonGoals : BACKFILL_MARKER;
 
 	const contract = scopeContract(state);
-	const project_context = `${projectContext}\n\n[SCOPE_CONTRACT]\n${JSON.stringify({ ...contract, scope_contract_sha256: sha256(JSON.stringify(contract)) })}\n[/SCOPE_CONTRACT]`;
+	const baseCommit = state.review_base_commit;
+	const baseLine =
+		baseCommit === undefined
+			? ""
+			: `\n\nReview base commit: ${baseCommit} — review the range ${baseCommit}...HEAD (this pursuit's own changes).`;
+	const project_context = `${projectContext}${baseLine}\n\n[SCOPE_CONTRACT]\n${JSON.stringify({ ...contract, scope_contract_sha256: sha256(JSON.stringify(contract)) })}\n[/SCOPE_CONTRACT]`;
 	return { what_was_implemented, description, requirements, project_context, non_goals };
 }
 

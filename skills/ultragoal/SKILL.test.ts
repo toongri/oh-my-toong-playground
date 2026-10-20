@@ -238,7 +238,8 @@ describe("ported from goal (regression): required phrases survive somewhere in b
 	});
 
 	test("INCONCLUSIVE status routing survives in the union", () => {
-		expect(combined).toMatch(/`INCONCLUSIVE`[^\n]*no speculative repair/);
+		expect(combined).toMatch(/`INCONCLUSIVE`[^\n]*inconclusive review/);
+		expect(combined).not.toContain("No speculative repair");
 		expect(combined).toContain("UNKNOWN / invalid / inconclusive review");
 	});
 });
@@ -395,7 +396,7 @@ describe("review dispatch budget runtime contract", () => {
 
 	test("완료 전에 모든 범위 안 개선을 수정하고 범위 밖 지적은 제외한다", () => {
 		expect(completionGateMd).toContain("HIGH => `REQUEST_CHANGES`");
-		expect(completionGateMd).toContain("LOW => `COMMENT` notes only");
+		expect(completionGateMd).toContain("LOW => `COMMENT` that never blocks and never triggers a fresh review");
 		expect(completionGateMd).toContain("OUT_OF_SCOPE");
 		expect(completionGateMd).toContain("`UNKNOWN`");
 	});
@@ -956,23 +957,23 @@ describe("disambiguation clause: OMT goal skill vs Codex native goal tools", () 
 });
 
 // ---------------------------------------------------------------------------
-// no-safe-default-terminal: the completion gate already forbids speculative
-// fixes on an uncertain finding; the gap is adherence under momentum pressure.
-// For a no-safe-default domain, an uncertain finding Oracle cannot collapse
-// routes to a MANDATORY user scope decision (handle vs accept-as-non-goal),
-// and autonomous speculative handling is explicitly not a sanctioned outcome.
-// (must FAIL before the completion-gate.md edit -- RED)
+// no-safe-default: an uncertain finding names the runtime fact that would settle
+// it; a repair local to code this pursuit changed is allowed (reason recorded),
+// and the user decides only when the remedy needs excluded behavior or the
+// product requirement itself is unclear.
 // ---------------------------------------------------------------------------
 
-describe("no-safe-default-terminal: an uncertain no-safe-default finding escalates to the user, never autonomous handling", () => {
+describe("no-safe-default: an uncertain finding allows a local repair and escalates to the user only for scope or requirement", () => {
 	test("the rationalization table names the stuck-block speculative-fix trap", () => {
 		expect(completionGateMd).toContain("Stuck on the block, so I'll just add the lock/guard/handling");
 	});
 
-	test("autonomous handling of an uncertain no-safe-default risk is explicitly not sanctioned", () => {
+	test("an uncertain no-safe-default finding allows a local repair and no longer forbids it outright", () => {
 		expect(completionGateMd).toContain(
-			"autonomous handling of an uncertain no-safe-default risk is not a sanctioned outcome",
+			"A repair local to code this pursuit added or modified is allowed",
 		);
+		expect(completionGateMd).not.toContain("not a sanctioned outcome");
+		expect(completionGateMd).not.toContain("No speculative repair");
 	});
 
 	test("an accepted risk is recorded as a non-goal, not implemented", () => {

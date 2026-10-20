@@ -118,10 +118,10 @@ describe("priority routing", () => {
 		}
 	});
 
-	test("INCONCLUSIVE는 빈 action group의 REQUEST_CHANGES이다", () => {
+	test("INCONCLUSIVE는 finding을 분류해 담고 verdict는 REQUEST_CHANGES로 유지한다", () => {
 		greenObjectiveLane();
 		writeReview([finding({ priority: undefined, assessment: undefined })], "INCONCLUSIVE");
-		expect(state.getReviewResult(SID)).toMatchObject({ verdict: "REQUEST_CHANGES", findings: { repair: [], adjudicate: [], notes: [] } });
+		expect(state.getReviewResult(SID)).toMatchObject({ verdict: "REQUEST_CHANGES", reason: "inconclusive review", findings: { repair: [], adjudicate: [], notes: [expect.objectContaining({ ref: "src/a.ts:1" })] } });
 	});
 
 	test("미확정 IN_SCOPE PLAUSIBLE은 수리 없이 adjudication evidence를 남긴다", () => {
