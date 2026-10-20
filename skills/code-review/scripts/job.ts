@@ -54,6 +54,8 @@ import {
 } from "@lib/generic-job";
 
 export { cmdResumeMember } from "@lib/generic-job";
+import { loadPlan } from "./diff-cursor";
+import { coverageHooks, readJobCoverage } from "./worker";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -99,6 +101,7 @@ const CHUNK_REVIEW_BOOLEAN_FLAGS = new Set([
 	"stdin",
 	"blocking",
 	"force",
+	"retry-stalled",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -461,11 +464,12 @@ function printHelp(): void {
 	process.stdout.write(`Chunk Review (job mode)
 
 Usage:
-  job.ts start [--config path] [--chairman auto|claude|codex|...] [--jobs-dir path] [--json] "question"
+  job.ts start [--config path] [--chairman auto|claude|codex|...] [--jobs-dir path] [--ledger-root dir] [--json] "question"
   job.ts start --stdin
   job.ts status [--json|--text|--checklist] [--verbose] <jobDir>
   job.ts collect [--timeout-ms N] <jobDir>
   job.ts results [--json|--manifest] <jobDir>
+  job.ts resume-member --job <jobDir> --member <name> --prompt "text" [--retry-stalled]
   job.ts stop <jobDir>
   job.ts clean <jobDir>
   job.ts reap [--jobs-dir path] [--grace-ms N]
@@ -474,6 +478,23 @@ Usage:
 Notes:
   - start returns immediately and runs reviewers in parallel via detached Node workers
   - poll status with repeated short calls to update TODO/plan UIs in host agents
+  - --ledger-root <dir>: coverage-gated job. Run diff-cursor.ts plan --out <dir>/plan first;
+    start records coverage {ledgerRoot, planDir, planSha} and settings.coverageGated in job.json.
+    Each member walks the diff through its ledger at <dir>/ledgers/<member>. A turn that ends
+    before the ledger is finished becomes awaiting_resume (status.json coverage: pagesAcked,
+    pagesTotal, finished:false), never done.
+  - resume-member is run by the conductor: after collect returns awaiting_resume, resume each
+    awaiting_resume member, then collect again. Nothing resumes automatically.
+    Without --ledger-root: at most 3 resumes per member; error/non_retryable are not resumable.
+    With --ledger-root: no resume cap while pagesAcked grows between resumes; timed_out and error
+    turns resume from the ledger. After 3 resumes in a row without progress, resume-member first
+    re-splits the issued page to half its size (min 4096 bytes), or else spends one plain resume.
+    It then marks the member stalled (exit 1, reason in status.json message) when progress still
+    does not come back, when the turn failed outside the member (missing CLI, non_retryable such
+    as auth expiry or quota/rate limit), or when no session id was recorded. A stalled member is
+    never done: tell the user, and rerun with --retry-stalled only after the cause is fixed.
+  - collect on a --ledger-root job counts its job deadline from the latest member activity, so a
+    member that is still working through resumed turns is not cut
   - reap kills orphaned job process groups (SIGTERM then SIGKILL); all its output goes to
     stderr — stdout is always empty, since a SessionStart hook calls it and must not vary
   - doctor reports orphan counts on stdout without killing anything (diagnostic only)
@@ -910,10 +931,32 @@ function cmdDoctor(options: Record<string, unknown>): void {
 	}
 }
 
+/**
+ * `--ledger-root <dir>` → the job's coverage record. The plan must already exist at
+ * `<dir>/plan/plan.json` (diff-cursor.ts plan); its planSha is recorded so readers never guess.
+ */
+function resolveStartCoverage(
+	options: Record<string, unknown>,
+): { ledgerRoot: string; planDir: string; planSha: string } | null {
+	const raw = options["ledger-root"];
+	if (raw === undefined || raw === null) return null;
+	if (typeof raw !== "string" || raw === "") exitWithError("start: --ledger-root needs a directory");
+	const ledgerRoot = path.resolve(raw);
+	const planDir = path.join(ledgerRoot, "plan");
+	try {
+		return { ledgerRoot, planDir, planSha: loadPlan(planDir).planSha };
+	} catch (error: unknown) {
+		exitWithError(
+			`start: --ledger-root: cannot read ${path.join(planDir, "plan.json")} (${error instanceof Error ? error.message : String(error)}); run diff-cursor.ts plan --out ${planDir} first`,
+		);
+	}
+}
+
 async function cmdStart(options: Record<string, unknown>, prompt: string): Promise<void> {
 	const configPath =
 		optionalString(options.config) || process.env.CHUNK_REVIEW_CONFIG || resolveDefaultConfigFile();
 	const jobsDir = resolveJobsDir(options);
+	const coverage = resolveStartCoverage(options);
 
 	ensureDir(jobsDir);
 	const identityResult = readChunkReviewIdentity(options);
@@ -1067,7 +1110,9 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 				timeoutSec: timeoutSec || null,
 				denySkills,
 				denySubagents,
+				...(coverage ? { coverageGated: true } : {}),
 			},
+			...(coverage ? { coverage } : {}),
 			...(identity ? { identity } : {}),
 			state: identity ? "initializing" : undefined,
 			...(identity
@@ -1268,9 +1313,12 @@ async function main(): Promise<void> {
 		if (!nameArg) exitWithError("--member required");
 		const promptArg = optionalString(options.prompt);
 		if (!promptArg) exitWithError("--prompt required");
+		const coverage = readJobCoverage(path.resolve(jobDirArg));
 		try {
 			await _cmdResumeMember(jobDirArg, nameArg, promptArg, CHUNK_REVIEW_JOB_CONFIG, {
 				workerPath: WORKER_PATH,
+				...(coverage ? { coverage: coverageHooks(coverage) } : {}),
+				retryStalled: options["retry-stalled"] === true,
 			});
 		} catch (e: unknown) {
 			exitWithError(e instanceof Error ? e.message : String(e));

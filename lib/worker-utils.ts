@@ -197,6 +197,11 @@ export interface RunOnceOpts {
 	workerEnv?: Record<string, string>;
 	fallbackFile?: string;
 	reviewContent?: string;
+	/**
+	 * Literal placeholder → value replacements applied to the final stdin prompt, after role-file
+	 * assembly, so a placeholder in the role file, the review content or the prompt is replaced alike.
+	 */
+	promptSubstitutions?: Record<string, string>;
 	heartbeatIntervalMs?: number;
 	/** Shared cancellation signal; runOneTurn supplies the marker observation. */
 	signal?: AbortSignal;
@@ -225,14 +230,22 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 		workerEnv,
 		fallbackFile,
 		reviewContent,
+		promptSubstitutions,
 		heartbeatIntervalMs = HEARTBEAT_INTERVAL_MS,
 		processSnapshot,
 		cleanupGraceMs,
 		signal,
 	} = opts;
 
+	const substitute = (text: string): string => {
+		let out = text;
+		for (const [placeholder, value] of Object.entries(promptSubstitutions ?? {}))
+			out = out.split(placeholder).join(value);
+		return out;
+	};
+
 	// Prompt assembly: attempt structured prompt from role files
-	let stdinPrompt = prompt;
+	let stdinPrompt = substitute(prompt);
 	if (promptsDir) {
 		const { assembled, isStructured } = assemblePrompt({
 			promptsDir,
@@ -242,8 +255,8 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 			fallbackFile,
 		});
 		if (isStructured) {
-			stdinPrompt = assembled;
-			fs.writeFileSync(path.join(memberDir, "assembled-prompt.txt"), assembled, "utf8");
+			stdinPrompt = substitute(assembled);
+			fs.writeFileSync(path.join(memberDir, "assembled-prompt.txt"), stdinPrompt, "utf8");
 		}
 	}
 
@@ -563,6 +576,13 @@ export interface RunOneTurnOpts {
 	fallbackFile?: string;
 	/** Optional content for REVIEW CONTENT section. */
 	reviewContent?: string;
+	/** Literal placeholder replacements applied to the assembled stdin prompt (see RunOnceOpts). */
+	promptSubstitutions?: Record<string, string>;
+	/**
+	 * Optional completion check, run only when a turn would end as `done`. When it reports the
+	 * work incomplete, the turn ends as `awaiting_resume` instead, so the caller resumes it.
+	 */
+	completionGate?: () => CompletionGateResult;
 	/** Test-only: override driver factory. */
 	driverFactory?: (cliType: CliType) => AgentDriver | null;
 	/** Test-only: override runOnce. */
@@ -571,6 +591,26 @@ export interface RunOneTurnOpts {
 	workerSlotOptions?: AcquireWorkerSlotOptions;
 	/** Optional upstream cancellation signal, relayed with the durable marker. */
 	signal?: AbortSignal;
+}
+
+export interface CompletionGateResult {
+	complete: boolean;
+	/** Progress detail persisted as status.json `coverage`. */
+	detail?: Record<string, unknown>;
+	/** Readable reason persisted as status.json `message` when incomplete. */
+	message?: string;
+}
+
+/** Runs the gate; a gate that throws counts as incomplete so the turn is never reported done. */
+function evaluateCompletionGate(gate: () => CompletionGateResult): CompletionGateResult {
+	try {
+		return gate();
+	} catch (error: unknown) {
+		return {
+			complete: false,
+			message: `completion gate failed: ${error instanceof Error ? error.message : String(error)}`,
+		};
+	}
 }
 
 export interface OneTurnResult {
@@ -662,6 +702,7 @@ async function executeOneTurn(
 		promptsDir: opts.promptsDir,
 		fallbackFile: opts.fallbackFile,
 		reviewContent: opts.reviewContent,
+		promptSubstitutions: opts.promptSubstitutions,
 		signal: cancellationSignal,
 	});
 	if (cancellationRequested(memberDir, cancellationSignal)) return canceledResult();
@@ -755,6 +796,19 @@ async function executeOneTurn(
 		accumulatedUsage = merged;
 	}
 
+	// Completion gate runs before the terminal write, so no reader ever sees `done` for work the
+	// gate rejects.
+	let message = runResult.message ?? null;
+	let gateDetail: Record<string, unknown> | undefined;
+	if (state === "done" && opts.completionGate) {
+		const gate = evaluateCompletionGate(opts.completionGate);
+		gateDetail = gate.detail;
+		if (!gate.complete) {
+			state = "awaiting_resume";
+			message = gate.message ?? "completion gate: work incomplete";
+		}
+	}
+
 	if (cancellationRequested(memberDir, cancellationSignal)) return canceledResult();
 	atomicWriteJson(path.join(memberDir, "status.json"), {
 		member,
@@ -763,10 +817,11 @@ async function executeOneTurn(
 		resume_count: existingResumeCount,
 		exitCode,
 		command,
-		message: runResult.message ?? null,
+		message,
 		finishedAt: runResult.finishedAt ?? new Date().toISOString(),
 		workerEnv: builtCmd.env,
 		usage: accumulatedUsage,
+		...(gateDetail ? { coverage: gateDetail } : {}),
 	});
 
 	return { state, sessionID, text, exitCode };

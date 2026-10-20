@@ -38,7 +38,11 @@ import {
 	COLLECT_MAX_WAIT_MS,
 	resolveCollectWaitMs,
 	resolveCollectNextAction,
+	readCollectBudgetMeta,
 	cmdResumeMember,
+	COVERAGE_STALL_LIMIT,
+	type CoverageHooks,
+	type CoverageProgress,
 	assertMembersOrExit,
 	assertDenyEnforceable,
 	assertDenyShape,
@@ -1951,7 +1955,7 @@ describe("computeStatus", () => {
 		expect(result.counts.empty_output).toBe(1);
 	});
 
-	test("computeStatus totals 13 keys", async () => {
+	test("computeStatus totals 14 keys", async () => {
 		const jobDir = path.join(tmpDir, "job-12keys");
 		setupJob(
 			jobDir,
@@ -1976,13 +1980,14 @@ describe("computeStatus", () => {
 			"transient_error",
 			"permanent_error",
 			"awaiting_resume",
+			"stalled",
 		];
 		for (const key of expectedKeys) {
 			expect(key in result.counts).toBe(true);
 		}
-		// Exactly 13 keys (excluding 'total' which is added separately)
+		// Exactly 14 keys (excluding 'total' which is added separately)
 		const countKeys = Object.keys(result.counts).filter((k) => k !== "total");
-		expect(countKeys.length).toBe(13);
+		expect(countKeys.length).toBe(14);
 		expect("max_turns_exceeded" in result.counts).toBe(false);
 	});
 });
@@ -5584,5 +5589,294 @@ describe("findActiveMembers / findOrphanJobs / cmdClean — entitiesDir 읽기 �
 
 		expect(() => cmdClean({ force: true }, jobDirForce, chunkReviewConfig, jobsDir)).not.toThrow();
 		expect(fs.existsSync(jobDirForce)).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Coverage-gated jobs: progress-based resume policy and activity-anchored collect deadline
+// ---------------------------------------------------------------------------
+
+describe("cmdResumeMember — coverage-gated 재개 정책", () => {
+	let tmpDir: string;
+	let jobDir: string;
+	let memberDir: string;
+
+	const config: JobConfig = {
+		entitySingular: "member",
+		entityPlural: "members",
+		entityDirName: "members",
+		jobPrefix: "chunk-review-",
+		uiLabel: "[Chunk Review]",
+		configTopLevelKey: "chunk-review",
+	};
+
+	const driver = {
+		cli: "opencode" as const,
+		initialCommand: () => ({ program: "opencode", args: [], env: {} }),
+		resumeCommand: () => ({ program: "opencode", args: [], env: {} }),
+		parseStdout: () => null,
+	};
+
+	/** Probe backed by a mutable progress value, recording every resplit request. */
+	function makeHooks(initial: CoverageProgress, resplitOk = true) {
+		const state = { progress: { ...initial } };
+		const resplits: { member: string; pageId: string; pageBytes: number }[] = [];
+		const hooks: CoverageHooks = {
+			readProgress: () => ({ ...state.progress }),
+			resplit: (member, pageId, pageBytes) => {
+				resplits.push({ member, pageId, pageBytes });
+				return resplitOk ? { ok: true, message: "RESPLIT" } : { ok: false, message: "already fits" };
+			},
+		};
+		return { state, resplits, hooks };
+	}
+
+	function writeJob(coverageGated: boolean) {
+		fs.mkdirSync(memberDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "chunk-review-x", settings: { timeoutSec: 60, ...(coverageGated ? { coverageGated: true } : {}) } }),
+		);
+	}
+
+	function writeStatus(payload: Record<string, unknown>) {
+		fs.writeFileSync(
+			path.join(memberDir, "status.json"),
+			JSON.stringify({ member: "correctness", command: "opencode --format json", sessionID: "sess-1", ...payload }),
+		);
+	}
+
+	function readStatus(): Record<string, unknown> {
+		return JSON.parse(fs.readFileSync(path.join(memberDir, "status.json"), "utf8"));
+	}
+
+	/** One conductor resume: the turn the stub runs ends awaiting_resume again. */
+	async function resume(hooks: CoverageHooks, extra: Partial<ResumeMemberOpts> = {}) {
+		await cmdResumeMember(jobDir, "correctness", "continue", config, {
+			driverFactory: () => driver,
+			resumeOneTurnFn: async () => {
+				const current = readStatus();
+				writeStatus({ ...current, state: "awaiting_resume" });
+				return { state: "awaiting_resume", sessionID: "sess-1", text: "", exitCode: 0 };
+			},
+			coverage: hooks,
+			...extra,
+		});
+	}
+
+	beforeEach(() => {
+		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "coverage-resume-test-"));
+		jobDir = path.join(tmpDir, "chunk-review-x");
+		memberDir = path.join(jobDir, "members", "correctness");
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	const base: CoverageProgress = { pagesAcked: 0, pagesTotal: 40, finished: false, issuedPage: null };
+
+	test("진행이 늘어나는 동안에는 3회를 넘어 계속 재개한다", async () => {
+		writeJob(true);
+		writeStatus({ state: "awaiting_resume", resume_count: 0 });
+		const { state, hooks } = makeHooks(base);
+		for (let i = 1; i <= 6; i++) {
+			state.progress.pagesAcked = i * 5;
+			await resume(hooks);
+		}
+		expect(readStatus().resume_count).toBe(6);
+		expect(readStatus().state).toBe("awaiting_resume");
+	});
+
+	test("진행 없는 재개가 3회 연속이면 발급된 페이지를 절반 크기로 재분할한 뒤 재개한다", async () => {
+		writeJob(true);
+		writeStatus({ state: "awaiting_resume", resume_count: 0 });
+		const { hooks, resplits } = makeHooks({
+			...base,
+			pagesAcked: 7,
+			issuedPage: { id: "p0008", bytes: 24000 },
+		});
+		// First resume sets the baseline; the next COVERAGE_STALL_LIMIT resumes see no progress.
+		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		expect(resplits).toEqual([]);
+		await resume(hooks);
+		expect(resplits).toEqual([{ member: "correctness", pageId: "p0008", pageBytes: 12000 }]);
+		expect(readStatus().state).toBe("awaiting_resume");
+	});
+
+	test("재분할 크기는 4096바이트 아래로 내려가지 않는다", async () => {
+		writeJob(true);
+		writeStatus({ state: "awaiting_resume" });
+		const { hooks, resplits } = makeHooks({ ...base, issuedPage: { id: "p0001.1", bytes: 6000 } });
+		for (let i = 0; i <= COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		expect(resplits[0]?.pageBytes).toBe(4096);
+	});
+
+	test("재분할할 수 없으면 평범한 재개를 한 번 쓰고, 그래도 진행이 없으면 stalled로 멈춘다", async () => {
+		writeJob(true);
+		writeStatus({ state: "awaiting_resume" });
+		const { hooks, resplits } = makeHooks(
+			{ ...base, pagesAcked: 2, issuedPage: { id: "p0003", bytes: 3000 } },
+			false,
+		);
+		for (let i = 0; i <= COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		expect(resplits.length).toBe(1);
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+		const status = readStatus();
+		expect(status.state).toBe("stalled");
+		expect(String(status.message)).toContain("2/40 pages");
+		expect(String(status.message)).toContain("cannot be split further");
+		// Auto-resume stays stopped.
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+	});
+
+	test("발급된 페이지가 없으면 평범한 재개 한 번 후 진행이 없을 때 stalled가 된다", async () => {
+		writeJob(true);
+		writeStatus({ state: "awaiting_resume" });
+		const { hooks, resplits } = makeHooks(base);
+		for (let i = 0; i <= COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		await expect(resume(hooks)).rejects.toThrow("plain resume from the ledger did not help");
+		expect(resplits).toEqual([]);
+		expect(readStatus().state).toBe("stalled");
+	});
+
+	test("외부 원인 실패(non_retryable)는 재개 없이 바로 stalled가 되고 이유를 남긴다", async () => {
+		writeJob(true);
+		writeStatus({ state: "non_retryable", message: null });
+		fs.writeFileSync(path.join(memberDir, "error.txt"), "ERROR: unexpected status 401 Unauthorized\n");
+		const { hooks } = makeHooks(base);
+		let resumed = false;
+		await expect(
+			cmdResumeMember(jobDir, "correctness", "continue", config, {
+				driverFactory: () => driver,
+				resumeOneTurnFn: async () => {
+					resumed = true;
+					return { state: "done", sessionID: "sess-1", text: "", exitCode: 0 };
+				},
+				coverage: hooks,
+			}),
+		).rejects.toThrow("member stalled");
+		expect(resumed).toBe(false);
+		const status = readStatus();
+		expect(status.state).toBe("stalled");
+		expect(String(status.message)).toContain("401 Unauthorized");
+	});
+
+	test("missing_cli는 stalled가 되고 --retry-stalled로 원인 해결 뒤 다시 재개할 수 있다", async () => {
+		writeJob(true);
+		writeStatus({ state: "missing_cli", message: "spawn codex ENOENT" });
+		const { hooks } = makeHooks(base);
+		await expect(resume(hooks)).rejects.toThrow("binary was not found");
+		expect(readStatus().state).toBe("stalled");
+		await resume(hooks, { retryStalled: true });
+		expect(readStatus().state).toBe("awaiting_resume");
+	});
+
+	test("세션 ID가 없으면 stalled가 된다 (done이 아님)", async () => {
+		writeJob(true);
+		writeStatus({ state: "error", sessionID: null, message: "Output drain timed out" });
+		const { hooks } = makeHooks(base);
+		await expect(resume(hooks)).rejects.toThrow("no session to resume");
+		expect(readStatus().state).toBe("stalled");
+	});
+
+	test("크래시(error)·timed_out 턴은 coverage-gated 잡에서 원장에서 재개한다", async () => {
+		writeJob(true);
+		writeStatus({ state: "error" });
+		const { hooks } = makeHooks(base);
+		await resume(hooks);
+		writeStatus({ ...readStatus(), state: "timed_out" });
+		await resume(hooks);
+		expect(readStatus().resume_count).toBe(2);
+	});
+
+	test("coverage-gated 잡에 coverage 훅이 없으면 거부한다", async () => {
+		writeJob(true);
+		writeStatus({ state: "awaiting_resume" });
+		await expect(
+			cmdResumeMember(jobDir, "correctness", "continue", config, {
+				driverFactory: () => driver,
+				resumeOneTurnFn: async () => ({ state: "done", sessionID: "s", text: "", exitCode: 0 }),
+			}),
+		).rejects.toThrow("needs coverage hooks");
+	});
+
+	test("coverage-gated가 아닌 잡은 훅을 넘겨도 기존 3회 상한과 error 거부를 유지한다", async () => {
+		writeJob(false);
+		writeStatus({ state: "awaiting_resume", resume_count: 3 });
+		const { hooks } = makeHooks(base);
+		await expect(resume(hooks)).rejects.toThrow("resume cap exceeded (3/3)");
+		writeStatus({ state: "error", resume_count: 0 });
+		await expect(resume(hooks)).rejects.toThrow("member in non-resumable state: error");
+	});
+});
+
+describe("collect 데드라인 — coverage-gated 잡", () => {
+	const createdAt = "2026-08-06T00:00:00.000Z";
+	const created = Date.parse(createdAt);
+
+	test("최근 활동이 있는 coverage-gated 잡은 생성 시각 기준 데드라인이 지나도 계속 폴한다", () => {
+		const now = created + 3 * 600_000;
+		const budget = resolveCollectNextAction(
+			{ createdAt, timeoutSec: 600, coverageGated: true, lastActivityAt: now - 60_000 },
+			now,
+		);
+		expect(budget.nextAction).toBe("poll_again");
+		expect(budget.elapsedSec).toBe(1800);
+		expect(budget.deadlineSec).toBe(1740 + 600);
+	});
+
+	test("마지막 활동 뒤 한 턴 타임아웃이 지나면 stop_and_degrade", () => {
+		const now = created + 3 * 600_000;
+		const budget = resolveCollectNextAction(
+			{ createdAt, timeoutSec: 600, coverageGated: true, lastActivityAt: now - 600_000 },
+			now,
+		);
+		expect(budget.nextAction).toBe("stop_and_degrade");
+	});
+
+	test("coverage-gated가 아니면 활동 시각을 무시하고 생성 시각 기준으로 자른다", () => {
+		const now = created + 3 * 600_000;
+		const budget = resolveCollectNextAction(
+			{ createdAt, timeoutSec: 600, coverageGated: false, lastActivityAt: now - 60_000 },
+			now,
+		);
+		expect(budget.nextAction).toBe("stop_and_degrade");
+	});
+
+	test("readCollectBudgetMeta는 coverage-gated 잡에서 멤버의 최신 활동 시각을 읽는다", () => {
+		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "collect-meta-test-"));
+		try {
+			const config: JobConfig = {
+				entitySingular: "member",
+				entityPlural: "members",
+				entityDirName: "members",
+				jobPrefix: "chunk-review-",
+				uiLabel: "[Chunk Review]",
+				configTopLevelKey: "chunk-review",
+			};
+			fs.mkdirSync(path.join(tmp, "members", "a"), { recursive: true });
+			fs.mkdirSync(path.join(tmp, "members", "b"), { recursive: true });
+			fs.writeFileSync(
+				path.join(tmp, "job.json"),
+				JSON.stringify({ createdAt, settings: { timeoutSec: 600, coverageGated: true } }),
+			);
+			fs.writeFileSync(
+				path.join(tmp, "members", "a", "status.json"),
+				JSON.stringify({ state: "running", startedAt: "2026-08-06T00:30:00.000Z", lastHeartbeat: "2026-08-06T00:45:00.000Z" }),
+			);
+			fs.writeFileSync(
+				path.join(tmp, "members", "b", "status.json"),
+				JSON.stringify({ state: "done", finishedAt: "2026-08-06T00:10:00.000Z" }),
+			);
+			const meta = readCollectBudgetMeta(tmp, config);
+			expect(meta.coverageGated).toBe(true);
+			expect(meta.lastActivityAt).toBe(Date.parse("2026-08-06T00:45:00.000Z"));
+
+			fs.writeFileSync(path.join(tmp, "job.json"), JSON.stringify({ createdAt, settings: { timeoutSec: 600 } }));
+			expect(readCollectBudgetMeta(tmp, config).lastActivityAt).toBe(null);
+		} finally {
+			fs.rmSync(tmp, { recursive: true, force: true });
+		}
 	});
 });

@@ -4,8 +4,20 @@ import { describe, it, test, expect, afterEach } from "bun:test";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { execFileSync, spawn, execSync } from "child_process";
-import { filterPromptSections, KNOWN_SECTION_NAMES } from "./worker.ts";
+import { execFileSync, spawn, spawnSync, execSync } from "child_process";
+import {
+	filterPromptSections,
+	KNOWN_SECTION_NAMES,
+	cursorCommand,
+	readJobCoverage,
+	readCoverageProgress,
+	coverageCompletionGate,
+	initMemberLedger,
+	memberLedgerDir,
+	DIFF_CURSOR_PATH,
+	type JobCoverage,
+} from "./worker.ts";
+import { run as runDiffCursor, loadPlan } from "./diff-cursor.ts";
 
 const TEMPLATE_PATH = path.join(import.meta.dirname, "chunk-reviewer-prompt.md");
 const WORKER_PATH = path.join(import.meta.dirname, "worker.ts");
@@ -33,8 +45,7 @@ function buildFixturePrompt(): string {
 		.replaceAll("{COMMIT_HISTORY}", "COMMIT_HISTORY_SENTINEL")
 		.replaceAll("{FILE_LIST}", "FILE_LIST_SENTINEL")
 		.replaceAll("{WHAT_WAS_IMPLEMENTED}", "WHAT_WAS_IMPLEMENTED_SENTINEL")
-		.replaceAll("{DESCRIPTION}", "DESCRIPTION_SENTINEL")
-		.replaceAll("{DIFF_COMMAND}", "DIFF_COMMAND_SENTINEL");
+		.replaceAll("{DESCRIPTION}", "DESCRIPTION_SENTINEL");
 }
 
 const ALL_MEMBERS = ["correctness", "regression", "cleanup", "requirement"];
@@ -55,7 +66,7 @@ describe("filterPromptSections", () => {
 		expect(filtered).toContain("NON_GOAL_SENTINEL");
 		expect(filtered).not.toContain("COMMIT_HISTORY_SENTINEL");
 		expect(filtered).toContain("FILE_LIST_SENTINEL");
-		expect(filtered).toContain("DIFF_COMMAND_SENTINEL");
+		expect(filtered).toContain("## Diff Coverage Protocol");
 	});
 
 	it("`regression` 앵글은 Project Context와 Commit History를 통과시키고 나머지는 제거한다", () => {
@@ -213,10 +224,10 @@ describe("filterPromptSections", () => {
 	// table), and replaceAll would forge two "zz" pairs — net balanced by luck — hiding the defect.
 	// Pre-fix, this forged pair spans from the Description placeholder through the real Commit
 	// History body, so filtering (for `correctness`, whose allowlist is empty) strips that whole
-	// misidentified span — including the real "## Diff Command" section — even though every
-	// genuine marker in the file remains individually 1/1. Confirmed by reverting the
+	// misidentified span — including the real "## Diff Coverage Protocol" section — even though
+	// every genuine marker in the file remains individually 1/1. Confirmed by reverting the
 	// KNOWN_SECTION_NAMES exact-match check and re-running: filtered !== forged and
-	// "## Diff Command" is gone — see report.
+	// "## Diff Coverage Protocol" is gone — see report.
 	it("템플릿에 없는 새 이름으로 위조한 균형 쌍은 필터링을 건너뛰고 원문을 그대로 반환한다", () => {
 		const raw = fs.readFileSync(TEMPLATE_PATH, "utf8");
 		const forged = raw
@@ -226,7 +237,7 @@ describe("filterPromptSections", () => {
 		const filtered = filterPromptSections(forged, "correctness");
 
 		expect(filtered).toBe(forged);
-		expect(filtered).toContain("## Diff Command");
+		expect(filtered).toContain("## Diff Coverage Protocol");
 	});
 
 	// Constant-vs-template drift guard: KNOWN_SECTION_NAMES is hand-declared in worker.ts, so if
@@ -529,5 +540,205 @@ describe("worker.ts 종료 경로 — reapOwnProcessGroup 연결", () => {
 			}
 		},
 		120_000,
+	);
+});
+
+// ---------------------------------------------------------------------------
+// Diff cursor coverage wiring (job.json `coverage`, set by `job.ts start --ledger-root`)
+// ---------------------------------------------------------------------------
+
+function gitIn(cwd: string, ...args: string[]): string {
+	return execFileSync(
+		"git",
+		["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", ...args],
+		{ cwd, encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } },
+	);
+}
+
+/** A git repo with one changed doc file, frozen into a cursor plan under `<root>/ledger-root/plan`. */
+function makeCoverageFixture(root: string): JobCoverage {
+	const repo = path.join(root, "repo");
+	fs.mkdirSync(path.join(repo, "docs"), { recursive: true });
+	gitIn(repo, "init", "-q", "-b", "main");
+	fs.writeFileSync(path.join(repo, "docs", "guide.md"), "# 안내\n");
+	gitIn(repo, "add", "-A");
+	gitIn(repo, "commit", "-q", "-m", "base");
+	const base = gitIn(repo, "rev-parse", "HEAD").trim();
+	fs.writeFileSync(
+		path.join(repo, "docs", "guide.md"),
+		"# 안내\n" + Array.from({ length: 30 }, (_, i) => `리뷰 커서 문단 ${i}\n`).join(""),
+	);
+	gitIn(repo, "commit", "-qam", "head");
+	const head = gitIn(repo, "rev-parse", "HEAD").trim();
+	const ledgerRoot = path.join(root, "ledger-root");
+	const planDir = path.join(ledgerRoot, "plan");
+	const r = runDiffCursor([
+		"plan", "--repo", repo, "--range", `${base}...${head}`, "--files", JSON.stringify(["docs/guide.md"]), "--out", planDir,
+	]);
+	if (r.code !== 0) throw new Error(r.stderr);
+	return { ledgerRoot, planDir, planSha: loadPlan(planDir).planSha };
+}
+
+const ackOf = (out: string) => /### ACK (\S+): ([0-9a-f]{8}) ###/.exec(out)?.[2] ?? "";
+const pageIdOf = (out: string) => /\[PAGE (\S+) ·/.exec(out)?.[1] ?? "";
+
+describe("diff cursor coverage helpers", () => {
+	let root: string | undefined;
+	let coverage: JobCoverage;
+
+	afterEach(() => {
+		if (root) fs.rmSync(root, { recursive: true, force: true });
+		root = undefined;
+	});
+
+	function setup() {
+		root = fs.mkdtempSync(path.join(os.tmpdir(), "worker-coverage-unit-"));
+		coverage = makeCoverageFixture(root);
+	}
+
+	it("cursorCommand는 절대 bun 경로와 스크립트 경로, 원장 경로를 각각 한 인자로 감싼다", () => {
+		const cmd = cursorCommand('/tmp/a b/$x"y`z');
+		expect(cmd).toBe(
+			`"${process.execPath}" "${DIFF_CURSOR_PATH}" --ledger "/tmp/a b/\\$x\\"y\\\`z"`,
+		);
+		const echoed = execFileSync("/bin/sh", ["-c", `printf '%s\\n' ${cmd}`], { encoding: "utf8" });
+		expect(echoed.split("\n").slice(0, 4)).toEqual([process.execPath, DIFF_CURSOR_PATH, "--ledger", '/tmp/a b/$x"y`z']);
+	});
+
+	it("readJobCoverage는 coverage가 없는 job.json에 대해 null을 돌려준다", () => {
+		root = fs.mkdtempSync(path.join(os.tmpdir(), "worker-coverage-unit-"));
+		fs.writeFileSync(path.join(root, "job.json"), JSON.stringify({ id: "x", settings: {} }));
+		expect(readJobCoverage(root)).toBe(null);
+		fs.writeFileSync(
+			path.join(root, "job.json"),
+			JSON.stringify({ id: "x", coverage: { ledgerRoot: "/l", planDir: "/l/plan", planSha: "abc" } }),
+		);
+		expect(readJobCoverage(root)).toEqual({ ledgerRoot: "/l", planDir: "/l/plan", planSha: "abc" });
+	});
+
+	it("init은 멱등이고, 게이트는 원장이 끝나기 전엔 미완료·끝나면 완료를 보고한다", () => {
+		setup();
+		initMemberLedger(coverage, "correctness");
+		expect(initMemberLedger(coverage, "correctness")).toContain("LEDGER EXISTS");
+		const ledger = memberLedgerDir(coverage, "correctness");
+		const gate = coverageCompletionGate(ledger);
+
+		const total = readCoverageProgress(ledger).pagesTotal;
+		expect(gate()).toEqual({
+			complete: false,
+			detail: { pagesAcked: 0, pagesTotal: total, finished: false },
+			message: expect.stringContaining(`0/${total} pages`),
+		});
+
+		let out = runDiffCursor(["next", "--ledger", ledger]).stdout;
+		const issued = readCoverageProgress(ledger).issuedPage;
+		expect(issued?.id).toBe(pageIdOf(out));
+		expect(issued?.bytes).toBe(loadPlan(coverage.planDir).pages[0]?.bytes);
+
+		while (!out.includes("ALL PAGES DONE")) {
+			const r = runDiffCursor([
+				"done", pageIdOf(out), "--ack", ackOf(out), "--note", "no relevant mechanism: doc page", "--next", "--ledger", ledger,
+			]);
+			if (r.code !== 0) throw new Error(r.stderr);
+			out = r.stdout;
+		}
+		expect(gate().complete).toBe(false); // all pages done, finish not run yet
+		expect(runDiffCursor(["finish", "--ledger", ledger]).code).toBe(0);
+		expect(gate()).toEqual({
+			complete: true,
+			detail: { pagesAcked: total, pagesTotal: total, finished: true },
+		});
+	});
+});
+
+// Drives the real main() as a subprocess against a coverage job. The member command is a bun stub
+// that records its stdin and env, and (with "walk") walks the cursor to the end through the env
+// ledger, the way a finder would.
+describe("main() 배선: coverage job", () => {
+	let root: string;
+
+	afterEach(() => {
+		fs.rmSync(root, { recursive: true, force: true });
+	});
+
+	function runWorker(walk: boolean) {
+		root = fs.mkdtempSync(path.join(os.tmpdir(), "worker-coverage-main-"));
+		const coverage = makeCoverageFixture(root);
+		const jobDir = path.join(root, "jobs", "chunk-review-coverage");
+		fs.mkdirSync(path.join(jobDir, "members", "correctness"), { recursive: true });
+		fs.writeFileSync(path.join(jobDir, "prompt.txt"), buildFixturePrompt(), "utf8");
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "chunk-review-coverage", settings: { coverageGated: true }, coverage }),
+		);
+		const stub = path.join(root, "finder-stub.ts");
+		fs.writeFileSync(
+			stub,
+			[
+				'import fs from "fs";',
+				`import { run } from ${JSON.stringify(DIFF_CURSOR_PATH)};`,
+				`const out = ${JSON.stringify(root)};`,
+				'fs.writeFileSync(out + "/stdin.txt", fs.readFileSync(0, "utf8"));',
+				'fs.writeFileSync(out + "/env.json", JSON.stringify({ worker: process.env.OMT_LEDGER_WORKER ?? null, ledger: process.env.OMT_DIFF_CURSOR_LEDGER ?? null }));',
+				`if (${walk}) {`,
+				'  let o = run(["next"]).stdout;',
+				'  while (!o.includes("ALL PAGES DONE")) {',
+				'    const id = /\\[PAGE (\\S+) ·/.exec(o)?.[1] ?? "";',
+				'    const ack = /### ACK (\\S+): ([0-9a-f]{8}) ###/.exec(o)?.[2] ?? "";',
+				'    const r = run(["done", id, "--ack", ack, "--note", "no relevant mechanism: doc page", "--next"]);',
+				'    if (r.code !== 0) { process.stderr.write(r.stderr); process.exit(3); }',
+				"    o = r.stdout;",
+				"  }",
+				'  if (run(["finish"]).code !== 0) process.exit(4);',
+				"}",
+			].join("\n"),
+		);
+		// The worker exits 1 for any state but done (awaiting_resume included).
+		const worker = spawnSync(
+			process.execPath,
+			[WORKER_PATH, "--job-dir", jobDir, "--member", "correctness", "--command", `${process.execPath} ${stub}`],
+			{ stdio: "pipe", env: { ...process.env, HOME: root, OMT_DIR: root } },
+		);
+		const memberDir = path.join(jobDir, "members", "correctness");
+		return {
+			exitCode: worker.status,
+			ledger: memberLedgerDir(coverage, "correctness"),
+			assembled: fs.readFileSync(path.join(memberDir, "assembled-prompt.txt"), "utf8"),
+			stdin: fs.readFileSync(path.join(root, "stdin.txt"), "utf8"),
+			env: JSON.parse(fs.readFileSync(path.join(root, "env.json"), "utf8")),
+			status: JSON.parse(fs.readFileSync(path.join(memberDir, "status.json"), "utf8")),
+		};
+	}
+
+	it(
+		"원장을 만들고 {CURSOR}를 치환하며 finder env에 원장 변수를 넣고, 원장이 미완이면 awaiting_resume으로 끝난다",
+		() => {
+			const { exitCode, ledger, assembled, stdin, env, status } = runWorker(false);
+
+			expect(exitCode).toBe(1);
+			expect(fs.existsSync(path.join(ledger, "ledger.json"))).toBe(true);
+			expect(assembled).not.toContain("{CURSOR}");
+			expect(assembled).toContain(`${cursorCommand(ledger)} resume`);
+			expect(assembled).toContain("Read the diff ONLY through the diff cursor");
+			expect(assembled).toContain("max_output_tokens");
+			expect(stdin).toBe(assembled);
+			expect(env).toEqual({ worker: "1", ledger });
+			expect(status.state).toBe("awaiting_resume");
+			expect(status.coverage).toMatchObject({ pagesAcked: 0, finished: false });
+			expect(status.workerEnv).toMatchObject({ OMT_LEDGER_WORKER: "1", OMT_DIFF_CURSOR_LEDGER: ledger });
+		},
+		30000,
+	);
+
+	it(
+		"finder가 원장을 끝까지 걷고 finish하면 done으로 끝난다",
+		() => {
+			const r = runWorker(true);
+			expect(r.exitCode).toBe(0);
+			expect(r.status.state).toBe("done");
+			expect(r.status.coverage).toMatchObject({ finished: true });
+			expect(r.status.coverage.pagesAcked).toBe(r.status.coverage.pagesTotal);
+		},
+		30000,
 	);
 });

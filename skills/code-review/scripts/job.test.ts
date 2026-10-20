@@ -6214,3 +6214,150 @@ describe("start durable review identity", () => {
 		expect(fs.readFileSync(marker, "utf8")).toBe("xx");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// start --ledger-root: coverage-gated job (diff cursor)
+// ---------------------------------------------------------------------------
+
+describe("start --ledger-root: coverage-gated job.json", () => {
+	const SCRIPT = path.join(import.meta.dirname, "job.ts");
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+
+	afterEach(() => {
+		mock.restore();
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	function writeConfig(): string {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: correctness",
+				"      command: echo correctness",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+			].join("\n"),
+		);
+		return configPath;
+	}
+
+	async function startWithMockedSpawn(extra: Record<string, unknown>): Promise<Record<string, unknown>> {
+		let capturedJobDir = "";
+		mock.module("@lib/generic-job", () => ({
+			...GenericJob,
+			spawnWorkers: ({ jobDir }: { jobDir: string }) => {
+				capturedJobDir = jobDir;
+				return [];
+			},
+		}));
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		const mod = await import(`./job.ts?ledger-root=${Date.now()}-${Math.random()}`);
+		await mod.cmdStart(
+			{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", json: true, ...extra },
+			"test prompt",
+		);
+		expect(capturedJobDir).not.toBe("");
+		return JSON.parse(fs.readFileSync(path.join(capturedJobDir, "job.json"), "utf8"));
+	}
+
+	test("--ledger-root가 있으면 coverage {ledgerRoot, planDir, planSha}와 settings.coverageGated를 기록한다", async () => {
+		const ledgerRoot = path.join(tmpDir, "ledger-root");
+		fs.mkdirSync(path.join(ledgerRoot, "plan"), { recursive: true });
+		fs.writeFileSync(path.join(ledgerRoot, "plan", "plan.json"), JSON.stringify({ planSha: "f00dfeed" }));
+
+		const jobMeta = await startWithMockedSpawn({ "ledger-root": ledgerRoot });
+		expect(jobMeta.coverage).toEqual({
+			ledgerRoot,
+			planDir: path.join(ledgerRoot, "plan"),
+			planSha: "f00dfeed",
+		});
+		expect((jobMeta.settings as Record<string, unknown>).coverageGated).toBe(true);
+	});
+
+	test("--ledger-root가 없으면 coverage와 coverageGated를 기록하지 않는다", async () => {
+		const jobMeta = await startWithMockedSpawn({});
+		expect("coverage" in jobMeta).toBe(false);
+		expect("coverageGated" in (jobMeta.settings as Record<string, unknown>)).toBe(false);
+	});
+
+	test("plan.json이 없는 --ledger-root는 잡을 만들지 않고 거부한다", () => {
+		const jobsDir = path.join(tmpDir, "jobs");
+		const r = spawnSync(
+			process.execPath,
+			[SCRIPT, "start", "--config", writeConfig(), "--jobs-dir", jobsDir, "--chairman", "none", "--ledger-root", path.join(tmpDir, "nope"), "prompt"],
+			{ stdio: "pipe" },
+		);
+		expect(r.status).toBe(1);
+		expect(r.stderr.toString()).toContain("--ledger-root");
+		expect(r.stderr.toString()).toContain("diff-cursor.ts plan");
+		expect(fs.existsSync(jobsDir) ? fs.readdirSync(jobsDir).filter((n) => n.startsWith("chunk-review-")) : []).toEqual([]);
+	});
+
+	test("--help는 --ledger-root, resume-member --retry-stalled와 재개 정책을 설명한다", () => {
+		const out = execFileSync(process.execPath, [SCRIPT, "--help"], { stdio: "pipe" }).toString();
+		expect(out).toContain("--ledger-root dir");
+		expect(out).toContain("resume-member --job <jobDir> --member <name> --prompt");
+		expect(out).toContain("--retry-stalled");
+		expect(out).toContain("no resume cap while pagesAcked grows");
+		expect(out).toContain("Nothing resumes automatically");
+	});
+});
+
+describe("resume-member CLI: coverage-gated job은 coverage 훅을 넘긴다", () => {
+	const SCRIPT = path.join(import.meta.dirname, "job.ts");
+	let tmpDir: string;
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("외부 원인 실패 멤버는 exit 1과 stalled 상태로 멈추고, 재개 워커를 띄우지 않는다", () => {
+		tmpDir = makeTmpDir();
+		const jobDir = path.join(tmpDir, "chunk-review-gated");
+		const memberDir = path.join(jobDir, "members", "correctness");
+		fs.mkdirSync(memberDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({
+				id: "chunk-review-gated",
+				settings: { timeoutSec: 60, coverageGated: true },
+				coverage: { ledgerRoot: path.join(tmpDir, "lr"), planDir: path.join(tmpDir, "lr", "plan"), planSha: "x" },
+			}),
+		);
+		fs.writeFileSync(
+			path.join(memberDir, "status.json"),
+			JSON.stringify({
+				member: "correctness",
+				state: "non_retryable",
+				sessionID: "thread-1",
+				command: "codex exec --json",
+				message: null,
+			}),
+		);
+		fs.writeFileSync(path.join(memberDir, "error.txt"), "ERROR: You've hit your usage limit.\n");
+
+		const r = spawnSync(
+			process.execPath,
+			[SCRIPT, "resume-member", "--job", jobDir, "--member", "correctness", "--prompt", "continue"],
+			{ stdio: "pipe" },
+		);
+		expect(r.status).toBe(1);
+		// "needs coverage hooks" here would mean job.ts did not pass them.
+		expect(r.stderr.toString()).toContain("member stalled");
+		const status = JSON.parse(fs.readFileSync(path.join(memberDir, "status.json"), "utf8"));
+		expect(status.state).toBe("stalled");
+		expect(status.message).toContain("usage limit");
+		expect(status.resume_count ?? 0).toBe(0);
+	});
+});
