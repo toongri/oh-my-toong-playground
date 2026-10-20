@@ -36,8 +36,13 @@ such as colors and faces. The theme structure of section 3 and the checks of sec
 
 `<skill-dir>` below means the directory that holds this file. The scripts are at `<skill-dir>/scripts/`.
 Long reference material lives in `<skill-dir>/references/`:
-[diagram-recipes.md](references/diagram-recipes.md) (per-type SVG recipes) and
-[data-driven-and-interaction.md](references/data-driven-and-interaction.md) (generated maps, scenario selectors).
+[page-anatomy.md](references/page-anatomy.md) (page skeletons by report type),
+[layout.md](references/layout.md) (page skeleton, phone strategy, card grids),
+[components.md](references/components.md) (HTML and CSS per component),
+[diagram-recipes.md](references/diagram-recipes.md) (per-type SVG recipes),
+[data-driven-and-interaction.md](references/data-driven-and-interaction.md) (generated maps, scenario selectors),
+[lint-checks.md](references/lint-checks.md) (check table and usual fixes),
+[anti-patterns.md](references/anti-patterns.md) (full anti-pattern table), and
 [diagram-classes.css](references/diagram-classes.css) (theme tokens and the `figure.diagram` SVG class palette, light and dark;
 paste it into the page `<style>` as the starting point for diagrams that use the shared class names).
 Two finished reports are in `<skill-dir>/exemplars/` (read `exemplars/README.md` first).
@@ -200,8 +205,9 @@ Rules:
   dash, or position, and say what each encoding means once, in the caption or a legend.
 - **Design the dark theme; do not invert.** Lighten the semantic hues until they read on the dark
   surface, darken their tinted backgrounds, and keep the accent legible on both grounds.
-- **Write the plan into the file:** 4 to 6 named color tokens, font roles, and a one-line layout
-  concept as a comment above `:root`.
+- **Write the plan into the file:** 4 to 6 core palette roles (ground, ink, accent, and the
+  semantic hues you use), font roles, and a one-line layout concept as a comment above `:root`. The other tokens
+  in the shipped block (surfaces, lines, `--ink-2`, `--ink-3`, the `-bg` tints) derive from those roles.
 
 **Contrast contract** (WCAG 2.x, measured against the surface the element actually sits on, in both themes):
 
@@ -266,7 +272,8 @@ middle-dot kicker of mood words (section 6).
   identifiers verbatim (`isBooted`, `HTTP 500`). No uppercase-and-tracked labels.
 - **Title.** The `<title>` names the thing in 2 to 4 words, the way a document is named. Use the name the
   source or the caller already gives it (an incident name, a feature name). No category label alone
-  ("보고서"), and no explainer after a colon or a dash ("결제 재시도: 설계 설명"). The explanation goes in the lede (lint: `title-name`).
+  ("보고서"). Lint flags a missing or empty title, an explainer after a colon or a dash ("결제 재시도: 설계 설명"),
+  and more than 6 words (`title-name`). The explanation goes in the lede.
 - **Page copy.** These rules cover the words the page adds: headings, labels, captions, hints, legends. They
   never license rewording text that the caller passes as source or requires verbatim.
   - Name things the way the reader knows them: a heading says "결제 알림 재시도" and keeps internal module
@@ -345,7 +352,7 @@ Use 2, 3, 4, or 6 items per row. The CSS and the five-item rule are in [referenc
 ## 6. Component vocabulary
 
 Use card styling (border, fill, radius) by role, to set off the element that needs it, not on every
-block. Radii stay at 6 to 10px. No shadows. Each component is the minimum CSS; extend it from the tokens.
+block. Card and box radii stay at 6 to 10px (pills are the one fully rounded exception). No shadows. Each component is the minimum CSS; extend it from the tokens.
 
 Components: masthead, pills, stat tiles (only when the numbers are the point), to-scale bar, row list, tables with pills, decision table, CSS timeline, numbered steps (only for a real sequence), known / unknown panels, callout (at most one per section), disclosure, code block, footer.
 
@@ -566,6 +573,9 @@ Top-line rules (full table with reasons: [references/anti-patterns.md](reference
 - Inline SVG with drawn edges for every graph (section 7.6); keep the SVG geometry on a phone.
 - Keep a source diagram as a figure (section 1); one form per relation (section 1).
 - Dates, voice, and notes come from the source only (section 13).
+- Give nodes treatment by role (focal, store, external, screen), not identical boxes for all.
+- Keep labels horizontal; no vertical `writing-mode` text.
+- Lay out a figure by hand on a grid; do not copy an automatic layout.
 
 ---
 
@@ -743,8 +753,14 @@ Check each frame for:
 
 - **Layout, CSS or tokens, an SVG (its text included), or a figure's geometry:** run a full round into a new
   directory. In testing, a geometry fix introduced a defect that only the next capture showed.
-- **Only HTML text outside any SVG** (wording, a caption, a number copied from the source): re-run lint, which
-  is cheap. A new capture of unchanged geometry finds nothing new, so skip it.
+- **An edit that cannot change any box's size** (replacing a word or number with one of similar length, or a
+  markup-only change such as `lang`, `id`, `class`, `aria-*`): re-run lint only. Write it into the latest round
+  directory, overwriting its `lint.json` (and its receipt when the caller uses `--receipt`), so the latest round
+  directory always holds the current receipt.
+- **Any edit that adds text, lengthens text, or adds or removes an element** inside a card, grid, flex row, table,
+  list, pill, masthead, or caption: run a full round into a new directory. Longer Korean text re-wraps and
+  changes box heights, and lint does not see uneven card heights, empty grid cells, a first frame that no longer
+  states the answer, or the 400 dark view.
 - **Stop** when the last look found nothing that needs a layout or style fix and the last lint run has no errors.
   If a lint error remains by design, name it and the reason in your report.
 
@@ -759,7 +775,7 @@ graph inside a `<div>` that is not a `<figure>`. Sections 13.1 and 13.2 and the 
 
 ## 15. What to report
 
-Return to the caller: the absolute path of the HTML file; the number of critique rounds and what each fixed; the
+Return to the caller: the absolute path of the HTML file; the number of critique rounds (capture rounds, section 14) and what each fixed; the
 final `summary` from `lint.sh` with any remaining errors and why they remain; the reconciliation of section 13.1
 (per kind: source count, count on the page, and each omission with its reason); whether `--source` was used; the
 receipt path when the caller required one (`--receipt`, section 14); which

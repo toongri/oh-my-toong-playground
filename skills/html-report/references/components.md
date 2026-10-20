@@ -6,7 +6,7 @@ Use card styling (border, fill, radius) by role, to set off the element that nee
 block. Radii stay at 6 to 10px. No shadows. Each component below is the minimum CSS; extend it from the tokens.
 
 **Masthead.** A kicker line (status pill, page type, and a source date with timezone when the source gives one), the `h1` name, a lede paragraph,
-and an optional stat strip.
+and, only for a page whose numbers are the point (an incident's impact), a stat strip.
 
 ```html
 <header class="mast">
@@ -31,7 +31,7 @@ Each kicker part is one fact in its own element, spaced by `gap`. Add a part onl
 ```
 
 **Stat tiles.** Use them only when the numbers are the point. Each label says what the number counts and
-its scope. Pick the column count from the item count (see above).
+its scope. Pick the column count from the item count ([card grids without orphans](layout.md#card-grids-without-orphans)).
 
 ```css
 .facts { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
@@ -99,7 +99,7 @@ heading ("확인됨", "확인 못 함"). List evidence on the left and inference
 「확인」에 둔 이유"). A tinted surface with a bold lead-in line. No colored side rail on a rounded card.
 
 ```css
-.note { background: var(--surface-2); border-radius: 8px; padding: 16px 20px; max-width: 820px; }
+.note { background: var(--surface-2); border-radius: 8px; padding: 16px 20px; max-width: 720px; }
 .note b { display: block; margin-bottom: 4px; }
 ```
 
