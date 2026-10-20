@@ -44,7 +44,7 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 
 - **4개 앵글로 분담** — `correctness`(정확성·공격 가능성, 구 line-scan·cross-file·security 흡수) · `regression`(회귀) · `cleanup`(정리와 가벼운 Test value 관점) · `requirement`(AC 매핑 또는 의도 추론, 구 coverage 흡수). 각 앵글은 하나의 finder job 안에서 병렬로 fan-out되는 별도 CLI 호출이며, 각자 독립적으로 candidate를 수집합니다 — 판정(CONFIRMED/PLAUSIBLE/REFUTED)은 하지 않고, code-review 자신의 검증 단계로 넘깁니다.
 - **중립 publisher** — 구조화된 publisher는 원본 `CodeReviewArtifact` JSON을 그대로 저장하고 transport receipt만 반환합니다. caller, ultragoal, priority·scope·수리·완료·예산·승인 정책을 알거나 결정하지 않으며, producer에 ultragoal 전용 동작을 추가하지 않습니다.
-- **오버사이즈 diff는 단일 패스 + 안내 문구** — `reviewableInsertionLines ≥ 2000` 또는 `reviewableFileCount ≥ 30`이면 청크로 쪼개는 대신 리포트 첫 줄에 "단일 패스로 리뷰했으며 이 정도 규모에서는 커버리지가 불완전할 수 있으니 리뷰를 더 작게 나누는 것을 고려하라"는 안내 한 줄만 덧붙입니다. 이 안내는 finding도 class도 게이트도 아니며 판정·순위·완료 여부에 영향을 주지 않습니다.
+- **diff 100% 완주** — 크기와 무관하게 앵글마다 finder 하나가 `diff-cursor.ts`로 diff 전체를 읽습니다. 컨덕터가 diff를 24,000바이트 이하 페이지로 고정하고, finder는 페이지마다 확인 코드(ack)와 메모를 남겨야 다음으로 넘어갑니다. 한 페이지라도 남으면 job은 `done`이 아니라 `awaiting_resume`이 되어 진척이 있는 동안 계속 재개되고, 진척 없는 재개가 3회 이어지면 페이지를 쪼개 다시 시도하며, 그래도 안 되면 `stalled`로 멈춥니다(`done`이 되지 않음). 컨덕터는 `diff-cursor.ts verify`가 0으로 끝나기 전에는 후보 검증으로 넘어가지 않습니다. `cleanup` finder는 적용되는 CLAUDE.md·AGENTS.md·규칙 파일마다 체크리스트 항목(준수·위반·해당 없음)을 채워야 하고 위반은 후보와 연결해야 하며, `requirement` finder는 계획의 명시적 결정 규칙을 AC처럼 매핑합니다. 규모에 따른 안내 문구는 더 이상 붙이지 않습니다.
 - **정적 검토 전용** — 파인더와 in-session fallback 모두 테스트·빌드·린터·설치·프로젝트 코드를 실행하지 않습니다. 후보는 diff, 소스 읽기, 검색으로만 뒷받침하며, 정적으로 판단할 수 없는 부분은 실행으로 해소하지 않고 불확실성 또는 커버리지 한계로 드러냅니다. job의 lifecycle 명령(`job.ts`의 `start`·`collect`·`resume-member`·`results`·`stop`·`clean`, `usage-summary.ts`)은 계속 사용할 수 있습니다.
 - **파인더가 모두 불가능한 경우**(설정 없음·CLI 미설치·타임아웃) in-session fallback으로 code-review 자신이 직접 파인더 역할을 수행합니다. fallback에도 정적 검토 제한은 그대로 적용됩니다.
 - `requirement`는 제공된 AC를 매핑하고, AC가 없으면 diff에서 의도를 추론하는 역할만 맡습니다.
@@ -181,7 +181,7 @@ raw API/CLI 출력과 baseline 로그는 접이식 감사 영역에만 포함하
   |-- 코드 변경을 사람에게 이해시켜야 함 -> explain-diff (그 다음 code-review)
 
 code-review를 실행하면:
-  자체 다중 AI 각도-파인더 job(단일 job, 청킹 없음)을 직접 dispatch합니다.
+  자체 다중 AI 각도-파인더 job(단일 job, 청킹 없음, 각 파인더가 diff 100%를 읽음)을 직접 dispatch합니다.
   별도로 조율 스킬을 먼저 호출할 필요가 없습니다.
 ```
 

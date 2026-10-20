@@ -44,7 +44,7 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 
 - **Split across 4 angles** — `correctness` (correctness + exploitability; absorbed former line-scan + cross-file + security) · `regression` · `cleanup` (cleanup plus a light-touch Test value lens) · `requirement` (AC mapping or intent inference; absorbed former coverage). Each angle is a separate CLI invocation fanned out in parallel inside the one finder job, and each collects candidates independently — none assigns a verdict (CONFIRMED/PLAUSIBLE/REFUTED); that is left to code-review's own verification step.
 - **Neutral publisher** — the structured publisher stores the original `CodeReviewArtifact` JSON unchanged and returns only a transport receipt. It knows and decides nothing about the caller, ultragoal, priority, scope, repair, completion, budget, or approval policy; producer behavior must not become ultragoal-aware.
-- **Oversized diffs get a single pass plus a notice, not chunking** — when `reviewableInsertionLines ≥ 2000` or `reviewableFileCount ≥ 30`, the report gets exactly one prepended line: "this change was reviewed in a single pass; coverage may be incomplete for a change this size — consider splitting it into smaller reviews." This is a plain notice, not a finding, a class, or a gate — it does not affect ranking, verdicts, or completion.
+- **100% diff coverage** — regardless of size, each angle's finder reads the whole diff through `diff-cursor.ts`. The conductor freezes the diff into pages of at most 24,000 bytes, and a finder must record an acknowledgement code (ack) and a note per page before it can move on. While any page is unread, the job is `awaiting_resume`, not `done`; it keeps resuming as long as pages advance, re-splits the page after 3 resumes without progress, and then stops as `stalled` (never `done`). The conductor does not start candidate verification until `diff-cursor.ts verify` exits 0. The `cleanup` finder must fill a checklist item (준수, 위반, or 해당 없음) for every applicable CLAUDE.md, AGENTS.md, or rule file and tie each 위반 to a candidate; the `requirement` finder maps the plan's explicit decision rules like acceptance criteria. No scale-based notice is added any more.
 - **Static review only**: finders and the in-session fallback do not run tests, builds, linters, installers/installs, or project code. Candidates are grounded with the diff, source reads, and searches only; when static evidence cannot resolve something, the review surfaces uncertainty or a coverage limitation instead of executing it. The job's lifecycle commands (`job.ts` `start`, `collect`, `resume-member`, `results`, `stop`, `clean`, plus `usage-summary.ts`) remain available.
 - **If all finders are unavailable** (no config, CLI not installed, timeout), code-review itself falls back to in-session finder mode directly. The static-review restriction still applies to the fallback.
 - `requirement` only maps supplied acceptance criteria (ACs), or infers intent from the diff when ACs are absent.
@@ -181,7 +181,7 @@ Need to understand it first?
   |-- A human must understand the change -> explain-diff (then code-review)
 
 When you run code-review:
-  It dispatches its own multi-AI angle-finder job directly (single job, no chunking).
+  It dispatches its own multi-AI angle-finder job directly (single job, no chunking, every finder reads 100% of the diff).
   There is no separate orchestration skill to invoke first.
 ```
 
