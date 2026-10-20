@@ -164,6 +164,20 @@ describe("Codex rollout 추출", () => {
 		]);
 		expect(log.editedFiles).toEqual(["/repo/a.ts"]);
 	});
+
+	test("처리 규칙이 없는 항목 종류도 한 줄로 남기고, 내부 사고와 압축 표시만 버린다", () => {
+		const item = (payload: Record<string, unknown>) => ({ type: "event_msg", payload: { type: "item_completed", item: payload } });
+		const records = [
+			item({ type: "ImageView", id: "exec-1", path: "file:///tmp/frame-p01.png" }),
+			item({ type: "FutureTool", id: "x-2", target: "a".repeat(300), image_url: "data:image/png;base64,AAAA", options: { mode: "fast" } }),
+			item({ type: "Reasoning", id: "r-1", summary: ["생각"] }),
+			item({ type: "ContextCompaction", id: "c-1" }),
+		];
+		expect(extractCodex(records).lines).toEqual([
+			"[tool ImageView] path=file:///tmp/frame-p01.png",
+			`[tool FutureTool] target=${"a".repeat(200)} options={"mode":"fast"}`,
+		]);
+	});
 });
 
 describe("검증기", () => {
