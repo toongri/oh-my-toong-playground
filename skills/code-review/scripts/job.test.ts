@@ -6409,6 +6409,10 @@ describe("start --ledger-root: coverage-gated job.json", () => {
 		expect(out).toContain("--retry-stalled");
 		expect(out).toContain("no resume cap while pagesAcked grows");
 		expect(out).toContain("Nothing resumes automatically");
+		expect(out).toContain("checklist");
+		expect(out).toContain("resume-member refuses every resume, --retry-stalled included");
+		expect(out).toContain("--retry-stalled on a stalled member starts a fresh initial turn");
+		expect(out).not.toContain("auth expiry");
 	});
 });
 

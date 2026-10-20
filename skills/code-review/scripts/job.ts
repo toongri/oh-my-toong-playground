@@ -495,18 +495,22 @@ Notes:
     awaiting_resume member, then collect again. Nothing resumes automatically.
     A job.json without coverage (created before --ledger-root was required): at most 3 resumes
     per member; error/non_retryable are not resumable.
-    With --ledger-root: no resume cap while pagesAcked grows between resumes; timed_out and error
-    turns resume from the ledger. When 3 turns in a row end without progress (the initial turn
-    counts), that 3rd resume-member first re-splits the issued page to half its size (min 4096
-    bytes), or else spends one plain resume.
-    It then marks the member stalled (exit 1, reason in status.json message) when progress still
-    does not come back, when the turn failed outside the member (missing CLI, non_retryable such
-    as auth expiry or quota/rate limit), or when no session id was recorded. A stalled member is
-    never done: tell the user, and rerun with --retry-stalled only after the cause is fixed.
-    --retry-stalled on a member with no session id starts a fresh initial turn on the same ledger.
+    With --ledger-root: no resume cap while pagesAcked grows between resumes (a checklist item
+    added or given a final verdict, and a finished ledger, count as progress too); timed_out and
+    error turns resume from the ledger. When 3 turns in a row end without progress (the initial
+    turn counts), that 3rd resume-member applies one remedy: it re-splits the issued page to half
+    its size (min 4096 bytes), or else spends one plain resume.
+    The next resume-member without progress marks the member stalled (exit 1, reason in
+    status.json message); so does a turn that failed outside the member (missing CLI,
+    non_retryable, with the recorded detail) or a missing session id. A stalled member is never
+    done: tell the user, and rerun with --retry-stalled only after the cause is fixed.
+    --retry-stalled on a stalled member starts a fresh initial turn on the same ledger (the old
+    session is not reused); on any other member it is a plain resume.
+    Past the ${COVERAGE_JOB_WALL_CAP_SEC / 3600}-hour wall cap, resume-member refuses every resume, --retry-stalled included.
   - collect counts the job deadline (settings timeout) from the latest page any member acknowledged,
     so a member still making progress through resumed turns is not cut; heartbeats and resumes
-    without progress do not extend it, and it never passes ${COVERAGE_JOB_WALL_CAP_SEC / 3600} hours after job start
+    without progress do not extend it, and it never passes ${COVERAGE_JOB_WALL_CAP_SEC / 3600} hours after job start;
+    past that wall cap every collect return (awaiting_resume and done included) carries stop_and_degrade
   - reap kills orphaned job process groups (SIGTERM then SIGKILL); all its output goes to
     stderr — stdout is always empty, since a SessionStart hook calls it and must not vary
   - doctor reports orphan counts on stdout without killing anything (diagnostic only)

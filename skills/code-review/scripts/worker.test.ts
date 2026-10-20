@@ -673,6 +673,22 @@ describe("diff cursor coverage helpers", () => {
 		});
 	});
 
+	it("readCoverageProgress는 체크리스트 항목 수와 최종 판정이 붙은 항목 수를 원장에서 읽는다", () => {
+		setup();
+		initMemberLedger(coverage, "cleanup");
+		const ledger = memberLedgerDir(coverage, "cleanup");
+		expect(readCoverageProgress(ledger)).toMatchObject({ checklistItems: 0, checklistVerdicts: 0 });
+
+		const ledgerFile = path.join(ledger, "ledger.json");
+		const raw = JSON.parse(fs.readFileSync(ledgerFile, "utf8"));
+		const item = (id: string, verdict: string | null) => ({
+			id, source: "CLAUDE.md:1", rule: "r", verdict, evidence: [], updatedAt: "2026-10-20T00:00:00.000Z",
+		});
+		raw.checklist = [item("r001", null), item("r002", "위반"), item("r003", "해당 없음"), item("r004", "준수")];
+		fs.writeFileSync(ledgerFile, JSON.stringify(raw));
+		expect(readCoverageProgress(ledger)).toMatchObject({ checklistItems: 4, checklistVerdicts: 3 });
+	});
+
 	it("job.json planSha가 plan.json과 다르면 init·게이트·재개 진행 조회 모두 이유와 함께 거부한다", () => {
 		setup();
 		initMemberLedger(coverage, "correctness");
@@ -770,9 +786,10 @@ describe("main() 배선: coverage job", () => {
 			expect(status.workerEnv).toMatchObject({ OMT_LEDGER_WORKER: "1", OMT_DIFF_CURSOR_LEDGER: ledger });
 			// Progress baseline recorded at the start of the initial turn (lib/generic-job resume policy).
 			expect(JSON.parse(fs.readFileSync(path.join(memberDir, "coverage-resume.json"), "utf8"))).toEqual({
-				lastPagesAcked: 0,
+				lastProgress: { pagesAcked: 0, checklistItems: 0, checklistVerdicts: 0, finished: false },
 				stalledResumes: 0,
 				plainRemedyUsed: false,
+				resplitUsed: false,
 			});
 		},
 		30000,

@@ -5637,7 +5637,11 @@ describe("cmdResumeMember — coverage-gated 재개 정책", () => {
 		fs.mkdirSync(memberDir, { recursive: true });
 		fs.writeFileSync(
 			path.join(jobDir, "job.json"),
-			JSON.stringify({ id: "chunk-review-x", settings: { timeoutSec: 60, ...(coverageGated ? { coverageGated: true } : {}) } }),
+			JSON.stringify({
+				id: "chunk-review-x",
+				settings: { timeoutSec: 60, ...(coverageGated ? { coverageGated: true } : {}) },
+				members: [{ name: "correctness" }],
+			}),
 		);
 	}
 
@@ -5679,10 +5683,15 @@ describe("cmdResumeMember — coverage-gated 재개 정책", () => {
 	const base: CoverageProgress = {
 		pagesAcked: 0,
 		pagesTotal: 40,
+		checklistItems: 0,
+		checklistVerdicts: 0,
 		finished: false,
 		issuedPage: null,
 		lastProgressAt: null,
 	};
+
+	/** The progress mark the worker records when a member's initial turn starts. */
+	const mark = (pagesAcked: number) => ({ ...base, pagesAcked });
 
 	test("진행이 늘어나는 동안에는 3회를 넘어 계속 재개한다", async () => {
 		writeJob(true);
@@ -5699,7 +5708,7 @@ describe("cmdResumeMember — coverage-gated 재개 정책", () => {
 	test("진행 없는 재개가 3회 연속이면 발급된 페이지를 절반 크기로 재분할한 뒤 재개한다", async () => {
 		writeJob(true);
 		// The worker records the baseline when the job's initial turn starts.
-		recordCoverageResumeBaseline(memberDir, 7);
+		recordCoverageResumeBaseline(memberDir, mark(7));
 		writeStatus({ state: "awaiting_resume", resume_count: 0 });
 		const { hooks, resplits } = makeHooks({
 			...base,
@@ -5716,7 +5725,7 @@ describe("cmdResumeMember — coverage-gated 재개 정책", () => {
 
 	test("기준선은 job 시작 시점이라 첫 턴이 진행했으면 첫 재개는 진행으로 센다", async () => {
 		writeJob(true);
-		recordCoverageResumeBaseline(memberDir, 0);
+		recordCoverageResumeBaseline(memberDir, mark(0));
 		writeStatus({ state: "awaiting_resume" });
 		const { state, hooks, resplits } = makeHooks(base);
 		state.progress.pagesAcked = 4; // the initial turn acknowledged 4 pages
@@ -5724,16 +5733,17 @@ describe("cmdResumeMember — coverage-gated 재개 정책", () => {
 		for (let i = 0; i < COVERAGE_STALL_LIMIT - 1; i++) await resume(hooks);
 		expect(resplits).toEqual([]);
 		expect(JSON.parse(fs.readFileSync(path.join(memberDir, "coverage-resume.json"), "utf8"))).toEqual({
-			lastPagesAcked: 4,
+			lastProgress: { pagesAcked: 4, checklistItems: 0, checklistVerdicts: 0, finished: false },
 			stalledResumes: COVERAGE_STALL_LIMIT - 1,
 			plainRemedyUsed: false,
+			resplitUsed: false,
 		});
 	});
 
 	test("재분할 크기는 4096바이트 아래로 내려가지 않는다", async () => {
 		writeJob(true);
 		writeStatus({ state: "awaiting_resume" });
-		recordCoverageResumeBaseline(memberDir, 0);
+		recordCoverageResumeBaseline(memberDir, mark(0));
 		const { hooks, resplits } = makeHooks({ ...base, issuedPage: { id: "p0001.1", bytes: 6000 } });
 		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
 		expect(resplits[0]?.pageBytes).toBe(4096);
@@ -5742,7 +5752,7 @@ describe("cmdResumeMember — coverage-gated 재개 정책", () => {
 	test("재분할할 수 없으면 평범한 재개를 한 번 쓰고, 그래도 진행이 없으면 stalled로 멈춘다", async () => {
 		writeJob(true);
 		writeStatus({ state: "awaiting_resume" });
-		recordCoverageResumeBaseline(memberDir, 2);
+		recordCoverageResumeBaseline(memberDir, mark(2));
 		const { hooks, resplits } = makeHooks(
 			{ ...base, pagesAcked: 2, issuedPage: { id: "p0003", bytes: 3000 } },
 			false,
@@ -5761,7 +5771,7 @@ describe("cmdResumeMember — coverage-gated 재개 정책", () => {
 	test("발급된 페이지가 없으면 평범한 재개 한 번 후 진행이 없을 때 stalled가 된다", async () => {
 		writeJob(true);
 		writeStatus({ state: "awaiting_resume" });
-		recordCoverageResumeBaseline(memberDir, 0);
+		recordCoverageResumeBaseline(memberDir, mark(0));
 		const { hooks, resplits } = makeHooks(base);
 		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
 		await expect(resume(hooks)).rejects.toThrow("plain resume from the ledger did not help");
@@ -5791,14 +5801,273 @@ describe("cmdResumeMember — coverage-gated 재개 정책", () => {
 		expect(String(status.message)).toContain("401 Unauthorized");
 	});
 
-	test("missing_cli는 stalled가 되고 --retry-stalled로 원인 해결 뒤 다시 재개할 수 있다", async () => {
+	/** spawnFn stub recording the worker argv of every dispatch. */
+	function recordingSpawn() {
+		const calls: string[][] = [];
+		const spawnFn = ((_command: string, args: string[]) => {
+			calls.push(args);
+			return { unref: () => {} } as unknown as ReturnType<typeof spawn>;
+		}) as unknown as typeof spawn;
+		return { calls, spawnFn };
+	}
+
+	function readRecord(): Record<string, unknown> {
+		return JSON.parse(fs.readFileSync(path.join(memberDir, "coverage-resume.json"), "utf8"));
+	}
+
+	test("missing_cli는 stalled가 되고, 세션 ID가 있어도 --retry-stalled는 같은 원장에 새 초기 턴을 띄운다", async () => {
 		writeJob(true);
 		writeStatus({ state: "missing_cli", message: "spawn codex ENOENT" });
 		const { hooks } = makeHooks(base);
 		await expect(resume(hooks)).rejects.toThrow("binary was not found");
 		expect(readStatus().state).toBe("stalled");
-		await resume(hooks, { retryStalled: true });
+		expect(readStatus().sessionID).toBe("sess-1");
+
+		const { calls, spawnFn } = recordingSpawn();
+		const out: string[] = [];
+		const origWrite = process.stdout.write.bind(process.stdout);
+		process.stdout.write = ((chunk: string) => {
+			out.push(String(chunk));
+			return true;
+		}) as typeof process.stdout.write;
+		try {
+			await cmdResumeMember(jobDir, "correctness", "continue", config, {
+				driverFactory: () => driver,
+				coverage: hooks,
+				retryStalled: true,
+				workerPath: "/fake/worker.ts",
+				spawnFn,
+			});
+		} finally {
+			process.stdout.write = origWrite;
+		}
+		// A degenerate session is not reused: no --session/--prompt, so the worker runs an initial turn.
+		expect(calls.length).toBe(1);
+		expect(calls[0]).not.toContain("--session");
+		expect(calls[0]).not.toContain("--prompt");
+		expect(JSON.parse(out.join("")).coverage.kind).toBe("fresh_turn");
+		expect(readStatus().state).toBe("queued");
+		expect(readRecord()).toEqual({ lastProgress: null, stalledResumes: 0, plainRemedyUsed: false, resplitUsed: false });
+	});
+
+	test("재분할은 한 번만: 진행 없는 3회 → 재분할 1회 → 다음 재개도 진행이 없으면 stalled", async () => {
+		writeJob(true);
+		recordCoverageResumeBaseline(memberDir, mark(7));
+		writeStatus({ state: "awaiting_resume", resume_count: 0 });
+		const { hooks, resplits } = makeHooks({ ...base, pagesAcked: 7, issuedPage: { id: "p0008", bytes: 24000 } });
+		// Resumes 1-3 judge the initial turn and the next two turns: no progress in any of them.
+		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		expect(resplits.length).toBe(1);
+		expect(readRecord()).toMatchObject({ stalledResumes: 3, resplitUsed: true, plainRemedyUsed: false });
+		// Resume 4 judges the turn that ran after the resplit: still no progress → stalled, no second resplit.
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+		expect(resplits.length).toBe(1);
+		expect(readStatus().state).toBe("stalled");
+		expect(String(readStatus().message)).toContain("7/40 pages");
+		expect(String(readStatus().message)).toContain("resplitting the issued page did not help");
+		expect(readStatus().resume_count).toBe(3);
+	});
+
+	test("진행이 오면 재분할 사용 표시까지 모두 초기화되어 다음 정체에 다시 재분할할 수 있다", async () => {
+		writeJob(true);
+		recordCoverageResumeBaseline(memberDir, mark(7));
+		writeStatus({ state: "awaiting_resume", resume_count: 0 });
+		const { state, hooks, resplits } = makeHooks({ ...base, pagesAcked: 7, issuedPage: { id: "p0008", bytes: 24000 } });
+		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		expect(resplits.length).toBe(1);
+		state.progress = { ...state.progress, pagesAcked: 8, issuedPage: { id: "p0009", bytes: 24000 } };
+		await resume(hooks);
+		expect(readRecord()).toEqual({
+			lastProgress: { pagesAcked: 8, checklistItems: 0, checklistVerdicts: 0, finished: false },
+			stalledResumes: 0,
+			plainRemedyUsed: false,
+			resplitUsed: false,
+		});
+		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		expect(resplits.map((r) => r.pageId)).toEqual(["p0008", "p0009"]);
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+	});
+
+	test("cleanup 체크리스트 작업(항목 추가·최종 판정·finish)은 진행으로 센다", async () => {
+		writeJob(true);
+		recordCoverageResumeBaseline(memberDir, { ...base, pagesAcked: 40 });
+		writeStatus({ state: "awaiting_resume", resume_count: 0 });
+		const { state, hooks, resplits } = makeHooks({ ...base, pagesAcked: 40 });
+		// Each turn after the walk adds checklist items, then gives them verdicts: never a stall.
+		for (let i = 1; i <= COVERAGE_STALL_LIMIT + 1; i++) {
+			state.progress.checklistItems = i * 2;
+			await resume(hooks);
+		}
+		for (let i = 1; i <= COVERAGE_STALL_LIMIT + 1; i++) {
+			state.progress.checklistVerdicts = i;
+			await resume(hooks);
+		}
+		expect(readRecord()).toMatchObject({ stalledResumes: 0 });
+		// Two turns without checklist change, then finishedAt is set: progress resets the count.
+		await resume(hooks);
+		await resume(hooks);
+		expect(readRecord()).toMatchObject({ stalledResumes: 2 });
+		state.progress.finished = true;
+		await resume(hooks);
+		expect(readRecord()).toMatchObject({ stalledResumes: 0, lastProgress: { finished: true } });
+		expect(resplits).toEqual([]);
 		expect(readStatus().state).toBe("awaiting_resume");
+	});
+
+	test("체크리스트 판정 수가 그대로면(항목 내용만 바뀜) 진행이 아니다", async () => {
+		writeJob(true);
+		recordCoverageResumeBaseline(memberDir, { ...base, pagesAcked: 40, checklistItems: 3, checklistVerdicts: 1 });
+		writeStatus({ state: "awaiting_resume" });
+		const { hooks } = makeHooks({ ...base, pagesAcked: 40, checklistItems: 3, checklistVerdicts: 1 });
+		await resume(hooks);
+		expect(readRecord()).toMatchObject({ stalledResumes: 1 });
+	});
+
+	test("stalled가 아닌 멤버의 --retry-stalled는 평범한 재개로 다뤄 카운터를 초기화하지 않는다", async () => {
+		writeJob(true);
+		recordCoverageResumeBaseline(memberDir, mark(0));
+		writeStatus({ state: "awaiting_resume" });
+		const { hooks } = makeHooks(base);
+		await resume(hooks);
+		await resume(hooks, { retryStalled: true });
+		expect(readRecord()).toMatchObject({ stalledResumes: 2, lastProgress: { pagesAcked: 0 } });
+		expect(readStatus().state).toBe("awaiting_resume");
+	});
+
+	test("stalled가 아닌 non_retryable 멤버의 --retry-stalled는 외부 원인 검사를 건너뛰지 않는다", async () => {
+		writeJob(true);
+		writeStatus({ state: "non_retryable", message: "turn failed" });
+		const { hooks } = makeHooks(base);
+		const { calls, spawnFn } = recordingSpawn();
+		await expect(
+			resume(hooks, { retryStalled: true, workerPath: "/fake/worker.ts", spawnFn }),
+		).rejects.toThrow("member stalled");
+		expect(calls).toEqual([]);
+		expect(readStatus().state).toBe("stalled");
+		expect(readStatus().resume_count ?? 0).toBe(0);
+	});
+
+	test("non_retryable 정지 사유는 원인을 추측하지 않고 기록된 원인을 그대로 적는다", async () => {
+		writeJob(true);
+		writeStatus({ state: "non_retryable", message: "codex exited 1" });
+		fs.writeFileSync(path.join(memberDir, "error.txt"), "ERROR: stream disconnected before completion\n");
+		const { hooks } = makeHooks(base);
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+		const message = String(readStatus().message);
+		expect(message).toBe("non-retryable failure: codex exited 1 / ERROR: stream disconnected before completion");
+		expect(message).not.toContain("auth expiry");
+		expect(message).not.toContain("quota");
+	});
+
+	test("기록된 원인이 없는 non_retryable은 중립 문구로 멈춘다", async () => {
+		writeJob(true);
+		writeStatus({ state: "non_retryable", message: null });
+		const { hooks } = makeHooks(base);
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+		expect(String(readStatus().message)).toBe("non-retryable failure: no detail recorded");
+	});
+
+	describe("6시간 벽시계 상한", () => {
+		function writeCappedJob(ageSec: number) {
+			fs.mkdirSync(memberDir, { recursive: true });
+			fs.writeFileSync(
+				path.join(jobDir, "job.json"),
+				JSON.stringify({
+					id: "chunk-review-x",
+					createdAt: new Date(Date.now() - ageSec * 1000).toISOString(),
+					settings: { timeoutSec: 60, coverageGated: true },
+					members: [{ name: "correctness" }],
+				}),
+			);
+		}
+
+		test("상한을 넘긴 잡의 resume-member는 디스패치하지 않고 거부하며 상태를 바꾸지 않는다", async () => {
+			writeCappedJob(COVERAGE_JOB_WALL_CAP_SEC + 60);
+			recordCoverageResumeBaseline(memberDir, mark(0));
+			writeStatus({ state: "awaiting_resume", resume_count: 1 });
+			const { state, hooks } = makeHooks(base);
+			state.progress.pagesAcked = 5; // progress does not lift the cap
+			const { calls, spawnFn } = recordingSpawn();
+			await expect(resume(hooks, { workerPath: "/fake/worker.ts", spawnFn })).rejects.toThrow(
+				"job exceeded its 6h wall cap",
+			);
+			expect(calls).toEqual([]);
+			expect(readStatus()).toMatchObject({ state: "awaiting_resume", resume_count: 1 });
+			expect(readRecord()).toMatchObject({ lastProgress: { pagesAcked: 0 }, stalledResumes: 0 });
+		});
+
+		test("--retry-stalled도 상한을 넘지 못한다", async () => {
+			writeCappedJob(COVERAGE_JOB_WALL_CAP_SEC + 60);
+			writeStatus({ state: "stalled", message: "no session to resume" });
+			const { hooks } = makeHooks(base);
+			const { calls, spawnFn } = recordingSpawn();
+			await expect(
+				resume(hooks, { retryStalled: true, workerPath: "/fake/worker.ts", spawnFn }),
+			).rejects.toThrow("job exceeded its 6h wall cap");
+			expect(calls).toEqual([]);
+			expect(readStatus().state).toBe("stalled");
+		});
+
+		test("상한 전이면 평소대로 재개한다", async () => {
+			writeCappedJob(COVERAGE_JOB_WALL_CAP_SEC - 600);
+			writeStatus({ state: "awaiting_resume" });
+			const { hooks } = makeHooks(base);
+			await resume(hooks);
+			expect(readStatus().resume_count).toBe(1);
+		});
+
+		async function collectOnce(): Promise<Record<string, unknown>> {
+			const out: string[] = [];
+			const origWrite = process.stdout.write.bind(process.stdout);
+			process.stdout.write = ((chunk: string) => {
+				out.push(String(chunk));
+				return true;
+			}) as typeof process.stdout.write;
+			try {
+				await cmdCollect({ "timeout-ms": 1 }, jobDir, config);
+			} finally {
+				process.stdout.write = origWrite;
+			}
+			return JSON.parse(out.join(""));
+		}
+
+		test("상한을 넘긴 잡의 collect는 awaiting_resume·done 조기 반환에도 stop_and_degrade를 보고한다", async () => {
+			writeCappedJob(COVERAGE_JOB_WALL_CAP_SEC + 60);
+			writeStatus({ state: "awaiting_resume" });
+			const parked = await collectOnce();
+			expect(parked.overallState).toBe("awaiting_resume");
+			expect(parked.nextAction).toBe("stop_and_degrade");
+			expect(parked.deadlineSec).toBe(COVERAGE_JOB_WALL_CAP_SEC);
+			expect(Number(parked.elapsedSec)).toBeGreaterThanOrEqual(COVERAGE_JOB_WALL_CAP_SEC + 60);
+			expect(String(parked.note)).toContain("6h wall cap");
+			expect(Array.isArray(parked.members)).toBe(true);
+
+			writeStatus({ state: "done" });
+			const done = await collectOnce();
+			expect(done.overallState).toBe("done");
+			expect(done.nextAction).toBe("stop_and_degrade");
+
+			writeStatus({ state: "running" });
+			const running = await collectOnce();
+			expect(running.overallState).toBe("running");
+			expect(running.nextAction).toBe("stop_and_degrade");
+		});
+
+		test("상한 전이거나 coverage-gated가 아니면 조기 반환 출력은 그대로다", async () => {
+			writeCappedJob(COVERAGE_JOB_WALL_CAP_SEC - 600);
+			writeStatus({ state: "awaiting_resume" });
+			expect((await collectOnce()).nextAction).toBeUndefined();
+
+			fs.writeFileSync(
+				path.join(jobDir, "job.json"),
+				JSON.stringify({
+					id: "council-x",
+					createdAt: new Date(Date.now() - (COVERAGE_JOB_WALL_CAP_SEC + 60) * 1000).toISOString(),
+					settings: { timeoutSec: 60 },
+				}),
+			);
+			expect((await collectOnce()).nextAction).toBeUndefined();
+		});
 	});
 
 	test("세션 ID가 없으면 stalled가 된다 (done이 아님)", async () => {
@@ -5860,9 +6129,10 @@ describe("cmdResumeMember — coverage-gated 재개 정책", () => {
 		expect(readStatus().state).toBe("queued");
 		// The stall count starts over; the fresh turn's worker records the new baseline.
 		expect(JSON.parse(fs.readFileSync(path.join(memberDir, "coverage-resume.json"), "utf8"))).toEqual({
-			lastPagesAcked: null,
+			lastProgress: null,
 			stalledResumes: 0,
 			plainRemedyUsed: false,
+			resplitUsed: false,
 		});
 	});
 
@@ -5993,7 +6263,7 @@ describe("collect 데드라인 — coverage-gated 잡", () => {
 			const hooks: CoverageHooks = {
 				readProgress: (member) => {
 					if (!(member in progressAt)) throw new Error(`no ledger for ${member}`);
-					return { pagesAcked: 1, pagesTotal: 9, finished: false, issuedPage: null, lastProgressAt: progressAt[member] };
+					return { pagesAcked: 1, pagesTotal: 9, checklistItems: 0, checklistVerdicts: 0, finished: false, issuedPage: null, lastProgressAt: progressAt[member] };
 				},
 				resplit: () => ({ ok: false, message: "unused" }),
 			};

@@ -222,7 +222,7 @@ function numberField(record: Record<string, unknown>, key: string): number {
 	return v;
 }
 
-/** Coverage counts plus the issued-but-not-done page and its size, read from the member's ledger. */
+/** Coverage counts (pages, checklist) plus the issued-but-not-done page and its size, read from the member's ledger. */
 export function readCoverageProgress(ledgerDir: string): CoverageProgress {
 	const statusJson: unknown = JSON.parse(runCursor(ledgerDir, ["status", "--json"]));
 	if (typeof statusJson !== "object" || statusJson === null || Array.isArray(statusJson))
@@ -244,6 +244,10 @@ export function readCoverageProgress(ledgerDir: string): CoverageProgress {
 		if (Number.isFinite(at) && (lastProgressAt === null || at > lastProgressAt)) lastProgressAt = at;
 	}
 
+	const checklist: { verdict?: unknown }[] = Array.isArray(ledger?.checklist) ? ledger.checklist : [];
+	const checklistItems = checklist.length;
+	const checklistVerdicts = checklist.filter((item) => typeof item?.verdict === "string").length;
+
 	let issuedPage: CoverageProgress["issuedPage"] = null;
 	if (currentPage !== null) {
 		if (ledger?.pages?.[currentPage]?.state === "issued") {
@@ -255,7 +259,7 @@ export function readCoverageProgress(ledgerDir: string): CoverageProgress {
 			if (typeof bytes === "number") issuedPage = { id: currentPage, bytes };
 		}
 	}
-	return { pagesAcked, pagesTotal, finished, issuedPage, lastProgressAt };
+	return { pagesAcked, pagesTotal, checklistItems, checklistVerdicts, finished, issuedPage, lastProgressAt };
 }
 
 /**
@@ -460,7 +464,7 @@ async function main() {
 	if (coverage && ledgerDir && !isResume) {
 		try {
 			logInfo(initMemberLedger(coverage, member).trim());
-			recordCoverageResumeBaseline(memberDir, readCoverageProgress(ledgerDir).pagesAcked);
+			recordCoverageResumeBaseline(memberDir, readCoverageProgress(ledgerDir));
 		} catch (error: unknown) {
 			const message = `coverage ledger init failed: ${error instanceof Error ? error.message : String(error)}`;
 			logError(message);
