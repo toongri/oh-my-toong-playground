@@ -8,9 +8,12 @@
 #   <name>-<width>-<theme>-fig<N>.png              each <figure> scrolled to the top of the viewport
 #   <name>-400-<theme>-fig<N>-end.png              the same figure with its sideways scroller at the far end (400px only)
 # and prints, per configuration, document scrollWidth vs innerWidth (the page must never be wider),
-# then one line "page errors <width> <theme>: <N>" or "page errors <width> <theme>: <N> - <first message>".
+# then one line "page errors <width> <theme>: <N>" or "page errors <width> <theme>: <N> - <first message>",
+# or "page errors <width> <theme>: unknown (error buffer full)" when agent-browser's 1000-entry error buffer
+# is full (later errors cannot be counted), or "page errors <width> <theme>: not checked (<reason>)".
 # N counts uncaught JavaScript exceptions/script errors plus console messages of level error raised
-# by that configuration's load. The line is informational: the exit code does not change. Needs jq.
+# by that configuration's load and scrolling (printed once its frames and figures are captured).
+# The line is informational: the exit code does not change. Needs jq.
 #   --state    JavaScript evaluated after each load, to capture an interaction state (e.g. a selected tab)
 #   --offline  block the network first, to see the page in its fallback fonts
 set -euo pipefail
@@ -37,21 +40,35 @@ URL="file://$(printf '%s' "$ABS" | sed 's/%/%25/g; s/ /%20/g; s/#/%23/g; s/?/%3F
 NAME=$(basename "$HTML" .html)
 SESSION="hr-capture-$$"
 ab() { agent-browser --session "$SESSION" "$@"; }
-trap 'ab close >/dev/null 2>&1 || true' EXIT
 
 js() { printf '%s' "$1" | ab eval --stdin; }   # prints the evaluated value
 settle='(async () => { await document.fonts.ready; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); const a = document.getAnimations().filter(x => x.effect && x.effect.getTiming().iterations !== Infinity); await Promise.race([Promise.all(a.map(x => x.finished.catch(() => {}))), new Promise(r => setTimeout(r, 3000))]); return 1; })()'
 
-PE_SEEN=0   # agent-browser 'errors --clear' does not clear the page-error buffer, so count past what was already seen
-page_errors() { # <width> <theme>
+PE_CAP=1000  # agent-browser keeps at most this many page errors; 'errors --clear' does not empty the buffer
+PE_TMP=$(mktemp -d)
+trap 'rm -rf "$PE_TMP"; ab close >/dev/null 2>&1 || true' EXIT
+PE_START=""   # page-error buffer length right before the current configuration's open
+pe_mark() { # records the buffer length; never fails. JSON goes through files, never argv (it can be megabytes).
+  PE_START=""
+  command -v jq >/dev/null 2>&1 || return 0
+  ab errors --json >"$PE_TMP/mark.json" 2>/dev/null || return 0
+  PE_START=$(jq -r '[.data.errors[]?] | length' "$PE_TMP/mark.json" 2>/dev/null) || PE_START=""
+  return 0
+}
+page_errors() { # <width> <theme>; call after the configuration's scrolling and capture
   command -v jq >/dev/null 2>&1 || { echo "page errors $1 $2: not checked (jq not found)"; return 0; }
-  local pe ce n first
-  pe=$(ab errors --json 2>/dev/null | jq -c '[.data.errors[]?.text]' 2>/dev/null) || pe='[]'
-  ce=$(ab console --json 2>/dev/null | jq -c '[.data.messages[]? | select(.type == "error") | .text]' 2>/dev/null) || ce='[]'
+  [ -n "$PE_START" ] || { echo "page errors $1 $2: not checked (could not read the error buffer)"; return 0; }
+  local total n first
+  ab errors --json >"$PE_TMP/pe.json" 2>/dev/null || { echo "page errors $1 $2: not checked (errors command failed)"; return 0; }
+  ab console --json >"$PE_TMP/ce.json" 2>/dev/null || echo '{}' >"$PE_TMP/ce.json"
   ab console --clear >/dev/null 2>&1 || true
-  first=$(jq -rn --argjson p "${pe:-[]}" --argjson c "${ce:-[]}" --argjson s "$PE_SEEN" '($p[$s:] + $c) | .[0] // "" | split("\n")[0]')
-  n=$(jq -rn --argjson p "${pe:-[]}" --argjson c "${ce:-[]}" --argjson s "$PE_SEEN" '($p[$s:] + $c) | length')
-  PE_SEEN=$(jq -rn --argjson p "${pe:-[]}" '$p | length')
+  total=$(jq -r '[.data.errors[]?] | length' "$PE_TMP/pe.json" 2>/dev/null) || { echo "page errors $1 $2: not checked (unreadable error list)"; return 0; }
+  if [ "$total" -ge "$PE_CAP" ]; then echo "page errors $1 $2: unknown (error buffer full)"; return 0; fi
+  # jq slurps the two files; a malformed console file only drops the console half
+  jq -c '[.data.messages[]? | select(.type == "error") | .text]' "$PE_TMP/ce.json" >"$PE_TMP/ce.list.json" 2>/dev/null || echo '[]' >"$PE_TMP/ce.list.json"
+  jq -c '[.data.errors[]?.text]' "$PE_TMP/pe.json" >"$PE_TMP/pe.list.json" 2>/dev/null || { echo "page errors $1 $2: not checked (unreadable error list)"; return 0; }
+  n=$(jq -n --slurpfile p "$PE_TMP/pe.list.json" --slurpfile c "$PE_TMP/ce.list.json" --argjson s "$PE_START" '($p[0][$s:] + $c[0]) | length' 2>/dev/null) || { echo "page errors $1 $2: not checked (jq failed)"; return 0; }
+  first=$(jq -rn --slurpfile p "$PE_TMP/pe.list.json" --slurpfile c "$PE_TMP/ce.list.json" --argjson s "$PE_START" '($p[0][$s:] + $c[0]) | .[0] // "" | split("\n")[0] | .[0:300]' 2>/dev/null) || first=""
   if [ "$n" -gt 0 ]; then echo "page errors $1 $2: $n - $first"; else echo "page errors $1 $2: 0"; fi
 }
 
@@ -61,10 +78,10 @@ shoot() { # <width> <height> <light|dark>
   ab set media "$M" >/dev/null
   [ "$OFFLINE" = 1 ] && ab set offline on >/dev/null
   ab console --clear >/dev/null 2>&1 || true
+  pe_mark
   ab open "$URL" >/dev/null
   if [ -n "$STATE" ]; then ab eval "$STATE" >/dev/null; fi
   js "$settle" >/dev/null
-  page_errors "$W" "$M"
 
   local sw iw sh step y=0 n=1
   sw=$(js 'document.documentElement.scrollWidth'); iw=$(js 'innerWidth'); sh=$(js 'document.documentElement.scrollHeight')
@@ -87,6 +104,8 @@ shoot() { # <width> <height> <light|dark>
     fi
     k=$((k + 1))
   done
+
+  page_errors "$W" "$M"
 
   local verdict="ok" frames=$n more=""
   [ "$sw" -gt "$iw" ] && verdict="PAGE SCROLLS SIDEWAYS"

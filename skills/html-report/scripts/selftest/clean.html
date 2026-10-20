@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lint clean fixture</title>
 <style>
-:root { --bg: #ffffff; --surface: #ffffff; --ink: #1a1a1a; --ink-2: #444444; --line: #888888; color-scheme: light; }
+:root, :root[data-theme="light"] { --bg: #ffffff; --surface: #ffffff; --ink: #1a1a1a; --ink-2: #444444; --line: #888888; color-scheme: light; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #111111; --surface: #1c1c1c; --ink: #eeeeee; --ink-2: #bbbbbb; --line: #777777; color-scheme: dark; } }
 :root[data-theme="dark"] { --bg: #111111; --surface: #1c1c1c; --ink: #eeeeee; --ink-2: #bbbbbb; --line: #777777; color-scheme: dark; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, sans-serif; padding: 24px 16px; word-break: keep-all; }
@@ -39,6 +39,13 @@ svg .life { stroke: var(--line); stroke-dasharray: 3 3; fill: none; }
     <rect class="nd" x="212" y="16" width="96" height="40" rx="6"/><text x="260" y="41" text-anchor="middle">서버</text>
   </svg>
   <figcaption>그림 2. 앱이 요청하고 서버가 응답한다.</figcaption>
+</figure>
+<figure>
+  <svg viewBox="0 0 340 60" role="img" aria-label="마스크로 가려진 막대.">
+    <defs><mask id="c-mask"><rect x="0" y="0" width="340" height="60" fill="white"/><rect x="20" y="10" width="40" height="40" fill="black"/></mask></defs>
+    <rect class="nd" x="12" y="10" width="316" height="40" mask="url(#c-mask)"/>
+  </svg>
+  <figcaption>그림 3. 마스크는 리터럴 흰색을 쓸 수 있다.</figcaption>
 </figure>
 </body>
 </html>

@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Errors flood</title></head>
+<body><p>Throws 1100 long uncaught errors on load.</p>
+<script>
+var pad = new Array(1500).join('x');
+for (var i = 0; i < 1100; i++) setTimeout(function (n) { throw new Error('flood ' + n + ' ' + pad); }.bind(null, i), 0);
+</script></body></html>

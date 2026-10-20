@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lint edge cases</title>
+<style>
+/* body-bg-transparent must NOT fire: only html carries the background, which paints the canvas */
+html { background: #ffffff; }
+body { margin: 0; color: #1a1a1a; font: 16px/1.6 system-ui, sans-serif; padding: 24px 16px; }
+svg { display: block; width: 100px; height: 40px; }
+</style>
+</head>
+<body>
+<p>Seven unlabeled svgs, one svg whose aria-labelledby id does not exist, and one whose id resolves.</p>
+<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>
+<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>
+<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>
+<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>
+<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>
+<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>
+<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>
+<svg id="dangling" role="img" aria-labelledby="no-such-id" viewBox="0 0 10 10"><rect width="10" height="10"/></svg>
+<span id="lbl">a labelled square</span>
+<svg id="resolved" role="img" aria-labelledby="lbl" viewBox="0 0 10 10"><rect width="10" height="10"/></svg>
+</body>
+</html>

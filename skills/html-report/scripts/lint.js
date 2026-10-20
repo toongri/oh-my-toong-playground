@@ -295,6 +295,7 @@ async function __hrLint(opts) {
       if (svg.parentElement.closest("svg")) continue;
       const bad = [];
       for (const el of [svg, ...svg.querySelectorAll("*")]) {
+        if (el.closest("mask, clipPath")) continue; // a luminance mask needs a literal white/black
         for (const prop of ["fill", "stroke", "stop-color", "color"]) {
           const a = el.getAttribute(prop);
           const st = el.style ? el.style.getPropertyValue(prop) : "";
@@ -308,15 +309,16 @@ async function __hrLint(opts) {
 
   // ---------- (b3) SVG accessibility and embedded code: no name for assistive tech, <style>/<script> inside ----------
   if (checks.has("svg")) {
-    let unlabeled = 0;
     for (const svg of document.querySelectorAll("svg")) {
       if (svg.parentElement.closest("svg")) continue;
       const code = svg.querySelector("style, script");
       if (code) add("svg-embedded-code", "warn", svg, `<${code.tagName.toLowerCase()}> inside <svg>; styles and scripts belong in the page, where the theme tokens and the lint can see them`);
       if (!rendered(svg) || svg.closest('[aria-hidden="true"]')) continue;
-      const named = svg.getAttribute("aria-label") || svg.getAttribute("aria-labelledby");
-      if ((svg.getAttribute("role") !== "img" || !named) && unlabeled++ < 5) {
-        add("svg-no-label", "warn", svg, 'svg needs role="img" and an aria-label (or aria-labelledby) that states what the figure shows, or aria-hidden="true" when it only decorates');
+      const labelledby = (svg.getAttribute("aria-labelledby") || "").split(/\s+/).filter(Boolean);
+      const labelledbyOk = labelledby.length > 0 && labelledby.every((id) => { const t = document.getElementById(id); return !!t && t.textContent.trim() !== ""; });
+      const named = (svg.getAttribute("aria-label") || "").trim() !== "" || labelledbyOk;
+      if (svg.getAttribute("role") !== "img" || !named) {
+        add("svg-no-label", "warn", svg, 'svg needs role="img" and a non-empty aria-label (or aria-labelledby ids that each resolve to an element with text) that states what the figure shows, or aria-hidden="true" when it only decorates');
       }
     }
   }
@@ -478,7 +480,7 @@ async function __hrLint(opts) {
     const titleText = ((document.querySelector("title") || {}).textContent || "").trim();
     const titleWords = titleText ? titleText.split(/\s+/).length : 0;
     if (!titleText) add("title-name", "warn", document.documentElement, "<title> is missing or empty; the title is the page's 2-4 word name");
-    else if (/: | — | – | - /.test(titleText) || titleWords > 6) add("title-name", "warn", document.documentElement, `<title> "${titleText.slice(0, 60)}" is a sentence or has an explainer appended; the title is the page's 2-4 word name, and the explanation goes in the lede`);
+    else if (/: | — | – | - /.test(titleText) || titleWords > 6) add("title-name", "warn", document.documentElement, `<title> "${titleText.slice(0, 60)}" has an explainer separator (": ", " — ", " – " or " - ") or is longer than 6 words (${titleWords}); the title is the page's 2-4 word name, and the explanation goes in the lede`);
     const idCount = new Map();
     document.querySelectorAll("[id]").forEach((e) => idCount.set(e.id, (idCount.get(e.id) || 0) + 1));
     const dupIds = Array.from(idCount).filter(([, n]) => n > 1).map(([id]) => id);
@@ -497,9 +499,7 @@ async function __hrLint(opts) {
       }
       return false;
     };
-    let hidden = 0;
     for (const el of document.body.querySelectorAll("*")) {
-      if (hidden >= 5) break;
       if (el.closest('[hidden], [aria-hidden="true"], template, script, style, noscript') || closedDetails(el)) continue;
       if (!Array.from(el.childNodes).some((c) => c.nodeType === 3 && c.nodeValue.trim())) continue;
       const r = el.getBoundingClientRect();
@@ -507,7 +507,6 @@ async function __hrLint(opts) {
       if ((r.width === 0 && r.height === 0) || cs.display === "none") continue;
       const op = opacityChain(el);
       if (op < 0.1 || cs.visibility === "hidden") {
-        hidden++;
         add("hidden-at-rest", "warn", el, cs.visibility === "hidden" ? "text has visibility: hidden at rest; it is invisible in a still frame" : `text has effective opacity ${op.toFixed(2)} at rest; content waiting for an observer or animation is invisible in a still frame`);
       }
     }
@@ -530,16 +529,27 @@ async function __hrLint(opts) {
         const rest = v.replace(/\b(?:rgb|hsl)a?\([^)]*\)/gi, " ");
         return (rest.match(/[a-z]+/gi) || []).some((w) => !NOT_COLOR.test(w) && CSS.supports("color", w));
       };
+      const splitSelectors = (sel) => { // split on top-level commas only (not inside :not(...), [...])
+        const out = []; let depth = 0, cur = "";
+        for (const ch of sel) {
+          if (ch === "(" || ch === "[") depth++; else if (ch === ")" || ch === "]") depth--;
+          if (ch === "," && depth === 0) { out.push(cur.trim()); cur = ""; } else cur += ch;
+        }
+        out.push(cur.trim());
+        return out;
+      };
       const baseTokens = new Set(), themedTokens = new Set(), hardCoded = [];
       const walk = (rules, inMedia, themedCtx) => {
         for (const rule of rules) {
           if (rule instanceof CSSStyleRule) {
             const themed = themedCtx || rule.selectorText.includes("[data-theme");
-            const isBase = !inMedia && rule.selectorText.trim() === ":root";
+            // base block: any rule outside a prefers-color-scheme block whose selector list has a bare :root or html
+            const isBase = !themedCtx && splitSelectors(rule.selectorText).some((s) => s === ":root" || s === "html");
+            const rootExact = !inMedia && rule.selectorText.trim() === ":root";
             for (let i = 0; i < rule.style.length; i++) {
               const prop = rule.style[i];
               if (prop.startsWith("--")) { if (isBase) baseTokens.add(prop); else if (themed) themedTokens.add(prop); }
-              else if (!isBase && !themed && COLOR_PROP.test(prop)) {
+              else if (!rootExact && !themed && COLOR_PROP.test(prop)) {
                 const value = rule.style.getPropertyValue(prop);
                 if (value && hasLiteralColor(value)) hardCoded.push(`${rule.selectorText} { ${prop}: ${value} }`);
               }
@@ -561,8 +571,10 @@ async function __hrLint(opts) {
       if (hardCoded.length) add("theme-token-scope", "warn", document.documentElement, `${hardCoded.length} rule(s) hold a literal colour instead of var(--token): ${hardCoded.slice(0, 5).join("; ")}; it will not follow the light/dark theme`);
     }
     const bodyBg = () => getComputedStyle(document.body).backgroundColor;
-    const bg = parse(bodyBg());
-    if (!bg || bg.a === 0) add("body-bg-transparent", "warn", document.body, "<body> background is transparent; the page shows the browser canvas colour, not its own palette");
+    if (theme === "light") { // reported once per page; the dark run would repeat it
+      const opaque = (c) => { const p = parse(c); return !!p && p.a > 0; };
+      if (!opaque(bodyBg()) && !opaque(getComputedStyle(document.documentElement).backgroundColor)) add("body-bg-transparent", "warn", document.body, "<body> and <html> backgrounds are both transparent; the page shows the browser canvas colour, not its own palette");
+    }
     const twoTheme = (rules) => Array.from(rules).some((r) => (r instanceof CSSMediaRule && r.conditionText.includes("prefers-color-scheme: dark")) || (r.cssRules && twoTheme(r.cssRules)));
     let two = false;
     for (const sheet of document.styleSheets) {
