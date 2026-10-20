@@ -639,7 +639,7 @@ function clearScenarioRecord(scenario: QaScenario): QaScenario {
 
 function resolveProfiles(ids: string[], opts: AddActorOpts): QaDeviceProfile[] {
 	const result = readDeviceProfiles({ cwd: opts.project, ...(opts.home ? { home: opts.home } : {}) });
-	if (result.status !== "ok") throw new Error(`add-actor: ${result.ask_user} Manifest: ${result.path}`);
+	if (result.status !== "ok") throw new Error(`add-actor: ${result.instruction} Manifest: ${result.path}`);
 	return ids.map((id) => {
 		const profile = result.profiles.find((candidate) => candidate.id === id);
 		if (!profile) throw new Error(`add-actor: unknown device profile "${id}" in ${result.path}`);

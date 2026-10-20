@@ -23,11 +23,11 @@ const PROFILES = [
 ];
 
 describe("기기 프로필 저장소", () => {
-	test("저장된 프로필이 없으면 기본 목록과 함께 사용자에게 물어보라는 상태를 돌려줌", () => {
+	test("저장된 프로필이 없으면 기본 목록과 함께 기본값 저장 안내를 돌려줌", () => {
 		const result = readDeviceProfiles(fixture());
 		expect(result.status).toBe("unconfigured");
 		if (result.status === "unconfigured") {
-			expect(result.ask_user).toContain("Ask the user");
+			expect(result.instruction).toContain("set --defaults");
 			expect(result.defaults).toEqual(DEFAULT_DEVICE_PROFILES);
 		}
 	});

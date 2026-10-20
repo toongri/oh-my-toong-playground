@@ -8,10 +8,10 @@ import type { QaDeviceProfile } from "@lib/qa-chain-core.ts";
 /**
  * The screen sizes a project's clients must stay usable on. One YAML file per
  * project, beside the reusable-case manifest: `~/.qa-cases/<projectKey>/device-profiles.yaml`.
- * Absent means the project has not chosen them yet; QA offers the built-in defaults, asks the user once, and saves the answer.
+ * Absent means the project has not chosen them yet; QA saves the built-in defaults and fits them to the platforms the repo ships.
  */
 export type DeviceProfilesResult =
-	| { status: "unconfigured"; path: string; ask_user: string; defaults: readonly QaDeviceProfile[] }
+	| { status: "unconfigured"; path: string; instruction: string; defaults: readonly QaDeviceProfile[] }
 	| { status: "ok"; path: string; profiles: QaDeviceProfile[] };
 
 const PLATFORMS = ["web", "ios", "android"] as const;
@@ -34,10 +34,9 @@ export const DEFAULT_DEVICE_PROFILES: readonly QaDeviceProfile[] = [
 	{ id: "desktop-ultrawide", label: "21:9 울트라와이드", platform: "web", width: 3440, height: 1440 },
 ];
 
-const ASK_USER =
-	"No device profiles are recorded for this project. Ask the user once: show the `defaults` list and ask which platforms (web, ios, android) the project ships and which screens it must stay usable on. " +
-	"If the user accepts the list or does not know, save it with `set --defaults`. Then fit it to the project: `remove <id>` for each platform or device the project does not support, " +
-	"`upsert --json '<profile>'` to change a size or add a project-specific screen (a kiosk, an embedded device). Never guess a size the user did not give or the project does not document.";
+const SETUP_INSTRUCTION =
+	"No device profiles are recorded for this project. Save the built-in defaults with `set --defaults`, then fit them to the platforms the repo shows the project ships (app config such as `app.json` `platforms` and `supportsTablet`, the ios/android/web build targets, the README): " +
+	"`remove <id>` for each platform or device it does not ship, `upsert --json '<profile>'` for a screen size the project documents (a kiosk, an embedded device). Never guess a size the project does not document.";
 
 export function deviceProfilesPath(options: QaCaseStoreOptions = {}): string {
 	const context = resolveQaCaseContext(options);
@@ -70,7 +69,7 @@ export function readDeviceProfiles(options: QaCaseStoreOptions = {}): DeviceProf
 	try {
 		text = readFileSync(path, "utf8");
 	} catch (error) {
-		if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return { status: "unconfigured", path, ask_user: ASK_USER, defaults: DEFAULT_DEVICE_PROFILES };
+		if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return { status: "unconfigured", path, instruction: SETUP_INSTRUCTION, defaults: DEFAULT_DEVICE_PROFILES };
 		throw error;
 	}
 	const document = parseDocument(text);

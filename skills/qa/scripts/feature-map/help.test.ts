@@ -51,9 +51,9 @@ describe("feature-map 도움말", () => {
 		expect(status).toContain("Invalid feature files are reported by validate, not status");
 	});
 
-	test("configure는 사용자 동의를 안내하지만 user-only로 표시하지 않는다", () => {
+	test("configure는 사용자가 위치를 지정할 때만 쓰고 user-only로 표시하지 않는다", () => {
 		const help = renderFeatureMapHelp("configure");
-		expect(help).toContain("ask the user to agree on a storage location first");
+		expect(help).toContain("run only when the user names another location");
 		expect(help).toContain("relative paths resolve against the manifest directory");
 		expect(FEATURE_MAP_COMMANDS.find((command) => command.name === "configure")?.authority).toBe("ai");
 	});

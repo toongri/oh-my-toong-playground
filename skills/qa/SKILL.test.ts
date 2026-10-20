@@ -1341,7 +1341,7 @@ describe("new-prose: precondition bootstrap precedes unreachability", () => {
 			"`로컬 환경 — PR #4444 섭취 대조 작업의 매일 04:50 예약 제거`",
 		);
 		expect(skillMd).toContain(
-			"When you cannot place an item, interview the user before `set-acceptance`.",
+			"When the sources contradict each other about what the product should do, and the code does not settle it, ask the user before `set-acceptance`.",
 		);
 	});
 
@@ -1472,11 +1472,21 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 			"(one exception: *Routing report findings* below)",
 		);
 		expect(skillMd).toContain(
-			"whose every finding is renderer-owned layout/readability (not a 거짓/이격 on renderer text), or invalid under the renderer's mapping rules, does not block `complete` and needs no re-review of the unchanged render",
+			"A `REQUEST_CHANGES` whose every finding falls in the last two routes does not block `complete` and needs no re-review of the unchanged render.",
+		);
+	});
+
+	test("a 거짓/이격 on renderer text routes to a record fix, never await-user", () => {
+		expect(skillMd).toContain(
+			"the renderer prints your qa-state record, so the record is wrong against the source.",
 		);
 		expect(skillMd).toContain(
-			"A 거짓 or 이격 finding against renderer-generated text (a heading, fixed label, or badge that states something the record does not) is different: it is a renderer defect that makes the report misleading, so it blocks `complete`.",
+			"the AC is already accepted, so this is not a scope expansion.",
 		);
+		expect(skillMd).toContain(
+			"No finding is a reason for `await-user` or a scope-expansion question.",
+		);
+		expect(skillMd).not.toContain("whether to fix the renderer first is the user's decision");
 	});
 
 	test("STATE terminal sequence renders the report before completing the state", () => {
@@ -1593,7 +1603,7 @@ describe("new-prose: stack/seed/auth info is mined from repo docs and scripts", 
 
 	test("stage1-commands.md states mining applies to stack/seed/auth, not only build/test/lint", () => {
 		expect(stage1Md).toContain("Mining for stack/seed/auth");
-		expect(stage1Md).toContain("before asking the user or declaring a precondition unreachable");
+		expect(stage1Md).toContain("before declaring a precondition unreachable");
 	});
 });
 
