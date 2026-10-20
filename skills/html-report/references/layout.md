@@ -1,6 +1,43 @@
-# Layout: phone strategy for figures and card grids
+# Layout: page skeleton, phone strategy for figures, card grids
 
-This file holds the bodies of the two sub-sections of [section 5 (Layout)](../SKILL.md#5-layout) of SKILL.md.
+This file holds the page skeleton and the bodies of the two sub-sections of [section 5 (Layout)](../SKILL.md#5-layout) of SKILL.md.
+
+## Page skeleton
+
+The rules that govern it (gutter, two widths, `min-width: 0`, no sideways scroll) are in section 5 of SKILL.md.
+
+```html
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>디스펜서 USB 고착</title>   <!-- a 2-4 word name, not a summary -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* layout comment + tokens (section 3) */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.75 var(--font);
+    padding-block: 40px 72px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    word-break: keep-all; overflow-wrap: break-word;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+  .col  { max-width: 720px; }
+  section { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  h1, h2, h3, p, ul, ol, figure, table { margin: 0; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+</style>
+</head>
+<body><main class="wrap"> ... </main></body>
+</html>
+```
 
 ## Phone strategy for figures
 

@@ -14,7 +14,10 @@ shell and file access can follow it. The only external tools are the `agent-brow
 explainer, a research skill) decides *what* the page says: its sections, its claims, its
 evidence. This guide decides *how* the page is built and checked. When the two conflict,
 the caller's content rule wins and this guide's form rules adapt around it. A caller never
-copies these rules. It points here and keeps only its own content rules.
+copies these rules. It points here and keeps only its own content rules. For form, the order is: the
+user's own words, then the caller skill's form rules, then the target project's existing design system
+(its tokens, theme file, component styles), then this guide's defaults. A project system supplies values
+such as colors and faces. The theme structure of section 3 and the checks of section 14 still apply.
 
 **Output contract.**
 
@@ -24,7 +27,8 @@ copies these rules. It points here and keeps only its own content rules.
 - Opens from disk (`file://`). No server, no fetch of local files.
 - Works in light and dark themes, from 400px to 1280px+ wide, with no page-level sideways scroll.
 - Complete at rest: everything the reader needs is visible after load, with no click, hover, or scroll
-  needed to reveal it.
+  needed to reveal it. Nothing waits at `opacity: 0` for a scroll observer or an animation (lint: `hidden-at-rest`),
+  and the masthead is as tall as its content, never `100vh`, so the first frame already shows the answer.
 - Every directed graph with 3 or more nodes is inline SVG with drawn edges ([section 7.6](#76-directed-graphs-are-svg)),
   and a phone never changes what a diagram means ([section 5](references/layout.md#phone-strategy-for-figures)).
 - Faithful to the source: no invented status, owner, date, number, or definition ([section 13](#13-fidelity-rules)).
@@ -42,6 +46,8 @@ Two finished reports are in `<skill-dir>/exemplars/` (read `exemplars/README.md`
 
 ## 0. Workflow
 
+0. **Check that each part earns its place.** The caller has chosen a page. Where a sentence says a thing
+   faster than a figure, a table, or a card, write the sentence ([section 1](#1-draw-or-write)).
 1. **Name the reader and the job.** One sentence: who reads this, and what they must be able to
    decide or explain after reading. Pick the page anatomy from [section 2](#2-page-anatomy).
 2. **Inventory the source's diagrams.** Before you write, list every state, transition, message,
@@ -55,7 +61,8 @@ Two finished reports are in `<skill-dir>/exemplars/` (read `exemplars/README.md`
 6. **Reconcile with the inventory.** Map every inventory row to a figure, a table, or "omitted", and
    compare the counts ([section 13.1](#131-source-diagram-inventory)). Any omission is stated on the page with its reason.
 7. **Run the self-critique loop** ([section 14](#14-self-critique-loop-mandatory)): capture, lint
-   (with `--source` when the source is on disk), look, fix, repeat. This step is not optional.
+   (with `--source` when the source is on disk), look, fix. Capture again only after a fix that changed
+   layout, style, or an SVG; a text-only fix needs lint only. This step is not optional.
 8. **Report** the file path, the rounds you ran, the final lint summary, the reconciliation counts,
    and what you could not verify ([section 15](#15-what-to-report)).
 
@@ -118,6 +125,13 @@ decided, or what the reader must do. Then the detail follows. The skeletons list
 
 The numbered skeletons, with the content of each section, are in [references/page-anatomy.md](references/page-anatomy.md).
 
+**Treatment.** Every page here is a working document. Give it a real type hierarchy, even spacing, and a
+deliberate palette, and keep flourishes few. No viewport-tall hero, no decorative opener. Stat tiles open a
+section only when the numbers are what the reader came for (an incident's impact). In a design document or a
+plan, write a motivating number in a sentence.
+
+**Subject detail.** Carry at least one detail that only this subject has: its units and scales, its document
+conventions, its terms of art. Take it from the source; section 13.4 forbids inventing one.
 
 ---
 
@@ -153,7 +167,13 @@ viewer's OS theme and also an explicit `data-theme` attribute on `<html>` if a h
   }
 }
 :root[data-theme="dark"] { /* the same dark values again, so an explicit choice wins both ways */
-  --bg: #0E1117; /* ... every dark value from the block above ... */
+  --bg: #0E1117; --surface: #161A22; --surface-2: #1F242E;
+  --ink: #E8EBF1; --ink-2: #B4BBC9; --ink-3: #8F98AA;
+  --line: #2B313D; --line-strong: #566074;
+  --accent: #9DAAFF;
+  --ok: #4FD6A4;  --ok-bg: #11302A;
+  --bad: #FF8A7E; --bad-bg: #3B1B18;
+  --warn: #F3BC5C; --warn-bg: #392B10;
   color-scheme: dark;
 }
 body { background: var(--bg); color: var(--ink); }
@@ -163,10 +183,13 @@ Rules:
 
 - **Every token gets its first definition on bare `:root`.** The dark blocks only redefine.
   A color that exists only inside a media or `[data-theme]` block is the classic unreadable-page bug.
-- **`body` sets an explicit background** from a token. A transparent body shows whatever the viewer paints behind it.
+  Lint warns with `theme-state-mismatch` when an explicit `data-theme` choice does not switch the palette.
+- **`body` sets an explicit background** from a token. A transparent body shows whatever the viewer paints
+  behind it (lint: `body-bg-transparent`).
 - **No literal colors in components or in SVG.** Not in CSS rules, not in `fill="#fff"` attributes.
   A literal white box behind light-ink text is invisible in dark mode (the lint self-test plants
   exactly this defect). SVG shapes take colors from page CSS classes: `svg .box { fill: var(--surface); stroke: var(--line-strong); }`.
+  Lint flags a literal color on an SVG element (`svg-literal-color`).
 - **Choose neutrals deliberately.** A grey with a slight hue bias toward the accent reads as chosen;
   pure mid-grey reads as a default.
 - **Semantic colors are separate from the accent.** `--ok`, `--warn`, `--bad` (each with a tinted
@@ -194,29 +217,26 @@ Rules:
 - Composite translucent colors over their real background before measuring.
 - Text on a tinted surface (`--bad-bg`, `--surface-2`) is measured against that surface, not the page.
 - `lint.sh` measures text contrast in both themes and reports every failure.
+- Do not dim text the reader must read. Lint skips elements under 50% opacity, so a label drawn at
+  `opacity: 0.4` is never measured. Dim only what a scenario selector deselects.
 
-**Avoid the generated-looking defaults** unless the caller asks for one: warm cream with a serif
-display and a terracotta accent; near-black with one acid-green or vermilion accent; hairline
-broadsheet columns; a purple-to-blue gradient hero; Inter or Space Grotesk as the safe choice;
-emoji section markers; everything centered; one large radius and one soft shadow on every block;
-an accent rail on the side of rounded cards; tracked ALL-CAPS eyebrows above every heading.
+**Avoid the looks that read as machine-made** unless the user or the caller asks for one. A cream page
+with a serif display face and a rust accent. A near-black page with one neon green or orange-red highlight.
+Newspaper hairlines over dense columns. A hero that fades from purple to blue. Inter or Space Grotesk,
+picked because it is safe. Emoji as section markers. Every block centered. One big radius and one soft
+shadow on every block. A colored rail down one side of rounded cards. Tracked ALL-CAPS eyebrows over every
+heading. Big-number tiles opening each section, 01 / 02 / 03 markers on content with no order, and a
+middle-dot kicker of mood words (section 6).
 
 ---
 
 ## 4. Typography (Korean first)
 
-- Set `<html lang="ko">` (or the page's language). The browser uses it for line breaking and font fallback.
-- **Font stack.** Option A, proven in testing: IBM Plex Sans KR with IBM Plex Mono from Google Fonts.
-  Option B: Noto Sans KR. Always end with the system Korean faces:
-
-  ```html
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-  ```
-  ```css
-  --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
-  ```
+- Set `<html lang="ko">` (or the page's language). The browser uses it for line breaking and font fallback
+  (lint: `html-lang`).
+- **Font stack.** Option A, proven in testing: IBM Plex Sans KR with IBM Plex Mono from Google Fonts (the
+  `<link>` tags are in the [page skeleton](references/layout.md#page-skeleton)). Option B: Noto Sans KR. Always
+  end with the system Korean faces, as the `--font` token in section 3 does.
 - **No serif display face on a Korean page.** Latin serifs carry no Hangul, so the Korean half of a
   heading falls back to the platform's serif (or sans) and the two halves of one line disagree.
   Give headings their weight through size, weight (600 to 700), and tight letter-spacing (-0.01 to -0.02em).
@@ -236,55 +256,39 @@ an accent rail on the side of rounded cards; tracked ALL-CAPS eyebrows above eve
   Latin characters). Captions may run to 760px.
 - **Korean line breaking.** On `body`: `word-break: keep-all; overflow-wrap: break-word;` so words
   are not split mid-syllable-group. On `code`: `word-break: normal; overflow-wrap: anywhere;`.
-  With `break-all`, identifiers break visibly mid-word (`isBooted=fals` / `e`).
+  With `break-all`, identifiers break visibly mid-word (`isBooted=fals` / `e`). Lint samples Korean blocks
+  and warns when they lack `keep-all` (`word-break-korean`).
 - **Headings** get `text-wrap: balance`. Digits that line up get `font-variant-numeric: tabular-nums`.
 - **Mono is for technical tokens only:** identifiers, paths, ports, commands, field types. Never for
   names, UI labels, or Korean text (mono faces carry no Hangul).
 - **No English UI chrome on a Korean page.** Write the legend title as "읽는 법" or "범례", lane labels
   as "보내기 / 받기", captions as "그림 1.", status as "확인됨 / 확인 못 함". Keep technical
   identifiers verbatim (`isBooted`, `HTTP 500`). No uppercase-and-tracked labels.
+- **Title.** The `<title>` names the thing in 2 to 4 words, the way a document is named. Use the name the
+  source or the caller already gives it (an incident name, a feature name). No category label alone
+  ("보고서"), and no explainer after a colon or a dash ("결제 재시도: 설계 설명"). The explanation goes in the lede.
+- **Page copy.** These rules cover the words the page adds: headings, labels, captions, hints, legends. They
+  never license rewording text that the caller passes as source or requires verbatim.
+  - Name things the way the reader knows them: a heading says "결제 알림 재시도" and keeps internal module
+    names out. Identifiers that the source uses stay verbatim.
+  - Use the active voice. A control says what it does ("표 펼치기"). A hint says how to proceed.
+  - Write plainly, in short sentences. Avoid mannered devices: em-dash asides, "X가 아니라 Y다" framed for effect,
+    a colon that sets up a reveal, scare quotes around a coined label, and stock openers such as
+    "참고로", "주목할 점은", "솔직히 말하면" (in English, "worth noting", "honest caveat").
 
 ---
 
 ## 5. Layout
 
-**Skeleton.**
-
-```html
-<!doctype html>
-<html lang="ko">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>디스펜서 USB 고착</title>   <!-- a 2-4 word name, not a summary -->
-<!-- font links -->
-<style>
-  /* layout comment + tokens (section 3) */
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font: 16px/1.75 var(--font);
-    padding-block: 40px 72px;
-    padding-left: max(16px, env(safe-area-inset-left, 0px));
-    padding-right: max(16px, env(safe-area-inset-right, 0px));
-    word-break: keep-all; overflow-wrap: break-word;
-  }
-  .wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
-  .col  { max-width: 720px; }
-  section { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
-  h1, h2, h3, p, ul, ol, figure, table { margin: 0; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
-</style>
-</head>
-<body><main class="wrap"> ... </main></body>
-</html>
-```
+**Skeleton.** Start from the page skeleton in [references/layout.md](references/layout.md#page-skeleton). It holds
+`lang`, the viewport meta with `viewport-fit=cover`, the `<title>`, the token block, the body gutter, the
+`.wrap` stage and `.col` reading column, the flex sections with `gap`, the visible focus ring, and the
+reduced-motion rule.
 
 **Rules.**
 
-- **Side gutter of at least 16px at every width,** written as the two `max()` paddings above, set once
-  on `body`. Give vertical padding with `padding-block`. Never a `padding` shorthand that zeroes the sides.
+- **Side gutter of at least 16px at every width,** written as `padding-left: max(16px, env(safe-area-inset-left, 0px))`
+  and the matching `padding-right`, set once on `body`. Give vertical padding with `padding-block`. A `padding` shorthand would reset the side gutter, so do not use one.
 - **Two widths.** A reading column (720px) for prose, and a wider stage (up to 1040 to 1240px) for
   figures and tables. Sections are flex columns with `gap`; do not space siblings with margins.
 - **`min-width: 0`** on every flex or grid child that holds running text, code, or a table, so long
@@ -309,9 +313,15 @@ an accent rail on the side of rounded cards; tracked ALL-CAPS eyebrows above eve
 - **Give nothing a `min-width` wider than the screen** outside a scroll container. Images and
   `aspect-ratio` boxes get `max-width: 100%`.
 
-
 - **No fixed-width figures.** A figure's CSS width is `100%` of its container. A `width: 960px` figure breaks
   the layout between 400px and 1280px. Only a figure that scrolls in its own container gets a `min-width`.
+- **Repeated elements match.** Siblings of one kind (cards in a row, label and value pairs, pills on items)
+  share edges, baselines, and inner padding, and a part that recurs keeps one position on each. Content
+  decides a container's height. Long text gets room: it wraps, or it scrolls inside a container of its own.
+  Cut-off text is a defect (lint: `html-clipped`).
+- **Build cleanly.** Keep the skeleton's focus ring and reduced-motion rule. Close every non-void element and
+  double-quote attributes. Give each spacing one owner, preferably the parent's `gap`: when two classes on
+  one element both set padding or margin, the more specific one silently undoes the other.
 
 ### Phone strategy for figures
 
@@ -334,9 +344,13 @@ Use 2, 3, 4, or 6 items per row. The CSS and the five-item rule are in [referenc
 Use card styling (border, fill, radius) by role, to set off the element that needs it, not on every
 block. Radii stay at 6 to 10px. No shadows. Each component is the minimum CSS; extend it from the tokens.
 
-Components: masthead, pills, stat tiles, to-scale bar, row list, tables with pills, decision table, CSS timeline, numbered steps (only for a real sequence), known / unknown panels, callout (at most one per section), disclosure, code block, footer.
+Components: masthead, pills, stat tiles (only when the numbers are the point), to-scale bar, row list, tables with pills, decision table, CSS timeline, numbered steps (only for a real sequence), known / unknown panels, callout (at most one per section), disclosure, code block, footer.
 
 The HTML and CSS for each are in [references/components.md](references/components.md).
+
+**Structure is information.** A number, an eyebrow, a divider, or a part of the kicker states a fact about the
+content. Numbered markers mark a real order. A kicker joins real facts only (page type, a source date with
+its timezone), each in its own element; it is never a middle-dot string of mood words.
 
 ---
 
@@ -344,11 +358,12 @@ The HTML and CSS for each are in [references/components.md](references/component
 
 ### 7.1 What to draw
 
-- **Depict the mechanism, not its name.** A box labeled "cache" says less than the prose. The path a
-  request takes through it, the two stores it sits between, and the arrow that disappears when it is
-  removed say what words cannot. Draw the boundary crossed, the hop added, the data moved.
+- **Depict the mechanism, not its name.** A box with the word "캐시" in it adds nothing to the prose. Draw
+  what it does: the route a request follows through it, the store on each side of it, and the edge that
+  vanishes once it is gone. Draw the boundary crossed, the hop added, the data moved.
 - **Draw the difference.** For before/after or option A/B, use the same layout and the same coordinates
-  for every figure, and change only what differs. The reader should be able to point at the change.
+  for every figure, and change only what differs, down to the one edge an option adds or removes. The
+  reader can then put a finger on the change.
   Separate boxes per option with nothing connecting them to the system are a restated list, not a comparison.
 - **Label every arrow with a verb or a fact:** `쓰기`, `읽기`, `500ms마다 재시도`, `코드 13 거절`.
   An unlabeled arrow means only "related somehow".
@@ -400,7 +415,7 @@ figcaption .vf { display: block; margin-top: 6px; color: var(--ink-3); }
   drawing wasted space in testing; tighten the viewBox (`0 32 840 352`) instead of moving every shape.
   CSS scales it: `width: 100%; height: auto`. Never give a figure a fixed pixel width (no `width: 960px`).
 - **Color through page CSS classes and tokens,** or `currentColor`. No `<style>` or `<script>` inside the SVG,
-  no literal hex in attributes. Give every drawn shape an explicit `fill` (`fill: none` for lines and paths).
+  no literal hex in attributes (lint: `svg-literal-color`). Give every drawn shape an explicit `fill` (`fill: none` for lines and paths).
 - **Arrowheads are `<marker>` elements** (or small polygons), one marker per stroke color, with ids
   unique in the whole document. Prefix them with the figure slug (`f1-ah-ok`) so two figures never
   collide when one is copied. A single hidden `<svg width="0" height="0" style="position:absolute" aria-hidden="true">`
@@ -421,6 +436,8 @@ figcaption .vf { display: block; margin-top: 6px; color: var(--ink-3); }
   `aria-labelledby` pointing at a `<title>` (first child) and `<desc>` with figure-prefixed ids
   (`f2-title`, `f2-desc`), never bare `title` / `desc`. Decorative SVG gets `aria-hidden="true"`.
 - **No `<foreignObject>`.** HTML inside SVG does not scale or wrap predictably. Use `<text>` and `<tspan>`.
+  Lint reports it as an error (`svg-foreignobject`). A shape that needs long hand-traced path data is
+  decoration: simplify it to native shapes or drop it.
 - **Caption = claim + epistemic status.** "그림 N." then the claim in bold, then one line saying what is
   verified and what is not: "확인됨: 고착 기기 10대의 Sentry 이벤트. 확인 못 함: 두 인스턴스의 생성
   순서는 로그로 재구성했으며 실기기에서 재현하지 않았습니다." A figure of a design that is not built yet says so.
@@ -526,7 +543,9 @@ A scenario selector over one map, a CSS-only variant with radio inputs and `:has
 focus, and motion rules are in
 [references/data-driven-and-interaction.md](references/data-driven-and-interaction.md#interaction-patterns).
 The rules that always apply: every control is a real `<button>`, `<label>`, or link; focus is visible; scroll
-containers get `tabindex="0"`; nothing is hover-only; the default view shows everything.
+containers get `tabindex="0"`; nothing is hover-only; the default view shows everything. A script that keeps a
+view choice in `localStorage` wraps every read and write in `try/catch`, because a `file://` page may be denied
+storage, and the page renders the same without it.
 
 ---
 
@@ -636,7 +655,9 @@ empty and you skip the counts. You still follow the rest of this section.
   show the original too.
 - **Label examples correctly.** "예시" or "예:" marks illustrative values only. Real figures never carry it,
   and illustrative values never appear without it. A sample row in a design doc is labeled as a sample.
-- **Draw charts and bars to scale,** and check that parts sum to their whole (41 = 26 + 15).
+- **Draw charts and bars to scale,** and check that parts sum to their whole (41 = 26 + 15). Marks, ticks, and
+  labels share one scale, every tick label names a value the chart reaches, and the viewBox leaves room for
+  the outermost labels.
 - **Captions state epistemic status:** verified (with the source), inferred, or not verified. A figure of
   an unbuilt design says it is a design.
 - **Gaps in the source stay visible.** When the source does not settle a question, write that on the page
@@ -651,15 +672,16 @@ empty and you skip the counts. You still follow the rest of this section.
 ## 14. Self-critique loop (MANDATORY)
 
 You are not done when the HTML is written. You are done when the rendered page has been captured, linted,
-looked at, and fixed, and the final round found nothing left to fix. Requirements: `agent-browser` and `jq`
+looked at, and fixed, the last look found nothing that needs a layout or style fix, and the last lint run
+ended with no errors. Requirements: `agent-browser` and `jq`
 on PATH. Install agent-browser with `npm i -g agent-browser && agent-browser install` if it is missing.
 
-**Each round:**
+**A full round** (capture, lint, look):
 
 ```bash
 OUT=./.visual-check/round-1
 bash <skill-dir>/scripts/capture.sh report.html "$OUT"
-bash <skill-dir>/scripts/lint.sh report.html --source <source-dir-or-file> > "$OUT/lint.json"
+bash <skill-dir>/scripts/lint.sh report.html --source <source-dir-or-file> --strict > "$OUT/lint.json"
 jq '.runs, .summary' "$OUT/lint.json"
 jq -r '.findings[] | select(.severity != "info") | "\(.severity)\t\(.check)\t\(.viewport) \(.theme)\t\(.where)\t\(.text)\t\(.detail)"' "$OUT/lint.json"
 ```
@@ -668,11 +690,11 @@ For each interaction state, run both again with `--state` (one output directory 
 
 ```bash
 bash <skill-dir>/scripts/capture.sh report.html ./.visual-check/round-1-s3 --state "window.__select('s3')"
-bash <skill-dir>/scripts/lint.sh report.html --state "window.__select('s3')" > ./.visual-check/round-1-s3/lint.json
+bash <skill-dir>/scripts/lint.sh report.html --state "window.__select('s3')" --strict > ./.visual-check/round-1-s3/lint.json
 ```
 
 `--source` takes the directory (or one file) that holds the caller's source material. Leave it out when the
-source is not on disk; then say so in your report. Once, before the final round, check the font fallback:
+source is not on disk; then say so in your report. Once, after the last layout or style fix, check the font fallback:
 
 ```bash
 bash <skill-dir>/scripts/capture.sh report.html ./.visual-check/offline --offline
@@ -680,21 +702,15 @@ bash <skill-dir>/scripts/capture.sh report.html ./.visual-check/offline --offlin
 
 `capture.sh` writes, for 1280px light, 1280px dark, and 400px light: scrolled viewport frames (`-p01.png` ...),
 one frame per `<figure>` (`-fig1.png` ...), and at 400px the far end of each sideways scroller (`-fig1-end.png`).
-It prints `scrollWidth / innerWidth` per configuration. `lint.sh` prints one JSON document; `--strict` makes it
-exit 2 when any error remains (the strict run is `bash <skill-dir>/scripts/lint.sh report.html --strict`).
+It prints `scrollWidth / innerWidth` per configuration. `lint.sh` prints one JSON document. Pass `--strict` on
+every lint call: the JSON stays the same, and the exit code is 2 while an error remains. When the caller asks for
+a receipt, add `--receipt <path>` to that same call; there is no separate strict run.
 
-**Lint receipt.** `lint.sh report.html [--source ...] --receipt <path>` also writes a JSON receipt to `<path>`
-(atomic tmp + mv) when the run ends with 0 errors. The consuming skill decides the receipt path and passes it
-to its submit command. Fields: `schema_version` (2), `html_sha256` (of the linted bytes, taken at lint start),
-`html_path` (absolute), `errors`, `warnings`, `runs` (the three standard runs: 1280 light, 1280 dark, 400 light),
-`source` (absolute `--source` path or null), `source_sha256` (sha256 of the `--source` file's bytes, taken at lint
-start; null when `--source` is a directory or absent), `strict`, `lint_js_sha256`, `created_at` (UTC). With errors above 0,
-or when the HTML or the source file changed during linting, no receipt is written. An old receipt at that path is never deleted;
-a gate compares `html_sha256` to the submitted file and `source_sha256` to the current source file, so a receipt for
-older bytes fails (a revised source needs a new lint run, because the source-aware checks ran on the old one). The receipt proves lint
-ran clean on those exact bytes. It guards against mistakes (editing after lint, skipping lint); it is not
-tamper-proof. Re-run lint with `--receipt` after every edit of the HTML. An example is in
-`scripts/selftest/receipt.example.json`.
+**Lint receipt.** With `--receipt <path>`, a run that ends with 0 errors also writes a JSON receipt bound to
+the exact HTML bytes (and the `--source` file's bytes). The consuming skill chooses the path and its gate checks
+`schema_version`, `errors`, `html_sha256`, `html_path`, `runs`, `source`, and `source_sha256`; the fields
+`warnings`, `lint_js_sha256`, and `created_at` are audit-only. Re-run lint with `--receipt` after every edit of
+the HTML. Field meanings and the write rules are in [references/lint-checks.md](references/lint-checks.md#lint-receipt).
 
 **Look at every frame.** Open each PNG with your environment's image viewer or file reader that renders images.
 If you cannot view images, say so in your report and rely on lint alone; never claim a visual check you did not do.
@@ -716,14 +732,18 @@ Check each frame for:
 12. Verdicts, owners, and certainty words match the source. No new status word, no first person, no
     writing date, no definition the source lacks.
 
-**Fix, then run the next round** into a new directory. Repeat until lint reports no errors and a full visual pass
-finds nothing to fix. Run at least two rounds: in testing, the second round found a defect that the first
-round's fix had introduced. Stop after the round that finds nothing; if a lint error remains by design, name it and the reason in
-your report.
+**Fix, then choose the next check by what the fix touched.**
+
+- **Layout, CSS or tokens, an SVG (its text included), or a figure's geometry:** run a full round into a new
+  directory. In testing, a geometry fix introduced a defect that only the next capture showed.
+- **Only HTML text outside any SVG** (wording, a caption, a number copied from the source): re-run lint, which
+  is cheap. A new capture of unchanged geometry finds nothing new, so skip it.
+- **Stop** when the last look found nothing that needs a layout or style fix and the last lint run has no errors.
+  If a lint error remains by design, name it and the reason in your report.
 
 **Lint checks and their usual fixes:** the check table (check, meaning, usual fix) is in
 [references/lint-checks.md](references/lint-checks.md). The checks that matter most: `page-overflow`, `svg-text-overlap`,
-`svg-text-small-korean`, `figure-graph-nosvg` (error), `figure-scrolls`, `contrast`.
+`svg-text-small-korean`, `figure-graph-nosvg` and `svg-foreignobject` (errors), `figure-scrolls`, `contrast`.
 
 Lint cannot see everything. It cannot count a source's transitions, judge a verdict, or see a reflowed
 graph inside a `<div>` that is not a `<figure>`. Sections 13.1 and 13.2 and the frame checklist above are the checks for those.

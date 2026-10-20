@@ -10,11 +10,16 @@ and an optional stat strip.
 
 ```html
 <header class="mast">
-  <div class="kicker"><span class="pill bad">26대 고착 지속</span><span>사고 보고서 · 2026-10-17 (KST) 업데이트 후</span></div>
+  <div class="kicker"><span class="pill bad">26대 고착 지속</span><span>사고 보고서</span><time datetime="2026-10-17">2026-10-17 (KST)</time></div>
   <h1>디스펜서 USB 고착</h1>
   <p class="lede">...</p>
 </header>
 ```
+```css
+.kicker { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 14px; color: var(--ink-2); }
+```
+
+Each kicker part is one fact in its own element, spaced by `gap`. Add a part only when the source gives it.
 
 **Pills** carry state in form as well as color:
 
