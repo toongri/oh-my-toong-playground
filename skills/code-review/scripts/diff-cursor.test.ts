@@ -8,7 +8,6 @@ import { execFileSync, spawn, spawnSync } from "child_process";
 
 import {
 	run,
-	classifyPath,
 	globMatch,
 	parseDiff,
 	parseRuleFrontmatter,
@@ -167,7 +166,6 @@ function newLedger(angle: string): string {
 const cli = (ledger: string, ...args: string[]) => run([...args, "--ledger", ledger]);
 const ackOf = (out: string) => /### ACK (\S+): ([0-9a-f]{8}) ###/.exec(out)?.[2] ?? "";
 const pageIdOf = (out: string) => /\[PAGE (\S+) ·/.exec(out)?.[1] ?? "";
-const kindOf = (out: string) => /^PAGE \S+ {2}kind=(\w+)$/m.exec(out)?.[1] ?? "";
 
 /** A citation of the page: a new-file line number, or the file name when the page has none. */
 function citeOf(out: string): string {
@@ -262,21 +260,14 @@ describe("`plan` 페이지 구성", () => {
 		expect(rebuilt).toEqual(patch);
 	});
 
-	test("페이지 종류는 경로로 분류하고 페이지마다 하나의 kind를 가진다", () => {
-		expect(classifyPath("src/app.ts")).toBe("production");
-		expect(classifyPath("src/app.test.ts")).toBe("test");
-		expect(classifyPath("apps/api/src/test/kotlin/FooServiceTest.kt")).toBe("test");
-		expect(classifyPath("db/migrations/V2__add.sql")).toBe("migration");
-		expect(classifyPath("schema/user.graphql")).toBe("schema");
-		expect(classifyPath("apps/backend/src/lib/database/schema/health.ts")).toBe("schema");
-		expect(classifyPath("config/big.json")).toBe("config");
-		expect(classifyPath("build.gradle.kts")).toBe("config");
-		expect(classifyPath("docs/guide.md")).toBe("doc");
-		expect(classifyPath("CLAUDE.md")).toBe("doc");
-		const kinds = new Set(plan.pages.map((p) => p.kind));
-		for (const k of ["production", "config", "doc"])
-			expect(kinds.has(k as Plan["pages"][number]["kind"])).toBe(true);
-		expect(plan.fileKinds.find((f) => f.path === "src/설정.ts")?.kind).toBe("production");
+	test("한글 경로 파일도 diff 에서 찾는다", () => {
+		expect(plan.files).toContain("src/설정.ts");
+		expect(plan.filesWithoutDiff).not.toContain("src/설정.ts");
+	});
+
+	test("range 없는 단일 revision 과 --json 없는 status 는 사용법 오류다", () => {
+		expect(run(["plan", "--repo", fx.repo, "--range", "HEAD", "--files", JSON.stringify(fx.files), "--out", path.join(fx.tmp, "single")]).code).toBe(2);
+		expect(cli(newLedger("correctness"), "status").code).toBe(2);
 	});
 
 	test("같은 입력의 plan은 no-op이고 다른 range나 파일 목록은 거부한다", () => {
@@ -420,7 +411,6 @@ describe("ledger 진행 규칙", () => {
 	test("코드 페이지 메모는 인용 없이도 통과하고 빈 메모는 거부된다", () => {
 		const ledger = newLedger("requirement");
 		const out = cli(ledger, "next").stdout;
-		expect(["production", "config", "schema", "migration"]).toContain(kindOf(out));
 		const id = pageIdOf(out);
 		for (const blank of ["", "   "])
 			expect(cli(ledger, "done", id, "--ack", ackOf(out), "--note", blank).code).toBe(1);
@@ -479,7 +469,7 @@ describe("ledger 진행 규칙", () => {
 		);
 	});
 
-	test("resume 한 번으로 각도·진행·다음 페이지·최근 메모·후보·체크리스트·적용 파일을 보여준다", () => {
+	test("resume 한 번으로 각도·진행·다음 페이지·notes 안내·후보·체크리스트·적용 파일을 보여준다", () => {
 		const ledger = newLedger("correctness");
 		let out = cli(ledger, "next").stdout;
 		for (let i = 0; i < 2; i++)
@@ -516,7 +506,7 @@ describe("ledger 진행 규칙", () => {
 			"RESUME angle=correctness",
 			`PROGRESS: done 2/${plan.pages.length}`,
 			`NEXT PAGE: ${plan.pages[2]?.id} (issued, not done)`,
-			"메모1",
+			"NOTES: 2 note(s)",
 			"CANDIDATES: 1",
 			"c001 src/app.ts:3 경계값 누락",
 			"CHECKLIST: 0 item(s)",
@@ -573,9 +563,9 @@ describe("ledger 진행 규칙", () => {
 		expect(outside.code).toBe(0);
 		expect(outside.stdout).toBe("CANDIDATE c002 recorded (lib/CLAUDE.md:1)\n");
 		expect(outside.stderr).toBe("");
-		// --rule may cite any existing .md file, applicable or not, silently
-		expect(addAt("src/app.ts", "--rule", "docs/guide.md:2").code).toBe(0);
-		expect(addAt("src/app.ts", "--rule", "docs/missing.md:2").code).toBe(1);
+		// --rule takes a checklist item id only, never a path
+		expect(addAt("src/app.ts", "--rule", "docs/guide.md:2").code).toBe(1);
+		expect(addAt("src/app.ts", "--rule", "r999").code).toBe(1);
 		expect(
 			cli(
 				ledger,
@@ -594,7 +584,7 @@ describe("ledger 진행 규칙", () => {
 			).code,
 		).toBe(1);
 		const exported = JSON.parse(cli(ledger, "export").stdout);
-		expect(exported.candidates).toHaveLength(3);
+		expect(exported.candidates).toHaveLength(2);
 		expect(exported.candidates[0]).toMatchObject({
 			id: "c001",
 			found_by: "regression",
@@ -604,7 +594,7 @@ describe("ledger 진행 규칙", () => {
 			pagesTotal: plan.pages.length,
 			pagesDelivered: 1,
 			pagesAcked: 0,
-			candidates: 3,
+			candidates: 2,
 		});
 	});
 
@@ -846,7 +836,6 @@ describe("git 설정과 무관한 diff 해석", () => {
 			const m = miniRepo("noprefix", { "src/x.ts": "export const a = 1;\n" }, {
 				"src/x.ts": "export const a = 2;\n",
 			});
-			expect(m.plan.fileKinds.map((f) => f.path)).toEqual(["src/x.ts"]);
 			expect(m.plan.filesWithoutDiff).toEqual([]);
 			expect(m.plan.gitArgv.join(" ")).toContain("--src-prefix=a/ --dst-prefix=b/");
 		} finally {
@@ -1017,8 +1006,8 @@ describe("CLI 프로세스", () => {
 // notes / export paging, git config, rule frontmatter, glob safety
 // ---------------------------------------------------------------------------
 
-describe("notes 와 resume 은 오래된 메모와 열린 질문을 잃지 않는다", () => {
-	test("메모 8개 중 첫 페이지의 240자 뒤 `check later` 질문까지 notes 로 전부 읽히고 호출마다 예산 이하다", () => {
+describe("notes 는 오래된 메모를 잃지 않고 resume 은 notes 로 안내한다", () => {
+	test("메모 8개 중 첫 페이지의 긴 메모까지 notes 로 전부 읽히고 호출마다 예산 이하다", () => {
 		const ledger = newLedger("correctness");
 		let out = cli(ledger, "next").stdout;
 		const filler = "가".repeat(200);
@@ -1031,8 +1020,8 @@ describe("notes 와 resume 은 오래된 메모와 열린 질문을 잃지 않�
 		}
 		const resume = cli(ledger, "resume").stdout;
 		expect(resume).not.toContain("OPEN_QUESTION_MARKER");
-		expect(resume).toContain("OPEN QUESTIONS");
-		expect(resume).toContain(`notes --from ${plan.pages[0]?.id}`);
+		expect(resume).not.toContain("OPEN QUESTIONS");
+		expect(resume).toContain("read them in full with: notes");
 
 		let text = "";
 		let cmd = cli(ledger, "notes");
@@ -1163,7 +1152,7 @@ describe("잘못된 glob", () => {
 			{ "src/g.ts": "export const g = 1;\n", ".claude/rules/bad.md": "---\npaths: [\"src/[z-a].ts\"]\n---\n# bad\n" },
 			{ "src/g.ts": "export const g = 2;\n" },
 		);
-		expect(m.plan.warnings?.some((w) => w.includes(".claude/rules/bad.md") && w.includes("src/[z-a].ts"))).toBe(true);
+		expect(m.plan.warnings.some((w) => w.includes(".claude/rules/bad.md") && w.includes("src/[z-a].ts"))).toBe(true);
 		expect(m.plan.applicable.map((a) => a.path)).not.toContain(".claude/rules/bad.md");
 	});
 });

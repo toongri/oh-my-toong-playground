@@ -102,14 +102,12 @@ const ackOf = (out: string) => /### ACK (\S+): ([0-9a-f]{8}) ###/.exec(out)?.[2]
 const pageIdOf = (out: string) => /\[PAGE (\S+) ·/.exec(out)?.[1] ?? "";
 
 /**
- * The note each scripted finder writes: a short note on doc and test pages; on code pages a free
- * note citing the page, naming `candidateId` when one was recorded first.
+ * The note each scripted finder writes: a free note citing the page, naming `candidateId` when
+ * one was recorded first.
  */
 function noteFor(out: string, candidateId?: string): string {
 	const line = /^ {0,5}(\d+) \|/m.exec(out)?.[1];
 	const cite = line !== undefined ? `L${line}` : (/^FILES ON THIS PAGE:\n {2}(\S+)/m.exec(out)?.[1] ?? "");
-	const kind = /^PAGE \S+ {2}kind=(\w+)$/m.exec(out)?.[1] ?? "";
-	if (kind === "doc" || kind === "test") return `관련 메커니즘 없음: ${kind} 페이지`;
 	return `${cite} ${candidateId ? `후보 ${candidateId} 기록함` : "확인함"}`;
 }
 
@@ -173,7 +171,6 @@ describe("diff-cursor E2E: 네 finder가 diff를 100% 읽는 경로", () => {
 		const texts = plan.pages.map((p) => fs.readFileSync(path.join(coverage.planDir, "pages", `${p.id}.txt`), "utf8"));
 		expect(texts.some((t) => /^@@ .* \(continued\)$/m.test(t))).toBe(true);
 		expect(texts.some((t) => t.includes("문단입니다"))).toBe(true);
-		expect(new Set(plan.pages.map((p) => p.kind))).toEqual(new Set(["production", "test", "doc"]));
 		expect(plan.applicable.map((a) => a.path)).toContain(".claude/rules/x.md");
 	});
 
@@ -192,9 +189,8 @@ describe("diff-cursor E2E: 네 finder가 diff를 100% 읽는 경로", () => {
 			});
 			const fin = cli(angle, "finish");
 			expect(fin.code).toBe(0);
-			const codePages = seen.filter((o) => /^PAGE \S+ {2}kind=production$/m.test(o));
-			expect(codePages.length).toBeGreaterThan(0);
-			for (const o of codePages) {
+			expect(seen.length).toBeGreaterThan(0);
+			for (const o of seen) {
 				expect(o).toContain('--note "<what you checked and concluded>" --next');
 				expect(o).not.toMatch(/cite a line/);
 			}

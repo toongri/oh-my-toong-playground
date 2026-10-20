@@ -11,7 +11,7 @@
  * output that is cut keeps head and tail and elides the middle, so a finder that did not
  * see the page whole cannot pass `done --ack`.
  *
- * Node builtins only (no Bun.*, no @lib/ alias) so the script runs under bun and node.
+ * Node builtins only (no Bun.*, no @lib/ alias); invoked through bun.
  * Exit codes: 0 success, 1 refused (gate, validation or state), 2 usage error.
  */
 
@@ -36,16 +36,6 @@ export const LEDGER_ENV = "OMT_DIFF_CURSOR_LEDGER";
 export const VERDICTS = ["준수", "위반", "해당 없음"] as const;
 export const CLEANUP_ANGLE = "cleanup";
 
-export type PageKind = "production" | "schema" | "migration" | "config" | "test" | "doc";
-/** Most demanding first: a page takes the kind of its most demanding file. */
-const KIND_ORDER: readonly PageKind[] = [
-	"production",
-	"schema",
-	"migration",
-	"config",
-	"test",
-	"doc",
-];
 type Verdict = (typeof VERDICTS)[number];
 
 const HUNK_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
@@ -64,120 +54,6 @@ const refuse = (message: string) => new CursorError(message, 1);
 const usage = (message: string) => new CursorError(`${message}\nRun with --help for usage.`, 2);
 
 // ---------------------------------------------------------------------------
-// Path classification
-// ---------------------------------------------------------------------------
-
-const DOC_EXT = new Set([
-	"md",
-	"mdx",
-	"markdown",
-	"rst",
-	"adoc",
-	"txt",
-	"png",
-	"jpg",
-	"jpeg",
-	"gif",
-	"svg",
-	"webp",
-	"ico",
-	"pdf",
-]);
-const SCHEMA_EXT = new Set(["sql", "graphql", "gql", "proto", "prisma", "avsc", "xsd"]);
-const CONFIG_EXT = new Set([
-	"yml",
-	"yaml",
-	"json",
-	"jsonc",
-	"json5",
-	"toml",
-	"ini",
-	"properties",
-	"conf",
-	"cfg",
-	"env",
-	"xml",
-	"gradle",
-	"lock",
-]);
-const CONFIG_BASE = new Set([
-	"dockerfile",
-	"makefile",
-	"procfile",
-	".gitignore",
-	".gitattributes",
-	".editorconfig",
-	".npmrc",
-	".nvmrc",
-	".dockerignore",
-	"gradlew",
-	"mise.toml",
-]);
-
-/** Classifies a repo-relative path into the page kind that decides the note tier. */
-export function classifyPath(filePath: string): PageKind {
-	const lower = filePath.toLowerCase();
-	const segs = lower.split("/");
-	const dirs = segs.slice(0, -1);
-	const base = segs[segs.length - 1] ?? lower;
-	const origBase = filePath.split("/").pop() ?? filePath;
-	const ext = base.includes(".") ? (base.split(".").pop() ?? "") : "";
-
-	if (
-		dirs.some((s) =>
-			["migration", "migrations", "migrate", "flyway", "liquibase", "alembic"].includes(s),
-		) ||
-		/^v\d+[._\d]*__.+\.sql$/.test(base)
-	)
-		return "migration";
-	if (
-		dirs.some((s) =>
-			[
-				"test",
-				"tests",
-				"__tests__",
-				"spec",
-				"specs",
-				"testfixtures",
-				"fixtures",
-				"__snapshots__",
-				"e2e",
-				"testdata",
-			].includes(s),
-		) ||
-		/\.(test|spec)\.[^.]+$/.test(base) ||
-		/_test\.[^.]+$/.test(base) ||
-		/^test_.+\.py$/.test(base) ||
-		/(Test|Tests|Spec|IT)\.(kt|kts|java|scala|swift|cs|groovy)$/.test(origBase)
-	)
-		return "test";
-	if (
-		DOC_EXT.has(ext) ||
-		dirs.some((s) => ["docs", "doc", "wiki"].includes(s)) ||
-		/^(license|changelog|readme)(\..*)?$/.test(base)
-	)
-		return "doc";
-	if (
-		SCHEMA_EXT.has(ext) ||
-		dirs.includes("schema") ||
-		/(^|[._-])(schema|openapi|swagger)([._-]|$)/.test(base)
-	)
-		return "schema";
-	if (
-		CONFIG_EXT.has(ext) ||
-		CONFIG_BASE.has(base) ||
-		base.startsWith(".env") ||
-		base.endsWith(".gradle.kts") ||
-		/\.config\.(js|cjs|mjs|ts)$/.test(base) ||
-		dirs.some((s) => s === ".github" || s === ".circleci")
-	)
-		return "config";
-	return "production";
-}
-
-const kindRank = (k: PageKind) => KIND_ORDER.indexOf(k);
-
-// ---------------------------------------------------------------------------
 // Unified diff parsing
 // ---------------------------------------------------------------------------
 
@@ -193,7 +69,6 @@ interface Atom {
 
 interface DiffFile {
 	path: string;
-	kind: PageKind;
 	hunkHeaders: string[];
 	hunkMaxNew: number[];
 	hunkFirstAtom: number[];
@@ -241,7 +116,6 @@ export function parseDiff(patch: string, knownFiles: readonly string[]): ParsedD
 			const p = resolveDiffPath(header, knownFiles);
 			file = {
 				path: p,
-				kind: classifyPath(p),
 				hunkHeaders: [],
 				hunkMaxNew: [],
 				hunkFirstAtom: [],
@@ -324,7 +198,7 @@ class PageBuilder {
 		this.d = d;
 		this.id = id;
 		this.used =
-			bytes(`PAGE ${id}  kind=production\n`) +
+			bytes(`PAGE ${id}\n`) +
 			bytes("FILES ON THIS PAGE:\n") +
 			bytes(`--- BEGIN ${id} ---\n`) +
 			bytes(`${ackLine(id, "00000000")}\n`) +
@@ -354,7 +228,7 @@ class PageBuilder {
 		const out: string[] = [];
 		if (a.file !== lastFile) {
 			const cont = !(p.atom === f.firstAtom && p.from === 0);
-			out.push(`=== FILE ${f.path} [${f.kind}]${cont ? " (continued)" : ""} ===`);
+			out.push(`=== FILE ${f.path}${cont ? " (continued)" : ""} ===`);
 		}
 		const ctxHunk = a.file !== lastFile ? -2 : lastHunk;
 		if (a.type === "body" && a.hunk !== ctxHunk) out.push(`${f.hunkHeaders[a.hunk]} (continued)`);
@@ -413,18 +287,8 @@ class PageBuilder {
 		this.lastHunk = a.type === "file" ? -1 : a.hunk;
 	}
 
-	kind(): PageKind {
-		let best: PageKind = "doc";
-		for (const g of this.groups.values()) {
-			const k = this.d.files[g.file].kind;
-			if (kindRank(k) < kindRank(best)) best = k;
-		}
-		return best;
-	}
-
 	/** Renders the page; the ack line goes at the body line boundary nearest the byte midpoint. */
-	render(planSha: string): { text: string; ack: string; kind: PageKind } {
-		const kind = this.kind();
+	render(planSha: string): { text: string; ack: string } {
 		const summary: string[] = [];
 		for (const g of this.groups.values()) {
 			const f = this.d.files[g.file];
@@ -454,7 +318,7 @@ class PageBuilder {
 			lastHunk = a.type === "file" ? -1 : a.hunk;
 		}
 		const head = [
-			`PAGE ${this.id}  kind=${kind}`,
+			`PAGE ${this.id}`,
 			"FILES ON THIS PAGE:",
 			...summary,
 			`--- BEGIN ${this.id} ---`,
@@ -479,13 +343,12 @@ class PageBuilder {
 		}
 		all.splice(at, 0, ackLine(this.id, ack));
 		all.push(`--- END ${this.id} ---`);
-		return { text: all.join("\n") + "\n", ack, kind };
+		return { text: all.join("\n") + "\n", ack };
 	}
 }
 
 export interface PageRecord {
 	id: string;
-	kind: PageKind;
 	start: Pos;
 	end: Pos;
 	bytes: number;
@@ -519,7 +382,7 @@ export function packPages(
 	let pageStart: Pos = { ...start };
 	let b = new PageBuilder(d, idAt(0));
 	const close = () => {
-		const { text, ack, kind } = b.render(planSha);
+		const { text, ack } = b.render(planSha);
 		const size = bytes(text);
 		if (size > cap)
 			throw new Error(`internal: page ${b.id} rendered ${size} bytes over cap ${cap}`);
@@ -527,7 +390,6 @@ export function packPages(
 		out.push({
 			record: {
 				id: b.id,
-				kind,
 				start: pageStart,
 				end: { ...pos },
 				bytes: size,
@@ -784,23 +646,6 @@ interface TreeSource {
 	read(rel: string): string;
 }
 
-function fsSource(top: string): TreeSource {
-	const abs = (rel: string) => path.join(top, rel);
-	return {
-		kind(rel) {
-			try {
-				const st = fs.statSync(abs(rel));
-				return st.isDirectory() ? "dir" : st.isFile() ? "file" : null;
-			} catch {
-				return null;
-			}
-		},
-		canon: (rel) => fs.realpathSync(abs(rel)),
-		children: (rel) => fs.readdirSync(abs(rel)).sort(),
-		read: (rel) => fs.readFileSync(abs(rel), "utf8"),
-	};
-}
-
 /**
  * The tree of one commit, read through git so the working tree cannot change what is reviewed.
  * Symlinks are followed when the last path component is one; a symlinked parent directory is
@@ -887,16 +732,16 @@ const lineCount = (content: string) =>
  * of a changed file) plus `.claude/rules` and `.codex/rules` markdown files of the root and of
  * every such directory, whose `paths` match a changed file under the directory that owns the
  * rules (globs are relative to that directory) or that declare no `paths`. Everything is read
- * from the `head` commit, or from the working tree when `head` is null. Files reached twice
+ * from the `head` commit. Files reached twice
  * (symlinks) are listed once, with the other names as aliases.
  */
 export function computeApplicable(
 	top: string,
 	changed: readonly string[],
-	head: string | null,
+	head: string,
 	warnings: string[] = [],
 ): ApplicableFile[] {
-	const src = head === null ? fsSource(top) : gitSource(top, head);
+	const src = gitSource(top, head);
 	const out: ApplicableFile[] = [];
 	const byCanon = new Map<string, ApplicableFile>();
 	const add = (rel: string, entry: Omit<ApplicableFile, "lines" | "aliases">) => {
@@ -967,8 +812,6 @@ export function computeApplicable(
 // ---------------------------------------------------------------------------
 
 export interface Plan {
-	version: 1;
-	createdAt: string;
 	repo: string;
 	range: string;
 	files: string[];
@@ -977,13 +820,12 @@ export interface Plan {
 	diffBytes: number;
 	planSha: string;
 	gitArgv: string[];
-	fileKinds: { path: string; kind: PageKind }[];
 	filesWithoutDiff: string[];
 	pages: PageRecord[];
 	applicable: ApplicableFile[];
-	/** Problems found while computing the plan that did not stop it (absent in older plans). */
-	warnings?: string[];
-	stats: { pages: number; maxPageBytes: number; kinds: Record<string, number> };
+	/** Problems found while computing the plan that did not stop it. */
+	warnings: string[];
+	stats: { pages: number; maxPageBytes: number };
 }
 
 const sha256 = (data: string | Buffer) => crypto.createHash("sha256").update(data).digest("hex");
@@ -1004,23 +846,12 @@ const isPathList = (x: unknown): x is string[] =>
 	Array.isArray(x) && x.length > 0 && x.every((f) => typeof f === "string" && f.trim() !== "");
 
 function readFileList(value: string): string[] {
-	let raw = value.trim();
-	if (!raw.startsWith("[")) {
-		if (!fs.existsSync(value)) throw usage(`--files: not a JSON array and no such file: ${value}`);
-		raw = fs.readFileSync(value, "utf8").trim();
-	}
 	let list: unknown;
-	if (raw.startsWith("[")) {
-		try {
-			list = JSON.parse(raw);
-		} catch (e) {
-			throw usage(`--files: invalid JSON array (${e instanceof Error ? e.message : String(e)})`);
-		}
-	} else
-		list = raw
-			.split("\n")
-			.map((l) => l.trim())
-			.filter((l) => l !== "");
+	try {
+		list = JSON.parse(value);
+	} catch (e) {
+		throw usage(`--files: invalid JSON array (${e instanceof Error ? e.message : String(e)})`);
+	}
 	if (!isPathList(list)) throw usage("--files: expected a non-empty array of repo-relative paths");
 	for (const f of list)
 		if (f.startsWith("/") || f.split("/").includes(".."))
@@ -1060,22 +891,19 @@ function planSummary(planDir: string, plan: Plan, created: boolean) {
 		pageBytes: plan.pageBytes,
 		pages: plan.stats.pages,
 		maxPageBytes: plan.stats.maxPageBytes,
-		kinds: plan.stats.kinds,
 		applicable: plan.applicable.map((a) => ({
 			path: a.path,
 			type: a.type,
 			reason: a.reason,
 			aliases: a.aliases,
 		})),
-		warnings: plan.warnings ?? [],
+		warnings: plan.warnings,
 	};
 }
 
-/** The commit a revision range ends at; null for a single revision, which diffs the working tree. */
-function reviewedHead(range: string): string | null {
-	const i = range.lastIndexOf("..");
-	if (i < 0) return null;
-	return range.slice(i + 2).replace(/^\./, "") || "HEAD";
+/** The commit a `base...head` or `base..head` range ends at. */
+function reviewedHead(range: string): string {
+	return range.slice(range.lastIndexOf("..") + 2).replace(/^\./, "") || "HEAD";
 }
 
 function cmdPlan(v: Values): Output {
@@ -1084,8 +912,8 @@ function cmdPlan(v: Values): Output {
 	const planDir = path.resolve(required(v.out, "--out"));
 	const files = readFileList(required(v.files, "--files"));
 	const pageBytes = parsePageBytes(v["page-bytes"], DEFAULT_PAGE_BYTES);
-	if (range.startsWith("-") || /\s/.test(range))
-		throw usage(`--range must be a revision range, got: ${range}`);
+	if (range.startsWith("-") || /\s/.test(range) || !range.includes(".."))
+		throw usage(`--range must be a revision range base...head, got: ${range}`);
 	const top = spawnSync("git", ["-C", repo, "rev-parse", "--show-toplevel"], { encoding: "utf8" });
 	if (top.status !== 0)
 		throw refuse(`not a git repository: ${repo} (${(top.stderr ?? "").trim()})`);
@@ -1118,7 +946,7 @@ function cmdPlan(v: Values): Output {
 		throw refuse(`git diff produced no output for ${range} and ${files.length} file(s)`);
 	const diffSha256 = sha256(patchBuf);
 	const planSha = sha256(
-		JSON.stringify({ version: 1, repo: repoTop, range, files, pageBytes, diffSha256 }),
+		JSON.stringify({ repo: repoTop, range, files, pageBytes, diffSha256 }),
 	);
 
 	const existing = fs.existsSync(path.join(planDir, "plan.json")) ? loadPlan(planDir) : null;
@@ -1150,12 +978,8 @@ function cmdPlan(v: Values): Output {
 	fs.writeFileSync(path.join(planDir, "diff.patch"), patchBuf, { mode: FILE_MODE });
 	for (const p of pages) atomicWrite(path.join(planDir, "pages", `${p.record.id}.txt`), p.text);
 	const inDiff = new Set(parsed.files.map((f) => f.path));
-	const kinds: Record<string, number> = {};
-	for (const p of pages) kinds[p.record.kind] = (kinds[p.record.kind] ?? 0) + 1;
 	const warnings: string[] = [];
 	const plan: Plan = {
-		version: 1,
-		createdAt: now(),
 		repo: repoTop,
 		range,
 		files,
@@ -1164,7 +988,6 @@ function cmdPlan(v: Values): Output {
 		diffBytes: patchBuf.length,
 		planSha,
 		gitArgv: ["git", ...gitArgv],
-		fileKinds: parsed.files.map((f) => ({ path: f.path, kind: f.kind })),
 		filesWithoutDiff: files.filter((f) => !inDiff.has(f)),
 		pages: pages.map((p) => p.record),
 		applicable: computeApplicable(repoTop, files, reviewedHead(range), warnings),
@@ -1172,7 +995,6 @@ function cmdPlan(v: Values): Output {
 		stats: {
 			pages: pages.length,
 			maxPageBytes: Math.max(...pages.map((p) => p.record.bytes)),
-			kinds,
 		},
 	};
 	atomicWriteJson(path.join(planDir, "plan.json"), plan);
@@ -1185,14 +1007,11 @@ function cmdPlan(v: Values): Output {
 
 interface PageState {
 	state: "issued" | "done";
-	issuedAt: string;
 	doneAt?: string;
 	note?: string;
 	ack?: string;
 }
 interface ExtraPage {
-	parent: string;
-	kind: PageKind;
 	start: Pos;
 	end: Pos;
 	bytes: number;
@@ -1206,7 +1025,6 @@ interface Candidate {
 	summary: string;
 	failure_scenario: string;
 	rule: string | null;
-	addedAt: string;
 }
 interface ChecklistItem {
 	id: string;
@@ -1217,12 +1035,9 @@ interface ChecklistItem {
 	updatedAt: string;
 }
 export interface Ledger {
-	version: 1;
 	angle: string;
 	planDir: string;
 	planSha: string;
-	createdAt: string;
-	updatedAt: string;
 	finishedAt: string | null;
 	order: string[];
 	extraPages: Record<string, ExtraPage>;
@@ -1345,14 +1160,13 @@ function assertOpenLedger(ctx: Ctx, action: string): void {
 }
 
 function save(ctx: Ctx): void {
-	ctx.ledger.updatedAt = now();
 	atomicWriteJson(ledgerFile(ctx.dir), ctx.ledger);
 }
 
 function pageMeta(
 	ctx: Ctx,
 	id: string,
-): { kind: PageKind; ack: string; bytes: number; start: Pos; end: Pos } {
+): { ack: string; bytes: number; start: Pos; end: Pos } {
 	const extra = ctx.ledger.extraPages[id];
 	if (extra) return extra;
 	const rec = ctx.plan.pages.find((p) => p.id === id);
@@ -1398,7 +1212,7 @@ function issueNext(ctx: Ctx, lead: string): string {
 	if (cur === null)
 		return `${lead}ALL PAGES DONE (${l.order.length}/${l.order.length}) for angle ${l.angle}; run finish\n`;
 	if (!l.pages[cur]) {
-		l.pages[cur] = { state: "issued", issuedAt: now() };
+		l.pages[cur] = { state: "issued" };
 		save(ctx);
 	}
 	return showPage(ctx, cur, lead, "PAGE");
@@ -1428,14 +1242,10 @@ function cmdInit(v: Values, env: NodeJS.ProcessEnv): Output {
 				`ledger ${dir} already belongs to angle ${existing.angle} and plan ${existing.planSha.slice(0, 12)}; use another --ledger directory`,
 			);
 		}
-		const ts = now();
 		const ledger: Ledger = {
-			version: 1,
 			angle,
 			planDir,
 			planSha: plan.planSha,
-			createdAt: ts,
-			updatedAt: ts,
 			finishedAt: null,
 			order: plan.pages.map((p) => p.id),
 			extraPages: {},
@@ -1515,11 +1325,8 @@ function findApplicable(plan: Plan, p: string): ApplicableFile | undefined {
 	return plan.applicable.find((a) => a.path === p || a.aliases.includes(p));
 }
 
-/** The reviewed tree: the head commit of the range, or the working tree for a single revision. */
-function reviewedTree(plan: Plan): TreeSource {
-	const head = reviewedHead(plan.range);
-	return head === null ? fsSource(plan.repo) : gitSource(plan.repo, head);
-}
+/** The reviewed tree: the head commit of the range. */
+const reviewedTree = (plan: Plan): TreeSource => gitSource(plan.repo, reviewedHead(plan.range));
 
 /**
  * Validates a repo-relative path and returns its normalized form; the file must exist in the
@@ -1531,7 +1338,7 @@ function existingRepoFile(plan: Plan, raw: string, flag: string, allowChanged = 
 	if (p === "") throw refuse(`${flag} must not be blank`);
 	if (p.startsWith("/") || p.split("/").includes(".."))
 		throw refuse(`${flag} must be a repo-relative path without "..", got: ${raw}`);
-	if (allowChanged && (plan.files.includes(p) || plan.fileKinds.some((f) => f.path === p))) return p;
+	if (allowChanged && plan.files.includes(p)) return p;
 	if (reviewedTree(plan).kind(p) !== "file")
 		throw refuse(`${flag} ${p} is not a file in the reviewed tree`);
 	return p;
@@ -1579,11 +1386,9 @@ function cmdCandidate(v: Values, env: NodeJS.ProcessEnv, sub: string | undefined
 			throw refuse("--summary and --failure-scenario must not be blank");
 		if (!l.pages[pageId] && !l.replaced[pageId])
 			throw refuse(`--page ${pageId} has not been issued to this finder`);
-		let rule: string | null = null;
-		if (v.rule !== undefined) {
-			const item = l.checklist.find((c) => c.id === v.rule);
-			rule = item ? item.id : parseSource(ctx.plan, v.rule);
-		}
+		if (v.rule !== undefined && !l.checklist.some((c) => c.id === v.rule))
+			throw refuse(`--rule must be a checklist item id (see checklist list), got: ${v.rule}`);
+		const rule = v.rule ?? null;
 		const dup = l.candidates.find(
 			(c) => c.file === file && c.line === lineNo && c.summary === summary,
 		);
@@ -1597,7 +1402,6 @@ function cmdCandidate(v: Values, env: NodeJS.ProcessEnv, sub: string | undefined
 			summary,
 			failure_scenario: failure,
 			rule,
-			addedAt: now(),
 		});
 		save(ctx);
 		return { text: `CANDIDATE ${id} recorded (${file}:${lineNo})\n` };
@@ -1618,7 +1422,6 @@ function cmdChecklist(
 	const dir = ledgerDirOf(v, env);
 	if (sub === "list") {
 		const ctx = openLedger(dir);
-		if (v.json) return { text: JSON.stringify(ctx.ledger.checklist, null, 2) + "\n" };
 		const lines = ctx.ledger.checklist.map(
 			(c) =>
 				`${c.id} ${c.source} [${c.verdict ?? "no verdict"}] ${c.rule}${c.evidence.length ? ` — ${c.evidence.join(" / ")}` : ""}`,
@@ -1685,7 +1488,7 @@ export function finishProblems(ctx: Ctx): string[] {
 		const unfiled = l.checklist
 			.filter(
 				(c) =>
-					c.verdict === "위반" && !l.candidates.some((k) => k.rule === c.id || k.rule === c.source),
+					c.verdict === "위반" && !l.candidates.some((k) => k.rule === c.id),
 			)
 			.map((c) => c.id);
 		if (unfiled.length > 0)
@@ -1731,28 +1534,12 @@ function coverage(ctx: Ctx) {
 }
 
 function cmdStatus(v: Values, env: NodeJS.ProcessEnv): Output {
+	if (!v.json) throw usage("status needs --json");
 	const ctx = openLedger(ledgerDirOf(v, env));
-	const c = coverage(ctx);
-	if (v.json) return { text: JSON.stringify(c, null, 2) + "\n" };
-	return {
-		text: `angle ${c.angle}: done ${c.pagesAcked}/${c.pagesTotal} (${c.percent}%), delivered ${c.pagesDelivered}, current ${c.currentPage ?? "none"}, candidates ${c.candidates}, checklist ${c.checklistItems}, finished ${c.finished ? "yes" : "no"}\n`,
-	};
+	return { text: JSON.stringify(coverage(ctx), null, 2) + "\n" };
 }
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-
-/** Pages whose note holds a "check later" question; the notes themselves are read in full with `notes`. */
-function openQuestionLines(ctx: Ctx): string[] {
-	const l = ctx.ledger;
-	const ids = l.order.filter(
-		(id) => l.pages[id]?.state === "done" && /check later/i.test(l.pages[id]?.note ?? ""),
-	);
-	if (ids.length === 0) return [];
-	const shown = ids.slice(0, 20).join(", ") + (ids.length > 20 ? ", …" : "");
-	return [
-		`OPEN QUESTIONS: ${ids.length} note(s) contain "check later" (pages ${shown}); read every note in full with: notes --from ${ids[0]}`,
-	];
-}
 
 /** Full notes in page order, as many as fit the output budget, then a `MORE:` line. */
 function cmdNotes(v: Values, env: NodeJS.ProcessEnv): Output {
@@ -1789,17 +1576,12 @@ function cmdResume(v: Values, env: NodeJS.ProcessEnv): Output {
 	const l = ctx.ledger;
 	const p = ctx.plan;
 	const c = coverage(ctx);
-	const n = v.notes === undefined ? 5 : Number(v.notes);
-	if (!Number.isInteger(n) || n < 0) throw usage("--notes must be a non-negative integer");
-	const notes = n === 0 ? [] : l.order.filter((id) => l.pages[id]?.state === "done").slice(-n);
 	const out = [
 		`RESUME angle=${l.angle} ledger=${ctx.dir}`,
 		`PLAN: ${l.planDir} planSha=${p.planSha.slice(0, 12)} range=${p.range} files=${p.files.length} pages=${l.order.length}`,
 		`PROGRESS: done ${c.pagesAcked}/${c.pagesTotal} (${c.percent}%), delivered ${c.pagesDelivered}, remaining ${c.pagesTotal - c.pagesAcked}${l.finishedAt ? ", FINISHED" : ""}`,
 		`NEXT PAGE: ${c.currentPage === null ? "none (all pages done; run finish)" : `${c.currentPage} (${l.pages[c.currentPage] ? "issued, not done" : "not issued yet"})`}`,
-		`LAST ${notes.length} NOTE(S):`,
-		...notes.map((id) => `  ${id}: ${clip(l.pages[id]?.note ?? "", 240)}`),
-		...openQuestionLines(ctx),
+		`NOTES: ${c.pagesAcked} note(s); read them in full with: notes`,
 		`CANDIDATES: ${l.candidates.length}`,
 		...l.candidates.slice(-10).map((k) => `  ${k.id} ${k.file}:${k.line} ${clip(k.summary, 120)}`),
 		`CHECKLIST: ${checklistSummary(l)}`,
@@ -1851,8 +1633,6 @@ function cmdResplit(v: Values, env: NodeJS.ProcessEnv, id: string | undefined): 
 		for (const s of subs) {
 			atomicWrite(path.join(dir, "pages", `${s.record.id}.txt`), s.text);
 			l.extraPages[s.record.id] = {
-				parent: id,
-				kind: s.record.kind,
 				start: s.record.start,
 				end: s.record.end,
 				bytes: s.record.bytes,
@@ -1997,41 +1777,13 @@ const OPTIONS = {
 	source: { type: "string" },
 	verdict: { type: "string" },
 	evidence: { type: "string" },
-	notes: { type: "string" },
 	from: { type: "string" },
 	part: { type: "string" },
 	json: { type: "boolean" },
 	help: { type: "boolean", short: "h" },
 } as const;
 
-interface Values {
-	repo?: string;
-	range?: string;
-	files?: string;
-	out?: string;
-	"page-bytes"?: string;
-	plan?: string;
-	angle?: string;
-	ledger?: string;
-	ledgers?: string[];
-	ack?: string;
-	note?: string;
-	next?: boolean;
-	file?: string;
-	line?: string;
-	summary?: string;
-	"failure-scenario"?: string;
-	page?: string;
-	rule?: string;
-	source?: string;
-	verdict?: string;
-	evidence?: string;
-	notes?: string;
-	from?: string;
-	part?: string;
-	json?: boolean;
-	help?: boolean;
-}
+type Values = ReturnType<typeof parseArgs<{ options: typeof OPTIONS }>>["values"];
 interface Output {
 	text: string;
 	code?: number;
@@ -2045,7 +1797,7 @@ function required(value: string | undefined, flag: string): string {
 export const HELP = `diff-cursor.ts — frozen diff pages + per-finder coverage ledger
 
 CONDUCTOR
-  plan --repo <dir> --range <base...head> --files <json array | file> --out <planDir> [--page-bytes N]
+  plan --repo <dir> --range <base...head> --files <json array> --out <planDir> [--page-bytes N]
       Freeze the diff of the file list into pages of at most N bytes (default ${DEFAULT_PAGE_BYTES}, ${MIN_PAGE_BYTES}-${MAX_PAGE_BYTES}),
       record the applicable CLAUDE.md/AGENTS.md and rule files, print a JSON summary.
       Same inputs again: no-op. Different inputs for an existing planDir: refused.
@@ -2058,12 +1810,12 @@ FINDER (ledger dir via --ledger <dir> or env ${LEDGER_ENV})
   done <pageId> --ack <code> --note <text> [--next]
                                             acknowledge the current page; --next prints the next one
   view <pageId>                             re-print an issued or done page
-  candidate add --page <id> --file <path> --line <n> --summary <text> --failure-scenario <text> [--rule <itemId | path:line>]
+  candidate add --page <id> --file <path> --line <n> --summary <text> --failure-scenario <text> [--rule <checklist itemId>]
   checklist add --source <path[:line]> --rule <text> [--verdict 준수|위반|해당 없음] [--evidence <text>]
   checklist update <itemId> [--verdict 준수|위반|해당 없음] [--evidence <text>]
-  checklist list [--json]
+  checklist list
   status [--json]                           progress counts
-  resume [--notes N]                        everything needed to continue after an interruption; lists the pages whose note says "check later"
+  resume                                    everything needed to continue after an interruption
   notes [--from <pageId>]                   every note in full, in page order, up to the output budget; "MORE: notes --from <pageId>" means call again
   resplit <pageId> --page-bytes N           re-cut a page that is not done into <pageId>.1, <pageId>.2, …
   finish                                    refused until 100% of pages are done (cleanup: checklist complete)
@@ -2073,6 +1825,31 @@ FINDER (ledger dir via --ledger <dir> or env ${LEDGER_ENV})
 
 Exit codes: 0 success, 1 refused, 2 usage error.
 `;
+
+type Handler = (
+	v: Values,
+	env: NodeJS.ProcessEnv,
+	arg1: string | undefined,
+	arg2: string | undefined,
+	rest: string[],
+) => Output;
+
+const COMMANDS: Record<string, Handler> = {
+	plan: (v) => cmdPlan(v),
+	init: cmdInit,
+	next: cmdNext,
+	done: cmdDone,
+	view: cmdView,
+	candidate: cmdCandidate,
+	checklist: cmdChecklist,
+	status: cmdStatus,
+	resume: cmdResume,
+	notes: cmdNotes,
+	resplit: cmdResplit,
+	finish: cmdFinish,
+	verify: (v, _env, _a1, _a2, rest) => cmdVerify(v, rest),
+	export: cmdExport,
+};
 
 /** Runs one CLI invocation without exiting the process. */
 export function run(
@@ -2087,56 +1864,12 @@ export function run(
 				throw usage(e instanceof Error ? e.message : String(e));
 			}
 		})();
-		const v: Values = parsed.values;
+		const v = parsed.values;
 		const [cmd, arg1, arg2] = parsed.positionals;
 		if (v.help || cmd === undefined || cmd === "help") return { code: 0, stdout: HELP, stderr: "" };
-		let out: Output;
-		switch (cmd) {
-			case "plan":
-				out = cmdPlan(v);
-				break;
-			case "init":
-				out = cmdInit(v, env);
-				break;
-			case "next":
-				out = cmdNext(v, env);
-				break;
-			case "done":
-				out = cmdDone(v, env, arg1);
-				break;
-			case "view":
-				out = cmdView(v, env, arg1);
-				break;
-			case "candidate":
-				out = cmdCandidate(v, env, arg1);
-				break;
-			case "checklist":
-				out = cmdChecklist(v, env, arg1, arg2);
-				break;
-			case "status":
-				out = cmdStatus(v, env);
-				break;
-			case "resume":
-				out = cmdResume(v, env);
-				break;
-			case "notes":
-				out = cmdNotes(v, env);
-				break;
-			case "resplit":
-				out = cmdResplit(v, env, arg1);
-				break;
-			case "finish":
-				out = cmdFinish(v, env);
-				break;
-			case "verify":
-				out = cmdVerify(v, parsed.positionals.slice(1));
-				break;
-			case "export":
-				out = cmdExport(v, env);
-				break;
-			default:
-				throw usage(`unknown command: ${cmd}`);
-		}
+		const handler = COMMANDS[cmd];
+		if (handler === undefined) throw usage(`unknown command: ${cmd}`);
+		const out = handler(v, env, arg1, arg2, parsed.positionals.slice(1));
 		return { code: out.code ?? 0, stdout: out.text, stderr: "" };
 	} catch (e) {
 		if (e instanceof CursorError) return { code: e.exitCode, stdout: "", stderr: `${e.message}\n` };
