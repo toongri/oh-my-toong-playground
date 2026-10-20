@@ -10,7 +10,6 @@ import {
 	run,
 	classifyPath,
 	globMatch,
-	noteCitesPage,
 	parseDiff,
 	parseRuleFrontmatter,
 	DYNAMIC_RESERVE,
@@ -179,17 +178,6 @@ function citeOf(out: string): string {
 
 /** A note that cites the page (a scripted finder that holds every page). */
 const noteFor = (out: string) => `${citeOf(out)} 확인함`;
-
-/** Acknowledges pages until the current page has the wanted kind. */
-function advanceTo(ledger: string, kinds: readonly string[]): string {
-	let cur = cli(ledger, "next").stdout;
-	while (!kinds.includes(kindOf(cur))) {
-		const r = cli(ledger, "done", pageIdOf(cur), "--ack", ackOf(cur), "--note", noteFor(cur), "--next");
-		if (r.code !== 0) throw new Error(r.stderr);
-		cur = r.stdout;
-	}
-	return cur;
-}
 
 /** Walks the ledger with `done --next` until `leave` pages remain; returns every page output seen. */
 function walk(ledger: string, leave = 0): string[] {
@@ -429,56 +417,14 @@ describe("ledger 진행 규칙", () => {
 		expect(cli(ledger, "view", first).stdout).toContain(`### ACK ${first}: ${ackOf(out)} ###`);
 	});
 
-	test("production·config 페이지 메모는 페이지의 줄 번호나 식별자를 인용해야 하고 문서 페이지는 짧은 메모로 충분하다", () => {
+	test("코드 페이지 메모는 인용 없이도 통과하고 빈 메모는 거부된다", () => {
 		const ledger = newLedger("requirement");
 		const out = cli(ledger, "next").stdout;
 		expect(["production", "config", "schema", "migration"]).toContain(kindOf(out));
 		const id = pageIdOf(out);
-		const vague = cli(
-			ledger,
-			"done",
-			id,
-			"--ack",
-			ackOf(out),
-			"--note",
-			"전반적으로 확인함",
-		);
-		expect(vague.code).toBe(1);
-		expect(vague.stderr).toContain("must cite");
-		expect(cli(ledger, "done", id, "--ack", ackOf(out), "--note", "   ").code).toBe(1);
-
-		let cur = cli(ledger, "done", id, "--ack", ackOf(out), "--note", noteFor(out), "--next").stdout;
-		while (kindOf(cur) !== "doc")
-			cur = cli(
-				ledger,
-				"done",
-				pageIdOf(cur),
-				"--ack",
-				ackOf(cur),
-				"--note",
-				noteFor(cur),
-				"--next",
-			).stdout;
-		expect(
-			cli(
-				ledger,
-				"done",
-				pageIdOf(cur),
-				"--ack",
-				ackOf(cur),
-				"--note",
-				"관련 메커니즘 없음: 안내 문서",
-			).code,
-		).toBe(0);
-
-		const appPage = pageTexts().find((t) => t.includes("computeTotal1(input")) as string;
-		const lineNo = /^ {0,5}(\d+) \|/m.exec(appPage)?.[1] as string;
-		expect(noteCitesPage(`L${lineNo}에서 경계값 확인`, appPage)).toBe(true);
-		expect(noteCitesPage(`src/app.ts:${lineNo} 확인`, appPage)).toBe(true);
-		expect(noteCitesPage("`input + 1` 계산 확인", appPage)).toBe(true);
-		expect(noteCitesPage("computeTotal1 반환값 확인", appPage)).toBe(true);
-		expect(noteCitesPage("L99999 확인, 코드 읽음", appPage)).toBe(false);
-		expect(noteCitesPage("export function 확인", appPage)).toBe(false);
+		for (const blank of ["", "   "])
+			expect(cli(ledger, "done", id, "--ack", ackOf(out), "--note", blank).code).toBe(1);
+		expect(cli(ledger, "done", id, "--ack", ackOf(out), "--note", "전반적으로 확인함").code).toBe(0);
 	});
 
 	test("99%에서는 finish와 verify가 거부되고 100%에서 통과한다", () => {
@@ -758,21 +704,17 @@ describe("ledger 진행 규칙", () => {
 // free-form page notes
 // ---------------------------------------------------------------------------
 
-describe("모든 각도의 코드 페이지 메모는 자유 서술이고 페이지 인용만 요구한다", () => {
+describe("모든 각도의 코드 페이지 메모는 비어 있지 않은 자유 서술이다", () => {
 	const ANGLES = ["correctness", "regression", "requirement", "cleanup"];
-	const DEEP = ["production", "schema", "migration", "config"];
 	const doneWith = (ledger: string, out: string, note: string) =>
 		cli(ledger, "done", pageIdOf(out), "--ack", ackOf(out), "--note", note);
 
 	for (const angle of ANGLES) {
-		test(`${angle}: 페이지를 인용한 메모는 통과하고 인용이 없는 메모는 거부된다`, () => {
+		test(`${angle}: 인용 없는 메모도 통과하고 빈 메모는 거부된다`, () => {
 			const ledger = newLedger(angle);
 			const out = cli(ledger, "next").stdout;
-			expect(DEEP).toContain(kindOf(out));
-			const vague = doneWith(ledger, out, "전반적으로 확인함");
-			expect(vague.code).toBe(1);
-			expect(vague.stderr).toContain("must cite");
-			expect(doneWith(ledger, out, `${citeOf(out)} 확인함`).code).toBe(0);
+			expect(doneWith(ledger, out, "  ").code).toBe(1);
+			expect(doneWith(ledger, out, "전반적으로 확인함").code).toBe(0);
 		});
 
 		test(`${angle}: 메모 안의 \`a || b\`는 항목 구분자로 쪼개지지 않고 통과한다`, () => {
@@ -784,20 +726,12 @@ describe("모든 각도의 코드 페이지 메모는 자유 서술이고 페이
 		test(`${angle}: NEXT와 resume은 각도별 템플릿을 보이지 않는다`, () => {
 			const ledger = newLedger(angle);
 			const out = cli(ledger, "next").stdout;
-			expect(out).toContain("full note: cite a line from this page");
+			expect(out).toContain("<what you checked and concluded>");
+			expect(out).not.toMatch(/cite a line|short note is enough/);
 			expect(out).not.toMatch(/breaks-if|changed-contract|dependents:|branches:|quality:/);
 			expect(cli(ledger, "resume").stdout).not.toContain("NOTE TEMPLATE");
 		});
 	}
-
-	test("문서 페이지는 모든 각도에서 짧은 메모로 충분하다", () => {
-		for (const angle of ANGLES) {
-			const ledger = newLedger(angle);
-			const page = advanceTo(ledger, ["doc"]);
-			expect(page).toContain("short note is enough");
-			expect(doneWith(ledger, page, "관련 메커니즘 없음: 안내 문서").code).toBe(0);
-		}
-	});
 });
 
 // ---------------------------------------------------------------------------
@@ -861,30 +795,6 @@ describe("git 설정과 무관한 diff 해석", () => {
 			if (saved === undefined) delete process.env.GIT_CONFIG_GLOBAL;
 			else process.env.GIT_CONFIG_GLOBAL = saved;
 		}
-	});
-});
-
-describe("CRLF 파일 페이지", () => {
-	test("본문 줄을 파싱해 인용 없는 메모는 거부하고 실제 줄 번호·식별자를 인용한 메모는 받는다", () => {
-		const crlf = (s: string) => s.replace(/\n/g, "\r\n");
-		const m = miniRepo(
-			"crlf",
-			{ "src/w.ts": crlf("export const base = 1;\n") },
-			{ "src/w.ts": crlf("export const base = 1;\nexport function computeWidgetTotal() { return 7; }\n") },
-		);
-		const lg = path.join(m.root, "ledger");
-		expect(run(["init", "--plan", m.out, "--angle", "correctness", "--ledger", lg]).code).toBe(0);
-		const out = cli(lg, "next").stdout;
-		expect(out).toContain("\r");
-		const id = pageIdOf(out);
-		const done = (note: string) => cli(lg, "done", id, "--ack", ackOf(out), "--note", note);
-		expect(done("전반적으로 확인함").code).toBe(1);
-		expect(done("L9 확인함").code).toBe(1);
-		expect(done("computeWidgetTotal 확인함").code).toBe(0);
-		const lg2 = path.join(m.root, "ledger2");
-		run(["init", "--plan", m.out, "--angle", "correctness", "--ledger", lg2]);
-		const out2 = cli(lg2, "next").stdout;
-		expect(cli(lg2, "done", pageIdOf(out2), "--ack", ackOf(out2), "--note", "L2 확인함").code).toBe(0);
 	});
 });
 

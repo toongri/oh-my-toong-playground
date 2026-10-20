@@ -194,8 +194,10 @@ describe("diff-cursor E2E: 네 finder가 diff를 100% 읽는 경로", () => {
 			expect(fin.code).toBe(0);
 			const codePages = seen.filter((o) => /^PAGE \S+ {2}kind=production$/m.test(o));
 			expect(codePages.length).toBeGreaterThan(0);
-			for (const o of codePages)
-				expect(o).toContain('--note "<full note: cite a line from this page (L120 or path:120) or an identifier in backticks>" --next');
+			for (const o of codePages) {
+				expect(o).toContain('--note "<what you checked and concluded>" --next');
+				expect(o).not.toMatch(/cite a line/);
+			}
 		}
 
 		const verify = run(["verify", "--plan", coverage.planDir, "--ledgers", ...ANGLES.map(ledgerOf)]);

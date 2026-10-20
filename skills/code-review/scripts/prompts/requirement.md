@@ -22,7 +22,7 @@ Read the diff only as `## Diff Coverage Protocol` in the REVIEW CONTENT describe
 
 ## Page notes
 
-On every production, schema, migration, or config page, write the note as free prose in your own angle's words. Cite the lines or identifiers you checked on this page and say what you concluded about whether the page meets the criteria and decision rules it bears on. Record open questions that need another page as "check later: <what, where>", and revisit them before `finish` (re-read all notes in full with `{CURSOR} notes`). If you cannot say why the change holds, record a candidate with `{CURSOR} candidate add --page <this page id>` and name its id in the note. The cursor refuses a code-page note that cites no line number or identifier from the page. Do not invent a candidate you cannot ground in the code; a candidate still needs a nameable failure scenario.
+On every page, write the note as free prose in your own angle's words. Say what you checked on this page and what you concluded about whether the page meets the criteria and decision rules it bears on. Record open questions that need another page as "check later: <what, where>", and revisit them before `finish` (re-read all notes in full with `{CURSOR} notes`). If you cannot say why the change holds, record a candidate with `{CURSOR} candidate add --page <this page id>` and name its id in the note. Citing the lines you checked helps the end-of-walk pass. Do not invent a candidate you cannot ground in the code; a candidate still needs a nameable failure scenario.
 
 ## Your angle
 

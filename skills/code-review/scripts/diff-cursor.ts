@@ -46,19 +46,12 @@ const KIND_ORDER: readonly PageKind[] = [
 	"test",
 	"doc",
 ];
-const DEEP_KINDS: ReadonlySet<PageKind> = new Set<PageKind>([
-	"production",
-	"schema",
-	"migration",
-	"config",
-]);
 type Verdict = (typeof VERDICTS)[number];
 
 const HUNK_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const CONT_COL = "  cont |";
 /** Lines longer than this are printed as `cont` chunks of at most this many bytes. */
 const SLICE_BYTES = 512;
-const BODY_LINE_RE = /^( {0,5}\d+| {6}| {2}cont) \|([^\n]*?)\r?$/;
 
 class CursorError extends Error {
 	readonly exitCode: 1 | 2;
@@ -1393,13 +1386,9 @@ function emit(ctx: Ctx, text: string): string {
 
 function showPage(ctx: Ctx, id: string, lead: string, label: string): string {
 	const l = ctx.ledger;
-	const meta = pageMeta(ctx, id);
 	const done = doneCount(l);
 	const head = `${lead}[${label} ${id} · page ${l.order.indexOf(id) + 1}/${l.order.length} · angle ${l.angle} · done ${done} · remaining ${l.order.length - done}]\n`;
-	const note = !DEEP_KINDS.has(meta.kind)
-		? '<short note is enough, e.g. "no relevant mechanism: <reason>">'
-		: "<full note: cite a line from this page (L120 or path:120) or an identifier in backticks>";
-	const foot = `NEXT: done ${id} --ack <code from the ### ACK line mid-page> --note "${note}" --next\n`;
+	const foot = `NEXT: done ${id} --ack <code from the ### ACK line mid-page> --note "<what you checked and concluded>" --next\n`;
 	return emit(ctx, head + pageText(ctx, id) + foot);
 }
 
@@ -1413,49 +1402,6 @@ function issueNext(ctx: Ctx, lead: string): string {
 		save(ctx);
 	}
 	return showPage(ctx, cur, lead, "PAGE");
-}
-
-const LINE_CITE_RE =
-	/(?:\bL|:|#|\blines?\s+|라인\s*)(\d+)(?:\s*[-–~]\s*L?(\d+))?|(\d+)\s*(?:번째 줄|행|줄)/g;
-
-/** True when the note cites a new-file line number shown on the page or an identifier from its code. */
-export function noteCitesPage(note: string, page: string): boolean {
-	const lineNos = new Set<number>();
-	const corpus: string[] = [];
-	for (const line of page.split("\n")) {
-		const m = BODY_LINE_RE.exec(line);
-		if (m) {
-			const n = Number((m[1] ?? "").trim());
-			if (Number.isInteger(n) && (m[1] ?? "").trim() !== "" && (m[1] ?? "").trim() !== "cont")
-				lineNos.add(n);
-			corpus.push(m[2] ?? "");
-		} else if (line.startsWith("@@ ")) corpus.push(line);
-	}
-	const sorted = [...lineNos];
-	for (const m of note.matchAll(LINE_CITE_RE)) {
-		const a = Number(m[1] ?? m[3]);
-		const b = m[2] === undefined ? a : Number(m[2]);
-		if (sorted.some((n) => n >= Math.min(a, b) && n <= Math.max(a, b))) return true;
-	}
-	const text = corpus.join("\n");
-	for (const m of note.matchAll(/`([^`\n]{2,})`/g))
-		if (text.includes((m[1] ?? "").trim())) return true;
-	for (const m of note.matchAll(/[A-Za-z_$][\w$]*(\()?/g)) {
-		const tok = m[0].replace(/\($/, "");
-		const codeShaped =
-			tok.length >= 3 &&
-			(/[A-Z]/.test(tok.slice(1)) || tok.includes("_") || /\d/.test(tok) || m[1] === "(");
-		if (codeShaped && new RegExp(`(?<![\\w$])${tok.replace(/\$/g, "\\$")}(?![\\w$])`).test(text))
-			return true;
-	}
-	if (lineNos.size === 0) {
-		const files = page
-			.split("\n")
-			.filter((l) => l.startsWith("  ") && !BODY_LINE_RE.test(l))
-			.map((l) => l.trim().split(/\s+/)[0] ?? "");
-		if (files.some((f) => f !== "" && note.includes(f))) return true;
-	}
-	return false;
 }
 
 function ledgerDirOf(v: Values, env: NodeJS.ProcessEnv): string {
@@ -1544,13 +1490,6 @@ function cmdDone(v: Values, env: NodeJS.ProcessEnv, id: string | undefined): Out
 		}
 		const note = (v.note ?? "").trim();
 		if (note === "") throw refuse(`--note must not be blank: record what you checked on ${id}`);
-		if (DEEP_KINDS.has(meta.kind)) {
-			const page = pageText(ctx, id);
-			if (!noteCitesPage(note, page))
-				throw refuse(
-					`note for ${meta.kind} page ${id} must cite what you checked: a new-file line number shown on the page (L120, path:120, lines 120-130) or an identifier from its code (\`name\`)`,
-				);
-		}
 		l.pages[id] = { ...st, state: "done", doneAt: now(), note, ack };
 		save(ctx);
 		const line = `DONE ${id} (${doneCount(l)}/${l.order.length})\n`;

@@ -356,7 +356,7 @@ describe("finder prompts use the diff cursor and state only their own lens", () 
 	});
 });
 
-describe("finder page notes are free prose that cite the page", () => {
+describe("finder page notes are free prose with no citation rule", () => {
 	const template = readFileSync(TEMPLATE_MD, "utf-8");
 	const protocol = template.slice(
 		template.indexOf("## Diff Coverage Protocol"),
@@ -368,11 +368,17 @@ describe("finder page notes are free prose that cite the page", () => {
 	it("the Diff Coverage Protocol states the free-prose note rule the cursor enforces", () => {
 		expect(protocol).toMatch(/free prose/i);
 		expect(protocol).toContain("check later:");
-		expect(protocol).toMatch(/cites no line number or identifier/i);
+		expect(protocol).toMatch(/non-empty note/i);
 		expect(protocol).toMatch(/do not invent/i);
-		expect(protocol).toMatch(/doc page or a test-data page may take a short note/i);
+		expect(protocol).not.toMatch(/refuses[^.]*cites? no/i);
+		expect(protocol).not.toMatch(/must cite/i);
 		expect(protocol).not.toMatch(STRUCTURED_LABELS);
 		expect(protocol).not.toMatch(/do not pad notes/i);
+	});
+
+	it("no member prompt says the cursor refuses uncited notes", () => {
+		for (const m of ["correctness", "regression", "requirement", "cleanup"])
+			expect(read(m)).not.toMatch(/refuses[^.]*cites? no|must cite/i);
 	});
 
 	it("the protocol reads all notes with `notes`, pages `export`, names resplit and the --flag=value form", () => {
