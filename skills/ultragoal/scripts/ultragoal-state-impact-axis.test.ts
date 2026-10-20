@@ -16,7 +16,7 @@ import {
 
 // ---------------------------------------------------------------------------
 // 범위 우선 판정 — impact는 harm 정보이고 priority가 라우팅을 결정한다.
-// IN_SCOPE CONFIRMED는 priority에 따라 BLOCK/FIX/NOTE, PLAUSIBLE은 HIGH·MEDIUM이 ADJUDICATE이고 LOW는 NOTE.
+// IN_SCOPE CONFIRMED는 priority에 따라 BLOCK/FIX/NOTE, PLAUSIBLE도 같은 priority 경로를 따른다.
 // OUT_OF_SCOPE는 NOTE, UNKNOWN은 차단하며 무효화할 수 없다. IN_SCOPE의 NOTE가 아닌 지적은 무효화할 수 있다.
 // scope, scope_evidence, 현재 계약 해시와 impact는 필수다.
 // ---------------------------------------------------------------------------
@@ -137,8 +137,8 @@ describe("범위 우선 판정식: classifyReviewFindingOutcome (verdict × prio
 		["CONFIRMED", "LOW", "MEDIUM", "FIX"],
 		["CONFIRMED", "MEDIUM", "LOW", "NOTE"],
 		["PLAUSIBLE", "HIGH", "LOW", "NOTE"],
-		["PLAUSIBLE", "MEDIUM", "HIGH", "ADJUDICATE"],
-		["PLAUSIBLE", "LOW", "MEDIUM", "ADJUDICATE"],
+		["PLAUSIBLE", "MEDIUM", "HIGH", "BLOCK"],
+		["PLAUSIBLE", "LOW", "MEDIUM", "FIX"],
 	];
 
 	for (const [verdict, impact, priority, outcome] of CELLS) {
@@ -229,7 +229,7 @@ describe("완료 게이트: priority가 범위 내 finding의 라우팅을 결�
 		expect(requestComplete(SID)).toBe(false);
 	});
 
-	test("PLAUSIBLE × MEDIUM은 ADJUDICATE — 완료를 막는다", () => {
+	test("PLAUSIBLE × MEDIUM은 FIX — comment resolution 전까지 완료를 막는다", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeCompleteArtifact(SID, [
 			{ class: "regression", verdict: "PLAUSIBLE", impact: "MEDIUM", ref: "src/b.ts:7" },

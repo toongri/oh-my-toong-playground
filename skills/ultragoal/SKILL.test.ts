@@ -900,7 +900,7 @@ describe("deterministic ultragoal review routing contract", () => {
 	test("comment and approve do not trigger a code-review re-review", () => {
 		expect(completionGateMd).toContain("`COMMENT` and `APPROVE` never trigger a code-review re-review");
 		expect(completionGateMd).toContain(
-			"any `IN_SCOPE` + `CONFIRMED` finding with `priority=HIGH`",
+			"any `IN_SCOPE` finding (`CONFIRMED` or `PLAUSIBLE`) with `priority=HIGH`",
 		);
 	});
 

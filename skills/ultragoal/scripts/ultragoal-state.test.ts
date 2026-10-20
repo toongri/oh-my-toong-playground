@@ -3459,8 +3459,8 @@ describe("story layer: code-review INCONCLUSIVE status (TODO 2)", () => {
 describe("requirement-gap class: validator accepts and gate keys on verdict", () => {
 	// `class` is free text, so requirement-gap is accepted like any non-blank class.
 	// The gate keys on scope, verdict and priority: an IN_SCOPE PLAUSIBLE
-	// HIGH/MEDIUM finding routes to ADJUDICATE and blocks; PLAUSIBLE LOW is a note.
-	test("PLAUSIBLE requirement-gap finding requires adjudication", () => {
+	// MEDIUM finding routes to FIX (blocks until comment resolution); PLAUSIBLE LOW is a note.
+	test("PLAUSIBLE requirement-gap finding requires repair and comment resolution", () => {
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {

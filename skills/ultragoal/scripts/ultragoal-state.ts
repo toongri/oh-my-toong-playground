@@ -1463,7 +1463,7 @@ interface VerdictArtifact {
 export type ReviewFindingClass = string;
 export type ReviewImpact = "HIGH" | "MEDIUM" | "LOW";
 export type ReviewPriority = "HIGH" | "MEDIUM" | "LOW";
-export type ReviewFindingOutcome = "BLOCK" | "FIX" | "NOTE" | "ADJUDICATE";
+export type ReviewFindingOutcome = "BLOCK" | "FIX" | "NOTE";
 export type ReviewScope = "IN_SCOPE" | "OUT_OF_SCOPE" | "UNKNOWN";
 export type ReviewScopeBasis =
 	"requirement" | "regression" | "changed_code" | "non_goal" | "unrelated" | "uncertain";
@@ -1546,10 +1546,10 @@ function isReviewResolution(value: unknown): value is ReviewResolution {
 }
 
 /**
- * Scope admission precedes confidence and priority. In scope, a confirmed finding
- * blocks at HIGH, is a repair comment at MEDIUM and a note at LOW; a plausible
- * finding needs adjudication at HIGH or MEDIUM and is a note at LOW. Excluded
- * observations are report-only; unknown scope fails closed.
+ * Scope admission precedes priority. In scope, a finding blocks at HIGH, is a
+ * repair comment at MEDIUM and a note at LOW, whether CONFIRMED or PLAUSIBLE: the
+ * verdict is a visible label and does not change routing. Excluded observations
+ * are report-only; unknown scope fails closed.
  */
 export function classifyReviewFindingOutcome(finding: {
 	verdict: "CONFIRMED" | "PLAUSIBLE";
@@ -1560,7 +1560,6 @@ export function classifyReviewFindingOutcome(finding: {
 	if (finding.scope === "OUT_OF_SCOPE") return "NOTE";
 	if (finding.scope === "UNKNOWN") return "BLOCK";
 	if (finding.scope === "IN_SCOPE") {
-		if (finding.verdict === "PLAUSIBLE") return finding.priority === "LOW" ? "NOTE" : "ADJUDICATE";
 		return finding.priority === "HIGH" ? "BLOCK" : finding.priority === "MEDIUM" ? "FIX" : "NOTE";
 	}
 	return "BLOCK";
@@ -1749,7 +1748,6 @@ function reviewResultFromArtifact(raw: string, artifact: CodeReviewArtifact, sta
 			if (finding.scope === "IN_SCOPE") result.findings.repair.push(finding);
 			else result.findings.adjudicate.push(finding);
 		} else if (outcome === "FIX") result.findings.repair.push(finding);
-		else if (outcome === "ADJUDICATE") result.findings.adjudicate.push(finding);
 		else result.findings.notes.push(finding);
 	}
 	// Degradation is not silent: surface each invalid finding and the fix so the
@@ -2183,7 +2181,7 @@ export type DismissalResult = { dismissed: true } | { dismissed: false; refusal:
  * Deliberately narrow, so the lever unblocks a specific wrong call rather than
  * disabling the review lane. It refuses unless exactly one admitted (IN_SCOPE)
  * finding with this exact `ref` and `class` holds up completion in the CURRENT
- * artifact — outcome BLOCK or FIX (CONFIRMED) or ADJUDICATE (PLAUSIBLE); a NOTE
+ * artifact — outcome BLOCK or FIX (CONFIRMED or PLAUSIBLE); a NOTE
  * needs no dismissal and UNKNOWN or OUT_OF_SCOPE cannot be cleared this way. A
  * dismissal cannot be issued ahead of the finding it answers, and it records the
  * artifact's byte hash, so it lapses the moment the next review round writes

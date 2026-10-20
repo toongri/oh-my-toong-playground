@@ -124,16 +124,28 @@ describe("priority routing", () => {
 		expect(state.getReviewResult(SID)).toMatchObject({ verdict: "REQUEST_CHANGES", reason: "inconclusive review", findings: { repair: [], adjudicate: [], notes: [expect.objectContaining({ ref: "src/a.ts:1" })] } });
 	});
 
-	test("미확정 IN_SCOPE PLAUSIBLE은 수리 없이 adjudication evidence를 남긴다", () => {
+	test("미확정 IN_SCOPE PLAUSIBLE HIGH는 CONFIRMED처럼 repair로 라우팅된다", () => {
 		greenObjectiveLane();
 		writeReview([finding({ verdict: "PLAUSIBLE", priority: "HIGH" })]);
-		expect(state.getReviewResult(SID)).toMatchObject({ verdict: "REQUEST_CHANGES", findings: { repair: [], adjudicate: [finding({ verdict: "PLAUSIBLE", priority: "HIGH" })], notes: [] } });
+		expect(state.getReviewResult(SID)).toMatchObject({ verdict: "REQUEST_CHANGES", findings: { repair: [finding({ verdict: "PLAUSIBLE", priority: "HIGH" })], adjudicate: [], notes: [] } });
 	});
 
 	test("UNKNOWN은 추측 수리가 아닌 adjudication evidence로 남는다", () => {
 		greenObjectiveLane();
 		writeReview([finding({ scope: "UNKNOWN", priority: "HIGH", scope_evidence: { basis: "uncertain", reference: "outcome", rationale: "scope unresolved" } })]);
 		expect(state.getReviewResult(SID)).toMatchObject({ verdict: "REQUEST_CHANGES", findings: { repair: [], adjudicate: [finding({ scope: "UNKNOWN", priority: "HIGH", scope_evidence: { basis: "uncertain", reference: "outcome", rationale: "scope unresolved" } })], notes: [] } });
+	});
+
+	test("PLAUSIBLE MEDIUM도 CONFIRMED MEDIUM과 같은 COMMENT 해소 경로로 완료된다", () => {
+		greenObjectiveLane();
+		writeReview([finding({ verdict: "PLAUSIBLE", priority: "MEDIUM" })]);
+		const medium = state.getReviewResult(SID);
+		expect(medium).toMatchObject({ verdict: "COMMENT", findings: { adjudicate: [] } });
+		expect(medium.findings.repair).toHaveLength(1);
+		expect(state.requestComplete(SID)).toBe(false);
+		writeFileSync(join(dir, "fix.md"), "fixed");
+		state.recordCommentResolution(SID, medium.artifact_sha256, [join(dir, "fix.md")]);
+		expect(state.requestComplete(SID)).toBe(true);
 	});
 
 	test("MEDIUM 수리는 COMMENT와 현재 hash-bound evidence가 필요하고 LOW-only는 필요 없다", () => {
@@ -192,7 +204,7 @@ describe("priority routing", () => {
 		expect(state.requestComplete(SID)).toBe(false);
 	});
 
-	test("IN_SCOPE BLOCK·FIX·ADJUDICATE는 dismissal할 수 있고 NOTE는 거부한다", () => {
+	test("IN_SCOPE BLOCK·FIX(PLAUSIBLE 포함)는 dismissal할 수 있고 NOTE는 거부한다", () => {
 		greenObjectiveLane();
 		writeReview([finding({ priority: "LOW" })]);
 		expect(state.dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" })).toBe(false);

@@ -125,12 +125,12 @@ describe("범위 판정이 심각도보다 먼저 적용된다", () => {
 		expect(classify(finding("IN_SCOPE", "CONFIRMED", "LOW"))).toBe("NOTE");
 	});
 
-	test("범위 안 PLAUSIBLE 지적은 HIGH·MEDIUM만 adjudication 대상이고 LOW는 메모다", () => {
+	test("범위 안 PLAUSIBLE 지적도 CONFIRMED처럼 priority로 BLOCK·FIX·NOTE가 갈린다", () => {
 		const classify = (state as Record<string, unknown>)["classifyReviewFindingOutcome"] as (
 			finding: object,
 		) => string;
-		expect(classify(finding("IN_SCOPE", "PLAUSIBLE", "HIGH"))).toBe("ADJUDICATE");
-		expect(classify(finding("IN_SCOPE", "PLAUSIBLE", "MEDIUM"))).toBe("ADJUDICATE");
+		expect(classify(finding("IN_SCOPE", "PLAUSIBLE", "HIGH"))).toBe("BLOCK");
+		expect(classify(finding("IN_SCOPE", "PLAUSIBLE", "MEDIUM"))).toBe("FIX");
 		expect(classify(finding("IN_SCOPE", "PLAUSIBLE", "LOW"))).toBe("NOTE");
 	});
 
@@ -649,7 +649,7 @@ describe("독립리뷰 회귀 방지", () => {
 	});
 
 	for (const impact of ["HIGH", "MEDIUM"] as const) {
-		test(`범위 안 PLAUSIBLE ${impact}(ADJUDICATE)는 근거를 남긴 사용자 무효화로 해소된다`, () => {
+		test(`범위 안 PLAUSIBLE ${impact}는 근거를 남긴 사용자 무효화로 해소된다`, () => {
 			state.setGoalState(SID, { phase: "pursuing" });
 			writeObjectiveArtifact();
 			writeReview([finding("IN_SCOPE", "PLAUSIBLE", impact)]);
@@ -673,7 +673,7 @@ describe("독립리뷰 회귀 방지", () => {
 		expect(state.requestComplete(SID)).toBe(true);
 	});
 
-	test("이미 저장된 PLAUSIBLE 무효화는 같은 아티팩트의 ADJUDICATE 지적을 해소한다", () => {
+	test("이미 저장된 PLAUSIBLE 무효화는 같은 아티팩트의 PLAUSIBLE 지적을 해소한다", () => {
 		state.setGoalState(SID, { phase: "pursuing" });
 		writeObjectiveArtifact();
 		writeReview([finding("IN_SCOPE", "PLAUSIBLE", "HIGH")]);
