@@ -791,8 +791,8 @@ export interface HtmlSubmissionInput {
  * facts — every diagram's SVG byte-identical and in order, every fenced code block
  * verbatim in a `<pre>`, every commit hash and changed path, every `##`/`###`
  * heading in order, every text block (paragraph, list item, table cell, component text) verbatim, a style rule for each reference class the document uses, and no
- * `<foreignObject>`. A clean strict lint receipt for these exact HTML bytes proves
- * the page was captured and looked at in both themes and at phone width. The
+ * `<foreignObject>`. A receipt proves only a clean strict lint of these exact HTML
+ * bytes in the three lint runs (1280 light, 1280 dark, 400 light); it does not prove anyone looked at the page. The
  * technical-writing report and final checklist close with their machine-checkable lines.
  */
 export function checkHtmlSubmission(input: HtmlSubmissionInput): { pass: boolean; failedItems: string[] } {
