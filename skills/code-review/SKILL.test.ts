@@ -712,7 +712,7 @@ describe("code-review 변경 코드 기본 범위 계약", () => {
 		expect(skillMd).toContain("It leaves scope only when an explicit exclusion statement directly addresses that behavior or defect class");
 		expect(skillMd).toContain("A requirement's silence never excludes. A decision about a different behavior never excludes");
 		expect(verifierPrompt).toContain("- **IN_SCOPE / changed_code:**");
-		expect(verifierPrompt).toContain("Set `reference` to `non_goals` and quote that statement verbatim in `rationale`.");
+		expect(verifierPrompt).toContain("Set `reference` to `non_goals`. Name the exclusion you rely on, by `non_goals#N` or by quoting it; judge yourself whether it covers this defect.");
 		expect(verifierPrompt).toContain("With no such statement, a defect in changed code is IN_SCOPE / changed_code.");
 		expect(verifierPrompt).toContain("the defect lies in code this change did not touch");
 	});

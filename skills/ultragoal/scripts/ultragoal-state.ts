@@ -1819,7 +1819,7 @@ function collapseWhitespace(text: string): string {
 	return text.replace(/\s+/g, " ").trim();
 }
 
-/** Normalized non_goals statements that say nothing: quoting one excludes nothing, so none counts as a quote. Short real exclusions ("skip ui") stay quotable. */
+/** Normalized non_goals statements that say nothing: naming one excludes nothing, so none counts as an identified exclusion. Short real exclusions ("skip ui") stay quotable. */
 const PLACEHOLDER_NON_GOAL_STATEMENTS = new Set(["none", "n/a", "na", "tbd", "-", "nothing", "없음", "해당 없음"]);
 
 /**
@@ -1849,7 +1849,7 @@ function normalizeQuote(text: string): string {
  * OUT_OF_SCOPE is the nonblocking branch and its `reference` feeds the non-empty
  * slot check below — a `non_goal` exclusion must cite the `non_goals` slot it
  * claims to be excluded by, that slot must be non-empty, and the rationale must
- * quote one of its statements. IN_SCOPE `reference`
+ * identify one of its statements by `non_goals#N` or by quote. IN_SCOPE `reference`
  * feeds no gate decision (routing is f(scope, verdict, priority)), so no narrowing
  * is imposed there.
  */
@@ -1888,16 +1888,21 @@ function scopeEvidenceReferenceProblem(
 		if (slotValue === undefined || slotValue.trim() === "")
 			return `OUT_OF_SCOPE reference "${reference}" points at an empty contract slot; the excluding slot must be non-empty`;
 		if (basis === "non_goal") {
-			// An exclusion must be an explicit statement, quoted, not a stretched requirement:
-			// the rationale carries one non_goals statement verbatim (whitespace-insensitive).
-			// Whether that statement directly addresses the defect stays the reviewer's call.
+			// The finding must identify one explicit, non-placeholder non_goals statement:
+			// by `non_goals#N` (1-based) or by quoting it (whitespace-insensitive). Whether
+			// that statement covers the defect is the reviewer's judgment, not checked here.
+			// The pointer lives in the rationale: `reference` is already pinned to "non_goals".
 			const allStatements = nonGoalStatements(slotValue);
-			const statements = allStatements.filter(
-				(statement) => !PLACEHOLDER_NON_GOAL_STATEMENTS.has(normalizeQuote(statement)),
-			);
-			const rationale = normalizeQuote(finding.scope_evidence.rationale);
-			if (!statements.some((statement) => rationale.includes(normalizeQuote(statement))))
-				return `OUT_OF_SCOPE + non_goal rationale must quote verbatim the non_goals statement (case, smart quotes, markdown and trailing punctuation are ignored; placeholder statements such as "none" or "n/a" are not quotable) that excludes this defect (non_goals statements: ${allStatements.map((statement) => `"${statement}"`).join(", ")}); a requirement's silence or a decision about a different behavior is not an exclusion — a defect in code this change added or modified is IN_SCOPE + changed_code`;
+			const isRealStatement = (statement: string) =>
+				!PLACEHOLDER_NON_GOAL_STATEMENTS.has(normalizeQuote(statement));
+			const rawRationale = finding.scope_evidence.rationale;
+			const rationale = normalizeQuote(rawRationale);
+			const pointed = [...rawRationale.matchAll(/non_goals#(\d+)(?!\d)/gi)].map((m) => allStatements[Number(m[1]) - 1]);
+			const identified =
+				pointed.some((statement) => statement !== undefined && isRealStatement(statement)) ||
+				allStatements.some((statement) => isRealStatement(statement) && rationale.includes(normalizeQuote(statement)));
+			if (!identified)
+				return `OUT_OF_SCOPE + non_goal rationale must name the non_goals statement it relies on, by number (non_goals#N) or by quoting it (case, smart quotes, markdown and trailing punctuation are ignored; placeholder statements such as "none" or "n/a" are not usable); judge yourself whether that statement covers this defect (non_goals statements: ${allStatements.map((statement, i) => `non_goals#${i + 1}: "${statement}"`).join(", ")}); a requirement's silence or a decision about a different behavior is not an exclusion — a defect in code this change added or modified is IN_SCOPE + changed_code`;
 		}
 	}
 	return null;

@@ -4672,11 +4672,31 @@ describe("non_goal exclusion quote matching", () => {
 		expect(quoteProblem("- 인증 제외 | decider: x", "인증 제외")).toEqual([]);
 	});
 
-	test("the refusal lists every non_goals statement, placeholders included", () => {
+	test("the refusal lists every non_goals statement with its number, placeholders included", () => {
 		const problems = quoteProblem("- none | decider: x\n- skip ui | decider: y", "unrelated");
 		expect(problems).toHaveLength(1);
-		expect(problems[0]).toContain('"none"');
-		expect(problems[0]).toContain('"skip ui"');
+		expect(problems[0]).toContain('non_goals#1: "none"');
+		expect(problems[0]).toContain('non_goals#2: "skip ui"');
+	});
+
+	test("a non_goals#N pointer to a real statement passes even when the rationale paraphrases it", () => {
+		const nonGoals = "- none | decider: x\n- redesign the login screen | decider: y";
+		expect(quoteProblem(nonGoals, "non_goals#2 covers this: the UI overhaul is out")).toEqual([]);
+		expect(quoteProblem(nonGoals, "NON_GOALS#2")).toEqual([]);
+	});
+
+	test("a non_goals#N pointer out of range is rejected", () => {
+		expect(quoteProblem("- skip ui | decider: x", "non_goals#9 excludes it")).toHaveLength(1);
+		expect(quoteProblem("- skip ui | decider: x", "non_goals#0 excludes it")).toHaveLength(1);
+	});
+
+	test("a pointer must match the whole number, not a prefix of a larger one", () => {
+		const nonGoals = "- skip ui | decider: x";
+		expect(quoteProblem(nonGoals, "non_goals#10")).toHaveLength(1);
+	});
+
+	test("a non_goals#N pointer to a placeholder statement is rejected", () => {
+		expect(quoteProblem("- none | decider: x\n- skip ui | decider: y", "non_goals#1 excludes it")).toHaveLength(1);
 	});
 });
 
