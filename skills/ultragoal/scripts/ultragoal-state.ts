@@ -1819,8 +1819,8 @@ function collapseWhitespace(text: string): string {
 	return text.replace(/\s+/g, " ").trim();
 }
 
-/** A non_goals statement shorter than this (after normalization) is too generic to count as a quote: "none", "n/a", "tbd" would match almost any rationale. */
-const MIN_QUOTABLE_STATEMENT_CHARS = 8;
+/** Normalized non_goals statements that say nothing: quoting one excludes nothing, so none counts as a quote. Short real exclusions ("skip ui") stay quotable. */
+const PLACEHOLDER_NON_GOAL_STATEMENTS = new Set(["none", "n/a", "na", "tbd", "-", "nothing", "없음", "해당 없음"]);
 
 /**
  * Comparison form of a quote: typographic quotes mapped to ASCII, markdown
@@ -1891,12 +1891,13 @@ function scopeEvidenceReferenceProblem(
 			// An exclusion must be an explicit statement, quoted, not a stretched requirement:
 			// the rationale carries one non_goals statement verbatim (whitespace-insensitive).
 			// Whether that statement directly addresses the defect stays the reviewer's call.
-			const statements = nonGoalStatements(slotValue).filter(
-				(statement) => normalizeQuote(statement).length >= MIN_QUOTABLE_STATEMENT_CHARS,
+			const allStatements = nonGoalStatements(slotValue);
+			const statements = allStatements.filter(
+				(statement) => !PLACEHOLDER_NON_GOAL_STATEMENTS.has(normalizeQuote(statement)),
 			);
 			const rationale = normalizeQuote(finding.scope_evidence.rationale);
 			if (!statements.some((statement) => rationale.includes(normalizeQuote(statement))))
-				return `OUT_OF_SCOPE + non_goal rationale must quote verbatim the non_goals statement (case, smart quotes, markdown and trailing punctuation are ignored; statements under ${MIN_QUOTABLE_STATEMENT_CHARS} characters are not quotable) that excludes this defect (one of: ${statements.map((statement) => `"${statement}"`).join(", ")}); a requirement's silence or a decision about a different behavior is not an exclusion — a defect in code this change added or modified is IN_SCOPE + changed_code`;
+				return `OUT_OF_SCOPE + non_goal rationale must quote verbatim the non_goals statement (case, smart quotes, markdown and trailing punctuation are ignored; placeholder statements such as "none" or "n/a" are not quotable) that excludes this defect (non_goals statements: ${allStatements.map((statement) => `"${statement}"`).join(", ")}); a requirement's silence or a decision about a different behavior is not an exclusion — a defect in code this change added or modified is IN_SCOPE + changed_code`;
 		}
 	}
 	return null;
@@ -2465,21 +2466,21 @@ export function requestComplete(sessionId: string, codexGoalArg?: string): boole
 	});
 }
 
-const ADR_HEADING = /^### (D-\d+):[ \t]*(.*?)[ \t]*$/;
+const ADR_HEADING = /^#{3,4} (D-\d+)[ \t]*[:\u2014-][ \t]*(.*?)[ \t]*$/;
 const ANY_HEADING = /^#{1,6}[ \t]/;
-const DECISION_FIELD = /^Decision(?:[ \t]*\([^)]*\))?:[ \t]*(.*)$/;
+const DECISION_FIELD = /^(?:-[ \t]+)?(?:\*\*)?Decision(?:[ \t]*\([^)]*\))?(?:\*\*)?:(?:\*\*)?[ \t]*(.*)$/;
 // Plan ADR field labels (see skills/prometheus/plan-template.md). A continuation line
 // like `Applies when: x` is Decision text, not a field, so only these end the field.
 const FIELD_LABEL =
-	/^(?:\*\*)?(?:Tier|Context|Decision Drivers|Considered Options|Decision|Rationale|Consequences|Follow-ups|Why|Invalidated alternative|Cites|Owns|Must NOT own|Edges)(?:[ \t]*\([^)]*\))?:/;
+	/^(?:-[ \t]+)?(?:\*\*)?(?:Tier|Context|Decision Drivers|Considered Options|Decision|Rationale|Consequences|Follow-ups|Why|Invalidated alternative|Cites|Owns|Must NOT own|Edges)(?:[ \t]*\([^)]*\))?(?:\*\*)?:/;
 
 /**
  * Explicit decision rules of the plan at `planPath`: one `[D-N] <title> — <text>`
- * line per `### D-<n>: <title>` ADR item, under a `Decision rules:` header, with
+ * line per `### D-<n>: <title>` ADR item (`###` or `####`; `:`, em dash or `-` separator), under a `Decision rules:` header, with
  * a trailing newline. <text> is the item's `Decision` field (its first line plus
  * continuation lines up to a blank line or the next field label, joined by single
- * spaces); an item with no `Decision` field contributes its whole body up to the
- * next heading. Headings inside code blocks and comments are ignored. Returns ""
+ * spaces); an item with no `Decision` field is omitted (its body holds rationale
+ * and alternatives, which must not become binding rules). Headings inside code blocks and comments are ignored. Returns ""
  * for a missing/unreadable plan or a plan without ADR items — the plan is an
  * optional enrichment, so no error. Rules ride in the requirements slot only,
  * never in ScopeContract, so scope_contract_sha256 is unaffected.
@@ -2502,15 +2503,11 @@ function planDecisionRules(planPath: string): string {
 		const body = lines.slice(i + 1, end);
 		const start = body.findIndex((l) => DECISION_FIELD.test(l));
 		const first = start === -1 ? null : DECISION_FIELD.exec(body[start]);
-		let decision: string[];
-		if (first === null) {
-			decision = body;
-		} else {
-			decision = [first[1]];
-			for (let k = start + 1; k < body.length; k++) {
-				if (body[k].trim() === "" || body[k].trim() === "---" || FIELD_LABEL.test(body[k])) break;
-				decision.push(body[k]);
-			}
+		if (first === null) continue;
+		const decision = [first[1]];
+		for (let k = start + 1; k < body.length; k++) {
+			if (body[k].trim() === "" || body[k].trim() === "---" || FIELD_LABEL.test(body[k])) break;
+			decision.push(body[k]);
 		}
 		const rule = decision.map((l) => l.trim()).filter((l) => l !== "").join(" ");
 		entries.push(`[${heading[1]}] ${heading[2]} — ${rule}`);

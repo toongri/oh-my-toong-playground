@@ -3547,7 +3547,7 @@ describe("serializeRequirements (internal helper, used by serialize-review-conte
 	});
 
 	// A plan with `### D-N:` ADR items adds a Decision rules block: Decision field
-	// text for an item that has one, the body for an item without one. Code-block
+	// text for an item that has one; an item without one is omitted. Code-block
 	// headings are ignored. The block stays out of ScopeContract.
 	test("플랜의 ADR 결정 규칙을 Decision rules 블록으로 덧붙인다", () => {
 		const planPath = join(tmpDir, "plan.md");
@@ -3594,7 +3594,6 @@ describe("serializeRequirements (internal helper, used by serialize-review-conte
 				"Decision rules:",
 				"[D-5] Shapes live in schemas — New `record-v2.ts` exports the shapes.",
 				'[D-6] Rule for payload-schema failure — "If any v2 row fails the schema, the document\'s v2 output is `null`: no v2 row is written or invalidated."',
-				"[D-7] Body only — Plain body without a decision field.",
 				"",
 			].join("\n"),
 		);
@@ -4654,21 +4653,30 @@ describe("non_goal exclusion quote matching", () => {
 		expect(quoteProblem("- redesign the login screen | decider: x", "the plan is silent about this")).toHaveLength(1);
 	});
 
-	test("a too-short statement is not quotable", () => {
+	test("a placeholder statement is not quotable", () => {
 		expect(quoteProblem("- none | decider: x", "there is none of this in scope")).toHaveLength(1);
 		expect(quoteProblem("- n/a | decider: x", "n/a")).toHaveLength(1);
+		expect(quoteProblem("- N/A. | decider: x", "n/a")).toHaveLength(1);
+		expect(quoteProblem("- 없음 | decider: x", "없음")).toHaveLength(1);
+		expect(quoteProblem("- 해당 없음 | decider: x", "해당 없음")).toHaveLength(1);
 	});
 
-	test("a rationale quoting only the too-short statement does not count when a long one exists", () => {
+	test("a rationale quoting only the placeholder statement does not count when a real one exists", () => {
 		const nonGoals = "- none | decider: x\n- redesign the login screen | decider: y";
 		expect(quoteProblem(nonGoals, "none of the listed items apply")).toHaveLength(1);
 		expect(quoteProblem(nonGoals, "excluded: redesign the login screen")).toEqual([]);
 	});
 
-	test("the minimum is 8 normalized characters", () => {
-		expect(quoteProblem("- skip ui | decider: x", "skip ui")).toHaveLength(1); // 7
-		expect(quoteProblem("- no ui work | decider: x", "no ui work")).toEqual([]); // 10
-		expect(quoteProblem("- skip uis. | decider: x", "skip uis")).toEqual([]); // 8 after trimming "."
+	test("short real exclusions are quotable", () => {
+		expect(quoteProblem("- skip ui | decider: x", "skip ui")).toEqual([]);
+		expect(quoteProblem("- 인증 제외 | decider: x", "인증 제외")).toEqual([]);
+	});
+
+	test("the refusal lists every non_goals statement, placeholders included", () => {
+		const problems = quoteProblem("- none | decider: x\n- skip ui | decider: y", "unrelated");
+		expect(problems).toHaveLength(1);
+		expect(problems[0]).toContain('"none"');
+		expect(problems[0]).toContain('"skip ui"');
 	});
 });
 
@@ -4695,5 +4703,50 @@ describe("plan decision rules keep continuation lines that look like labels", ()
 		expect(serializeRequirements(S)).toContain(
 			"[D-1] Scoped rule — Retry is capped at three attempts. Applies when: the upstream returns 503. Note: the cap is per request.\n",
 		);
+	});
+});
+
+describe("plan decision rule formats", () => {
+	function rulesFor(planLines: string[]): string {
+		const planPath = join(tmpDir, "plan-formats.md");
+		writeFileSync(planPath, planLines.join("\n"));
+		setGoalState(S, { phase: "planning", outcome: "ship it", plan_path: planPath });
+		return serializeRequirements(S);
+	}
+
+	test.each([
+		["bold label with colon inside", "**Decision:** x rule"],
+		["bold label with colon outside", "**Decision**: x rule"],
+		["bulleted label", "- Decision: x rule"],
+		["bulleted bold label", "- **Decision:** x rule"],
+	])("Decision field accepts %s", (_name, line) => {
+		expect(rulesFor(["### D-1: T", line, ""])).toContain("[D-1] T — x rule\n");
+	});
+
+	test.each([
+		["bold with colon outside", "**Why**: because"],
+		["bold with colon inside", "**Why:** because"],
+		["bulleted", "- Why: because"],
+		["bulleted bold", "- **Rationale**: because"],
+	])("FIELD_LABEL ends the Decision field for %s", (_name, label) => {
+		const out = rulesFor(["### D-1: T", "Decision: x rule", label, ""]);
+		expect(out).toContain("[D-1] T — x rule\n");
+		expect(out).not.toContain("because");
+	});
+
+	test.each([
+		["#### with colon", "#### D-2: T2"],
+		["### with em dash", "### D-2 — T2"],
+		["### with hyphen", "### D-2 - T2"],
+		["#### with em dash", "#### D-2 — T2"],
+	])("ADR heading accepts %s", (_name, heading) => {
+		expect(rulesFor([heading, "Decision: y rule", ""])).toContain("[D-2] T2 — y rule\n");
+	});
+
+	test("an item without a Decision field is omitted, not promoted from its body", () => {
+		const out = rulesFor(["### D-1: No field", "Rationale: long story", "Alternatives: other", "", "### D-2: Has one", "Decision: kept", ""]);
+		expect(out).toContain("[D-2] Has one — kept\n");
+		expect(out).not.toContain("D-1");
+		expect(out).not.toContain("long story");
 	});
 });
