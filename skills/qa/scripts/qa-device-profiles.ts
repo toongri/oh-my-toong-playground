@@ -12,10 +12,10 @@ export type QaDeviceProfilesCliResult = { exitCode: number; stdout: string; stde
 const help = `qa-device-profiles — the screen sizes this project's clients must stay usable on
 
 Commands:
-  get [--project DIR]                    print the saved profiles, or status "unconfigured" with the defaults and an ask_user instruction
+  get [--project DIR]                    print the saved profiles, or status "unconfigured" with the defaults and a setup instruction
   defaults                               print the built-in default list (phones, foldables, tablets, desktops)
-  set --defaults [--project DIR]         save the built-in defaults (the user accepted them or does not know)
-  set --file JSON_PATH [--project DIR]   save the profiles the user gave (JSON array of {id,label,platform,width,height})
+  set --defaults [--project DIR]         save the built-in defaults
+  set --file JSON_PATH [--project DIR]   save a profile list (JSON array of {id,label,platform,width,height})
   upsert --json PROFILE [--project DIR]  add a profile, or replace the saved one with the same id (JSON {id,label,platform,width,height})
   remove ID [--project DIR]              remove a platform or device the project does not support
   help

@@ -19,11 +19,11 @@ function fixture(): { cwd: string; home: string } {
 }
 
 describe("qa-device-profiles CLI", () => {
-	test("프로필이 없으면 사용자에게 물으라고 하고, 저장 후에는 그대로 돌려줌", () => {
+	test("프로필이 없으면 기본값 저장을 안내하고, 저장 후에는 그대로 돌려줌", () => {
 		const options = fixture();
 		const before = JSON.parse(runQaDeviceProfilesCli(["get"], options).stdout);
 		expect(before.status).toBe("unconfigured");
-		expect(before.ask_user).toContain("Ask the user");
+		expect(before.instruction).toContain("set --defaults");
 
 		const file = join(options.cwd, "profiles.json");
 		writeFileSync(file, JSON.stringify([{ id: "phone-small", label: "작은 폰", platform: "ios", width: 375, height: 667 }]));

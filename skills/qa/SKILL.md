@@ -137,14 +137,12 @@ bun "${CLAUDE_SKILL_DIR}/scripts/qa-device-profiles.ts" get --project .
 ```
 
 - `status: "ok"` → use those profiles. Pick every profile whose platform the actor's client ships on: a React Native or Flutter app ships on `ios` and `android`, so it takes the profiles of both; a phone app does not run on a 1440 px desktop, nor on another product's device that shares its platform (a kiosk or dispenser tablet profile belongs to that device's app). The project's QA runbook names the platforms it ships.
-- `status: "unconfigured"` (first run for this project, or a new machine) → the result carries the built-in `defaults` (phones, foldables, tablets, desktops). Ask the user once: show that list and ask which platforms the project ships and which screens it must support. Then:
-  - The user accepts the list or does not know → `set --defaults`.
-  - The user gives a list → `set --file <json>`.
-- Fit a saved list to the project whenever the user or the project docs say so:
+- `status: "unconfigured"` (first run for this project, or a new machine) → `set --defaults`, then fit the list as below to the platforms the repo shows the project ships (app config such as `app.json` `platforms` and `supportsTablet`, the ios/android/web build targets, the README).
+- Fit a saved list to the project whenever the user, the repo, or the project docs say so:
   - `remove <id>` → a platform or device the project does not ship (no desktop for an app-only project).
   - `upsert --json '{"id":…,"label":…,"platform":…,"width":…,"height":…}'` → change a size, or add a project screen (a kiosk, an embedded device) from its documented resolution.
 
-Never guess a device size the user did not give or the project does not document.
+Never guess a device size the project does not document.
 
 A profile is a logical screen size, not a device model; its label only names it. Drive each profile at that size:
 
@@ -298,7 +296,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts record-scenario --story … --scenar
 | "The seed account is stuck in onboarding and wants health answers; I must not invent them" | It is your local test account. Choose a test value and continue, or use a seeded account already past onboarding. Ask only for a real person's account. |
 | "Pairing needs a code from the device, so skip that actor" | Ask the user for the code (`await-user`). A human step is work you request, not an obstacle. When the code is on an emulator you drive and the account is your local seed, enter it yourself, unless the project tells agents to hand that step to the user. |
 | "The runbook wants the user's confirmation before that call and I have none, so `blocked`" | A confirmation is a human step too. Take a path that needs none (an in-app developer menu, a local seed), or ask for it with `await-user`. Never record `blocked` for a question you did not ask. |
-| "A Fold is about 345 dp wide, I'll use that" | Read the project's device profiles. If none exist, ask the user and save them. Never guess a size. |
+| "A Fold is about 345 dp wide, I'll use that" | Read the project's device profiles. If none exist, save the defaults and fit them to the platforms the repo ships. Never guess a size. |
 | "The component test proves the fallback; I'll attach a nearby screenshot for the profile" | A screenshot that does not show the outcome is not evidence. Prove that scenario with the test and no profile, or make the state happen on screen and capture it. |
 | "The layout looks fine on my one emulator" | A `render` actor is proven on every profile it runs on. One screen size proves one profile. |
 | "The reviewer says the renderer made this text, so it is a renderer defect and the user decides" | The renderer prints your record, so your record is wrong. Fix the actor or drive the missing scenario, then re-render. |
@@ -621,7 +619,7 @@ ECONOMY:    verify the change's stories and scenarios by the cheapest means that
 INPUT:      read the plan/issue/spec/PR yourself; write ACs as user-observable outcomes in the report language. A state file or summary is never the source of requirements
 ENV:        one target environment, `local` unless the user names another; the source never picks it. Sort each source item: product behavior → AC proven there; release/operations work → `## Out of QA Scope`, never an AC or blocked; provenance (PR, wiki) → input, never queried. Cannot place an item → interview the user (await-user) before set-acceptance
 ACTOR:      Actor Roster before scenarios — actor · boundary (verification surface) · driver · client impact (none|contract|render + reason) · profiles · reachable. One actor per client that reads what changed; "screen unchanged" means contract, never an inward boundary. Human-only step (pairing code, OTP) → await-user. Substitute only an unreachable hop and record driven-at; otherwise record blocked (obstacle kind hardware|third-party|person + obstacle + attempts + deepest reachable + attempt log), never PASS. Local accounts, seed, onboarding, app/device state = setup work, fixed once for all profiles
-PROFILES:   render actors are proven on every device profile they run on; profiles come from qa-device-profiles.ts get; unconfigured → show the defaults and ask once; "don't know" → set --defaults; prune/fix/add with remove / upsert; never guess sizes. Each profile: before/after screenshots, readable and unbroken
+PROFILES:   render actors are proven on every device profile they run on; profiles come from qa-device-profiles.ts get; unconfigured → set --defaults, then fit them to the platforms the repo ships with remove / upsert; never guess sizes. Each profile: before/after screenshots, readable and unbroken
 SCENARIOS:  user scenarios under stories (author-scenario; amend-scenario corrects one with a recorded result: result reset, prior kept, reason required): what the actor does and sees; ≥1 H per story; risks 1..6 are tags; each risk covered by a scenario or declare-risk-na once per cycle. States: pass/fail · blocked · unrecorded (open work). author-cell, record-cell, waive, na, not_applicable are retired
 VERDICT:    REQUEST_CHANGES needs a recorded product failure (a failed scenario counts once a supported cause claim shows product path + base commit; an H fail with its cause unproven caps at COMMENT); APPROVE needs every scenario pass (a blocked one caps at COMMENT); any unrecorded scenario with no failure = no verdict yet
 BOOTSTRAP:  set up only what the chosen surface needs — isolated local instance, documented QA accounts/seeders first, cross-platform preconditions via API/seed/DB. When the user names a deployed environment as the target, its failure is the FAIL
