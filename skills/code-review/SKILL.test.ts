@@ -694,6 +694,56 @@ describe("code-review verifier finding artifact contract", () => {
 	});
 });
 
+describe("code-review 변경 코드 기본 범위 계약", () => {
+	const basisEnum = '"basis":"requirement | regression | changed_code | non_goal | unrelated | uncertain"';
+	const artifactBasisEnum = '"basis":"requirement|regression|changed_code|non_goal|unrelated|uncertain"';
+
+	test("every basis enum includes changed_code", () => {
+		expect(skillMd).toContain(basisEnum);
+		expect(verifierPrompt).toContain(basisEnum);
+		expect(skillMd.split(artifactBasisEnum).length - 1).toBe(2);
+		expect(skillMd).not.toMatch(/"basis":"requirement ?\| ?regression ?\| ?non_goal/);
+		expect(verifierPrompt).not.toMatch(/"basis":"requirement ?\| ?regression ?\| ?non_goal/);
+		expect(skillMd).toContain("IN_SCOPE requires basis `requirement`, `regression`, or `changed_code`");
+	});
+
+	test("a defect in changed code is in scope unless an explicit exclusion directly addresses it", () => {
+		expect(skillMd).toContain("A defect located in lines or code this change added or modified is IN_SCOPE with basis `changed_code`, whether or not a requirement mentions it.");
+		expect(skillMd).toContain("It leaves scope only when an explicit exclusion statement directly addresses that behavior or defect class");
+		expect(skillMd).toContain("A requirement's silence never excludes. A decision about a different behavior never excludes");
+		expect(verifierPrompt).toContain("- **IN_SCOPE / changed_code:**");
+		expect(verifierPrompt).toContain("Set `reference` to `non_goals` and quote that statement verbatim in `rationale`.");
+		expect(verifierPrompt).toContain("With no such statement, a defect in changed code is IN_SCOPE / changed_code.");
+		expect(verifierPrompt).toContain("the defect lies in code this change did not touch");
+	});
+
+	test("an explicit exclusion stays a note and a contradicting premise is only noted", () => {
+		expect(skillMd).toContain("the defect remains an OUT_OF_SCOPE note, not a repair demand");
+		expect(verifierPrompt).toContain("add that contradiction to the note");
+	});
+
+	test("the remedy covers sibling changed sites; new capability outside the change stays UNKNOWN", () => {
+		expect(skillMd).toContain("A repair confined to code this change added or modified is authorized by default. Do not narrow the remedy to the reported site");
+		expect(skillMd).toContain("list every sibling site in the finding's remedy");
+		expect(skillMd).toContain("needs new excluded behavior or a new capability outside the change, return UNKNOWN");
+		expect(verifierPrompt).toContain("list every sibling site in the FIX");
+	});
+
+	test("a scope reason never yields REFUTED and REFUTED cites a code fact", () => {
+		expect(skillMd).toContain("**A scope reason never produces REFUTED.** REFUTED is a quality verdict only");
+		expect(skillMd).toContain("appears in `findings.md` and the artifact as a visible nonblocking note");
+		expect(skillMd).toContain('CODE EVIDENCE: {"file": <strict escaped JSON string>, "line": <line>}');
+		expect(skillMd).toContain("A REFUTED entry without `CODE EVIDENCE`, or one whose reason is a plan, requirement, decision, or exclusion instead of code, is invalid.");
+		const ladder = extractSection(verifierPrompt, "## Verdict ladder", "## No-safe-default");
+		expect(ladder).toContain("Every REFUTED\n  cites the code fact (`file:line`) that disproves the candidate.");
+		expect(ladder).toContain("a scope reason never yields REFUTED");
+		const output = extractSection(verifierPrompt, "## Output", "##");
+		expect(output).toContain("Audit-only never hides a real defect");
+		expect(verifierPrompt).toContain('CODE EVIDENCE: {"file": <strict escaped JSON string>, "line": <line>}');
+		expect(verifierPrompt).not.toContain("REFUTE or downgrade to PLAUSIBLE with the tradeoff");
+	});
+});
+
 describe("code-review Phase 2 verifier interpolation 계약", () => {
 	const phase2 = extractSection(skillMd, "### Phase 2: Candidate Verification", "### Phase 3:");
 

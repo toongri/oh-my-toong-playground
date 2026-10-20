@@ -1443,7 +1443,7 @@ export type ReviewPriority = "HIGH" | "MEDIUM" | "LOW";
 export type ReviewFindingOutcome = "BLOCK" | "FIX" | "NOTE" | "ADJUDICATE";
 export type ReviewScope = "IN_SCOPE" | "OUT_OF_SCOPE" | "UNKNOWN";
 export type ReviewScopeBasis =
-	"requirement" | "regression" | "non_goal" | "unrelated" | "uncertain";
+	"requirement" | "regression" | "changed_code" | "non_goal" | "unrelated" | "uncertain";
 
 export interface ReviewScopeEvidence {
 	basis: ReviewScopeBasis;
@@ -1665,7 +1665,7 @@ function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
 		)
 			return false;
 		const basisByScope: Record<string, string[]> = {
-			IN_SCOPE: ["requirement", "regression"],
+			IN_SCOPE: ["requirement", "regression", "changed_code"],
 			OUT_OF_SCOPE: ["non_goal", "unrelated"],
 			UNKNOWN: ["uncertain"],
 		};
@@ -1802,10 +1802,22 @@ function isCurrentCommentResolutionValid(result: ReviewResult, state: Partial<Go
 
 const SCOPE_SLOTS = ["outcome", "verification_surface", "constraints", "boundaries", "non_goals"];
 const ALLOWED_BASIS_BY_SCOPE: Record<ReviewScope, string[]> = {
-	IN_SCOPE: ["requirement", "regression"],
+	IN_SCOPE: ["requirement", "regression", "changed_code"],
 	OUT_OF_SCOPE: ["non_goal", "unrelated"],
 	UNKNOWN: ["uncertain"],
 };
+
+/** Whitespace-collapsed exclusion statements of a non_goals slot: each `- {statement} | decider: {...}` line's statement. */
+function nonGoalStatements(nonGoals: string): string[] {
+	return nonGoals
+		.split("\n")
+		.map((line) => collapseWhitespace(line.replace(/^\s*-\s+/, "").replace(/\|\s*decider:.*$/, "")))
+		.filter((statement) => statement !== "");
+}
+
+function collapseWhitespace(text: string): string {
+	return text.replace(/\s+/g, " ").trim();
+}
 
 /**
  * Returns null when the finding's scope evidence validates against the current
@@ -1818,7 +1830,8 @@ const ALLOWED_BASIS_BY_SCOPE: Record<ReviewScope, string[]> = {
  * Fine-grained basis→reference narrowing is kept ONLY for OUT_OF_SCOPE, because
  * OUT_OF_SCOPE is the nonblocking branch and its `reference` feeds the non-empty
  * slot check below — a `non_goal` exclusion must cite the `non_goals` slot it
- * claims to be excluded by, and that slot must be non-empty. IN_SCOPE `reference`
+ * claims to be excluded by, that slot must be non-empty, and the rationale must
+ * quote one of its statements. IN_SCOPE `reference`
  * feeds no gate decision (routing is f(scope, verdict, priority)), so no narrowing
  * is imposed there.
  */
@@ -1856,6 +1869,15 @@ function scopeEvidenceReferenceProblem(
 								: undefined;
 		if (slotValue === undefined || slotValue.trim() === "")
 			return `OUT_OF_SCOPE reference "${reference}" points at an empty contract slot; the excluding slot must be non-empty`;
+		if (basis === "non_goal") {
+			// An exclusion must be an explicit statement, quoted, not a stretched requirement:
+			// the rationale carries one non_goals statement verbatim (whitespace-insensitive).
+			// Whether that statement directly addresses the defect stays the reviewer's call.
+			const statements = nonGoalStatements(slotValue);
+			const rationale = collapseWhitespace(finding.scope_evidence.rationale);
+			if (!statements.some((statement) => rationale.includes(statement)))
+				return `OUT_OF_SCOPE + non_goal rationale must quote verbatim the non_goals statement that excludes this defect (one of: ${statements.map((statement) => `"${statement}"`).join(", ")}); a requirement's silence or a decision about a different behavior is not an exclusion — a defect in code this change added or modified is IN_SCOPE + changed_code`;
+		}
 	}
 	return null;
 }

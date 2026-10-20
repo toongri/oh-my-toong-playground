@@ -281,7 +281,7 @@ describe("OUT_OF_SCOPE 배제 페어링 복원", () => {
 		writeReview([
 			{
 				...finding("OUT_OF_SCOPE", "CONFIRMED", "HIGH"),
-				scope_evidence: { basis: "non_goal", reference: "non_goals", rationale: "x" },
+				scope_evidence: { basis: "non_goal", reference: "non_goals", rationale: 'non-goal "redesign UI" excludes this layout defect' },
 			},
 		]);
 		expect(state.requestComplete(SID)).toBe(true);
@@ -293,6 +293,94 @@ describe("OUT_OF_SCOPE 배제 페어링 복원", () => {
 			{
 				...finding("IN_SCOPE", "CONFIRMED", "LOW"),
 				scope_evidence: { basis: "requirement", reference: "constraints", rationale: "x" },
+			},
+		]);
+		expect(state.requestComplete(SID)).toBe(true);
+	});
+});
+
+describe("변경 코드 결함의 기본 범위와 명시적 배제 인용", () => {
+	const getReviewResult = (state as Record<string, unknown>)["getReviewResult"] as (
+		sid: string,
+	) => {
+		verdict: string;
+		reason?: string;
+		findings: { repair: { ref?: string }[]; adjudicate: unknown[]; notes: unknown[] };
+	};
+
+	test("IN_SCOPE changed_code 확정 HIGH는 수리 대상으로 admission된다", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		writeObjectiveArtifact();
+		writeReview([
+			{
+				...finding("IN_SCOPE", "CONFIRMED", "HIGH"),
+				ref: "src/new-file.ts:12",
+				scope_evidence: {
+					basis: "changed_code",
+					reference: "S1",
+					rationale: "end < start is accepted in a file this change added",
+				},
+			},
+		]);
+		const result = getReviewResult(SID);
+		expect(result.verdict).toBe("REQUEST_CHANGES");
+		expect(result.findings.repair).toHaveLength(1);
+		expect(result.findings.repair[0]?.ref).toBe("src/new-file.ts:12");
+		expect(result.findings.adjudicate).toHaveLength(0);
+	});
+
+	test("IN_SCOPE changed_code 확정 MEDIUM은 COMMENT 수리로 라우팅된다", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		writeObjectiveArtifact();
+		writeReview([
+			{
+				...finding("IN_SCOPE", "CONFIRMED", "MEDIUM"),
+				scope_evidence: { basis: "changed_code", reference: "outcome", rationale: "added line trims only one side" },
+			},
+		]);
+		const result = getReviewResult(SID);
+		expect(result.verdict).toBe("COMMENT");
+		expect(result.findings.repair).toHaveLength(1);
+	});
+
+	test("changed_code는 OUT_OF_SCOPE 근거가 될 수 없다", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		writeReview([
+			{
+				...finding("OUT_OF_SCOPE", "CONFIRMED", "LOW"),
+				scope_evidence: { basis: "changed_code", reference: "outcome", rationale: "x" },
+			},
+		]);
+		expect(state.validateReviewArtifact(SID).ok).toBe(false);
+	});
+
+	test("배제 문장을 인용하지 않은 non_goal은 차단 UNKNOWN으로 강등되고 reason이 인용을 요구한다", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		writeObjectiveArtifact();
+		writeReview([
+			{
+				...finding("OUT_OF_SCOPE", "CONFIRMED", "MEDIUM"),
+				scope_evidence: {
+					basis: "non_goal",
+					reference: "non_goals",
+					rationale: "the plan says ids match verbatim, so whitespace is excluded",
+				},
+			},
+		]);
+		const result = getReviewResult(SID);
+		expect(result.verdict).toBe("REQUEST_CHANGES");
+		expect(result.findings.adjudicate).toHaveLength(1);
+		expect(result.findings.notes).toHaveLength(0);
+		expect(result.reason ?? "").toContain("quote");
+		expect(result.reason ?? "").toContain("changed_code");
+	});
+
+	test("배제 문장 인용은 공백 차이를 무시하고 비교한다", () => {
+		writeObjectiveArtifact();
+		writeReview([
+			{
+				...finding("OUT_OF_SCOPE", "CONFIRMED", "HIGH"),
+				scope_evidence: { basis: "non_goal", reference: "non_goals", rationale: 'excluded by "redesign\n  UI"' },
 			},
 		]);
 		expect(state.requestComplete(SID)).toBe(true);

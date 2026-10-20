@@ -116,19 +116,21 @@ Apply this section when the supplied intent includes a valid `[SCOPE_CONTRACT]` 
 Return exactly one scope decision with this structured evidence, in addition to the quality verdict:
 
 ```json
-{"scope":"IN_SCOPE | OUT_OF_SCOPE | UNKNOWN","scope_evidence":{"basis":"requirement | regression | non_goal | unrelated | uncertain","reference":"<outcome, verification_surface, constraints, boundaries, non_goals, or confirmed story id>","rationale":"<cite approved behavior, change causality, and concrete remedy boundary>"}}
+{"scope":"IN_SCOPE | OUT_OF_SCOPE | UNKNOWN","scope_evidence":{"basis":"requirement | regression | changed_code | non_goal | unrelated | uncertain","reference":"<outcome, verification_surface, constraints, boundaries, non_goals, or confirmed story id>","rationale":"<cite approved behavior, change causality, and concrete remedy boundary>"}}
 ```
 
 - **IN_SCOPE / requirement:** approved behavior or a quality improvement within the authorized work, grounded in the contract or a confirmed story. Small cleanup/docs fixes qualify; impact is not an admission threshold. An inferred analogy alone is insufficient.
 - **IN_SCOPE / regression:** this change breaks previously working behavior or a protected invariant; cite the causal change and a minimal correction or rollback restoring it. Reading an unchanged line does not authorize repair unless that change-caused regression is established.
-- **OUT_OF_SCOPE / non_goal or unrelated:** the proposed work implements an excluded behavior, repairs an unrelated pre-existing defect, or adds an unrequested capability/general framework. Cite the relevant contract boundary even if the defect itself is real and HIGH impact.
-- **UNKNOWN / uncertain:** available evidence cannot establish scope, or required repair would need excluded behavior/new capability. Name the unresolved user scope decision; do not invent authorization or implement a workaround that expands scope.
+- **IN_SCOPE / changed_code:** the defect sits in lines or code this change added or modified; cite those changed lines. No requirement has to mention the behavior: this is the default for a defect in changed code.
+- **OUT_OF_SCOPE / non_goal:** an explicit exclusion or accepted-risk statement in the intent source (e.g. "we will not handle concurrency because it is rare") directly addresses this defect's behavior or class. Set `reference` to `non_goals` and quote that statement verbatim in `rationale`. A requirement's silence is not a basis. A decision about a different behavior is not a basis: a decision against prefix expansion does not exclude a whitespace defect, and a parity requirement for valid inputs does not exclude an invalid input in a new file. With no such statement, a defect in changed code is IN_SCOPE / changed_code. When the statement exists, keep the exclusion even if the defect is real and HIGH impact; if its stated premise contradicts the code (it says "rare", but the code triggers it on every retry), add that contradiction to the note.
+- **OUT_OF_SCOPE / unrelated:** the defect lies in code this change did not touch (pre-existing, untouched), and the change does not cause or aggravate it. Cite the relevant contract boundary even if the defect itself is real and HIGH impact.
+- **UNKNOWN / uncertain:** available evidence cannot establish scope, or required repair would need excluded behavior/new capability outside the change. Name the unresolved user scope decision; do not invent authorization or implement a workaround that expands scope.
 
-Evaluate the remedy separately from the symptom: for a real CSV bug, replace a proposed generic export framework with a concrete local repair when that repair satisfies approved behavior, and admit only that bounded finding. If no authorized remedy is established, use UNKNOWN; a CONFIRMED defect does not override this. Minimal restoration in an excluded subsystem is not permission to enhance that subsystem.
+Evaluate the remedy separately from the symptom. A repair confined to code this change added or modified is authorized by default. Do not narrow the remedy to the reported site: search the changed code for the same defect pattern (the same missing check at another new boundary, the same normalization missing on the sibling path) and list every sibling site in the FIX. For a real CSV bug, replace a proposed generic export framework with a concrete local repair when that repair satisfies approved behavior, and admit only that bounded finding. If no authorized remedy is established, use UNKNOWN; a CONFIRMED defect does not override this. Minimal restoration in an excluded subsystem is not permission to enhance that subsystem.
 
 Review-derived expected-items, generic best practices, or analogs may support a claim about approved behavior; they cannot create acceptance criteria. Frozen constraints/non-goals outrank a candidate's inferred intent. Missing or malformed frozen input is a verification failure, not an IN_SCOPE guess.
 
-After recording scope, apply the quality ladder independently. OUT_OF_SCOPE can be CONFIRMED and remains a nonblocking observation; UNKNOWN does not authorize a fix. Emit scope evidence even for REFUTED candidates in the direct verification audit. For kept findings, the FIX must match the remedy you adjudicated; for OUT_OF_SCOPE/UNKNOWN label any remedy as unapproved and not a repair instruction.
+After recording scope, apply the quality ladder independently. A scope reason never produces REFUTED: "the plan, a requirement, a decision, or a non-goal says so" is not evidence that the code is correct. OUT_OF_SCOPE can be CONFIRMED and remains a nonblocking observation, visible in findings.md and the artifact; UNKNOWN does not authorize a fix. Emit scope evidence even for REFUTED candidates in the direct verification audit. For kept findings, the FIX must match the remedy you adjudicated; for OUT_OF_SCOPE/UNKNOWN label any remedy as unapproved and not a repair instruction.
 
 ## How to verify — read the code, do not judge from the candidate text
 
@@ -141,8 +143,10 @@ After recording scope, apply the quality ladder independently. OUT_OF_SCOPE can 
    needs out-of-order delivery. Verify these preconditions against the actual infrastructure (e.g.
    Kafka partition key, consumer-group config, thread-pool setup).
 4. **Is it an intentional design choice?** Check comments, commit messages, and the stated intent
-   for a deliberate tradeoff. If so, note it and REFUTE or downgrade to PLAUSIBLE with the tradeoff
-   stated.
+   for a deliberate tradeoff. When code (a guard, an invariant, a commented contract) shows the
+   behavior is correct by design, REFUTE and cite that `file:line`. When the stated intent accepts a
+   real defect (an explicit exclusion or accepted risk), it is not a refutation: keep CONFIRMED or
+   PLAUSIBLE and record it as OUT_OF_SCOPE / non_goal, quoting the statement.
 
 ```dot
 digraph verification_flow {
@@ -153,7 +157,7 @@ digraph verification_flow {
     "Scenario possible?" [shape=diamond];
     "REFUTED" [shape=box, style=filled, fillcolor=lightgray];
     "Intentional design?" [shape=diamond];
-    "Note tradeoff, likely REFUTE or PLAUSIBLE" [shape=box];
+    "Code proves correct: REFUTE (cite file:line)\nAccepted risk: keep verdict, OUT_OF_SCOPE" [shape=box];
     "Assign verdict (CONFIRMED / PLAUSIBLE)" [shape=box, style=filled, fillcolor=lightyellow];
     "Enrich finding\n(code snippet, context, fix, blast radius)" [shape=box, style=filled, fillcolor=lightblue];
 
@@ -162,9 +166,9 @@ digraph verification_flow {
     "Trace caller execution context" -> "Scenario possible?";
     "Scenario possible?" -> "REFUTED" [label="No"];
     "Scenario possible?" -> "Intentional design?" [label="Yes"];
-    "Intentional design?" -> "Note tradeoff, likely REFUTE or PLAUSIBLE" [label="Yes"];
+    "Intentional design?" -> "Code proves correct: REFUTE (cite file:line)\nAccepted risk: keep verdict, OUT_OF_SCOPE" [label="Yes"];
     "Intentional design?" -> "Assign verdict (CONFIRMED / PLAUSIBLE)" [label="No"];
-    "Note tradeoff, likely REFUTE or PLAUSIBLE" -> "Assign verdict (CONFIRMED / PLAUSIBLE)";
+    "Code proves correct: REFUTE (cite file:line)\nAccepted risk: keep verdict, OUT_OF_SCOPE" -> "Assign verdict (CONFIRMED / PLAUSIBLE)";
     "Assign verdict (CONFIRMED / PLAUSIBLE)" -> "Enrich finding\n(code snippet, context, fix, blast radius)";
 }
 ```
@@ -182,7 +186,9 @@ digraph verification_flow {
   an anchor.
 - **REFUTED** — constructible from the code as not-a-bug: factually wrong (quote the actual line);
   provably impossible (type/constant/invariant — show it); already handled in this diff (cite the
-  guard); or pure style with no observable effect.
+  guard); or pure style with no observable effect. REFUTED is a quality verdict only. Every REFUTED
+  cites the code fact (`file:line`) that disproves the candidate. A plan, requirement, decision, or
+  non-goal is not a code fact, so a scope reason never yields REFUTED.
 
 Do **NOT** refute a candidate merely for being "speculative" or "depends on runtime state" when the
 state is realistic — that is PLAUSIBLE. For a race specifically, REFUTED requires an established
@@ -241,7 +247,7 @@ execution model was never consulted to support.
 
 ## Output
 
-For a scope-contract dispatch, first emit the structured `scope`/`scope_evidence` JSON above, then the verdict and applicable card below. REFUTED candidates are audit-only: keep their scope evidence in the direct verification audit output, but do not copy them into the full card or completion artifact findings. CONFIRMED or PLAUSIBLE findings preserve this JSON in the full card and completion artifact. Do not infer scope later from severity or verdict. An `IN_SCOPE` candidate whose quality verdict remains PLAUSIBLE requires the scoped review to be INCONCLUSIVE, even if its assessment fields are complete; preserve the diagnostic and never authorize speculative repair. UNKNOWN scope is a separate unresolved authorization decision and is also not a repair instruction. Record scope, quality, grounded facts, and assessment inputs here. The reviewer assigns priority during findings synthesis; repair, adjudication, completion, budget, and approval decisions belong to the caller.
+For a scope-contract dispatch, first emit the structured `scope`/`scope_evidence` JSON above, then the verdict and applicable card below. REFUTED candidates are audit-only: keep their scope evidence in the direct verification audit output, but do not copy them into the full card or completion artifact findings. Audit-only never hides a real defect, because REFUTED means "not a defect": a real defect excluded by scope is CONFIRMED or PLAUSIBLE + OUT_OF_SCOPE and goes into the full card, findings.md, and the artifact findings. CONFIRMED or PLAUSIBLE findings preserve this JSON in the full card and completion artifact. Do not infer scope later from severity or verdict. An `IN_SCOPE` candidate whose quality verdict remains PLAUSIBLE requires the scoped review to be INCONCLUSIVE, even if its assessment fields are complete; preserve the diagnostic and never authorize speculative repair. UNKNOWN scope is a separate unresolved authorization decision and is also not a repair instruction. Record scope, quality, grounded facts, and assessment inputs here. The reviewer assigns priority during findings synthesis; repair, adjudication, completion, budget, and approval decisions belong to the caller.
 
 The unverified no-safe-default case above is an exception to this output contract: emit no finding verdict or enriched finding card; stop the review, set the review artifact's status to INCONCLUSIVE, preserve the candidate and missing execution-model evidence in findings_report, and omit the candidate from artifact findings. Otherwise, return exactly one verdict. Evidence must quote or cite the relevant line(s). Do not hedge between two verdicts.
 
@@ -250,7 +256,11 @@ If **REFUTED**:
 ```
 VERDICT: REFUTED
 REASON: <one line, quoting the line / guard / invariant that proves it is not a bug>
+CODE EVIDENCE: {"file": <strict escaped JSON string>, "line": <line>} — <the quoted line / guard / invariant>
 ```
+
+A REFUTED without `CODE EVIDENCE`, or whose reason is a plan, requirement, decision, or non-goal
+instead of code, is invalid: re-judge it as CONFIRMED or PLAUSIBLE and record that reason as scope.
 
 If **CONFIRMED** or **PLAUSIBLE** — return the enriched finding (you already read the code to
 decide, so capture it now):
