@@ -1687,7 +1687,7 @@ const ROSTER: CliCommand[] = [
 	{
 		name: "review-report",
 		authority: "ai",
-		effect: "records the visual inspection attestation for the rendered HTML report",
+		effect: "records that the rendered HTML report was checked against the record",
 	},
 	{ name: "record-run-check", authority: "ai", effect: "records one of the three per-run checks" },
 	{ name: "set-verdict", authority: "ai", effect: "persists the cycle verdict" },
