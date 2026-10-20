@@ -787,6 +787,10 @@ export async function syncCategory(
 
 			if (context.dryRun) {
 				logDry(`[${platform}] ${category}/${displayName}`);
+				const dryModelMap = context.modelMaps.get(platform) ?? context.rootModelMaps.get(platform);
+				for (const variantName of codexAgentVariantNames(platform, category, displayName, dryModelMap)) {
+					logDry(`[${platform}] ${category}/${variantName}`);
+				}
 				continue;
 			}
 
