@@ -52,7 +52,7 @@ This describes what kind of software is being reviewed. Finders must factor this
 
 {NON_GOAL}
 
-Each declared non-goal has the form `- {what this change deliberately does not do} | decider: {how to recognize a candidate finding that falls inside this non-goal}`. Finders do not drop a candidate because of a non-goal. File it, and in its summary note the `non_goals#N` (or the quoted non-goal statement) it may fall under. The reviewer decides scope.
+Each declared non-goal has the form `- {what this change deliberately does not do} | decider: {how to recognize a candidate finding that falls inside this non-goal}`. Finders do not drop a candidate because of a non-goal. File it, and in its summary note the exact non-goal `statement` (from the `non_goals` array) it may fall under. The reviewer decides scope.
 <!-- /section:non_goal -->
 
 ## Diff Coverage Protocol
@@ -86,7 +86,7 @@ You read the diff ONLY through the diff cursor, page by page. The cursor holds a
 | {DESCRIPTION} | Required | Step 1 interview or commit messages |
 | {REQUIREMENTS} | Optional | Step 1 interview, "N/A" if deferred; exact path echoes use the same strict escaped JSON string representation |
 | {PROJECT_CONTEXT} | Required | Step 1 project context |
-| {NON_GOAL} | Required | Completion-gate payload field `non_goals` (backfilled to "(none provided)" when blank) |
+| {NON_GOAL} | Required | Completion-gate payload field `non_goals`: a JSON array of `{statement, decider}`, `[]` when none |
 | {FILE_LIST} | Required | Step 3 `reviewableFileList`, strict escaped JSON array of path strings (current chunk only; not the complete changed-file manifest) |
 | {COMMIT_HISTORY} | Required | Step 2 git log output |
 <!-- /section:field_reference -->

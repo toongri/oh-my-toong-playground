@@ -1472,6 +1472,8 @@ export interface ReviewScopeEvidence {
 	basis: ReviewScopeBasis;
 	reference: string;
 	rationale: string;
+	/** OUT_OF_SCOPE + non_goal only: one declared non-goal statement, copied exactly from the `non_goals` slot array. */
+	non_goal?: string;
 }
 
 export interface CodeReviewFinding {
@@ -1696,6 +1698,7 @@ function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
 		};
 		if (!isOneOf(evidence["basis"], basisByScope[String(entry["scope"])] ?? [])) return false;
 		if (evidence["rationale"].trim() === "" || evidence["reference"].trim() === "") return false;
+		if (evidence["non_goal"] !== undefined && typeof evidence["non_goal"] !== "string") return false;
 	}
 	return true;
 }
@@ -1833,34 +1836,27 @@ const ALLOWED_BASIS_BY_SCOPE: Record<ReviewScope, string[]> = {
 	UNKNOWN: ["uncertain"],
 };
 
-/** Whitespace-collapsed exclusion statements of a non_goals slot: each `- {statement} | decider: {...}` line's statement. */
-function nonGoalStatements(nonGoals: string): string[] {
+/**
+ * Declared exclusions of a non_goals slot, in order: each `- {statement} | decider: {test}`
+ * line becomes `{statement, decider}` (whitespace collapsed). Feeds both the reviewer's
+ * `non_goals` slot (serializeReviewContext) and the citation check (scopeEvidenceProblem).
+ */
+function declaredNonGoals(nonGoals: string): { statement: string; decider: string }[] {
 	return nonGoals
 		.split("\n")
-		.map((line) => collapseWhitespace(line.replace(/^\s*-\s+/, "").replace(/\|\s*decider:.*$/, "")))
-		.filter((statement) => statement !== "");
+		.map((line) => {
+			const body = line.replace(/^\s*-\s+/, "");
+			const at = body.search(/\|\s*decider:/);
+			return {
+				statement: collapseWhitespace(at < 0 ? body : body.slice(0, at)),
+				decider: at < 0 ? "" : collapseWhitespace(body.slice(at).replace(/^\|\s*decider:/, "")),
+			};
+		})
+		.filter(({ statement }) => statement !== "");
 }
 
 function collapseWhitespace(text: string): string {
 	return text.replace(/\s+/g, " ").trim();
-}
-
-/** Normalized non_goals statements that say nothing: naming one excludes nothing, so none counts as an identified exclusion. Short real exclusions ("skip ui") stay quotable. */
-const PLACEHOLDER_NON_GOAL_STATEMENTS = new Set(["none", "n/a", "na", "tbd", "-", "nothing", "없음", "해당 없음"]);
-
-/**
- * Comparison form of a quote: typographic quotes mapped to ASCII, markdown
- * emphasis (`*`, `__`) and backticks removed, whitespace collapsed, lowercased,
- * trailing punctuation trimmed. Applied to both the statement and the rationale.
- */
-function normalizeQuote(text: string): string {
-	return collapseWhitespace(
-		text
-			.replace(/[\u2018\u2019]/g, "'")
-			.replace(/[\u201C\u201D]/g, '"')
-			.replace(/[`*]|__/g, "")
-			.toLowerCase(),
-	).replace(/[\s.,;:!?]+$/, "");
 }
 
 /**
@@ -1871,11 +1867,10 @@ function normalizeQuote(text: string): string {
  *   allowed for the scope (ALLOWED_BASIS_BY_SCOPE). The schema gate
  *   (isCodeReviewArtifact) enforces these, so a finding that fails them never
  *   reaches here; the matrix line below restates the consistency rule.
- * - an OUT_OF_SCOPE + non_goal exclusion names one real, non-placeholder non_goals
- *   statement, by `non_goals#N` (1-based) or by quoting it (whitespace-insensitive),
- *   in its `reference` or `rationale`. This keeps a defect from being dropped by
- *   stretching intent. Whether that statement covers the defect is the reviewer's
- *   judgment and is not checked.
+ * - an OUT_OF_SCOPE + non_goal exclusion carries `scope_evidence.non_goal`, exactly
+ *   equal (===) to one declared non_goals statement. This keeps a defect from being
+ *   dropped by stretching intent. Whether that statement covers the defect is the
+ *   reviewer's judgment and is not checked.
  * What `reference` points at (a contract slot, a story id, free text) is also the
  * reviewer's call: scopeEvidenceAdvisories reports those pointer details as
  * warnings in `validate-review-artifact` without changing the outcome.
@@ -1884,26 +1879,14 @@ function scopeEvidenceProblem(
 	finding: CodeReviewFinding,
 	state: Partial<GoalState>,
 ): string | null {
-	const { basis, reference, rationale } = finding.scope_evidence;
+	const { basis } = finding.scope_evidence;
 	if (!ALLOWED_BASIS_BY_SCOPE[finding.scope].includes(basis))
 		return `basis "${basis}" is not valid for scope ${finding.scope}; use one of: ${ALLOWED_BASIS_BY_SCOPE[finding.scope].join(", ")}`;
 	if (finding.scope !== "OUT_OF_SCOPE" || basis !== "non_goal") return null;
-	const allStatements = nonGoalStatements(state.non_goals ?? "");
-	const isRealStatement = (statement: string) => !PLACEHOLDER_NON_GOAL_STATEMENTS.has(normalizeQuote(statement));
-	const texts = [reference, rationale];
-	const pointed = texts
-		.flatMap((text) => [...text.matchAll(/non_goals#(\d+)(?!\d)/gi)])
-		.map((m) => allStatements[Number(m[1]) - 1]);
-	const identified =
-		pointed.some((statement) => statement !== undefined && isRealStatement(statement)) ||
-		allStatements.some(
-			(statement) => isRealStatement(statement) && texts.some((text) => normalizeQuote(text).includes(normalizeQuote(statement))),
-		);
-	if (identified) return null;
-	const listing = allStatements.length === 0
-		? "the non_goals slot is empty"
-		: `non_goals statements: ${allStatements.map((statement, i) => `non_goals#${i + 1}: "${statement}"`).join(", ")}`;
-	return `OUT_OF_SCOPE + non_goal evidence must name the non_goals statement it relies on, in its reference or rationale, by number (non_goals#N) or by quoting it (case, smart quotes, markdown and trailing punctuation are ignored; placeholder statements such as "none" or "n/a" are not usable); judge yourself whether that statement covers this defect (${listing}); a requirement's silence or a decision about a different behavior is not an exclusion — a defect in code this change added or modified is IN_SCOPE + changed_code`;
+	const statements = declaredNonGoals(state.non_goals ?? "").map(({ statement }) => statement);
+	const cited = finding.scope_evidence.non_goal;
+	if (cited !== undefined && cited !== "" && statements.includes(cited)) return null;
+	return `OUT_OF_SCOPE + non_goal evidence must set scope_evidence.non_goal to one declared non_goals statement copied exactly (valid statements: ${JSON.stringify(statements)}); judge yourself whether that statement covers this defect; a requirement's silence or a decision about a different behavior is not an exclusion — a defect in code this change added or modified is IN_SCOPE + changed_code`;
 }
 
 /**
@@ -1918,7 +1901,6 @@ function scopeEvidenceAdvisories(
 	state: Partial<GoalState>,
 ): string[] {
 	const { basis, reference } = finding.scope_evidence;
-	const slot = /^non_goals#\d+$/i.test(reference) ? "non_goals" : reference;
 	const slotValues: Record<string, string | undefined> = {
 		outcome: state.outcome,
 		verification_surface: state.verification_surface,
@@ -1928,16 +1910,16 @@ function scopeEvidenceAdvisories(
 	};
 	const storyIds = (state.stories ?? []).filter((s) => s.status === "confirmed").map((s) => s.id);
 	const warnings: string[] = [];
-	if (!SCOPE_SLOTS.includes(slot) && !storyIds.includes(slot))
+	if (!SCOPE_SLOTS.includes(reference) && !storyIds.includes(reference))
 		warnings.push(
 			`reference "${reference}" does not resolve to a contract slot (${SCOPE_SLOTS.join(", ")})${storyIds.length ? `, or a confirmed story id (${storyIds.join(", ")})` : ""}`,
 		);
 	if (finding.scope === "OUT_OF_SCOPE") {
-		if (basis === "non_goal" && slot !== "non_goals")
+		if (basis === "non_goal" && reference !== "non_goals")
 			warnings.push(`OUT_OF_SCOPE + non_goal is expected to reference "non_goals" (the non-goal it is excluded by), not "${reference}"`);
-		if (basis === "unrelated" && slot !== "outcome")
+		if (basis === "unrelated" && reference !== "outcome")
 			warnings.push(`OUT_OF_SCOPE + unrelated is expected to reference "outcome" (compared against the approved outcome), not "${reference}"`);
-		if (SCOPE_SLOTS.includes(slot) && (slotValues[slot] ?? "").trim() === "")
+		if (SCOPE_SLOTS.includes(reference) && (slotValues[reference] ?? "").trim() === "")
 			warnings.push(`OUT_OF_SCOPE reference "${reference}" points at an empty contract slot`);
 	}
 	return warnings;
@@ -2645,7 +2627,10 @@ export const BACKFILL_MARKER = "(none provided)";
  * NOT folded into `project_context` alongside constraints/boundaries. Those two
  * mean "surface that may be touched" / "must not regress"; `non_goals` means
  * "declared out of scope", a distinct judgment the finder step needs to keep
- * separate to decide whether a finding falls outside the declared scope.
+ * separate to decide whether a finding falls outside the declared scope. It is an
+ * array of `{statement, decider}` (`[]` when blank): a finding cites one statement
+ * from it, copied exactly. The `[SCOPE_CONTRACT]` envelope keeps the raw string
+ * and is hashed identity only.
  *
  * Throws when no active ultragoal state exists for `sessionId` — the CLI
  * dispatch lets this propagate to a non-zero exit, the same failure protocol
@@ -2656,7 +2641,7 @@ export function serializeReviewContext(sessionId: string): {
 	description: string;
 	requirements: string;
 	project_context: string;
-	non_goals: string;
+	non_goals: { statement: string; decider: string }[];
 } {
 	const state = readGoalState(sessionId);
 	if (state === null) {
@@ -2690,7 +2675,7 @@ export function serializeReviewContext(sessionId: string): {
 	const projectContext =
 		projectContextSources.length > 0 ? projectContextSources.join("\n\n") : BACKFILL_MARKER;
 
-	const non_goals = nonGoals.trim() !== "" ? nonGoals : BACKFILL_MARKER;
+	const non_goals = declaredNonGoals(nonGoals);
 
 	const contract = scopeContract(state);
 	const baseCommit = state.review_base_commit;

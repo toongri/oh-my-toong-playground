@@ -345,7 +345,7 @@ describe("finder prompts use the diff cursor and start from their own angle", ()
 	});
 
 	it("the template tells finders to file non-goal candidates and note the non-goal, not suppress them", () => {
-		expect(template).toContain("`non_goals#N`");
+		expect(template).toContain("exact non-goal `statement`");
 		expect(template).toContain("The reviewer decides scope.");
 		expect(template).not.toMatch(/suppression at generation time/i);
 	});

@@ -259,7 +259,7 @@ describe("OUT_OF_SCOPE 배제 근거: 문장 지목만 강제하고 reference �
 		sid: string,
 	) => { verdict: string; findings: { adjudicate: unknown[]; notes: unknown[] }; reason?: string };
 
-	test("OUT_OF_SCOPE non_goal이 non_goals 문장을 지목하지 않으면 차단 UNKNOWN 강등, reason에 non_goals 목록", () => {
+	test("OUT_OF_SCOPE non_goal이 non_goals 문장을 지목하지 않으면 차단 UNKNOWN 강등, reason에 유효 문장 JSON 배열", () => {
 		state.setGoalState(SID, { phase: "pursuing" });
 		writeObjectiveArtifact();
 		writeReview([
@@ -272,7 +272,7 @@ describe("OUT_OF_SCOPE 배제 근거: 문장 지목만 강제하고 reference �
 		expect(result.verdict).toBe("REQUEST_CHANGES");
 		expect(result.findings.adjudicate).toHaveLength(1);
 		expect(result.findings.notes).toHaveLength(0);
-		expect(result.reason ?? "").toContain("non_goals#1");
+		expect(result.reason ?? "").toContain('["redesign UI"]');
 	});
 
 	test("OUT_OF_SCOPE non_goal은 reference가 non_goals가 아니어도 문장을 지목하면 비차단 NOTE", () => {
@@ -281,7 +281,7 @@ describe("OUT_OF_SCOPE 배제 근거: 문장 지목만 강제하고 reference �
 		writeReview([
 			{
 				...finding("OUT_OF_SCOPE", "CONFIRMED", "HIGH"),
-				scope_evidence: { basis: "non_goal", reference: "constraints", rationale: 'excluded by "redesign UI"' },
+				scope_evidence: { basis: "non_goal", reference: "constraints", rationale: "x", non_goal: "redesign UI" },
 			},
 		]);
 		const result = getReviewResult(SID);
@@ -290,12 +290,12 @@ describe("OUT_OF_SCOPE 배제 근거: 문장 지목만 강제하고 reference �
 		expect(state.requestComplete(SID)).toBe(true);
 	});
 
-	test("OUT_OF_SCOPE non_goal의 non_goals#N 지목은 reference에 있어도 인정된다", () => {
+	test("OUT_OF_SCOPE non_goal은 non_goal 필드가 선언 문장과 정확히 같으면 인정된다", () => {
 		writeObjectiveArtifact();
 		writeReview([
 			{
 				...finding("OUT_OF_SCOPE", "CONFIRMED", "HIGH"),
-				scope_evidence: { basis: "non_goal", reference: "non_goals#1", rationale: "the UI overhaul is out" },
+				scope_evidence: { basis: "non_goal", reference: "non_goals", rationale: "the UI overhaul is out", non_goal: "redesign UI" },
 			},
 		]);
 		expect(state.requestComplete(SID)).toBe(true);
@@ -336,7 +336,7 @@ describe("OUT_OF_SCOPE 배제 근거: 문장 지목만 강제하고 reference �
 		writeReview([
 			{
 				...finding("OUT_OF_SCOPE", "CONFIRMED", "HIGH"),
-				scope_evidence: { basis: "non_goal", reference: "non_goals", rationale: 'non-goal "redesign UI" excludes this layout defect' },
+				scope_evidence: { basis: "non_goal", reference: "non_goals", rationale: "excludes this layout defect", non_goal: "redesign UI" },
 			},
 		]);
 		expect(state.requestComplete(SID)).toBe(true);
@@ -426,19 +426,22 @@ describe("변경 코드 결함의 기본 범위와 명시적 배제 인용", () 
 		expect(result.verdict).toBe("REQUEST_CHANGES");
 		expect(result.findings.adjudicate).toHaveLength(1);
 		expect(result.findings.notes).toHaveLength(0);
-		expect(result.reason ?? "").toContain("quote");
+		expect(result.reason ?? "").toContain("copied exactly");
 		expect(result.reason ?? "").toContain("changed_code");
 	});
 
-	test("배제 문장 인용은 공백 차이를 무시하고 비교한다", () => {
+	test("배제 문장은 부분 인용·대소문자 차이면 차단 UNKNOWN으로 강등된다", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
 		writeObjectiveArtifact();
-		writeReview([
-			{
-				...finding("OUT_OF_SCOPE", "CONFIRMED", "HIGH"),
-				scope_evidence: { basis: "non_goal", reference: "non_goals", rationale: 'excluded by "redesign\n  UI"' },
-			},
-		]);
-		expect(state.requestComplete(SID)).toBe(true);
+		for (const non_goal of ["redesign", "Redesign UI"]) {
+			writeReview([
+				{
+					...finding("OUT_OF_SCOPE", "CONFIRMED", "HIGH"),
+					scope_evidence: { basis: "non_goal", reference: "non_goals", rationale: "redesign UI is out", non_goal },
+				},
+			]);
+			expect(getReviewResult(SID).findings.adjudicate).toHaveLength(1);
+		}
 	});
 });
 
@@ -485,7 +488,7 @@ describe("validate-review-artifact CLI 게이트", () => {
 			},
 			{
 				...finding("OUT_OF_SCOPE", "CONFIRMED", "LOW"),
-				scope_evidence: { basis: "non_goal", reference: "constraints", rationale: 'excluded by "redesign UI"' },
+				scope_evidence: { basis: "non_goal", reference: "constraints", rationale: "x", non_goal: "redesign UI" },
 			},
 		]);
 		const result = state.validateReviewArtifact(SID);

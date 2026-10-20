@@ -48,7 +48,7 @@ function writeObjective(): void {
 function finding(scope: "IN_SCOPE" | "OUT_OF_SCOPE" | "UNKNOWN", verdict: "CONFIRMED" | "PLAUSIBLE", impact: "HIGH" | "MEDIUM" | "LOW", priority: "HIGH" | "MEDIUM" | "LOW" = impact): CodeReviewArtifact["findings"][number] {
 	const basis = scope === "IN_SCOPE" ? "requirement" : scope === "OUT_OF_SCOPE" ? "non_goal" : "uncertain";
 	const reference = scope === "OUT_OF_SCOPE" ? "non_goals" : "outcome";
-	return { class: "correctness", verdict, impact, priority, assessment: { unfixed_cost: "cost", exposure: "exposure", remedy: "remedy", added_cost: "added cost", rationale: "rationale" }, scope, scope_evidence: { basis, reference, rationale: scope === "OUT_OF_SCOPE" ? 'excluded by non-goal "docs are out of scope"' : "evidence" }, ref: `${scope}-${verdict}-${priority}` };
+	return { class: "correctness", verdict, impact, priority, assessment: { unfixed_cost: "cost", exposure: "exposure", remedy: "remedy", added_cost: "added cost", rationale: "rationale" }, scope, scope_evidence: { basis, reference, rationale: scope === "OUT_OF_SCOPE" ? "docs are out of scope for this change" : "evidence", ...(scope === "OUT_OF_SCOPE" ? { non_goal: "docs are out of scope" } : {}) }, ref: `${scope}-${verdict}-${priority}` };
 }
 
 function publish(path: string, raw: string) {
@@ -71,7 +71,7 @@ describe("리뷰 제출 reducer", () => {
 	test("FIX와 NOTE 그룹을 계산하고 아티팩트 해시를 고정한다", () => {
 		const raw = JSON.stringify(artifact([
 			{ class: "correctness", verdict: "CONFIRMED", impact: "LOW", priority: "MEDIUM", assessment: { unfixed_cost: "c", exposure: "e", remedy: "r", added_cost: "a", rationale: "why" }, scope: "IN_SCOPE", scope_evidence: { basis: "requirement", reference: "outcome", rationale: "r" }, ref: "a.ts:1" },
-			{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", priority: "LOW", assessment: { unfixed_cost: "c", exposure: "e", remedy: "r", added_cost: "a", rationale: "why" }, scope: "OUT_OF_SCOPE", scope_evidence: { basis: "non_goal", reference: "non_goals", rationale: 'excluded by non-goal "docs are out of scope"' }, ref: "b.ts:1" },
+			{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", priority: "LOW", assessment: { unfixed_cost: "c", exposure: "e", remedy: "r", added_cost: "a", rationale: "why" }, scope: "OUT_OF_SCOPE", scope_evidence: { basis: "non_goal", reference: "non_goals", rationale: "docs are out of scope for this change", non_goal: "docs are out of scope" }, ref: "b.ts:1" },
 		]));
 		const path = join(dir, `ultragoal-codereview-${SID}.json`);
 		const result = publish(path, raw);

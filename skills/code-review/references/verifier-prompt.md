@@ -16,7 +16,7 @@ The placeholders describe the current candidate; no subagent dispatch is needed.
 | `{CANDIDATE_FAILURE_SCENARIO}` | the candidate's stated failure scenario / cost |
 | `{CANDIDATE_AC}` | the acceptance criterion or inferred intent, requirement-gap candidates only (`?` if none) |
 | `{CANDIDATE_FOUND_BY}` | the angle(s) that surfaced it |
-| `{INTENT}` | Step 1 intent/requirements (or `N/A — code-quality-only review`); a scope-contract dispatch also includes the unmodified frozen scope envelope, original non-goals, and approved stories |
+| `{INTENT}` | Step 1 intent/requirements (or `N/A — code-quality-only review`); a scope-contract dispatch also includes the unmodified frozen scope envelope, original non-goals, and approved stories. `non_goals` is a JSON array of `{statement, decider}`; cite from that array. The raw non-goals string inside the envelope is hashed identity only |
 
 Everything below the marker is applied directly by the reviewer.
 
@@ -118,13 +118,13 @@ Apply this section when the supplied intent includes a valid `[SCOPE_CONTRACT]` 
 Return exactly one scope decision with this structured evidence, in addition to the quality verdict:
 
 ```json
-{"scope":"IN_SCOPE | OUT_OF_SCOPE | UNKNOWN","scope_evidence":{"basis":"requirement | regression | changed_code | non_goal | unrelated | uncertain","reference":"<outcome, verification_surface, constraints, boundaries, non_goals, or confirmed story id>","rationale":"<cite approved behavior, change causality, and concrete remedy boundary>"}}
+{"scope":"IN_SCOPE | OUT_OF_SCOPE | UNKNOWN","scope_evidence":{"basis":"requirement | regression | changed_code | non_goal | unrelated | uncertain","reference":"<outcome, verification_surface, constraints, boundaries, non_goals, or confirmed story id>","rationale":"<cite approved behavior, change causality, and concrete remedy boundary>","non_goal":"<OUT_OF_SCOPE + non_goal only: one declared non_goals statement copied exactly>"}}
 ```
 
 - **IN_SCOPE / requirement:** approved behavior or a quality improvement within the authorized work, grounded in the contract or a confirmed story. Small cleanup/docs fixes qualify; impact is not an admission threshold. An inferred analogy alone is insufficient. A defect in code this change did not touch that prevents an approved requirement from working is also IN_SCOPE / requirement; its remedy is the smallest local fix.
 - **IN_SCOPE / regression:** this change breaks previously working behavior or a protected invariant, or worsens a defect in code it did not touch; cite the causal change and a minimal correction or rollback restoring it. Reading an unchanged line does not authorize repair unless that change-caused regression is established.
 - **IN_SCOPE / changed_code:** the defect sits in lines or code this change added or modified; cite those changed lines. No requirement has to mention the behavior: this is the default for a defect in changed code.
-- **OUT_OF_SCOPE / non_goal:** an explicit exclusion or accepted-risk statement in the intent source (e.g. "we will not handle concurrency because it is rare") directly addresses this defect's behavior or class. Set `reference` to `non_goals`. Name the exclusion you rely on, by `non_goals#N` or by quoting it; judge yourself whether it covers this defect. A requirement's silence or a decision about a different behavior is not an exclusion. For example, a decision against prefix expansion does not exclude a whitespace defect, and a parity requirement for valid inputs does not exclude an invalid input in a new file. With no such statement, a defect in changed code is IN_SCOPE / changed_code. When the statement exists, keep the exclusion even if the defect is real and HIGH impact; if its stated premise contradicts the code (it says "rare", but the code triggers it on every retry), add that contradiction to the note.
+- **OUT_OF_SCOPE / non_goal:** an explicit exclusion or accepted-risk statement in the intent source (e.g. "we will not handle concurrency because it is rare") directly addresses this defect's behavior or class. Set `reference` to `non_goals`. Copy the exclusion you rely on, exactly as its `statement` appears in the `non_goals` array, into `scope_evidence.non_goal` (a partial quote or paraphrase degrades the finding to UNKNOWN); judge yourself whether it covers this defect. A requirement's silence or a decision about a different behavior is not an exclusion. For example, a decision against prefix expansion does not exclude a whitespace defect, and a parity requirement for valid inputs does not exclude an invalid input in a new file. With no such statement, a defect in changed code is IN_SCOPE / changed_code. When the statement exists, keep the exclusion even if the defect is real and HIGH impact; if its stated premise contradicts the code (it says "rare", but the code triggers it on every retry), add that contradiction to the note.
 - **OUT_OF_SCOPE / unrelated:** the defect lies in code this change did not touch, the change does not worsen it, and it does not prevent an approved requirement from working. Cite the relevant contract boundary.
 - **UNKNOWN / uncertain:** only when the only known remedy needs excluded behavior or a new capability outside the change, or the product requirement itself is unclear. If a smaller remedy inside the change exists, judge IN_SCOPE with that remedy. Name the unresolved user scope decision; do not invent authorization or implement a workaround that expands scope.
 
@@ -149,7 +149,7 @@ After recording scope, apply the quality ladder independently. A scope reason ne
    for a deliberate tradeoff. When code (a guard, an invariant, a commented contract) shows the
    behavior is correct by design, REFUTE and cite that `file:line`. When the stated intent accepts a
    real defect (an explicit exclusion or accepted risk), it is not a refutation: keep CONFIRMED or
-   PLAUSIBLE and record it as OUT_OF_SCOPE / non_goal, naming the statement (`non_goals#N` or a quote).
+   PLAUSIBLE and record it as OUT_OF_SCOPE / non_goal, copying the exact statement into `scope_evidence.non_goal`.
 
 ```dot
 digraph verification_flow {

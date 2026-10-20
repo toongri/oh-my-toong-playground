@@ -1094,7 +1094,7 @@ describe("non_goals declaration-format gate", () => {
 
 		const out = runCli("serialize-review-context");
 		const parsed = JSON.parse(out);
-		expect(parsed.non_goals).toBe(BACKFILL_MARKER);
+		expect(parsed.non_goals).toEqual([]);
 	});
 });
 
@@ -3660,7 +3660,7 @@ describe("serialize-review-context subcommand", () => {
 		expect(parsed.description).toBe(BACKFILL_MARKER);
 		expect(parsed.project_context).toContain(BACKFILL_MARKER);
 		expect(parsed.requirements).toBe(BACKFILL_MARKER);
-		expect(parsed.non_goals).toBe(BACKFILL_MARKER);
+		expect(parsed.non_goals).toEqual([]);
 	});
 
 	// ROUND-TRIP: stdout parses to exactly the 5 contract keys, each holding
@@ -3688,20 +3688,21 @@ describe("serialize-review-context subcommand", () => {
 	// `non_goals` is a standalone slot: its value must round-trip verbatim into
 	// its own key, and must NOT get folded into project_context alongside
 	// constraints/boundaries — that composite stays a 2-source join.
-	test("`non_goals` round-trips verbatim into its own key without polluting project_context", () => {
+	test("`non_goals` is an array of {statement, decider} in declared order, without polluting project_context", () => {
 		setGoalState(S, {
 			phase: "planning",
 			constraints: "no new deps",
 			boundaries: "no billing changes",
-			non_goals: "- SENTINEL_NON_GOALS: no i18n support | decider: touches locale files",
+			non_goals: "- SENTINEL_NON_GOALS: no   i18n support | decider: touches locale files\n- skip ui | decider: any ui file",
 		});
 
 		const out = runCli("serialize-review-context");
 		const parsed = JSON.parse(out);
 
-		expect(parsed.non_goals).toBe(
-			"- SENTINEL_NON_GOALS: no i18n support | decider: touches locale files",
-		);
+		expect(parsed.non_goals).toEqual([
+			{ statement: "SENTINEL_NON_GOALS: no i18n support", decider: "touches locale files" },
+			{ statement: "skip ui", decider: "any ui file" },
+		]);
 		expect(parsed.project_context).toContain("no new deps\n\nno billing changes");
 		expect(parsed.project_context).toContain("SENTINEL_NON_GOALS");
 	});
@@ -4588,11 +4589,11 @@ describe("help subcommand", () => {
 	});
 });
 
-describe("non_goal exclusion quote matching", () => {
+describe("non_goal exclusion exact-statement citation", () => {
 	const SID = "quote-session";
 
-	/** Returns the non_goal quote problem for a rationale against a non_goals slot, or null when the quote is accepted. */
-	function quoteProblem(nonGoals: string, rationale: string): string[] {
+	/** Returns the validate-review-artifact problems for an OUT_OF_SCOPE + non_goal finding carrying `nonGoal` (omitted when undefined) against a non_goals slot. */
+	function citeProblem(nonGoals: string, nonGoal: unknown, rationale = "why"): string[] {
 		writeFileSync(
 			resolveStatePath(SID),
 			JSON.stringify({
@@ -4607,6 +4608,8 @@ describe("non_goal exclusion quote matching", () => {
 			"utf8",
 		);
 		const state = JSON.parse(readFileSync(resolveStatePath(SID), "utf8"));
+		const evidence: Record<string, unknown> = { basis: "non_goal", reference: "non_goals", rationale };
+		if (nonGoal !== undefined) evidence["non_goal"] = nonGoal;
 		const artifact = {
 			status: "COMPLETE",
 			scope_contract_sha256: scopeContractSha256(state),
@@ -4615,7 +4618,7 @@ describe("non_goal exclusion quote matching", () => {
 					class: "cleanup", verdict: "CONFIRMED", impact: "LOW", priority: "LOW",
 					assessment: { unfixed_cost: "c", exposure: "e", remedy: "r", added_cost: "a", rationale: "why" },
 					scope: "OUT_OF_SCOPE",
-					scope_evidence: { basis: "non_goal", reference: "non_goals", rationale },
+					scope_evidence: evidence,
 					ref: "a.ts:1",
 				},
 			],
@@ -4626,76 +4629,52 @@ describe("non_goal exclusion quote matching", () => {
 		return validateReviewArtifact(SID).problems;
 	}
 
-	test("verbatim quote is accepted", () => {
-		expect(quoteProblem("- redesign the login screen | decider: x", 'excluded: "redesign the login screen"')).toEqual([]);
+	const TWO = "- redesign the login screen | decider: touches login\n- skip ui | decider: any ui file";
+
+	test("a statement copied exactly passes", () => {
+		expect(citeProblem(TWO, "redesign the login screen")).toEqual([]);
+		expect(citeProblem(TWO, "skip ui")).toEqual([]);
 	});
 
-	test("matching ignores case", () => {
-		expect(quoteProblem("- Redesign The Login Screen | decider: x", "excluded: REDESIGN the LOGIN screen")).toEqual([]);
+	test("a partial quote, paraphrase, different case, empty string or unlisted statement is refused", () => {
+		for (const cited of ["redesign the login", "rework the login page", "Redesign The Login Screen", "", "not declared"]) {
+			expect(citeProblem(TWO, cited)).toHaveLength(1);
+		}
 	});
 
-	test("matching maps typographic quotes to ASCII", () => {
-		expect(quoteProblem("- do not rename the \"legacy\" flag | decider: x", "excluded: do not rename the “legacy” flag")).toEqual([]);
-		expect(quoteProblem("- keep the user’s locale | decider: x", "excluded: keep the user's locale")).toEqual([]);
+	test("a missing non_goal field is refused even when the rationale contains the statement", () => {
+		expect(citeProblem("- ui | decider: x", undefined, "this is a ui problem")).toHaveLength(1);
+		expect(citeProblem(TWO, undefined, "excluded: redesign the login screen")).toHaveLength(1);
 	});
 
-	test("matching strips markdown emphasis and backticks on either side", () => {
-		expect(quoteProblem("- no change to `retry.ts` backoff | decider: x", "excluded: no change to **retry.ts** backoff")).toEqual([]);
-		expect(quoteProblem("- **no** change to retry backoff | decider: x", "excluded: no change to `retry` backoff")).toEqual([]);
+	test("a placeholder-looking statement matches only itself, never arbitrary text", () => {
+		expect(citeProblem("- . | decider: x", "some other text")).toHaveLength(1);
+		expect(citeProblem("- . | decider: x", "")).toHaveLength(1);
 	});
 
-	test("matching ignores trailing punctuation of the statement", () => {
-		expect(quoteProblem("- no change to retry backoff. | decider: x", "excluded: no change to retry backoff")).toEqual([]);
+	test("the refusal lists the valid statements as a JSON array", () => {
+		const problems = citeProblem(TWO, "nope");
+		expect(problems[0]).toContain(JSON.stringify(["redesign the login screen", "skip ui"]));
 	});
 
-	test("an unrelated rationale is still rejected", () => {
-		expect(quoteProblem("- redesign the login screen | decider: x", "the plan is silent about this")).toHaveLength(1);
+	test("an empty non_goals slot can never be cited", () => {
+		expect(citeProblem("", "anything")).toHaveLength(1);
 	});
 
-	test("a placeholder statement is not quotable", () => {
-		expect(quoteProblem("- none | decider: x", "there is none of this in scope")).toHaveLength(1);
-		expect(quoteProblem("- n/a | decider: x", "n/a")).toHaveLength(1);
-		expect(quoteProblem("- N/A. | decider: x", "n/a")).toHaveLength(1);
-		expect(quoteProblem("- 없음 | decider: x", "없음")).toHaveLength(1);
-		expect(quoteProblem("- 해당 없음 | decider: x", "해당 없음")).toHaveLength(1);
+	test("a non-string non_goal makes the artifact schema-invalid; absent is accepted", () => {
+		citeProblem(TWO, 7);
+		expect(validateReviewArtifact(SID).ok).toBe(false);
+		expect(validateReviewArtifact(SID).problems[0]).toContain("schema-invalid");
+		expect(citeProblem(TWO, "skip ui")).toEqual([]);
 	});
 
-	test("a rationale quoting only the placeholder statement does not count when a real one exists", () => {
-		const nonGoals = "- none | decider: x\n- redesign the login screen | decider: y";
-		expect(quoteProblem(nonGoals, "none of the listed items apply")).toHaveLength(1);
-		expect(quoteProblem(nonGoals, "excluded: redesign the login screen")).toEqual([]);
-	});
-
-	test("short real exclusions are quotable", () => {
-		expect(quoteProblem("- skip ui | decider: x", "skip ui")).toEqual([]);
-		expect(quoteProblem("- 인증 제외 | decider: x", "인증 제외")).toEqual([]);
-	});
-
-	test("the refusal lists every non_goals statement with its number, placeholders included", () => {
-		const problems = quoteProblem("- none | decider: x\n- skip ui | decider: y", "unrelated");
-		expect(problems).toHaveLength(1);
-		expect(problems[0]).toContain('non_goals#1: "none"');
-		expect(problems[0]).toContain('non_goals#2: "skip ui"');
-	});
-
-	test("a non_goals#N pointer to a real statement passes even when the rationale paraphrases it", () => {
-		const nonGoals = "- none | decider: x\n- redesign the login screen | decider: y";
-		expect(quoteProblem(nonGoals, "non_goals#2 covers this: the UI overhaul is out")).toEqual([]);
-		expect(quoteProblem(nonGoals, "NON_GOALS#2")).toEqual([]);
-	});
-
-	test("a non_goals#N pointer out of range is rejected", () => {
-		expect(quoteProblem("- skip ui | decider: x", "non_goals#9 excludes it")).toHaveLength(1);
-		expect(quoteProblem("- skip ui | decider: x", "non_goals#0 excludes it")).toHaveLength(1);
-	});
-
-	test("a pointer must match the whole number, not a prefix of a larger one", () => {
-		const nonGoals = "- skip ui | decider: x";
-		expect(quoteProblem(nonGoals, "non_goals#10")).toHaveLength(1);
-	});
-
-	test("a non_goals#N pointer to a placeholder statement is rejected", () => {
-		expect(quoteProblem("- none | decider: x\n- skip ui | decider: y", "non_goals#1 excludes it")).toHaveLength(1);
+	test("scope_contract_sha256 keeps the raw non_goals string (golden)", () => {
+		expect(
+			scopeContractSha256({
+				outcome: "ship", verification_surface: "tests", constraints: "none", boundaries: "src",
+				non_goals: "- skip ui | decider: touches ui\n- no i18n | decider: locale files", stories: [],
+			}),
+		).toBe("3c14bc30630cf78a0713f8b6c68b04c5bbf98fcf61074caa914b0f3740a08af3");
 	});
 });
 
