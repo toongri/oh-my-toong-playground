@@ -3,6 +3,7 @@ import { readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { setGoalState, serializeReviewContext } from "../../ultragoal/scripts/ultragoal-state.ts";
+import { ANGLE_NOTES } from "./diff-cursor.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
 const SKILL_MD = join(REPO_ROOT, "skills", "code-review", "SKILL.md");
@@ -353,5 +354,64 @@ describe("finder prompts use the diff cursor and state only their own lens", () 
 		expect(cleanup).toContain("위반");
 		expect(cleanup).toContain("해당 없음");
 		expect(cleanup).toContain("--rule <itemId>");
+	});
+});
+
+describe("finder page notes are checks through the angle, not summaries", () => {
+	const template = readFileSync(TEMPLATE_MD, "utf-8");
+	const protocol = template.slice(
+		template.indexOf("## Diff Coverage Protocol"),
+		template.indexOf("<!-- section:commit_history -->"),
+	);
+	const read = (m: string) => readFileSync(join(MEMBER_PROMPT_DIR, `${m}.md`), "utf-8");
+
+	it("the cursor defines a note template for exactly the four dedicated angles", () => {
+		expect(Object.keys(ANGLE_NOTES).sort()).toEqual(["cleanup", "correctness", "regression", "requirement"]);
+	});
+
+	it("each dedicated angle prompt carries the cursor's exact template, its labels, and the check-not-summary rule", () => {
+		for (const [angle, rule] of Object.entries(ANGLE_NOTES)) {
+			const content = read(angle);
+			expect(content, `${angle}.md must quote the cursor template verbatim`).toContain(rule.template);
+			for (const label of rule.labels) expect(content, `${angle}.md must name ${label}:`).toContain(`${label}:`);
+			expect(content, `${angle}.md`).toMatch(/check, not a summary/i);
+			expect(content, `${angle}.md`).toMatch(/try to break/i);
+			expect(content, `${angle}.md`).toContain("{CURSOR} candidate add");
+		}
+	});
+
+	it("the Diff Coverage Protocol describes every angle template and keeps the no-padding rule", () => {
+		expect(protocol).toMatch(/check, not a summary/i);
+		expect(protocol).toMatch(/try to break/i);
+		for (const rule of Object.values(ANGLE_NOTES))
+			for (const label of rule.labels) expect(protocol, `protocol must name ${label}:`).toContain(`${label}:`);
+		expect(protocol).toMatch(/do not pad/i);
+		expect(protocol).toMatch(/do not invent/i);
+		expect(protocol).toMatch(/doc page or a test-data page may take a short note/i);
+	});
+
+	it("the fallback prompt keeps the citation-only note", () => {
+		const fallback = read("default");
+		for (const rule of Object.values(ANGLE_NOTES))
+			for (const label of rule.labels) expect(fallback).not.toContain(`${label}:`);
+	});
+
+	it("correctness carries the two general lenses with no project-specific terms", () => {
+		const correctness = read("correctness");
+		const lens = (name: string) => {
+			const start = correctness.indexOf(`- **${name}**`);
+			expect(start, `correctness.md must have the lens ${name}`).toBeGreaterThan(-1);
+			const end = correctness.indexOf("\n- **", start + 1);
+			return correctness.slice(start, end === -1 ? undefined : end);
+		};
+		const external = lens("Malformed, reversed, or empty external input");
+		for (const needle of [/missing/, /malformed/, /out of range/, /wrong type/, /reversed/, /duplicated/, /empty/, /caller treats it as/])
+			expect(external).toMatch(needle);
+		const derived = lens("Derived state on change");
+		for (const needle of [/derived/, /aggregates/, /caches/, /recomputed or invalidated/, /every write path/, /conditional upsert/, /previously null/])
+			expect(derived).toMatch(needle);
+		const projectTerms =
+			/\b(oura|apple|healthkit|health ?connect|hktimezone|sleep|workout|heart ?rate|step count|algocare|invalidateMissingKeys|normalizers?)\b/i;
+		expect(correctness).not.toMatch(projectTerms);
 	});
 });

@@ -14,6 +14,7 @@ import {
 	parseRuleFrontmatter,
 	DYNAMIC_RESERVE,
 	TOOL_OUTPUT_CEILING,
+	ANGLE_NOTES,
 	type Plan,
 } from "./diff-cursor.ts";
 
@@ -168,12 +169,41 @@ const cli = (ledger: string, ...args: string[]) => run([...args, "--ledger", led
 const ackOf = (out: string) => /### ACK (\S+): ([0-9a-f]{8}) ###/.exec(out)?.[2] ?? "";
 const pageIdOf = (out: string) => /\[PAGE (\S+) ·/.exec(out)?.[1] ?? "";
 const kindOf = (out: string) => /^PAGE \S+ {2}kind=(\w+)$/m.exec(out)?.[1] ?? "";
+const angleOf = (out: string) => /· angle (\S+) ·/.exec(out)?.[1] ?? "";
 
-function noteFor(out: string): string {
+/** A citation of the page: a new-file line number, or the file name when the page has none. */
+function citeOf(out: string): string {
 	const line = /^ {0,5}(\d+) \|/m.exec(out)?.[1];
-	if (line !== undefined) return `L${line} 확인함`;
-	const file = /^FILES ON THIS PAGE:\n {2}(\S+)/m.exec(out)?.[1] ?? "";
-	return `${file} 확인함`;
+	if (line !== undefined) return `L${line}`;
+	return /^FILES ON THIS PAGE:\n {2}(\S+)/m.exec(out)?.[1] ?? "";
+}
+
+/** A note that passes the page's angle template (a scripted finder that holds every page). */
+function noteFor(out: string): string {
+	const cite = citeOf(out);
+	switch (angleOf(out)) {
+		case "correctness":
+			return `breaks-if: 음수 입력; holds-because: ${cite} 확인함`;
+		case "regression":
+			return `changed-contract: none: 새 코드 ${cite}; dependents: 호출부 없음; verdict: holds`;
+		case "requirement":
+			return `maps: none; branches: 해당 규칙 없음 ${cite}; verdict: met`;
+		case "cleanup":
+			return `rules: none; quality: none: ${cite} 단순함`;
+		default:
+			return `${cite} 확인함`;
+	}
+}
+
+/** Acknowledges pages with template notes until the current page has the wanted kind. */
+function advanceTo(ledger: string, kinds: readonly string[]): string {
+	let cur = cli(ledger, "next").stdout;
+	while (!kinds.includes(kindOf(cur))) {
+		const r = cli(ledger, "done", pageIdOf(cur), "--ack", ackOf(cur), "--note", noteFor(cur), "--next");
+		if (r.code !== 0) throw new Error(r.stderr);
+		cur = r.stdout;
+	}
+	return cur;
 }
 
 /** Walks the ledger with `done --next` until `leave` pages remain; returns every page output seen. */
@@ -419,7 +449,15 @@ describe("ledger 진행 규칙", () => {
 		const out = cli(ledger, "next").stdout;
 		expect(["production", "config", "schema", "migration"]).toContain(kindOf(out));
 		const id = pageIdOf(out);
-		const vague = cli(ledger, "done", id, "--ack", ackOf(out), "--note", "전반적으로 확인함");
+		const vague = cli(
+			ledger,
+			"done",
+			id,
+			"--ack",
+			ackOf(out),
+			"--note",
+			"maps: none; branches: 전반적으로 확인함; verdict: met",
+		);
 		expect(vague.code).toBe(1);
 		expect(vague.stderr).toContain("must cite");
 		expect(cli(ledger, "done", id, "--ack", ackOf(out), "--note", "   ").code).toBe(1);
@@ -728,6 +766,140 @@ describe("ledger 진행 규칙", () => {
 		expect(list).toContain("위반 1");
 		expect(list).toContain("src/CLAUDE.md:1");
 		expect(run(["verify", "--plan", planDir, "--ledgers", ledger]).code).toBe(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// angle note templates
+// ---------------------------------------------------------------------------
+
+describe("각도별 코드 페이지 메모 템플릿", () => {
+	const DEEP = ["production", "schema", "migration", "config"];
+	const doneWith = (ledger: string, out: string, note: string) =>
+		cli(ledger, "done", pageIdOf(out), "--ack", ackOf(out), "--note", note);
+	const addCandidate = (ledger: string, page: string) =>
+		cli(
+			ledger,
+			"candidate",
+			"add",
+			"--page",
+			page,
+			"--file",
+			"src/app.ts",
+			"--line",
+			"3",
+			"--summary",
+			"경계값 누락",
+			"--failure-scenario",
+			"음수 입력에서 합계가 틀린다",
+		);
+
+	interface Case {
+		angle: string;
+		/** A citing note that lacks the listed labels. */
+		missing: (cite: string) => string;
+		missingLabels: string[];
+		/** Other refused notes: [note, text the refusal must name]. */
+		refused: ((cite: string) => [string, string])[];
+		/** A complete note that holds through a recorded candidate id, when the angle has one. */
+		viaCandidate?: (cite: string, id: string) => string;
+	}
+	const CASES: Case[] = [
+		{
+			angle: "correctness",
+			missing: (c) => `breaks-if: 음수 입력이 ${c}에 들어온다`,
+			missingLabels: ["holds-because:", "candidate:"],
+			refused: [
+				(c) => [`holds-because: ${c} 확인함`, "breaks-if:"],
+				(c) => [`breaks-if: 음수 입력 ${c}; candidate: c999`, "c999"],
+				(c) => [`breaks-if: 음수 입력 ${c}; holds-because: 괜찮아 보임`, "holds-because: must cite"],
+			],
+			viaCandidate: (c, id) => `breaks-if: 음수 입력 ${c}; candidate: ${id}`,
+		},
+		{
+			angle: "regression",
+			missing: (c) => `changed-contract: none: 새 코드 ${c}; verdict: holds`,
+			missingLabels: ["dependents:"],
+			refused: [
+				(c) => [`changed-contract: 반환값 변경 ${c}; dependents: 호출부 2곳; verdict: candidate c999`, "c999"],
+				(c) => [`changed-contract: 반환값 변경 ${c}; dependents: 호출부 2곳; verdict: 괜찮음`, "verdict:"],
+				(c) => [`changed-contract: none; dependents: 호출부 2곳 ${c}; verdict: holds`, "none: <why>"],
+			],
+			viaCandidate: (c, id) => `changed-contract: 반환값 변경 ${c}; dependents: 호출부 2곳; verdict: candidate ${id}`,
+		},
+		{
+			angle: "requirement",
+			missing: (c) => `maps: none ${c}; verdict: met`,
+			missingLabels: ["branches:"],
+			refused: [
+				(c) => [`maps: D-1; branches: null 분기 미충족 ${c}; verdict: candidate c999`, "c999"],
+				(c) => [`maps: D-1; branches: 모두 충족 ${c}; verdict: holds`, "verdict:"],
+			],
+			viaCandidate: (c, id) => `maps: D-1; branches: null 분기 미충족 ${c}; verdict: candidate ${id}`,
+		},
+		{
+			angle: "cleanup",
+			missing: (c) => `rules: none ${c}`,
+			missingLabels: ["quality:"],
+			refused: [(c) => [`rules: r001; quality: none ${c}`, "none: <why>"]],
+		},
+	];
+
+	for (const k of CASES) {
+		test(`${k.angle}: 빠진 필드·없는 후보·채우지 않은 템플릿은 거부되고 모든 필드를 채운 메모는 통과한다`, () => {
+			const template = ANGLE_NOTES[k.angle]?.template as string;
+			expect(template).toBeTruthy();
+			const ledger = newLedger(k.angle);
+			const out = cli(ledger, "next").stdout;
+			expect(DEEP).toContain(kindOf(out));
+			expect(out).toMatch(new RegExp(`^NEXT: done .*${template.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "m"));
+			expect(cli(ledger, "resume").stdout).toContain(template);
+			const cite = citeOf(out);
+
+			const miss = doneWith(ledger, out, k.missing(cite));
+			expect(miss.code).toBe(1);
+			for (const label of k.missingLabels) expect(miss.stderr).toContain(label);
+			expect(miss.stderr).toContain("not a summary");
+			expect(miss.stderr).toContain(`Template: ${template}`);
+			expect(doneWith(ledger, out, template).code).toBe(1);
+			for (const make of k.refused) {
+				const [note, named] = make(cite);
+				const r = doneWith(ledger, out, note);
+				expect(r.code).toBe(1);
+				expect(r.stderr).toContain(named);
+			}
+
+			if (k.viaCandidate) {
+				expect(addCandidate(ledger, pageIdOf(out)).code).toBe(0);
+				expect(doneWith(ledger, out, k.viaCandidate(cite, "c001")).code).toBe(0);
+			} else expect(doneWith(ledger, out, noteFor(out)).code).toBe(0);
+			const second = cli(ledger, "next").stdout;
+			expect(doneWith(ledger, second, noteFor(second)).code).toBe(0);
+		});
+	}
+
+	test("문서 페이지는 모든 각도에서 짧은 메모로 충분하고 NEXT에 템플릿을 보이지 않는다", () => {
+		for (const k of CASES) {
+			const ledger = newLedger(k.angle);
+			const page = advanceTo(ledger, ["doc"]);
+			expect(page).toContain("short note is enough");
+			expect(page).not.toContain(ANGLE_NOTES[k.angle]?.template as string);
+			expect(doneWith(ledger, page, "관련 메커니즘 없음: 안내 문서").code).toBe(0);
+		}
+	});
+
+	test("default 각도와 모르는 각도는 인용 규칙만 그대로 적용한다", () => {
+		for (const angle of ["default", "security"]) {
+			expect(ANGLE_NOTES[angle]).toBeUndefined();
+			const ledger = newLedger(angle);
+			const out = cli(ledger, "next").stdout;
+			expect(out).toContain("full note: cite a line from this page");
+			expect(cli(ledger, "resume").stdout).not.toContain("NOTE TEMPLATE");
+			const vague = doneWith(ledger, out, "전반적으로 확인함");
+			expect(vague.code).toBe(1);
+			expect(vague.stderr).toContain("must cite");
+			expect(doneWith(ledger, out, `${citeOf(out)} 확인함`).code).toBe(0);
+		}
 	});
 });
 

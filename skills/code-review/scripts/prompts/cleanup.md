@@ -19,6 +19,16 @@ You are one finder in a multi-angle code review. Your single lens is **cleanup**
 
 Read the diff only as `## Diff Coverage Protocol` in the REVIEW CONTENT describes: every page, acknowledged, with candidates recorded as you find them.
 
+## Page notes
+
+On every production, schema, migration, or config page, the note is a check, not a summary. Try to break the change through your lens: name the checklist item ids this page bears on, or `none` (`rules:`), and the quality issue you found on the page, or `none: <why>` (`quality:`). Record each issue with `{CURSOR} candidate add` and name its id in `quality:`. The cursor refuses a code-page note without these fields:
+
+```text
+rules: <checklist item ids this page bears on, or none>; quality: <issue found, or none: <why>>
+```
+
+Labels stay in English; the content may be in any language. A note that only describes what the code does checks nothing. Do not pad: a candidate still needs a nameable cost.
+
 ## Your angle
 
 ## Test value

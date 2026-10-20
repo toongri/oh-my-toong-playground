@@ -101,35 +101,56 @@ const cli = (angle: string, ...args: string[]) => run([...args, "--ledger", ledg
 const ackOf = (out: string) => /### ACK (\S+): ([0-9a-f]{8}) ###/.exec(out)?.[2] ?? "";
 const pageIdOf = (out: string) => /\[PAGE (\S+) ·/.exec(out)?.[1] ?? "";
 
-function noteFor(out: string): string {
+/**
+ * The note each scripted finder writes: a short note on doc and test pages; on code pages its
+ * angle's template (a page that holds, or one whose `candidateId` was recorded first), or the
+ * plain citation for an angle without a template.
+ */
+function noteFor(angle: string, out: string, candidateId?: string): string {
 	const line = /^ {0,5}(\d+) \|/m.exec(out)?.[1];
-	if (line !== undefined) return `L${line} 확인함`;
-	const file = /^FILES ON THIS PAGE:\n {2}(\S+)/m.exec(out)?.[1] ?? "";
-	return `${file} 확인함`;
+	const cite = line !== undefined ? `L${line}` : (/^FILES ON THIS PAGE:\n {2}(\S+)/m.exec(out)?.[1] ?? "");
+	const verdict = (pass: string) => (candidateId ? `candidate ${candidateId}` : pass);
+	const kind = /^PAGE \S+ {2}kind=(\w+)$/m.exec(out)?.[1] ?? "";
+	if (kind === "doc" || kind === "test") return `관련 메커니즘 없음: ${kind} 페이지`;
+	switch (angle) {
+		case "correctness":
+			return candidateId
+				? `breaks-if: 음수 입력이 ${cite}에 들어온다; candidate: ${candidateId}`
+				: `breaks-if: 음수 입력; holds-because: ${cite}은 더하기만 한다`;
+		case "regression":
+			return `changed-contract: none: 새 함수만 추가 ${cite}; dependents: 호출부 없음; verdict: ${verdict("holds")}`;
+		case "requirement":
+			return `maps: none; branches: 해당 규칙 없음 ${cite}; verdict: ${verdict("met")}`;
+		case "cleanup":
+			return `rules: none; quality: ${candidateId ? `후보 ${candidateId}` : "none: 단순함"} ${cite}`;
+		default:
+			return `${cite} 확인함`;
+	}
 }
 
 /**
  * Walks the angle's ledger with `done --next`, leaving `leave` pages unacknowledged.
  * `onFirstPage` runs while the first page is issued (candidates need an issued page).
  */
-function walk(angle: string, opts: { leave?: number; onFirstPage?: (pageId: string) => void } = {}): void {
+function walk(angle: string, opts: { leave?: number; onFirstPage?: (pageId: string) => string | undefined } = {}): void {
 	let out = cli(angle, "next").stdout;
 	let first = true;
 	for (;;) {
 		if (out.includes("ALL PAGES DONE")) return;
 		const status = JSON.parse(cli(angle, "status", "--json").stdout) as { pagesTotal: number; pagesAcked: number };
 		if (status.pagesTotal - status.pagesAcked <= (opts.leave ?? 0)) return;
+		let candidateId: string | undefined;
 		if (first) {
-			opts.onFirstPage?.(pageIdOf(out));
+			candidateId = opts.onFirstPage?.(pageIdOf(out));
 			first = false;
 		}
-		const r = cli(angle, "done", pageIdOf(out), "--ack", ackOf(out), "--note", noteFor(out), "--next");
+		const r = cli(angle, "done", pageIdOf(out), "--ack", ackOf(out), "--note", noteFor(angle, out, candidateId), "--next");
 		if (r.code !== 0) throw new Error(r.stderr);
 		out = r.stdout;
 	}
 }
 
-function addCandidate(angle: string, page: string, summary: string, rule?: string): void {
+function addCandidate(angle: string, page: string, summary: string, rule?: string): string {
 	const r = cli(
 		angle,
 		"candidate", "add", "--page", page, "--file", "src/app.ts", "--line", "4",
@@ -137,6 +158,7 @@ function addCandidate(angle: string, page: string, summary: string, rule?: strin
 		...(rule ? ["--rule", rule] : []),
 	);
 	if (r.code !== 0) throw new Error(r.stderr);
+	return /CANDIDATE (c\d+)/.exec(r.stdout)?.[1] ?? "";
 }
 
 function fillChecklist(angle: string): string {
@@ -172,11 +194,12 @@ describe("diff-cursor E2E: 네 finder가 diff를 100% 읽는 경로", () => {
 		for (const angle of ANGLES) {
 			walk(angle, {
 				onFirstPage: (page) => {
-					addCandidate(angle, page, `${angle} 후보`);
+					const id = addCandidate(angle, page, `${angle} 후보`);
 					if (angle === "cleanup") {
 						violationId = fillChecklist(angle);
 						addCandidate(angle, page, "규칙 위반 후보", violationId);
 					}
+					return id;
 				},
 			});
 			const fin = cli(angle, "finish");

@@ -19,6 +19,16 @@ You are one finder in a multi-angle code review. Your single lens is **whether t
 
 Read the diff only as `## Diff Coverage Protocol` in the REVIEW CONTENT describes: every page, acknowledged, with candidates recorded as you find them.
 
+## Page notes
+
+On every production, schema, migration, or config page, the note is a check, not a summary. Try to break the change through your lens: name a concrete input, state, or timing that could make the changed code wrong (`breaks-if:`). Then either state why it does not break, citing a line or identifier from the page (`holds-because:`), or record a candidate with `{CURSOR} candidate add` and name its id (`candidate:`). If you cannot state why it holds, record the candidate. The cursor refuses a code-page note without these fields:
+
+```text
+breaks-if: <concrete input, state or timing that could make this code wrong>; holds-because: <why it does not, citing L<n> or an identifier from this page> | candidate: <id>
+```
+
+Labels stay in English; the content may be in any language. A note that only describes what the code does checks nothing. Do not pad: a `breaks-if:` you can dismiss with a cited line is a valid note, and a candidate still needs a nameable failure scenario.
+
 ## Your angle
 
 For every hunk in the diff, read the enclosing function, not just the changed lines — a bug in an unchanged line of a touched function is in scope, since the change re-exposes it or fails to fix it. That reading is where the tracing starts, not a pass of its own: for each function/symbol the diff changes, ask what input, state, timing, or platform makes it wrong, then follow it outward through every lens below that applies.
@@ -29,6 +39,8 @@ For every hunk in the diff, read the enclosing function, not just the changed li
 - **Deadlock potential**: when the change touches locking, check the lock acquisition order against every other path that holds more than one of the same locks — if two call paths acquire lock A then B while a third acquires B then A, or a lock is re-acquired non-reentrantly on a path that already holds it (e.g. via a callback or re-entrant call), flag it.
 - **Resource lifecycle across call boundaries**: trace every resource acquired in the changed code (file handle, socket, DB connection, stream, lock) to its release, even when acquire and release live in different functions or files. Follow the resource past the boundary of the changed function — does the caller close it, does it flow into a context manager/`try/finally`/`defer`/RAII wrapper, or is ownership handed off without a matching release on the early-return and exception paths? A resource opened in the diff with no traceable release on every exit path is a leak; do not stop at the changed function's own body.
 - **Transaction atomicity**: when the changed code performs multiple related state mutations (DB writes, or a read-modify-write spanning rows/tables/documents) that must succeed-or-fail together, trace whether a single transaction/atomic scope encloses all of them and rolls back on any error. If the mutations are not all wrapped in one such boundary, flag it — a partial-failure path (an exception or early return between the writes) leaves inconsistent persisted state.
+- **Malformed, reversed, or empty external input**: for each value the changed code accepts from outside — client payloads, device or vendor data, responses from other services, files — ask what happens when it is missing, malformed, out of range, of the wrong type, reversed (an end before its start, a maximum below its minimum), duplicated, or empty. Then check that the code's handling (skip it, return null or "unreadable", return an empty result, raise an error) matches what the caller treats it as: an empty result the caller treats as "delete or invalidate the existing data" is a different outcome from one it treats as "nothing to say". A mismatch is a candidate even when each side looks correct alone.
+- **Derived state on change**: when the change writes or updates a stored value, find every value derived from it — aggregates, caches, recomputed days or rows, indexes, denormalized copies — and check that each derived value is recomputed or invalidated on every write path. Include the paths that are easy to miss: a conditional upsert where only some columns change, and the first-time set of a field that was previously null. A write path that leaves a derived value stale is a candidate.
 - **Wrapper/proxy**: if the change adds or modifies a type that wraps another (cache, proxy, decorator, adapter), check every method routes to the wrapped instance and not back through a registry/session/global (which would re-enter or recurse), and that all methods callers actually use are forwarded.
 - **Conditionals, off-by-one, and operators**: an inverted or wrong condition, an off-by-one, or a wrong operator.
 - **Null/undefined and falsy-zero handling**: a null/undefined dereference, a falsy zero treated as missing, or a missing `await`.

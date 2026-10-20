@@ -1188,10 +1188,13 @@ function showPage(ctx: Ctx, id: string, lead: string, label: string): string {
 	const meta = pageMeta(ctx, id);
 	const done = doneCount(l);
 	const head = `${lead}[${label} ${id} · page ${l.order.indexOf(id) + 1}/${l.order.length} · angle ${l.angle} · done ${done} · remaining ${l.order.length - done}]\n`;
-	const tier = DEEP_KINDS.has(meta.kind)
-		? "full note: cite a line from this page (L120 or path:120) or an identifier in backticks"
-		: 'short note is enough, e.g. "no relevant mechanism: <reason>"';
-	const foot = `NEXT: done ${id} --ack <code from the ### ACK line mid-page> --note "<${tier}>" --next\n`;
+	const template = angleNote(l.angle)?.template;
+	const note = !DEEP_KINDS.has(meta.kind)
+		? '<short note is enough, e.g. "no relevant mechanism: <reason>">'
+		: template !== undefined
+			? template
+			: "<full note: cite a line from this page (L120 or path:120) or an identifier in backticks>";
+	const foot = `NEXT: done ${id} --ack <code from the ### ACK line mid-page> --note "${note}" --next\n`;
 	return emit(ctx, head + pageText(ctx, id) + foot);
 }
 
@@ -1248,6 +1251,111 @@ export function noteCitesPage(note: string, page: string): boolean {
 		if (files.some((f) => f !== "" && note.includes(f))) return true;
 	}
 	return false;
+}
+
+type NoteFields = ReadonlyMap<string, string>;
+interface AngleNote {
+	/** Field labels the note is parsed for, written `<label>:` in the note. */
+	labels: readonly string[];
+	/** Printed in the NEXT hint, in resume and in a refusal. */
+	template: string;
+	/** Problems of a parsed note; `known` holds this ledger's candidate ids. */
+	check: (f: NoteFields, known: ReadonlySet<string>, page: string) => string[];
+}
+
+/** A field counts as written only when it is non-blank and not a copied `<placeholder>`. */
+const blank = (v: string | undefined): boolean => v === undefined || v === "" || /^<.*>$/s.test(v);
+
+const missing = (f: NoteFields, labels: readonly string[]) =>
+	labels.filter((k) => blank(f.get(k))).map((k) => `missing ${k}:`);
+
+/** `none` must carry its reason: `none: <why>`. */
+function noneNeedsWhy(f: NoteFields, label: string): string[] {
+	const v = f.get(label) ?? "";
+	return /^none\b/i.test(v) && !/^none\s*:\s*\S/i.test(v)
+		? [`${label} none needs a reason: none: <why>`]
+		: [];
+}
+
+function candidateRefs(value: string, known: ReadonlySet<string>, where: string): string[] {
+	const ids = value.match(/\bc\d+\b/g) ?? [];
+	if (ids.length === 0) return [`${where} names no candidate id`];
+	return ids
+		.filter((id) => !known.has(id))
+		.map((id) => `${where} ${id} is not a recorded candidate (record it with candidate add first)`);
+}
+
+function verdictProblems(f: NoteFields, pass: string, known: ReadonlySet<string>): string[] {
+	const v = f.get("verdict") ?? "";
+	if (blank(v)) return ["missing verdict:"];
+	if (new RegExp(`^${pass}\\b`, "i").test(v)) return [];
+	if (/^candidate\b/i.test(v)) return candidateRefs(v, known, "verdict: candidate");
+	return [`verdict: must be \`${pass}\` or \`candidate <id>\`, got: ${v}`];
+}
+
+/**
+ * Structured notes for code pages (production|schema|migration|config), per finder angle.
+ * An angle not listed here keeps the citation-only rule.
+ */
+export const ANGLE_NOTES: Readonly<Record<string, AngleNote>> = {
+	correctness: {
+		labels: ["breaks-if", "holds-because", "candidate"],
+		template:
+			"breaks-if: <concrete input, state or timing that could make this code wrong>; holds-because: <why it does not, citing L<n> or an identifier from this page> | candidate: <id>",
+		check: (f, known, page) => {
+			const out = missing(f, ["breaks-if"]);
+			const holds = f.get("holds-because") ?? "";
+			const cand = f.get("candidate") ?? "";
+			if (blank(holds) && blank(cand)) out.push("missing holds-because: or candidate:");
+			if (!blank(holds) && !noteCitesPage(holds, page))
+				out.push("holds-because: must cite a line (L120) or an identifier (`name`) from this page");
+			if (!blank(cand)) out.push(...candidateRefs(cand, known, "candidate:"));
+			return out;
+		},
+	},
+	regression: {
+		labels: ["changed-contract", "dependents", "verdict"],
+		template:
+			"changed-contract: <prior behavior or caller-visible contract this page changes, or none: <why>>; dependents: <callers/consumers checked>; verdict: holds | candidate <id>",
+		check: (f, known) => [
+			...missing(f, ["changed-contract", "dependents"]),
+			...noneNeedsWhy(f, "changed-contract"),
+			...verdictProblems(f, "holds", known),
+		],
+	},
+	requirement: {
+		labels: ["maps", "branches", "verdict"],
+		template:
+			"maps: <AC / decision-rule ids this page bears on, or none>; branches: <each branch the mapped rule names: met or not>; verdict: met | candidate <id>",
+		check: (f, known) => [...missing(f, ["maps", "branches"]), ...verdictProblems(f, "met", known)],
+	},
+	cleanup: {
+		labels: ["rules", "quality"],
+		template:
+			"rules: <checklist item ids this page bears on, or none>; quality: <issue found, or none: <why>>",
+		check: (f) => [...missing(f, ["rules", "quality"]), ...noneNeedsWhy(f, "quality")],
+	},
+};
+
+const angleNote = (angle: string): AngleNote | undefined =>
+	Object.hasOwn(ANGLE_NOTES, angle) ? ANGLE_NOTES[angle] : undefined;
+
+const NOTE_IS_A_CHECK =
+	"A code-page note is a check, not a summary: try to break the change through your angle; if you cannot say why it holds, record a candidate (candidate add) and name its id.";
+
+/** Splits a note into its labeled fields; a field runs until the next label. */
+function parseNoteFields(note: string, labels: readonly string[]): Map<string, string> {
+	const re = new RegExp(`(?:^|[\\s;|,])(${labels.join("|")})\\s*:`, "gi");
+	const hits = [...note.matchAll(re)];
+	const fields = new Map<string, string>();
+	hits.forEach((m, i) => {
+		const key = (m[1] ?? "").toLowerCase();
+		const value = note
+			.slice((m.index ?? 0) + m[0].length, hits[i + 1]?.index ?? note.length)
+			.replace(/^[\s;|,]+|[\s;|,]+$/g, "");
+		fields.set(key, [fields.get(key) ?? "", value].filter((x) => x !== "").join(" "));
+	});
+	return fields;
 }
 
 function ledgerDirOf(v: Values, env: NodeJS.ProcessEnv): string {
@@ -1336,10 +1444,25 @@ function cmdDone(v: Values, env: NodeJS.ProcessEnv, id: string | undefined): Out
 		}
 		const note = (v.note ?? "").trim();
 		if (note === "") throw refuse(`--note must not be blank: record what you checked on ${id}`);
-		if (DEEP_KINDS.has(meta.kind) && !noteCitesPage(note, pageText(ctx, id)))
-			throw refuse(
-				`note for ${meta.kind} page ${id} must cite what you checked: a new-file line number shown on the page (L120, path:120, lines 120-130) or an identifier from its code (\`name\`)`,
-			);
+		if (DEEP_KINDS.has(meta.kind)) {
+			const page = pageText(ctx, id);
+			const rule = angleNote(l.angle);
+			const problems = rule
+				? rule.check(
+						parseNoteFields(note, rule.labels),
+						new Set(l.candidates.map((c) => c.id)),
+						page,
+					)
+				: [];
+			if (rule && problems.length > 0)
+				throw refuse(
+					`note for ${meta.kind} page ${id} does not fit the ${l.angle} note: ${problems.join("; ")}\n${NOTE_IS_A_CHECK}\nTemplate: ${rule.template}`,
+				);
+			if (!noteCitesPage(note, page))
+				throw refuse(
+					`note for ${meta.kind} page ${id} must cite what you checked: a new-file line number shown on the page (L120, path:120, lines 120-130) or an identifier from its code (\`name\`)`,
+				);
+		}
 		l.pages[id] = { ...st, state: "done", doneAt: now(), note, ack };
 		save(ctx);
 		const line = `DONE ${id} (${doneCount(l)}/${l.order.length})\n`;
@@ -1576,6 +1699,7 @@ function cmdResume(v: Values, env: NodeJS.ProcessEnv): Output {
 	const n = v.notes === undefined ? 5 : Number(v.notes);
 	if (!Number.isInteger(n) || n < 0) throw usage("--notes must be a non-negative integer");
 	const notes = n === 0 ? [] : l.order.filter((id) => l.pages[id]?.state === "done").slice(-n);
+	const rule = angleNote(l.angle);
 	const out = [
 		`RESUME angle=${l.angle} ledger=${ctx.dir}`,
 		`PLAN: ${l.planDir} planSha=${p.planSha.slice(0, 12)} range=${p.range} files=${p.files.length} pages=${l.order.length}`,
@@ -1586,6 +1710,12 @@ function cmdResume(v: Values, env: NodeJS.ProcessEnv): Output {
 		`CANDIDATES: ${l.candidates.length}`,
 		...l.candidates.slice(-10).map((k) => `  ${k.id} ${k.file}:${k.line} ${clip(k.summary, 120)}`),
 		`CHECKLIST: ${checklistSummary(l)}`,
+		...(rule
+			? [
+					`NOTE TEMPLATE (production|schema|migration|config pages): ${rule.template}`,
+					`  ${NOTE_IS_A_CHECK}`,
+				]
+			: []),
 		`APPLICABLE GUIDELINES AND RULES (${p.applicable.length}):`,
 		...p.applicable.map(
 			(a) =>

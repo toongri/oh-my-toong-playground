@@ -20,6 +20,16 @@ You are one finder in a multi-angle code review. Your single lens asks whether t
 
 Read the diff only as `## Diff Coverage Protocol` in the REVIEW CONTENT describes: every page, acknowledged, with candidates recorded as you find them.
 
+## Page notes
+
+On every production, schema, migration, or config page, the note is a check, not a summary. Try to break the change through your lens: name the AC ids and decision-rule ids this page bears on, or `none` (`maps:`); for each mapped rule, list every branch it names and whether the code on this page satisfies it (`branches:`); then give the verdict (`verdict:`) — `met`, or `candidate <id>` after you record the gap with `{CURSOR} candidate add`. On the intent-inference path, write `maps: none` and check the branches of the inferred intent. If you cannot show that a branch is met, record the candidate. The cursor refuses a code-page note without these fields:
+
+```text
+maps: <AC / decision-rule ids this page bears on, or none>; branches: <each branch the mapped rule names: met or not>; verdict: met | candidate <id>
+```
+
+Labels stay in English; the content may be in any language. A note that only describes what the code does checks nothing. Do not pad: a candidate still needs a nameable requirement gap.
+
 ## Your angle
 
 ### 1. Requirement fulfillment
