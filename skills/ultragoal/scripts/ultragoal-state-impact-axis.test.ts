@@ -16,8 +16,8 @@ import {
 
 // ---------------------------------------------------------------------------
 // 범위 우선 판정 — impact는 harm 정보이고 priority가 라우팅을 결정한다.
-// IN_SCOPE CONFIRMED는 priority에 따라 BLOCK/FIX/NOTE, PLAUSIBLE은 ADJUDICATE.
-// OUT_OF_SCOPE는 NOTE, UNKNOWN은 차단하며 무효화할 수 없다.
+// IN_SCOPE CONFIRMED는 priority에 따라 BLOCK/FIX/NOTE, PLAUSIBLE은 HIGH·MEDIUM이 ADJUDICATE이고 LOW는 NOTE.
+// OUT_OF_SCOPE는 NOTE, UNKNOWN은 차단하며 무효화할 수 없다. IN_SCOPE의 NOTE가 아닌 지적은 무효화할 수 있다.
 // scope, scope_evidence, 현재 계약 해시와 impact는 필수다.
 // ---------------------------------------------------------------------------
 
@@ -136,7 +136,7 @@ describe("범위 우선 판정식: classifyReviewFindingOutcome (verdict × prio
 		["CONFIRMED", "HIGH", "HIGH", "BLOCK"],
 		["CONFIRMED", "LOW", "MEDIUM", "FIX"],
 		["CONFIRMED", "MEDIUM", "LOW", "NOTE"],
-		["PLAUSIBLE", "HIGH", "LOW", "ADJUDICATE"],
+		["PLAUSIBLE", "HIGH", "LOW", "NOTE"],
 		["PLAUSIBLE", "MEDIUM", "HIGH", "ADJUDICATE"],
 		["PLAUSIBLE", "LOW", "MEDIUM", "ADJUDICATE"],
 	];
@@ -229,13 +229,21 @@ describe("완료 게이트: priority가 범위 내 finding의 라우팅을 결�
 		expect(requestComplete(SID)).toBe(false);
 	});
 
-	test("PLAUSIBLE × MEDIUM / LOW도 ADJUDICATE — 완료를 막는다", () => {
+	test("PLAUSIBLE × MEDIUM은 ADJUDICATE — 완료를 막는다", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeCompleteArtifact(SID, [
 			{ class: "regression", verdict: "PLAUSIBLE", impact: "MEDIUM", ref: "src/b.ts:7" },
 			{ class: "cleanup", verdict: "PLAUSIBLE", impact: "LOW", ref: "src/c.ts:9" },
 		]);
 		expect(requestComplete(SID)).toBe(false);
+	});
+
+	test("PLAUSIBLE × LOW만 있으면 메모 — 완료를 막지 않는다", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		writeCompleteArtifact(SID, [
+			{ class: "cleanup", verdict: "PLAUSIBLE", impact: "LOW", ref: "src/c.ts:9" },
+		]);
+		expect(requestComplete(SID)).toBe(true);
 	});
 
 	test("regression CONFIRMED HIGH는 차단한다 — 새 class가 게이트에 실제로 도달한다", () => {
@@ -309,7 +317,7 @@ describe("dismiss-review-finding: 차단 여부가 class가 아니므로 4종 cl
 		expect(requestComplete(SID)).toBe(false);
 	});
 
-	test("CLI: --class regression과 --class cleanup이 enum 게이트에서 거부되지 않고, 미등록 class는 거부된다", () => {
+	test("CLI: --class는 enum으로 거부하지 않고, 매칭 finding이 없는 class는 그 사유로 거부된다", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeCompleteArtifact(SID, [
 			{ class: "regression", verdict: "CONFIRMED", impact: "HIGH", ref: "src/api.ts:88" },
@@ -343,9 +351,15 @@ describe("dismiss-review-finding: 차단 여부가 class가 아니므로 4종 cl
 		expect(cleanup.stderr).not.toContain("--class must be");
 		expect(cleanup.stdout).toContain("dismissed cleanup finding");
 
+		// class is a free-form non-empty label: an unlisted class passes the CLI and is
+		// refused only because no finding of that class sits at the ref.
 		const bogus = runDismiss("bogus", "src/api.ts:88");
 		expect(bogus.status).not.toBe(0);
-		expect(bogus.stderr).toContain("--class must be one of");
+		expect(bogus.stderr).toContain("no bogus finding at src/api.ts:88");
+
+		const blank = runDismiss("", "src/api.ts:88");
+		expect(blank.status).not.toBe(0);
+		expect(blank.stderr).toContain("--class");
 	});
 
 	test("re-plan 시 무효화가 함께 비워지는 기존 계약이 4종 class에서도 유지된다", () => {
@@ -410,18 +424,18 @@ describe("범위 판정과 사용자 무효화의 경계", () => {
 					expect(requestComplete(SID)).toBe(scope === "OUT_OF_SCOPE");
 				});
 			}
-			test(`IN_SCOPE ${verdict} ${impact}: CONFIRMED만 무효화할 수 있고 PLAUSIBLE은 독립 판정 필요`, () => {
+			test(`IN_SCOPE ${verdict} ${impact}: NOTE가 아닌 지적은 무효화할 수 있고 무효화 후 완료된다`, () => {
 				buildObjectiveLaneGreenFixture(SID);
 				writeCompleteArtifact(SID, [{ class: "correctness", verdict, impact, ref: "src/a.ts:1" }]);
-				expect(requestComplete(SID)).toBe(verdict === "CONFIRMED" && impact === "LOW" ? true : false);
+				expect(requestComplete(SID)).toBe(impact === "LOW");
 				expect(
 					dismissReviewFinding(SID, {
 						class: "correctness",
 						ref: "src/a.ts:1",
 						rationale: "앞선 guard로 도달 불가",
 					}),
-				).toBe(verdict === "CONFIRMED" && impact === "HIGH");
-				expect(requestComplete(SID)).toBe(verdict === "CONFIRMED" && (impact === "HIGH" || impact === "LOW"));
+				).toBe(impact !== "LOW");
+				expect(requestComplete(SID)).toBe(true);
 			});
 		}
 	}

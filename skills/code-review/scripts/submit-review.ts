@@ -12,15 +12,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const assessmentKeys = ["unfixed_cost", "exposure", "remedy", "added_cost", "rationale"] as const;
-const assessmentKeySet = new Set<string>(assessmentKeys);
-const findingClassSet = new Set(["correctness", "regression", "cleanup", "requirement-gap"]);
 
 function validatePriority(value: unknown): void {
 	if (value !== "HIGH" && value !== "MEDIUM" && value !== "LOW") throw new Error("submit-review: finding priority must be HIGH, MEDIUM, or LOW");
 }
 
 function validateAssessment(value: unknown): void {
-	if (!isRecord(value) || Object.keys(value).some((key) => !assessmentKeySet.has(key)) || Object.keys(value).length !== assessmentKeys.length) throw new Error("submit-review: finding assessment must contain exactly five known fields");
+	// Presence only: the five required keys must be non-blank; extra keys are ignored.
+	if (!isRecord(value)) throw new Error("submit-review: finding assessment must be an object");
 	for (const key of assessmentKeys) {
 		if (typeof value[key] !== "string" || value[key].trim() === "") throw new Error(`submit-review: finding assessment.${key} must be a non-empty string`);
 	}
@@ -32,7 +31,8 @@ function validateReviewJson(value: unknown): void {
 	if (typeof value.at !== "string") throw new Error("submit-review: at must be a string");
 	if (!Array.isArray(value.findings)) throw new Error("submit-review: findings must be an array");
 	for (const finding of value.findings) {
-		if (!isRecord(finding) || typeof finding.class !== "string" || !findingClassSet.has(finding.class) || (finding.verdict !== "CONFIRMED" && finding.verdict !== "PLAUSIBLE") || (finding.impact !== "HIGH" && finding.impact !== "MEDIUM" && finding.impact !== "LOW")) throw new Error("submit-review: finding requires a supported class, verdict, and impact");
+		// class is a free-form label (presence only); verdict and impact are routing enums.
+		if (!isRecord(finding) || typeof finding.class !== "string" || finding.class.trim() === "" || (finding.verdict !== "CONFIRMED" && finding.verdict !== "PLAUSIBLE") || (finding.impact !== "HIGH" && finding.impact !== "MEDIUM" && finding.impact !== "LOW")) throw new Error("submit-review: finding requires a non-empty class and a supported verdict and impact");
 		if (finding.ref !== undefined && typeof finding.ref !== "string") throw new Error("submit-review: finding ref must be a string when present");
 		if (value.status === "COMPLETE" || finding.priority !== undefined) validatePriority(finding.priority);
 		if (value.status === "COMPLETE" || finding.assessment !== undefined) validateAssessment(finding.assessment);

@@ -90,12 +90,32 @@ describe("중립 리뷰 publisher", () => {
 		expect(readFileSync(path, "utf8")).toBe(original);
 	});
 
-	test("지원하지 않는 finding class는 기존 아티팩트를 덮어쓰지 않는다", () => {
+	test("finding class는 비어 있지 않은 문자열이면 목록 밖 값도 수용한다", () => {
+		const path = join(dir, "free-class.json");
+		const raw = JSON.stringify({ status: "COMPLETE", reviewer: "r", at: "now", findings: [finding({ class: "correctnes" })] });
+		expect(submitReviewArtifact(path, raw).path).toBe(path);
+	});
+
+	test("assessment의 추가 키는 무시하고 다섯 필수 키만 검사한다", () => {
+		const path = join(dir, "extra-assessment.json");
+		const extra = finding();
+		extra.assessment = { ...(extra.assessment as Record<string, string>), note: "extra" };
+		const raw = JSON.stringify({ status: "COMPLETE", reviewer: "r", at: "now", findings: [extra] });
+		expect(submitReviewArtifact(path, raw).path).toBe(path);
+		const missing = finding();
+		const { remedy: _remedy, ...withoutRemedy } = missing.assessment as Record<string, string>;
+		missing.assessment = { ...withoutRemedy, note: "extra" };
+		expect(() => submitReviewArtifact(path, JSON.stringify({ status: "COMPLETE", reviewer: "r", at: "now", findings: [missing] }))).toThrow(/assessment\.remedy/);
+	});
+
+	test("빈 finding class는 기존 아티팩트를 덮어쓰지 않는다", () => {
 		const path = join(dir, "existing-class.json");
 		const original = base();
 		submitReviewArtifact(path, original);
-		const invalidClass = JSON.stringify({ status: "COMPLETE", reviewer: "r", at: "now", findings: [finding({ class: "correctnes" })] });
-		expect(() => submitReviewArtifact(path, invalidClass)).toThrow();
+		for (const cls of ["", "  ", undefined]) {
+			const invalidClass = JSON.stringify({ status: "COMPLETE", reviewer: "r", at: "now", findings: [finding({ class: cls })] });
+			expect(() => submitReviewArtifact(path, invalidClass)).toThrow(/class/);
+		}
 		expect(readFileSync(path, "utf8")).toBe(original);
 	});
 

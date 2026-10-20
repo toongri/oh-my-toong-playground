@@ -125,13 +125,13 @@ describe("범위 판정이 심각도보다 먼저 적용된다", () => {
 		expect(classify(finding("IN_SCOPE", "CONFIRMED", "LOW"))).toBe("NOTE");
 	});
 
-	test("범위 안 PLAUSIBLE 지적은 우선 독립 adjudication 대상으로 남긴다", () => {
+	test("범위 안 PLAUSIBLE 지적은 HIGH·MEDIUM만 adjudication 대상이고 LOW는 메모다", () => {
 		const classify = (state as Record<string, unknown>)["classifyReviewFindingOutcome"] as (
 			finding: object,
 		) => string;
 		expect(classify(finding("IN_SCOPE", "PLAUSIBLE", "HIGH"))).toBe("ADJUDICATE");
 		expect(classify(finding("IN_SCOPE", "PLAUSIBLE", "MEDIUM"))).toBe("ADJUDICATE");
-		expect(classify(finding("IN_SCOPE", "PLAUSIBLE", "LOW"))).toBe("ADJUDICATE");
+		expect(classify(finding("IN_SCOPE", "PLAUSIBLE", "LOW"))).toBe("NOTE");
 	});
 
 	test("범위 미확정은 모든 심각도에서 수정 없이 완료를 막는다", () => {
@@ -160,7 +160,7 @@ describe("범위 근거는 필수이며 완료 전에 검증된다", () => {
 			writeReview([finding(scope, verdict, impact)]);
 			expect(state.requestComplete(SID)).toBe(
 				scope === "OUT_OF_SCOPE" ||
-				(scope === "IN_SCOPE" && verdict === "CONFIRMED" && impact === "LOW")
+				(scope === "IN_SCOPE" && impact === "LOW")
 					? true
 					: false,
 		);
@@ -192,16 +192,19 @@ describe("basis→reference 세부 페어링 narrowing 제거 (D)", () => {
 });
 
 describe("scope-evidence 부분 무효화 (C)", () => {
-	test("한 finding의 근거 참조가 무효여도 나머지 유효 finding은 살아남고 무효 finding은 차단 UNKNOWN으로 강등된다", () => {
+	/** A non_goal exclusion that names no non_goals statement — the one pointer check that still degrades. */
+	const unidentifiedExclusion = {
+		...finding("OUT_OF_SCOPE", "CONFIRMED", "HIGH"),
+		ref: "src/bad.ts:1",
+		scope_evidence: { basis: "non_goal", reference: "non_goals", rationale: "the plan never asked for this" },
+	};
+
+	test("한 finding의 배제 근거가 무효여도 나머지 유효 finding은 살아남고 무효 finding은 차단 UNKNOWN으로 강등된다", () => {
 		state.setGoalState(SID, { phase: "pursuing" });
 		writeObjectiveArtifact();
 		writeReview([
 			{ ...finding("IN_SCOPE", "CONFIRMED", "HIGH"), ref: "src/valid.ts:1" },
-			{
-				...finding("IN_SCOPE", "CONFIRMED", "HIGH"),
-				ref: "src/bad.ts:1",
-				scope_evidence: { basis: "requirement", reference: "S99-nonexistent", rationale: "bad" },
-			},
+			unidentifiedExclusion,
 		]);
 		const getReviewResult = (state as Record<string, unknown>)["getReviewResult"] as (
 			sid: string,
@@ -224,11 +227,7 @@ describe("scope-evidence 부분 무효화 (C)", () => {
 		writeObjectiveArtifact();
 		writeReview([
 			{ ...finding("IN_SCOPE", "CONFIRMED", "HIGH"), ref: "src/valid.ts:1" },
-			{
-				...finding("IN_SCOPE", "CONFIRMED", "HIGH"),
-				ref: "src/bad.ts:1",
-				scope_evidence: { basis: "requirement", reference: "S99-nonexistent", rationale: "bad" },
-			},
+			unidentifiedExclusion,
 		]);
 		expect(
 			state.dismissReviewFinding(SID, {
@@ -238,14 +237,29 @@ describe("scope-evidence 부분 무효화 (C)", () => {
 			}),
 		).toBe(true);
 	});
+
+	test("계약 슬롯이나 확정 스토리로 해석되지 않는 reference는 강등하지 않고 리뷰어 판정대로 라우팅한다", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		writeReview([
+			{
+				...finding("IN_SCOPE", "CONFIRMED", "HIGH"),
+				ref: "src/pointer.ts:1",
+				scope_evidence: { basis: "requirement", reference: "S99-nonexistent", rationale: "free-form pointer" },
+			},
+		]);
+		const result = state.getReviewResult(SID);
+		expect(result.findings.repair.map((f) => f.ref)).toEqual(["src/pointer.ts:1"]);
+		expect(result.findings.adjudicate).toHaveLength(0);
+		expect(result.reason).toBeUndefined();
+	});
 });
 
-describe("OUT_OF_SCOPE 배제 페어링 복원", () => {
+describe("OUT_OF_SCOPE 배제 근거: 문장 지목만 강제하고 reference 문구는 강제하지 않는다", () => {
 	const getReviewResult = (state as Record<string, unknown>)["getReviewResult"] as (
 		sid: string,
 	) => { verdict: string; findings: { adjudicate: unknown[]; notes: unknown[] }; reason?: string };
 
-	test("OUT_OF_SCOPE non_goal이 non_goals가 아닌 슬롯을 참조하면 무효 → 차단 UNKNOWN 강등, reason에 대안", () => {
+	test("OUT_OF_SCOPE non_goal이 non_goals 문장을 지목하지 않으면 차단 UNKNOWN 강등, reason에 non_goals 목록", () => {
 		state.setGoalState(SID, { phase: "pursuing" });
 		writeObjectiveArtifact();
 		writeReview([
@@ -258,10 +272,36 @@ describe("OUT_OF_SCOPE 배제 페어링 복원", () => {
 		expect(result.verdict).toBe("REQUEST_CHANGES");
 		expect(result.findings.adjudicate).toHaveLength(1);
 		expect(result.findings.notes).toHaveLength(0);
-		expect(result.reason ?? "").toContain("non_goals");
+		expect(result.reason ?? "").toContain("non_goals#1");
 	});
 
-	test("OUT_OF_SCOPE unrelated이 outcome이 아닌 슬롯을 참조하면 무효 → 차단 UNKNOWN 강등", () => {
+	test("OUT_OF_SCOPE non_goal은 reference가 non_goals가 아니어도 문장을 지목하면 비차단 NOTE", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		writeObjectiveArtifact();
+		writeReview([
+			{
+				...finding("OUT_OF_SCOPE", "CONFIRMED", "HIGH"),
+				scope_evidence: { basis: "non_goal", reference: "constraints", rationale: 'excluded by "redesign UI"' },
+			},
+		]);
+		const result = getReviewResult(SID);
+		expect(result.findings.notes).toHaveLength(1);
+		expect(result.findings.adjudicate).toHaveLength(0);
+		expect(state.requestComplete(SID)).toBe(true);
+	});
+
+	test("OUT_OF_SCOPE non_goal의 non_goals#N 지목은 reference에 있어도 인정된다", () => {
+		writeObjectiveArtifact();
+		writeReview([
+			{
+				...finding("OUT_OF_SCOPE", "CONFIRMED", "HIGH"),
+				scope_evidence: { basis: "non_goal", reference: "non_goals#1", rationale: "the UI overhaul is out" },
+			},
+		]);
+		expect(state.requestComplete(SID)).toBe(true);
+	});
+
+	test("OUT_OF_SCOPE unrelated은 outcome이 아닌 아무 non-blank reference여도 비차단 NOTE", () => {
 		state.setGoalState(SID, { phase: "pursuing" });
 		writeObjectiveArtifact();
 		writeReview([
@@ -271,9 +311,24 @@ describe("OUT_OF_SCOPE 배제 페어링 복원", () => {
 			},
 		]);
 		const result = getReviewResult(SID);
-		expect(result.verdict).toBe("REQUEST_CHANGES");
-		expect(result.findings.adjudicate).toHaveLength(1);
-		expect(result.findings.notes).toHaveLength(0);
+		expect(result.findings.adjudicate).toHaveLength(0);
+		expect(result.findings.notes).toHaveLength(1);
+		expect(result.reason).toBeUndefined();
+	});
+
+	test("빈 contract 슬롯을 가리키는 OUT_OF_SCOPE unrelated도 강등하지 않는다", () => {
+		const path = state.resolveStatePath(SID);
+		const prior = JSON.parse(readFileSync(path, "utf8"));
+		prior.boundaries = "";
+		writeFileSync(path, JSON.stringify(prior));
+		writeObjectiveArtifact();
+		writeReview([
+			{
+				...finding("OUT_OF_SCOPE", "CONFIRMED", "HIGH"),
+				scope_evidence: { basis: "unrelated", reference: "boundaries", rationale: "x" },
+			},
+		]);
+		expect(state.requestComplete(SID)).toBe(true);
 	});
 
 	test("올바른 배제 페어링(non_goal→non_goals)은 비차단 NOTE 유지", () => {
@@ -416,6 +471,33 @@ describe("validate-review-artifact CLI 게이트", () => {
 		const run = runValidate();
 		expect(run.exitCode).toBe(0);
 	});
+
+	test("세부 reference 점검은 경고로만 출력하고 결과를 바꾸지 않는다", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		writeReview([
+			{
+				...finding("IN_SCOPE", "CONFIRMED", "LOW"),
+				scope_evidence: { basis: "requirement", reference: "S99-nonexistent", rationale: "x" },
+			},
+			{
+				...finding("OUT_OF_SCOPE", "CONFIRMED", "LOW"),
+				scope_evidence: { basis: "unrelated", reference: "non_goals", rationale: "x" },
+			},
+			{
+				...finding("OUT_OF_SCOPE", "CONFIRMED", "LOW"),
+				scope_evidence: { basis: "non_goal", reference: "constraints", rationale: 'excluded by "redesign UI"' },
+			},
+		]);
+		const result = state.validateReviewArtifact(SID);
+		expect(result.ok).toBe(true);
+		expect(result.problems).toEqual([]);
+		expect(result.warnings).toHaveLength(3);
+		const run = runValidate();
+		expect(run.exitCode).toBe(0);
+		expect(run.stderr).toContain("does not resolve to a contract slot");
+		expect(run.stderr).toContain('reference "outcome"');
+		expect(run.stderr).toContain('reference "non_goals"');
+	});
 });
 
 describe("범위 슬롯은 고정되고 변경 시 스토리 재승인이 필요하다", () => {
@@ -507,7 +589,7 @@ describe("범위 계약과 개별 무효화가 불완전한 완료를 거부한�
 		expect(state.claimReviewDispatch(SID).allowed).toBe(true);
 	});
 
-	test("계약에 없는 근거 참조는 완료할 수 없다", () => {
+	test("계약에 없는 근거 참조도 리뷰어의 범위 판정을 따른다", () => {
 		writeObjectiveArtifact();
 		writeReview([
 			{
@@ -515,7 +597,7 @@ describe("범위 계약과 개별 무효화가 불완전한 완료를 거부한�
 				scope_evidence: { basis: "unrelated", reference: "missing-slot", rationale: "test" },
 			},
 		]);
-		expect(state.requestComplete(SID)).toBe(false);
+		expect(state.requestComplete(SID)).toBe(true);
 	});
 
 	test("범위 안 지적의 무효화는 같은 위치의 미확정 지적을 지우지 않는다", () => {
@@ -566,24 +648,35 @@ describe("독립리뷰 회귀 방지", () => {
 		}
 	});
 
-	for (const impact of ["HIGH", "MEDIUM", "LOW"] as const) {
-		test(`범위 안 PLAUSIBLE ${impact}는 사용자 무효화로 독립 판정을 건너뛰지 않는다`, () => {
+	for (const impact of ["HIGH", "MEDIUM"] as const) {
+		test(`범위 안 PLAUSIBLE ${impact}(ADJUDICATE)는 근거를 남긴 사용자 무효화로 해소된다`, () => {
 			state.setGoalState(SID, { phase: "pursuing" });
 			writeObjectiveArtifact();
 			writeReview([finding("IN_SCOPE", "PLAUSIBLE", impact)]);
-			const before = readFileSync(state.resolveStatePath(SID), "utf8");
+			expect(state.requestComplete(SID)).toBe(false);
 			expect(state.dismissReviewFinding(SID, {
 				ref: "src/a.ts:1", class: "correctness", rationale: "user disagrees",
-			})).toBe(false);
-			expect(readFileSync(state.resolveStatePath(SID), "utf8")).toBe(before);
-			expect(state.requestComplete(SID)).toBe(false);
+			})).toBe(true);
+			expect(state.requestComplete(SID)).toBe(true);
 		});
 	}
 
-	test("이미 저장된 PLAUSIBLE 무효화도 독립 판정을 대체하지 않는다", () => {
+	test("범위 안 PLAUSIBLE LOW는 메모라 무효화 대상이 아니고 완료를 막지 않는다", () => {
 		state.setGoalState(SID, { phase: "pursuing" });
 		writeObjectiveArtifact();
 		writeReview([finding("IN_SCOPE", "PLAUSIBLE", "LOW")]);
+		const before = readFileSync(state.resolveStatePath(SID), "utf8");
+		expect(state.dismissReviewFinding(SID, {
+			ref: "src/a.ts:1", class: "correctness", rationale: "user disagrees",
+		})).toBe(false);
+		expect(readFileSync(state.resolveStatePath(SID), "utf8")).toBe(before);
+		expect(state.requestComplete(SID)).toBe(true);
+	});
+
+	test("이미 저장된 PLAUSIBLE 무효화는 같은 아티팩트의 ADJUDICATE 지적을 해소한다", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		writeObjectiveArtifact();
+		writeReview([finding("IN_SCOPE", "PLAUSIBLE", "HIGH")]);
 		const path = state.resolveStatePath(SID);
 		const prior = JSON.parse(readFileSync(path, "utf8"));
 		const review = readFileSync(join(omtDir, `ultragoal-codereview-${SID}.json`), "utf8");
@@ -592,7 +685,7 @@ describe("독립리뷰 회귀 방지", () => {
 			ref: "src/a.ts:1", class: "correctness", rationale: "previous user dismissal",
 		}];
 		writeFileSync(path, JSON.stringify(prior));
-		expect(state.requestComplete(SID)).toBe(false);
+		expect(state.requestComplete(SID)).toBe(true);
 	});
 
 	test("single 잠금 대기 중 추가된 스토리는 자동승인으로 덮어쓰지 않는다", () => {

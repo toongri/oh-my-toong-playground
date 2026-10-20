@@ -107,6 +107,17 @@ describe("priority routing", () => {
 		expect(state.readCodeReviewArtifact(SID)).toBeNull();
 	});
 
+	test("class는 비어 있지 않은 문자열이면 되고 assessment의 추가 키는 무시한다", () => {
+		writeReview([finding({ class: "style" })]);
+		expect(state.readCodeReviewArtifact(SID)).not.toBeNull();
+		writeReview([finding({ assessment: assessment({ severity_note: "extra" }) })]);
+		expect(state.readCodeReviewArtifact(SID)).not.toBeNull();
+		for (const cls of ["", "  ", undefined, 7]) {
+			writeReview([finding({ class: cls })]);
+			expect(state.readCodeReviewArtifact(SID)).toBeNull();
+		}
+	});
+
 	test("INCONCLUSIVE는 빈 action group의 REQUEST_CHANGES이다", () => {
 		greenObjectiveLane();
 		writeReview([finding({ priority: undefined, assessment: undefined })], "INCONCLUSIVE");
@@ -181,12 +192,50 @@ describe("priority routing", () => {
 		expect(state.requestComplete(SID)).toBe(false);
 	});
 
-	test("확정된 IN_SCOPE HIGH만 dismissal할 수 있다", () => {
+	test("IN_SCOPE BLOCK·FIX·ADJUDICATE는 dismissal할 수 있고 NOTE는 거부한다", () => {
 		greenObjectiveLane();
-		writeReview([finding({ priority: "MEDIUM" })]);
+		writeReview([finding({ priority: "LOW" })]);
 		expect(state.dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" })).toBe(false);
 		writeReview([finding({ priority: "HIGH" })]);
 		expect(state.dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" })).toBe(true);
+		writeReview([finding({ verdict: "PLAUSIBLE", priority: "MEDIUM" })]);
+		expect(state.dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" })).toBe(true);
+	});
+
+	test("MEDIUM(FIX) dismissal은 COMMENT resolution 없이 완료를 허용하고 근거를 남긴다", () => {
+		greenObjectiveLane();
+		writeReview([finding({ priority: "MEDIUM" })]);
+		expect(state.requestComplete(SID)).toBe(false);
+		expect(state.dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "guard above makes it unreachable" })).toBe(true);
+		expect(state.getReviewResult(SID).findings.repair).toEqual([]);
+		const prior = state.readGoalStateRaw(SID) ?? {};
+		expect(state.renderOverrideSummary(prior)).toContain("guard above makes it unreachable");
+		expect(state.requestComplete(SID)).toBe(true);
+	});
+
+	test("dismissal 거부 사유는 실패한 조건을 이름으로 밝힌다", () => {
+		const refusal = (opts: { ref: string; class: string; rationale: string }) => {
+			const result = state.tryDismissReviewFinding(SID, opts);
+			return result.dismissed ? "" : result.refusal;
+		};
+		const ok = { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" };
+		greenObjectiveLane();
+		writeReview([finding({ priority: "LOW" })]);
+		expect(refusal({ ...ok, rationale: "  " })).toContain("--rationale");
+		expect(refusal({ ...ok, ref: "" })).toContain("--ref");
+		expect(refusal({ ...ok, class: "" })).toContain("--class");
+		expect(refusal(ok)).toContain("NOTE");
+		expect(refusal({ ...ok, ref: "src/none.ts:1" })).toContain("no correctness finding at src/none.ts:1");
+		writeReview([finding({ scope: "UNKNOWN", scope_evidence: { basis: "uncertain", reference: "outcome", rationale: "unsure" } })]);
+		expect(refusal(ok)).toContain("UNKNOWN");
+		writeReview([finding(), finding()]);
+		expect(refusal(ok)).toContain("2 dismissible");
+		writeFileSync(artifactPath(), JSON.stringify({ status: "COMPLETE", scope_contract_sha256: "0".repeat(64), findings: [finding()], reviewer: "r", at: "now" }));
+		expect(refusal(ok)).toContain("scope contract");
+		rmSync(artifactPath());
+		expect(refusal(ok)).toContain("no valid code-review artifact");
+		state.setBlocked(SID, "stuck");
+		expect(refusal(ok)).toContain("pursuing");
 	});
 
 	test("HIGH와 INCONCLUSIVE만 dispatch되고 COMMENT와 APPROVE는 renewal 후에도 dispatch되지 않는다", () => {

@@ -129,7 +129,7 @@ describe("리뷰 제출 reducer", () => {
 			for (const verdict of ["CONFIRMED", "PLAUSIBLE"] as const)
 				for (const priority of ["HIGH", "MEDIUM", "LOW"] as const) {
 					const result = publish(join(dir, `ultragoal-codereview-${SID}.json`), JSON.stringify(artifact([finding(scope, verdict, "HIGH", priority)])));
-					const expected = scope === "UNKNOWN" || (scope === "IN_SCOPE" && (verdict === "PLAUSIBLE" || priority === "HIGH")) ? "REQUEST_CHANGES" : "COMMENT";
+					const expected = scope === "UNKNOWN" || (scope === "IN_SCOPE" && ((verdict === "PLAUSIBLE" && priority !== "LOW") || priority === "HIGH")) ? "REQUEST_CHANGES" : "COMMENT";
 					expect(result.verdict).toBe(expected);
 				}
 	});

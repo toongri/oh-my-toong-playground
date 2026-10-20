@@ -3303,7 +3303,7 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
 			status: "COMPLETE",
-			findings: [{ class: "cleanup", verdict: "PLAUSIBLE", impact: "LOW", ref: "foo.ts:3" }],
+			findings: [{ class: "cleanup", verdict: "PLAUSIBLE", impact: "MEDIUM", ref: "foo.ts:3" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
 		});
@@ -3472,7 +3472,7 @@ describe("requirement-gap class: validator accepts and gate keys on verdict", ()
 					scope: "IN_SCOPE",
 					scope_evidence: { basis: "requirement", reference: "outcome", rationale: "adjudicate" },
 					verdict: "PLAUSIBLE",
-					impact: "LOW",
+					impact: "MEDIUM",
 					ref: "foo.ts:1",
 				},
 			],
@@ -4768,5 +4768,32 @@ describe("plan decision rule formats", () => {
 		expect(out).toContain("[D-2] Has one — kept\n");
 		expect(out).not.toContain("D-1");
 		expect(out).not.toContain("long story");
+	});
+});
+
+describe("plan decision headings the parser cannot read", () => {
+	function rulesFor(planLines: string[]): { out: string; planPath: string } {
+		const planPath = join(tmpDir, "plan-unparsed.md");
+		writeFileSync(planPath, planLines.join("\n"));
+		setGoalState(S, { phase: "planning", outcome: "ship it", plan_path: planPath });
+		return { out: serializeRequirements(S), planPath };
+	}
+
+	test("D-N headings at another level with zero parsed rules add one line telling the reader to open the plan", () => {
+		const { out, planPath } = rulesFor(["## D-1 Retry cap", "Decision: three attempts", "", "# D-2 — Backoff", "Decision: linear", ""]);
+		expect(out).toContain(
+			`Decision rules:\nplan has 2 decision headings but none in the parseable \`### D-N:\` + \`Decision:\` form; read the plan directly: ${planPath}\n`,
+		);
+	});
+
+	test("ADR-N headings and D-N headings without a Decision field count too", () => {
+		expect(rulesFor(["### ADR-1: Store", "Decision: sqlite", ""]).out).toContain("plan has 1 decision headings but none");
+		expect(rulesFor(["### D-1: No field", "Why: because", ""]).out).toContain("plan has 1 decision headings but none");
+	});
+
+	test("no notice when at least one rule parsed, when the plan has no decision headings, or when they sit in a code block", () => {
+		expect(rulesFor(["## D-1 Other level", "", "### D-2: Parsed", "Decision: kept", ""]).out).not.toContain("plan has");
+		expect(rulesFor(["## Overview", "text", ""]).out).toBe("[outcome] ship it — AC: ship it — verify: ship it\n");
+		expect(rulesFor(["```", "## D-9 inside code", "```", ""]).out).toBe("[outcome] ship it — AC: ship it — verify: ship it\n");
 	});
 });

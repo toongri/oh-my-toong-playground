@@ -271,7 +271,7 @@ describe("T7: requirement-gap 클래스 커버리지 계약 (regression guard)",
 	});
 
 	// 진짜 판별 케이스: PLAUSIBLE × LOW는 NOTE(non-blocking)이므로 위 BLOCK 케이스와 대조된다.
-	test("requirement-gap 클래스 PLAUSIBLE LOW finding — requestComplete는 adjudication으로 거부", () => {
+	test("requirement-gap 클래스 PLAUSIBLE LOW finding — 메모라 requestComplete를 막지 않는다", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeArtifact(SID, {
 			status: "COMPLETE",
@@ -280,7 +280,7 @@ describe("T7: requirement-gap 클래스 커버리지 계약 (regression guard)",
 			at: "2026-06-26T10:00:00",
 		});
 
-		expect(requestComplete(SID)).toBe(false);
+		expect(requestComplete(SID)).toBe(true);
 	});
 });
 
