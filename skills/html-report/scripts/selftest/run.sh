@@ -40,6 +40,11 @@ expect theme-state-mismatch  light 1280
 expect theme-state-mismatch  dark  1280
 expect html-lang             light 1280 DOC
 expect body-bg-transparent   light 1280 DOC
+expect title-name            light 1280 DOC
+expect duplicate-id          light 1280 DOC
+expect theme-token-scope     light 1280 DOC
+expect svg-no-label          light 1280
+expect svg-embedded-code     light 1280
 # detail-level checks: the planted values are reported, the source-backed ones are not
 absent() { # <label> <jq-filter returning true when the finding exists>
   if echo "$OUT" | jq -e "$2" >/dev/null; then echo "FAIL $1"; fail=1; else echo "ok   $1"; fi
@@ -55,7 +60,7 @@ absent  "10월 17일 (in the source) is not reported" '[.findings[] | select(.ch
 present "exactly one figure is flagged figure-graph-nosvg" '[.findings[] | select(.check=="figure-graph-nosvg")] | length == 1'
 present "exactly one svg is flagged svg-no-edges" '[.findings[] | select(.check=="svg-no-edges")] | length == 1'
 # the clean fixture: SVG graphs with edges, source-backed numbers, no errors and no new-check warnings
-if echo "$CLEAN" | jq -e '.summary.errors == 0 and ([.findings[] | select(.check | test("^(figure-graph-nosvg|svg-no-edges|author-first-person|authoring-notes-mention|number-not-in-source|masthead-date-not-in-source|svg-foreignobject|svg-literal-color|html-lang|word-break-korean|hidden-at-rest|body-bg-transparent|theme-state-mismatch)$"))] | length == 0)' >/dev/null; then
+if echo "$CLEAN" | jq -e '.summary.errors == 0 and ([.findings[] | select(.check | test("^(figure-graph-nosvg|svg-no-edges|author-first-person|authoring-notes-mention|number-not-in-source|masthead-date-not-in-source|svg-foreignobject|svg-literal-color|html-lang|word-break-korean|hidden-at-rest|body-bg-transparent|theme-state-mismatch|title-name|duplicate-id|theme-token-scope|svg-no-label|svg-embedded-code)$"))] | length == 0)' >/dev/null; then
   echo "ok   clean fixture: 0 errors, no graph/prose/source findings"
 else
   echo "FAIL clean fixture flagged:"; echo "$CLEAN" | jq -c '.summary, [.findings[] | select(.severity != "info") | {check, detail}]'; fail=1

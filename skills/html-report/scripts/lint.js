@@ -306,6 +306,21 @@ async function __hrLint(opts) {
     }
   }
 
+  // ---------- (b3) SVG accessibility and embedded code: no name for assistive tech, <style>/<script> inside ----------
+  if (checks.has("svg")) {
+    let unlabeled = 0;
+    for (const svg of document.querySelectorAll("svg")) {
+      if (svg.parentElement.closest("svg")) continue;
+      const code = svg.querySelector("style, script");
+      if (code) add("svg-embedded-code", "warn", svg, `<${code.tagName.toLowerCase()}> inside <svg>; styles and scripts belong in the page, where the theme tokens and the lint can see them`);
+      if (!rendered(svg) || svg.closest('[aria-hidden="true"]')) continue;
+      const named = svg.getAttribute("aria-label") || svg.getAttribute("aria-labelledby");
+      if ((svg.getAttribute("role") !== "img" || !named) && unlabeled++ < 5) {
+        add("svg-no-label", "warn", svg, 'svg needs role="img" and an aria-label (or aria-labelledby) that states what the figure shows, or aria-hidden="true" when it only decorates');
+      }
+    }
+  }
+
   // ---------- (d) clipped / spilling HTML, and figures that scroll sideways ----------
   if (checks.has("clip")) {
     document.body.querySelectorAll("*").forEach((el) => {
@@ -460,6 +475,14 @@ async function __hrLint(opts) {
 
   // ---------- (i) document: lang, Korean word-break, content hidden at rest ----------
   if (checks.has("doc")) {
+    const titleText = ((document.querySelector("title") || {}).textContent || "").trim();
+    const titleWords = titleText ? titleText.split(/\s+/).length : 0;
+    if (!titleText) add("title-name", "warn", document.documentElement, "<title> is missing or empty; the title is the page's 2-4 word name");
+    else if (/: | — | – | - /.test(titleText) || titleWords > 6) add("title-name", "warn", document.documentElement, `<title> "${titleText.slice(0, 60)}" is a sentence or has an explainer appended; the title is the page's 2-4 word name, and the explanation goes in the lede`);
+    const idCount = new Map();
+    document.querySelectorAll("[id]").forEach((e) => idCount.set(e.id, (idCount.get(e.id) || 0) + 1));
+    const dupIds = Array.from(idCount).filter(([, n]) => n > 1).map(([id]) => id);
+    if (dupIds.length) add("duplicate-id", "warn", document.documentElement, `${dupIds.length} id value(s) used by more than one element: ${dupIds.slice(0, 5).join(", ")}; duplicate marker ids silently break arrowheads`);
     const lang = document.documentElement.lang;
     if (!lang) add("html-lang", "warn", document.documentElement, "<html> has no lang attribute; set lang=\"ko\" or lang=\"en\" for screen readers and hyphenation");
     if (/^ko/i.test(lang)) {
@@ -492,6 +515,51 @@ async function __hrLint(opts) {
 
   // ---------- (j) theme: body background, explicit data-theme choice ----------
   if (checks.has("theme")) {
+    if (theme === "light") {
+      const CSS_VAR = /var\((?:[^()]|\([^()]*\))*\)/g;
+      const COLOR_PROP = /^(color|background(-color|-image)?|border(-[a-z]+)*-color|outline-color|text-decoration-color|fill|stroke|column-rule-color|caret-color)$/;
+      const NOT_COLOR = /^(currentcolor|transparent|inherit|initial|unset|revert|none)$/i;
+      const hasLiteralColor = (value) => {
+        const v = value.replace(CSS_VAR, " ").replace(/url\([^)]*\)/gi, " ");
+        if (/#[0-9a-f]{3,8}\b/i.test(v)) return true;
+        for (const m of v.matchAll(/\b(?:rgb|hsl)a?\(([^)]*)\)/gi)) {
+          const parts = m[1].split(/[\s,/]+/).filter(Boolean);
+          const alpha = parts[3];
+          if (!(alpha !== undefined && parseFloat(alpha) === 0)) return true;
+        }
+        const rest = v.replace(/\b(?:rgb|hsl)a?\([^)]*\)/gi, " ");
+        return (rest.match(/[a-z]+/gi) || []).some((w) => !NOT_COLOR.test(w) && CSS.supports("color", w));
+      };
+      const baseTokens = new Set(), themedTokens = new Set(), hardCoded = [];
+      const walk = (rules, inMedia, themedCtx) => {
+        for (const rule of rules) {
+          if (rule instanceof CSSStyleRule) {
+            const themed = themedCtx || rule.selectorText.includes("[data-theme");
+            const isBase = !inMedia && rule.selectorText.trim() === ":root";
+            for (let i = 0; i < rule.style.length; i++) {
+              const prop = rule.style[i];
+              if (prop.startsWith("--")) { if (isBase) baseTokens.add(prop); else if (themed) themedTokens.add(prop); }
+              else if (!isBase && !themed && COLOR_PROP.test(prop)) {
+                const value = rule.style.getPropertyValue(prop);
+                if (value && hasLiteralColor(value)) hardCoded.push(`${rule.selectorText} { ${prop}: ${value} }`);
+              }
+            }
+          } else if (rule.cssRules) {
+            const cond = rule instanceof CSSMediaRule ? rule.conditionText : "";
+            const scheme = /prefers-color-scheme/.test(cond);
+            if (/\bprint\b/.test(cond) && !scheme) continue;
+            walk(rule.cssRules, inMedia || rule instanceof CSSMediaRule, themedCtx || scheme);
+          }
+        }
+      };
+      for (const sheet of document.styleSheets) {
+        if (sheet.ownerNode && sheet.ownerNode.closest && sheet.ownerNode.closest("svg")) continue;
+        try { walk(sheet.cssRules, false, false); } catch { /* cross-origin sheet */ }
+      }
+      const themedOnly = Array.from(themedTokens).filter((t) => !baseTokens.has(t));
+      if (themedOnly.length) add("theme-token-scope", "warn", document.documentElement, `${themedOnly.length} token(s) defined only inside a theme block: ${themedOnly.slice(0, 5).join(", ")}; define it on bare :root first`);
+      if (hardCoded.length) add("theme-token-scope", "warn", document.documentElement, `${hardCoded.length} rule(s) hold a literal colour instead of var(--token): ${hardCoded.slice(0, 5).join("; ")}; it will not follow the light/dark theme`);
+    }
     const bodyBg = () => getComputedStyle(document.body).backgroundColor;
     const bg = parse(bodyBg());
     if (!bg || bg.a === 0) add("body-bg-transparent", "warn", document.body, "<body> background is transparent; the page shows the browser canvas colour, not its own palette");
