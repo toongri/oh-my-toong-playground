@@ -66,8 +66,8 @@ Two finished reports are in `<skill-dir>/exemplars/` (read `exemplars/README.md`
 6. **Reconcile with the inventory.** Map every inventory row to a figure, a table, or "omitted", and
    compare the counts ([section 13.1](#131-source-diagram-inventory)). Any omission is stated on the page with its reason.
 7. **Run the self-critique loop** ([section 14](#14-self-critique-loop-mandatory)): capture, lint
-   (with `--source` when the source is on disk), look, fix. Capture again only after a fix that changed
-   layout, style, or an SVG; a text-only fix needs lint only. This step is not optional.
+   (with `--source` when the source is on disk), look, fix. Capture again after any edit except the
+   no-render edits that section 14 names. This step is not optional.
 8. **Report** the file path, the rounds you ran, the final lint summary, the reconciliation counts,
    and what you could not verify ([section 15](#15-what-to-report)).
 
@@ -749,20 +749,19 @@ Check each frame for:
 12. Verdicts, owners, and certainty words match the source. No new status word, no first person, no
     writing date, no definition the source lacks.
 
-**Fix, then choose the next check by what the fix touched.**
+**Fix, then choose the next check. The default is a full round.**
 
-- **Layout, CSS or tokens, an SVG (its text included), or a figure's geometry:** run a full round into a new
-  directory. In testing, a geometry fix introduced a defect that only the next capture showed.
-- **An edit that cannot change any box's size** (replacing a word or number with one of similar length, or a
-  markup-only change such as `lang`, `id`, `class`, `aria-*`): re-run lint only. Write it into the latest round
-  directory, overwriting its `lint.json` (and its receipt when the caller uses `--receipt`), so the latest round
-  directory always holds the current receipt.
-- **Any edit that adds text, lengthens text, or adds or removes an element** inside a card, grid, flex row, table,
-  list, pill, masthead, or caption: run a full round into a new directory. Longer Korean text re-wraps and
-  changes box heights, and lint does not see uneven card heights, empty grid cells, a first frame that no longer
-  states the answer, or the 400 dark view.
-- **Stop** when the last look found nothing that needs a layout or style fix and the last lint run has no errors.
-  If a lint error remains by design, name it and the reason in your report.
+- **Full round, the default:** after any edit to the HTML or its CSS, run a full round into a new
+  directory. In testing, a geometry fix introduced a defect that only the next capture showed. Korean text
+  re-wraps even on edits that look like wording only.
+- **Lint-only rerun, the one exception:** allowed only for an edit you can confirm renders nothing
+  differently. That means a change to `lang`, `aria-*`, `alt`, the `<title>`, or a `<meta>`, on an
+  attribute that no CSS selector in the page targets. If you are unsure, run a full round. A lint-only
+  rerun writes its `lint.json`, and its receipt when the caller asks for one, to the same paths as the last
+  round's run.
+- **Stop** when the last capture's look found nothing that needs a fix and the last lint run has 0 errors.
+  A caller that gates on a receipt needs a lint run with 0 errors, so an error cannot remain by design
+  there. A warn that remains is named in your report, with its reason.
 
 **Lint checks and their usual fixes:** the check table (check, meaning, usual fix) is in
 [references/lint-checks.md](references/lint-checks.md). The checks that matter most: `page-overflow`, `svg-text-overlap`,

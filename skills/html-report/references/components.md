@@ -3,7 +3,7 @@
 This file holds the full body of [section 6 (Component vocabulary)](../SKILL.md#6-component-vocabulary) of SKILL.md.
 
 Use card styling (border, fill, radius) by role, to set off the element that needs it, not on every
-block. Radii stay at 6 to 10px. No shadows. Each component below is the minimum CSS; extend it from the tokens.
+block. Radii stay at 6 to 10px (pills are the one fully rounded exception). No shadows. Each component below is the minimum CSS; extend it from the tokens.
 
 **Masthead.** A kicker line (status pill, page type, and a source date with timezone when the source gives one), the `h1` name, a lede paragraph,
 and, only for a page whose numbers are the point (an incident's impact), a stat strip.
