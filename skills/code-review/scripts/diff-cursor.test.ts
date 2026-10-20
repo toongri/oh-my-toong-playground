@@ -800,6 +800,209 @@ describe("모든 각도의 코드 페이지 메모는 자유 서술이고 페이
 });
 
 // ---------------------------------------------------------------------------
+// audited defects
+// ---------------------------------------------------------------------------
+
+/** A repo with a base commit and a head commit; returns the plan inputs and the plan result. */
+function miniRepo(
+	name: string,
+	baseFiles: Record<string, string>,
+	headFiles: Record<string, string>,
+	pageBytes = PAGE_BYTES,
+) {
+	const root = path.join(fx.tmp, name);
+	const repo = path.join(root, "repo");
+	fs.mkdirSync(repo, { recursive: true });
+	git(repo, "init", "-q", "-b", "main");
+	for (const [rel, c] of Object.entries(baseFiles)) write(repo, rel, c);
+	git(repo, "add", "-A");
+	git(repo, "commit", "-q", "--allow-empty", "-m", "base");
+	const base = git(repo, "rev-parse", "HEAD").trim();
+	for (const [rel, c] of Object.entries(headFiles)) write(repo, rel, c);
+	git(repo, "add", "-A");
+	git(repo, "commit", "-q", "-m", "head");
+	const head = git(repo, "rev-parse", "HEAD").trim();
+	const range = `${base}...${head}`;
+	const files = Object.keys(headFiles).filter((f) => !f.includes(".claude/") && !f.includes(".codex/"));
+	const out = path.join(root, "plan");
+	const r = run([
+		"plan",
+		"--repo",
+		repo,
+		"--range",
+		range,
+		"--files",
+		JSON.stringify(files),
+		"--out",
+		out,
+		"--page-bytes",
+		String(pageBytes),
+	]);
+	if (r.code !== 0) throw new Error(r.stderr);
+	const p = JSON.parse(fs.readFileSync(path.join(out, "plan.json"), "utf8")) as Plan;
+	return { root, repo, range, files, out, plan: p };
+}
+
+describe("git 설정과 무관한 diff 해석", () => {
+	test("diff.noprefix·mnemonicPrefix가 켜진 사용자 설정에서도 경로가 그대로 읽힌다", () => {
+		const cfg = path.join(fx.tmp, "noprefix.gitconfig");
+		fs.writeFileSync(cfg, "[diff]\n\tnoprefix = true\n\tmnemonicPrefix = true\n");
+		const saved = process.env.GIT_CONFIG_GLOBAL;
+		process.env.GIT_CONFIG_GLOBAL = cfg;
+		try {
+			const m = miniRepo("noprefix", { "src/x.ts": "export const a = 1;\n" }, {
+				"src/x.ts": "export const a = 2;\n",
+			});
+			expect(m.plan.fileKinds.map((f) => f.path)).toEqual(["src/x.ts"]);
+			expect(m.plan.filesWithoutDiff).toEqual([]);
+			expect(m.plan.gitArgv.join(" ")).toContain("--src-prefix=a/ --dst-prefix=b/");
+		} finally {
+			if (saved === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+			else process.env.GIT_CONFIG_GLOBAL = saved;
+		}
+	});
+});
+
+describe("CRLF 파일 페이지", () => {
+	test("본문 줄을 파싱해 인용 없는 메모는 거부하고 실제 줄 번호·식별자를 인용한 메모는 받는다", () => {
+		const crlf = (s: string) => s.replace(/\n/g, "\r\n");
+		const m = miniRepo(
+			"crlf",
+			{ "src/w.ts": crlf("export const base = 1;\n") },
+			{ "src/w.ts": crlf("export const base = 1;\nexport function computeWidgetTotal() { return 7; }\n") },
+		);
+		const lg = path.join(m.root, "ledger");
+		expect(run(["init", "--plan", m.out, "--angle", "correctness", "--ledger", lg]).code).toBe(0);
+		const out = cli(lg, "next").stdout;
+		expect(out).toContain("\r");
+		const id = pageIdOf(out);
+		const done = (note: string) => cli(lg, "done", id, "--ack", ackOf(out), "--note", note);
+		expect(done("전반적으로 확인함").code).toBe(1);
+		expect(done("L9 확인함").code).toBe(1);
+		expect(done("computeWidgetTotal 확인함").code).toBe(0);
+		const lg2 = path.join(m.root, "ledger2");
+		run(["init", "--plan", m.out, "--angle", "correctness", "--ledger", lg2]);
+		const out2 = cli(lg2, "next").stdout;
+		expect(cli(lg2, "done", pageIdOf(out2), "--ack", ackOf(out2), "--note", "L2 확인함").code).toBe(0);
+	});
+});
+
+describe("규칙 frontmatter 후행 주석", () => {
+	test("블록 목록과 인라인 값의 따옴표 밖 ` # 주석`만 지운다", () => {
+		expect(
+			parseRuleFrontmatter(
+				'---\npaths:\n  - "src/**/*.ts" # application code\n  - docs/** # d\n  - "a#b/**"\n  - \'c #d/**\'\n---\n',
+			).patterns,
+		).toEqual(["src/**/*.ts", "docs/**", "a#b/**", "c #d/**"]);
+		expect(parseRuleFrontmatter('---\npaths: ["a #b/**", x/** ]  # tail\n---\n').patterns).toEqual([
+			"a #b/**",
+			"x/**",
+		]);
+	});
+});
+
+describe("finish 이후 ledger는 닫혀 있다", () => {
+	test("candidate add와 checklist add·update가 거부된다", () => {
+		const ledger = newLedger("correctness");
+		walk(ledger);
+		expect(cli(ledger, "finish").code).toBe(0);
+		const before = fs.readFileSync(path.join(ledger, "ledger.json"), "utf8");
+		const cand = cli(
+			ledger, "candidate", "add", "--page", plan.pages[0]?.id as string, "--file", "src/app.ts",
+			"--line", "3", "--summary", "늦은 후보", "--failure-scenario", "finish 뒤에 추가됨",
+		);
+		expect(cand.code).toBe(1);
+		expect(cand.stderr).toContain("ledger finished");
+		const add = cli(ledger, "checklist", "add", "--source", "CLAUDE.md:1", "--rule", "x");
+		expect(add.code).toBe(1);
+		expect(add.stderr).toContain("ledger finished");
+		const upd = cli(ledger, "checklist", "update", "r001", "--verdict", "준수");
+		expect(upd.code).toBe(1);
+		expect(upd.stderr).toContain("ledger finished");
+		expect(fs.readFileSync(path.join(ledger, "ledger.json"), "utf8")).toBe(before);
+	});
+});
+
+describe("ledger 잠금", () => {
+	test("죽은 보유자가 남긴 오래된 잠금은 대기 한도 안에 인수된다", () => {
+		const ledger = newLedger("correctness");
+		const lock = path.join(ledger, ".lock");
+		fs.writeFileSync(lock, "99999");
+		const old = new Date(Date.now() - 8_000);
+		fs.utimesSync(lock, old, old);
+		const t0 = Date.now();
+		expect(cli(ledger, "next").code).toBe(0);
+		expect(Date.now() - t0).toBeLessThan(5_000);
+		expect(fs.existsSync(lock)).toBe(false);
+		expect(fs.readdirSync(ledger).filter((n) => n.includes("stale"))).toEqual([]);
+	});
+});
+
+describe("파일 권한", () => {
+	test("plan 디렉터리·페이지·diff.patch·ledger는 소유자만 접근한다", () => {
+		const ledger = newLedger("correctness");
+		cli(ledger, "next");
+		const mode = (p: string) => fs.statSync(p).mode & 0o777;
+		for (const d of [planDir, path.join(planDir, "pages"), ledger]) expect(mode(d)).toBe(0o700);
+		const filesIn = [
+			path.join(planDir, "plan.json"),
+			path.join(planDir, "diff.patch"),
+			path.join(planDir, "pages", `${plan.pages[0]?.id}.txt`),
+			path.join(ledger, "ledger.json"),
+		];
+		for (const f of filesIn) expect(mode(f)).toBe(0o600);
+		const out = cli(ledger, "next").stdout;
+		const id = pageIdOf(out);
+		expect(cli(ledger, "resplit", id, "--page-bytes", "2048").code).toBe(0);
+		expect(mode(path.join(ledger, "pages"))).toBe(0o700);
+		for (const n of fs.readdirSync(path.join(ledger, "pages")))
+			expect(mode(path.join(ledger, "pages", n))).toBe(0o600);
+	});
+});
+
+describe("중첩 rules 디렉터리", () => {
+	const base = { "pkg/src/a.ts": "export const a = 1;\n", "other/src/b.ts": "export const b = 1;\n" };
+	const head = { "pkg/src/a.ts": "export const a = 2;\n", "other/src/b.ts": "export const b = 2;\n" };
+	const rules = {
+		"pkg/.claude/rules/ts.md": '---\npaths: ["src/**/*.ts"]\n---\n# ts\n',
+		"pkg/.claude/rules/py.md": '---\npaths: ["**/*.py"]\n---\n# py\n',
+		"pkg/.codex/rules/all.md": "# all in pkg\n",
+		"pkg/CLAUDE.md": "# pkg\n",
+	};
+
+	test("변경 파일의 조상 디렉터리 규칙을 그 디렉터리 기준 paths로 평가한다", () => {
+		const m = miniRepo("nested", { ...base, ...rules }, { ...head });
+		const paths = m.plan.applicable.map((a) => a.path).sort();
+		expect(paths).toEqual(["pkg/.claude/rules/ts.md", "pkg/.codex/rules/all.md", "pkg/CLAUDE.md"]);
+		expect(paths).not.toContain("pkg/.claude/rules/py.md");
+	});
+
+	test("변경 파일이 규칙 소유 디렉터리 밖이면 그 규칙은 적용되지 않는다", () => {
+		const m = miniRepo("nested-out", { ...base, ...rules }, { "other/src/b.ts": "export const b = 2;\n" });
+		expect(m.plan.applicable).toEqual([]);
+	});
+
+	test("작업 트리가 아니라 검토 대상 head 커밋의 지침·규칙을 읽는다", () => {
+		const m = miniRepo("nested-head", { ...base, ...rules }, { ...head });
+		// Working tree drifts after the head commit: the matching rule is rewritten, a new one appears.
+		write(m.repo, "pkg/.claude/rules/ts.md", '---\npaths: ["nothing/**"]\n---\n');
+		write(m.repo, "pkg/.claude/rules/late.md", "# untracked\n");
+		fs.rmSync(path.join(m.repo, "pkg/CLAUDE.md"));
+		const out = path.join(m.root, "plan2");
+		const r = run([
+			"plan", "--repo", m.repo, "--range", m.range, "--files", JSON.stringify(m.files), "--out", out,
+		]);
+		expect(r.code).toBe(0);
+		const p2 = JSON.parse(fs.readFileSync(path.join(out, "plan.json"), "utf8")) as Plan;
+		expect(p2.applicable.map((a) => a.path).sort()).toEqual([
+			"pkg/.claude/rules/ts.md",
+			"pkg/.codex/rules/all.md",
+			"pkg/CLAUDE.md",
+		]);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // process
 // ---------------------------------------------------------------------------
 

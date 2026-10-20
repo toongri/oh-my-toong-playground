@@ -58,7 +58,7 @@ const HUNK_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const CONT_COL = "  cont |";
 /** Lines longer than this are printed as `cont` chunks of at most this many bytes. */
 const SLICE_BYTES = 512;
-const BODY_LINE_RE = /^( {0,5}\d+| {6}| {2}cont) \|(.*)$/;
+const BODY_LINE_RE = /^( {0,5}\d+| {6}| {2}cont) \|([^\n]*?)\r?$/;
 
 class CursorError extends Error {
 	readonly exitCode: 1 | 2;
@@ -704,6 +704,19 @@ function splitTopLevel(value: string): string[] {
 	return out;
 }
 
+/** Cuts an unquoted ` # comment`; a `#` inside quotes stays. */
+function stripYamlComment(s: string): string {
+	let quote = "";
+	for (let i = 0; i < s.length; i++) {
+		const c = s[i] ?? "";
+		if (quote !== "") {
+			if (c === quote) quote = "";
+		} else if (c === '"' || c === "'") quote = c;
+		else if (c === "#" && i > 0 && /\s/.test(s[i - 1] ?? "")) return s.slice(0, i).trimEnd();
+	}
+	return s;
+}
+
 const unquote = (s: string) =>
 	s
 		.trim()
@@ -724,7 +737,7 @@ export function parseRuleFrontmatter(content: string): {
 	for (let i = 0; i < lines.length; i++) {
 		const m = /^(paths|globs|applyTo|alwaysApply)\s*:\s*(.*)$/.exec(lines[i] ?? "");
 		if (!m) continue;
-		const value = (m[2] ?? "").replace(/\s+#.*$/, "").trim();
+		const value = stripYamlComment(m[2] ?? "").trim();
 		if (m[1] === "alwaysApply") {
 			result.alwaysApply = value === "true";
 			continue;
@@ -735,7 +748,9 @@ export function parseRuleFrontmatter(content: string): {
 			);
 		else if (value === "") {
 			while (i + 1 < lines.length && /^\s*-\s+/.test(lines[i + 1] ?? ""))
-				result.patterns.push(unquote((lines[++i] ?? "").replace(/^\s*-\s+/, "")));
+				result.patterns.push(
+					unquote(stripYamlComment((lines[++i] ?? "").replace(/^\s*-\s+/, ""))),
+				);
 		} else
 			result.patterns.push(
 				...(/^["']/.test(value) ? [unquote(value)] : splitTopLevel(value).map(unquote)),
@@ -753,26 +768,107 @@ function ruleMatches(patterns: readonly string[], file: string): boolean {
 	return positives.some(hit) && !negatives.some(hit);
 }
 
-function listMarkdown(dir: string, seen: Set<string>): string[] {
-	let real: string;
-	try {
-		real = fs.realpathSync(dir);
-	} catch {
-		return [];
+/** Read-only view of the files that guidelines and rules are read from; paths are repo-relative. */
+interface TreeSource {
+	kind(rel: string): "file" | "dir" | null;
+	/** Identity that is equal for two names of one file or directory (symlinks). */
+	canon(rel: string): string;
+	/** Sorted entry names of a directory. */
+	children(rel: string): string[];
+	read(rel: string): string;
+}
+
+function fsSource(top: string): TreeSource {
+	const abs = (rel: string) => path.join(top, rel);
+	return {
+		kind(rel) {
+			try {
+				const st = fs.statSync(abs(rel));
+				return st.isDirectory() ? "dir" : st.isFile() ? "file" : null;
+			} catch {
+				return null;
+			}
+		},
+		canon: (rel) => fs.realpathSync(abs(rel)),
+		children: (rel) => fs.readdirSync(abs(rel)).sort(),
+		read: (rel) => fs.readFileSync(abs(rel), "utf8"),
+	};
+}
+
+/**
+ * The tree of one commit, read through git so the working tree cannot change what is reviewed.
+ * Symlinks are followed when the last path component is one; a symlinked parent directory is
+ * not (lazy: resolve each component if a repo links a whole parent of a rules directory).
+ */
+function gitSource(top: string, head: string): TreeSource {
+	const git = (args: string[], encoding: "utf8" | "buffer" = "utf8") => {
+		const r = spawnSync("git", ["-C", top, ...args], { encoding, maxBuffer: 1 << 28 });
+		if (r.status !== 0)
+			throw refuse(`git ${args[0]} failed while reading ${head}: ${String(r.stderr ?? "").trim()}`);
+		return String(r.stdout);
+	};
+	interface Entry {
+		type: "blob" | "tree";
+		path: string;
+		sha: string;
 	}
-	if (seen.has(real)) return [];
-	seen.add(real);
+	const entryAt = (rel: string): { mode: string; entry: Entry } | null => {
+		if (rel === "") return { mode: "040000", entry: { type: "tree", path: "", sha: head } };
+		const line = git(["ls-tree", "-z", head, "--", rel]).split("\0").find((l) => l.endsWith(`\t${rel}`));
+		const m = line && /^(\d+) (blob|tree) ([0-9a-f]+)\t/.exec(line);
+		if (!m) return null;
+		const type = m[2] === "tree" ? "tree" : "blob";
+		return { mode: m[1] ?? "", entry: { type, path: rel, sha: m[3] ?? "" } };
+	};
+	const memo = new Map<string, Entry | null>();
+	const resolve = (rel: string, depth = 0): Entry | null => {
+		if (memo.has(rel)) return memo.get(rel) ?? null;
+		let out: Entry | null = null;
+		const hit = entryAt(rel);
+		if (hit && hit.mode === "120000" && depth < 8) {
+			const target = path.posix.normalize(
+				path.posix.join(path.posix.dirname(rel), git(["cat-file", "blob", hit.entry.sha])),
+			);
+			out = target === ".." || target.startsWith("../") || target.startsWith("/") ? null : resolve(target === "." ? "" : target, depth + 1);
+		} else if (hit && hit.mode !== "120000") out = hit.entry;
+		memo.set(rel, out);
+		return out;
+	};
+	return {
+		kind(rel) {
+			const e = resolve(rel);
+			return e === null ? null : e.type === "tree" ? "dir" : "file";
+		},
+		canon: (rel) => resolve(rel)?.path ?? rel,
+		children(rel) {
+			const e = resolve(rel);
+			if (e === null || e.type !== "tree") return [];
+			const args = e.path === "" ? ["ls-tree", "--name-only", "-z", head] : ["ls-tree", "--name-only", "-z", head, "--", `${e.path}/`];
+			return git(args)
+				.split("\0")
+				.filter((n) => n !== "")
+				.map((n) => path.posix.basename(n))
+				.sort();
+		},
+		read(rel) {
+			const e = resolve(rel);
+			if (e === null || e.type !== "blob") throw refuse(`${rel} is not a file in ${head}`);
+			return git(["cat-file", "blob", e.sha]);
+		},
+	};
+}
+
+function listMarkdown(src: TreeSource, dir: string, seen: Set<string>): string[] {
+	if (src.kind(dir) !== "dir") return [];
+	const canon = src.canon(dir);
+	if (seen.has(canon)) return [];
+	seen.add(canon);
 	const out: string[] = [];
-	for (const name of fs.readdirSync(dir).sort()) {
-		const full = path.join(dir, name);
-		let st: fs.Stats;
-		try {
-			st = fs.statSync(full);
-		} catch {
-			continue;
-		}
-		if (st.isDirectory()) out.push(...listMarkdown(full, seen));
-		else if (st.isFile() && name.endsWith(".md")) out.push(full);
+	for (const name of src.children(dir)) {
+		const rel = path.posix.join(dir, name);
+		const kind = src.kind(rel);
+		if (kind === "dir") out.push(...listMarkdown(src, rel, seen));
+		else if (kind === "file" && name.endsWith(".md")) out.push(rel);
 	}
 	return out;
 }
@@ -782,27 +878,30 @@ const lineCount = (content: string) =>
 
 /**
  * Guideline files (CLAUDE.md / AGENTS.md at the repo root and in every directory on the path
- * of a changed file) plus `.claude/rules` and `.codex/rules` markdown files whose `paths`
- * match a changed file or that declare no `paths`. Files reached twice (symlinks) are
- * listed once, with the other names as aliases.
+ * of a changed file) plus `.claude/rules` and `.codex/rules` markdown files of the root and of
+ * every such directory, whose `paths` match a changed file under the directory that owns the
+ * rules (globs are relative to that directory) or that declare no `paths`. Everything is read
+ * from the `head` commit, or from the working tree when `head` is null. Files reached twice
+ * (symlinks) are listed once, with the other names as aliases.
  */
-export function computeApplicable(top: string, changed: readonly string[]): ApplicableFile[] {
+export function computeApplicable(
+	top: string,
+	changed: readonly string[],
+	head: string | null,
+): ApplicableFile[] {
+	const src = head === null ? fsSource(top) : gitSource(top, head);
 	const out: ApplicableFile[] = [];
-	const byReal = new Map<string, ApplicableFile>();
-	const add = (abs: string, entry: Omit<ApplicableFile, "lines" | "aliases">) => {
-		const real = fs.realpathSync(abs);
-		const existing = byReal.get(real);
+	const byCanon = new Map<string, ApplicableFile>();
+	const add = (rel: string, entry: Omit<ApplicableFile, "lines" | "aliases">) => {
+		const canon = src.canon(rel);
+		const existing = byCanon.get(canon);
 		if (existing) {
 			if (existing.path !== entry.path && !existing.aliases.includes(entry.path))
 				existing.aliases.push(entry.path);
 			return;
 		}
-		const item: ApplicableFile = {
-			...entry,
-			lines: lineCount(fs.readFileSync(abs, "utf8")),
-			aliases: [],
-		};
-		byReal.set(real, item);
+		const item: ApplicableFile = { ...entry, lines: lineCount(src.read(rel)), aliases: [] };
+		byCanon.set(canon, item);
 		out.push(item);
 	};
 
@@ -814,35 +913,40 @@ export function computeApplicable(top: string, changed: readonly string[]): Appl
 			dirFiles.set(dir, [...(dirFiles.get(dir) ?? []), f]);
 		}
 	}
-	for (const dir of [...dirFiles.keys()].sort()) {
+	const dirs = [...dirFiles.keys()].sort();
+	for (const dir of dirs) {
 		const under = dirFiles.get(dir) ?? [];
 		for (const name of ["CLAUDE.md", "AGENTS.md"]) {
-			const abs = path.join(top, dir, name);
-			if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) continue;
 			const rel = dir === "" ? name : `${dir}/${name}`;
+			if (src.kind(rel) !== "file") continue;
 			const reason =
 				dir === ""
 					? `repo-root guideline (applies to all ${under.length} changed files)`
 					: `guideline for ${dir}/ (on the path of ${under.length} changed file(s), e.g. ${under[0]})`;
-			add(abs, { path: rel, type: "guideline", reason });
+			add(rel, { path: rel, type: "guideline", reason });
 		}
 	}
 
 	const seenDirs = new Set<string>();
-	for (const rulesDir of [".claude/rules", ".codex/rules"]) {
-		for (const abs of listMarkdown(path.join(top, rulesDir), seenDirs)) {
-			const rel = path.relative(top, abs).split(path.sep).join("/");
-			const fm = parseRuleFrontmatter(fs.readFileSync(abs, "utf8"));
-			let reason: string | null = null;
-			if (fm.alwaysApply) reason = "rule: alwaysApply: true";
-			else if (fm.patterns.length === 0)
-				reason = "rule: no paths frontmatter (applies to every file)";
-			else {
-				const hits = changed.filter((f) => ruleMatches(fm.patterns, f));
-				if (hits.length > 0)
-					reason = `rule: paths [${fm.patterns.join(", ")}] match ${hits.length} changed file(s), e.g. ${hits[0]}`;
+	for (const dir of dirs) {
+		const under = dirFiles.get(dir) ?? [];
+		const scope = dir === "" ? "" : ` under ${dir}/`;
+		for (const rulesDir of [".claude/rules", ".codex/rules"]) {
+			for (const rel of listMarkdown(src, dir === "" ? rulesDir : `${dir}/${rulesDir}`, seenDirs)) {
+				const fm = parseRuleFrontmatter(src.read(rel));
+				let reason: string | null = null;
+				if (fm.alwaysApply) reason = `rule: alwaysApply: true${scope}`;
+				else if (fm.patterns.length === 0)
+					reason = `rule: no paths frontmatter (applies to every file${scope})`;
+				else {
+					const hits = under.filter((f) =>
+						ruleMatches(fm.patterns, dir === "" ? f : f.slice(dir.length + 1)),
+					);
+					if (hits.length > 0)
+						reason = `rule: paths [${fm.patterns.join(", ")}] match ${hits.length} changed file(s)${scope}, e.g. ${hits[0]}`;
+				}
+				if (reason !== null) add(rel, { path: rel, type: "rule", reason });
 			}
-			if (reason !== null) add(abs, { path: rel, type: "rule", reason });
 		}
 	}
 	return out;
@@ -873,9 +977,12 @@ export interface Plan {
 const sha256 = (data: string | Buffer) => crypto.createHash("sha256").update(data).digest("hex");
 const now = () => new Date().toISOString();
 
+const DIR_MODE = 0o700;
+const FILE_MODE = 0o600;
+
 function atomicWrite(filePath: string, data: string): void {
 	const tmp = `${filePath}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`;
-	fs.writeFileSync(tmp, data, "utf8");
+	fs.writeFileSync(tmp, data, { encoding: "utf8", mode: FILE_MODE });
 	fs.renameSync(tmp, filePath);
 }
 const atomicWriteJson = (filePath: string, payload: unknown) =>
@@ -951,6 +1058,13 @@ function planSummary(planDir: string, plan: Plan, created: boolean) {
 	};
 }
 
+/** The commit a revision range ends at; null for a single revision, which diffs the working tree. */
+function reviewedHead(range: string): string | null {
+	const i = range.lastIndexOf("..");
+	if (i < 0) return null;
+	return range.slice(i + 2).replace(/^\./, "") || "HEAD";
+}
+
 function cmdPlan(v: Values): Output {
 	const repo = required(v.repo, "--repo");
 	const range = required(v.range, "--range");
@@ -966,11 +1080,17 @@ function cmdPlan(v: Values): Output {
 	const gitArgv = [
 		"-c",
 		"core.quotePath=false",
+		"-c",
+		"diff.noprefix=false",
+		"-c",
+		"diff.mnemonicPrefix=false",
 		"--literal-pathspecs",
 		"diff",
 		"--no-ext-diff",
 		"--no-textconv",
 		"--no-color",
+		"--src-prefix=a/",
+		"--dst-prefix=b/",
 		range,
 		"--",
 		...files,
@@ -1011,8 +1131,8 @@ function cmdPlan(v: Values): Output {
 		planSha,
 		planIdAt,
 	);
-	fs.mkdirSync(path.join(planDir, "pages"), { recursive: true });
-	fs.writeFileSync(path.join(planDir, "diff.patch"), patchBuf);
+	fs.mkdirSync(path.join(planDir, "pages"), { recursive: true, mode: DIR_MODE });
+	fs.writeFileSync(path.join(planDir, "diff.patch"), patchBuf, { mode: FILE_MODE });
 	for (const p of pages) atomicWrite(path.join(planDir, "pages", `${p.record.id}.txt`), p.text);
 	const inDiff = new Set(parsed.files.map((f) => f.path));
 	const kinds: Record<string, number> = {};
@@ -1031,7 +1151,7 @@ function cmdPlan(v: Values): Output {
 		fileKinds: parsed.files.map((f) => ({ path: f.path, kind: f.kind })),
 		filesWithoutDiff: files.filter((f) => !inDiff.has(f)),
 		pages: pages.map((p) => p.record),
-		applicable: computeApplicable(repoTop, files),
+		applicable: computeApplicable(repoTop, files, reviewedHead(range)),
 		stats: {
 			pages: pages.length,
 			maxPageBytes: Math.max(...pages.map((p) => p.record.bytes)),
@@ -1106,22 +1226,23 @@ function sleepSync(ms: number): void {
 	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
+const LOCK_WAIT_MS = 10_000;
+/** A holder keeps the lock for one synchronous ledger update; older than this means it crashed. */
+const LOCK_STALE_MS = 5_000;
+
 /** Serializes ledger mutations: a finder's tool may run several cursor calls in parallel. */
 function withLock<T>(dir: string, fn: () => T): T {
-	fs.mkdirSync(dir, { recursive: true });
+	fs.mkdirSync(dir, { recursive: true, mode: DIR_MODE });
 	const lock = path.join(dir, ".lock");
-	const deadline = Date.now() + 10_000;
+	const token = `${process.pid}.${crypto.randomBytes(6).toString("hex")}`;
+	const deadline = Date.now() + LOCK_WAIT_MS;
 	for (;;) {
 		try {
-			fs.writeFileSync(lock, String(process.pid), { flag: "wx" });
+			fs.writeFileSync(lock, token, { flag: "wx", mode: FILE_MODE });
 			break;
 		} catch (e) {
 			if (!(e instanceof Error && "code" in e && e.code === "EEXIST")) throw e;
-			try {
-				if (Date.now() - fs.statSync(lock).mtimeMs > 30_000) fs.rmSync(lock, { force: true });
-			} catch {
-				// lock vanished between the failed create and stat; retry
-			}
+			takeOverStaleLock(lock);
 			if (Date.now() > deadline) throw refuse(`ledger busy: ${lock} is held by another call`);
 			sleepSync(50);
 		}
@@ -1129,8 +1250,35 @@ function withLock<T>(dir: string, fn: () => T): T {
 	try {
 		return fn();
 	} finally {
-		fs.rmSync(lock, { force: true });
+		try {
+			if (fs.readFileSync(lock, "utf8") === token) fs.rmSync(lock, { force: true });
+		} catch {
+			// lock already gone
+		}
 	}
+}
+
+/**
+ * Moves a stale lock aside with an atomic rename, so only one waiter wins it; the winner then
+ * retries the exclusive create. If the renamed file turns out fresh (another waiter had already
+ * replaced the stale lock), it is linked back.
+ * lazy: a narrow window remains where that link-back loses to a third creator; a lock service if it matters.
+ */
+function takeOverStaleLock(lock: string): void {
+	const stale = (p: string) => Date.now() - fs.statSync(p).mtimeMs > LOCK_STALE_MS;
+	const aside = `${lock}.stale.${process.pid}.${crypto.randomBytes(4).toString("hex")}`;
+	try {
+		if (!stale(lock)) return;
+		fs.renameSync(lock, aside);
+	} catch {
+		return; // lock vanished or another waiter moved it first
+	}
+	try {
+		if (!stale(aside)) fs.linkSync(aside, lock);
+	} catch {
+		// link-back lost the race; the holder's own release check tolerates a missing lock
+	}
+	fs.rmSync(aside, { force: true });
 }
 
 function openLedger(dir: string): Ctx {
@@ -1143,6 +1291,13 @@ function openLedger(dir: string): Ctx {
 			`ledger ${dir} was built for plan ${ledger.planSha.slice(0, 12)} but ${ledger.planDir} now holds ${plan.planSha.slice(0, 12)}`,
 		);
 	return { dir, ledger, plan };
+}
+
+function assertOpenLedger(ctx: Ctx, action: string): void {
+	if (ctx.ledger.finishedAt !== null)
+		throw refuse(
+			`ledger finished at ${ctx.ledger.finishedAt}; ${action} is refused because verify already treats it as complete. Use a new --ledger directory to review again.`,
+		);
 }
 
 function save(ctx: Ctx): void {
@@ -1397,6 +1552,7 @@ function cmdCandidate(v: Values, env: NodeJS.ProcessEnv, sub: string | undefined
 	const dir = ledgerDirOf(v, env);
 	return withLock(dir, () => {
 		const ctx = openLedger(dir);
+		assertOpenLedger(ctx, "candidate add");
 		const l = ctx.ledger;
 		const file = required(v.file, "--file");
 		const lineNo = Number(required(v.line, "--line"));
@@ -1462,6 +1618,7 @@ function cmdChecklist(
 		throw usage("checklist subcommands: add | update <itemId> | list");
 	return withLock(dir, () => {
 		const ctx = openLedger(dir);
+		assertOpenLedger(ctx, `checklist ${sub}`);
 		const l = ctx.ledger;
 		const verdict = parseVerdict(v.verdict);
 		const evidence = v.evidence?.trim();
@@ -1633,7 +1790,7 @@ function cmdResplit(v: Values, env: NodeJS.ProcessEnv, id: string | undefined): 
 			throw refuse(
 				`page ${id} (${meta.bytes} bytes) already fits in ${budget} bytes; choose a smaller --page-bytes`,
 			);
-		fs.mkdirSync(path.join(dir, "pages"), { recursive: true });
+		fs.mkdirSync(path.join(dir, "pages"), { recursive: true, mode: DIR_MODE });
 		for (const s of subs) {
 			atomicWrite(path.join(dir, "pages", `${s.record.id}.txt`), s.text);
 			l.extraPages[s.record.id] = {
