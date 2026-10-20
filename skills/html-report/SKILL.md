@@ -182,7 +182,7 @@ body { background: var(--bg); color: var(--ink); }
 Rules:
 
 - **Every token gets its first definition on bare `:root`.** The dark blocks only redefine.
-  A color that exists only inside a media or `[data-theme]` block is the classic unreadable-page bug.
+  A color that exists only inside a media or `[data-theme]` block is the classic unreadable-page bug (lint: `theme-token-scope`).
   Lint warns with `theme-state-mismatch` when an explicit `data-theme` choice does not switch the palette.
 - **`body` sets an explicit background** from a token. A transparent body shows whatever the viewer paints
   behind it (lint: `body-bg-transparent`).
@@ -266,7 +266,7 @@ middle-dot kicker of mood words (section 6).
   identifiers verbatim (`isBooted`, `HTTP 500`). No uppercase-and-tracked labels.
 - **Title.** The `<title>` names the thing in 2 to 4 words, the way a document is named. Use the name the
   source or the caller already gives it (an incident name, a feature name). No category label alone
-  ("보고서"), and no explainer after a colon or a dash ("결제 재시도: 설계 설명"). The explanation goes in the lede.
+  ("보고서"), and no explainer after a colon or a dash ("결제 재시도: 설계 설명"). The explanation goes in the lede (lint: `title-name`).
 - **Page copy.** These rules cover the words the page adds: headings, labels, captions, hints, legends. They
   never license rewording text that the caller passes as source or requires verbatim.
   - Name things the way the reader knows them: a heading says "결제 알림 재시도" and keeps internal module
@@ -289,6 +289,9 @@ reduced-motion rule.
 
 - **Side gutter of at least 16px at every width,** written as `padding-left: max(16px, env(safe-area-inset-left, 0px))`
   and the matching `padding-right`, set once on `body`. Give vertical padding with `padding-block`. A `padding` shorthand would reset the side gutter, so do not use one.
+- **Use px for type, widths, and spacing.** The SVG label floors (12px Hangul, 11px Latin) and the 400px phone
+  check are measured in rendered px, so px keeps the page and its checks on one scale.
+- **Rows wrap or stack at phone width.** A row of cards or columns wraps, or stacks to one column, at 400px.
 - **Two widths.** A reading column (720px) for prose, and a wider stage (up to 1040 to 1240px) for
   figures and tables. Sections are flex columns with `gap`; do not space siblings with margins.
 - **`min-width: 0`** on every flex or grid child that holds running text, code, or a table, so long
@@ -414,12 +417,13 @@ figcaption .vf { display: block; margin-top: 6px; color: var(--ink-3); }
 - **Size by `viewBox`.** Choose W and H for the content. Crop dead bands: a 56px empty strip above the
   drawing wasted space in testing; tighten the viewBox (`0 32 840 352`) instead of moving every shape.
   CSS scales it: `width: 100%; height: auto`. Never give a figure a fixed pixel width (no `width: 960px`).
-- **Color through page CSS classes and tokens,** or `currentColor`. No `<style>` or `<script>` inside the SVG,
-  no literal hex in attributes (lint: `svg-literal-color`). Give every drawn shape an explicit `fill` (`fill: none` for lines and paths).
+- **Color through page CSS classes and tokens,** or `currentColor`. No `<style>` or `<script>` inside the SVG
+  (lint: `svg-embedded-code`), no literal hex in attributes (lint: `svg-literal-color`). Give every drawn shape an explicit `fill` (`fill: none` for lines and paths).
 - **Arrowheads are `<marker>` elements** (or small polygons), one marker per stroke color, with ids
-  unique in the whole document. Prefix them with the figure slug (`f1-ah-ok`) so two figures never
+  unique in the whole document (lint: `duplicate-id`). Prefix them with the figure slug (`f1-ah-ok`) so two figures never
   collide when one is copied. A single hidden `<svg width="0" height="0" style="position:absolute" aria-hidden="true">`
-  holding shared `<defs>` also works.
+  holding shared `<defs>` also works. Gradients, patterns, and `<use>` refer only to ids inside the same `<svg>`
+  or in that shared hidden defs block.
 - **Grid.** Put coordinates, widths, heights, and gaps on a 4px grid (8px for major spacing). Columns and
   lane y-values are shared constants, written in a comment at the top of the SVG. Shared baselines and
   even gaps are most of what makes a hand diagram look deliberate.
@@ -435,6 +439,7 @@ figcaption .vf { display: block; margin-top: 6px; color: var(--ink-3); }
 - **Accessibility.** `<svg role="img" aria-label="...">` carries the same claim as the caption. Or use
   `aria-labelledby` pointing at a `<title>` (first child) and `<desc>` with figure-prefixed ids
   (`f2-title`, `f2-desc`), never bare `title` / `desc`. Decorative SVG gets `aria-hidden="true"`.
+  An SVG with neither is flagged (lint: `svg-no-label`).
 - **No `<foreignObject>`.** HTML inside SVG does not scale or wrap predictably. Use `<text>` and `<tspan>`.
   Lint reports it as an error (`svg-foreignobject`). A shape that needs long hand-traced path data is
   decoration: simplify it to native shapes or drop it.
@@ -700,9 +705,11 @@ source is not on disk; then say so in your report. Once, after the last layout o
 bash <skill-dir>/scripts/capture.sh report.html ./.visual-check/offline --offline
 ```
 
-`capture.sh` writes, for 1280px light, 1280px dark, and 400px light: scrolled viewport frames (`-p01.png` ...),
+`capture.sh` writes, for 1280px light, 1280px dark, 400px light, and 400px dark: scrolled viewport frames (`-p01.png` ...),
 one frame per `<figure>` (`-fig1.png` ...), and at 400px the far end of each sideways scroller (`-fig1-end.png`).
-It prints `scrollWidth / innerWidth` per configuration. `lint.sh` prints one JSON document. Pass `--strict` on
+It prints `scrollWidth / innerWidth` and a "page errors <width> <theme>: N" line per configuration. Read the
+"page errors" lines: any non-zero count is a defect to fix, because a broken script leaves a half-drawn figure
+that no lint check names. `lint.sh` prints one JSON document. Pass `--strict` on
 every lint call: the JSON stays the same, and the exit code is 2 while an error remains. When the caller asks for
 a receipt, add `--receipt <path>` to that same call; there is no separate strict run.
 
@@ -720,7 +727,7 @@ Check each frame for:
 2. Text on or outside a box edge; text cut at the figure edge.
 3. A figure's key difference visible at 400px without scrolling (see `-fig*.png` at 400).
 4. Grids with empty cells; cards of uneven height in one row.
-5. Dark theme: any box, text, or line that disappeared or turned into a bright block.
+5. Dark theme, at 1280px and at 400px: any box, text, or line that disappeared or turned into a bright block.
 6. English chrome or ALL CAPS on a Korean page; fallback-font glyph mismatch (offline frames).
 7. The failure path at least as visible as the success path.
 8. Every number, time, and timezone matches the source.

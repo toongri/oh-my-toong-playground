@@ -31,6 +31,7 @@ The rules that govern it (gutter, two widths, `min-width: 0`, no sideways scroll
   .col  { max-width: 720px; }
   section { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
   h1, h2, h3, p, ul, ol, figure, table { margin: 0; }
+  h1, h2, h3 { text-wrap: balance; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
 </style>

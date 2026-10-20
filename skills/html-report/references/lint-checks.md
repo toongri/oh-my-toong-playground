@@ -27,6 +27,11 @@ This file holds the lint check table and its notes from [section 14 (Self-critiq
 | `hidden-at-rest` (warn) | Text sits at an effective opacity under 0.1 or `visibility: hidden` after load (closed `<details>` and `aria-hidden` excluded) | Give it a visible resting state; animate from there, never from `opacity: 0` (output contract) |
 | `body-bg-transparent` (warn) | `<body>` has no background color | `body { background: var(--bg); }` (section 3) |
 | `theme-state-mismatch` (warn) | An explicit `data-theme` choice does not switch the palette: no `:root[data-theme="dark"]` block, or a dark media block without the `:not([data-theme="light"])` guard | The three-state token shape of section 3 |
+| `title-name` (warn) | `<title>` is missing, empty, a category label alone, or carries an explainer after a colon or a dash | A 2 to 4 word name for the thing; the explanation goes in the lede (section 4) |
+| `duplicate-id` (warn) | Two elements share one `id` (marker and gradient ids collide when a figure is copied) | Prefix ids with the figure slug (section 7.2) |
+| `theme-token-scope` (warn) | A color token is first defined only inside a media or `[data-theme]` block, or a component rule uses a literal color | Define every token on bare `:root` first; components read `var(--token)` (section 3) |
+| `svg-no-label` (warn) | An `<svg>` has no `role="img"` with `aria-label`, and is not `aria-hidden` | Add `role="img"` and an `aria-label` that carries the caption's claim, or `aria-hidden="true"` for decoration (section 7.2) |
+| `svg-embedded-code` (warn) | An `<svg>` holds a `<style>` or `<script>` element | Move the rules to page CSS classes; remove the script (section 7.2) |
 
 Elements dimmed to under 50% opacity (unselected scenario paths) are skipped by the contrast check and counted
 in the `contrast-sample` line. Lint never measures dimmed text, so dim only what a selector deselects. The self-test `bash <skill-dir>/scripts/lint_test.sh` checks that lint still
