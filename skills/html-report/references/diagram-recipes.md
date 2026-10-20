@@ -211,7 +211,7 @@ lines, not text.
 
 ## Timeline
 
-Default to the CSS timeline in [SKILL.md section 6](../SKILL.md#6-component-vocabulary). Use an SVG horizontal
+Default to the CSS timeline in [SKILL.md section 6](components.md). Use an SVG horizontal
 timeline only when the spacing between events is the point. Then draw it to scale on one axis, mark an elided
 stretch with a visible axis break (two short slanted strokes and the elided duration as text), and put event
 cards beside the axis, not on top of each other. Times keep the source's timezone, written once on the axis.

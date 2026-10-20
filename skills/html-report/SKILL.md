@@ -26,7 +26,7 @@ copies these rules. It points here and keeps only its own content rules.
 - Complete at rest: everything the reader needs is visible after load, with no click, hover, or scroll
   needed to reveal it.
 - Every directed graph with 3 or more nodes is inline SVG with drawn edges ([section 7.6](#76-directed-graphs-are-svg)),
-  and a phone never changes what a diagram means ([section 5](#phone-strategy-for-figures)).
+  and a phone never changes what a diagram means ([section 5](references/layout.md#phone-strategy-for-figures)).
 - Faithful to the source: no invented status, owner, date, number, or definition ([section 13](#13-fidelity-rules)).
 - Passes the self-critique loop in [section 14](#14-self-critique-loop-mandatory) before you report it done.
 
@@ -97,7 +97,7 @@ decided what the figure is for. Two more rules follow:
 
 - **Say each relation once.** Do not show the same relations as a figure, then a table, then cards. Pick the
   form that carries them best and refer to it. The one allowed repeat is the phone fallback table of
-  [section 5](#phone-strategy-for-figures), which is hidden on wide screens.
+  [section 5](references/layout.md#phone-strategy-for-figures), which is hidden on wide screens.
 - **Do not fragment a structure.** One structure that fits the budget of [section 12](#12-complexity-budget-and-the-split-rule)
   is one figure, not a row of 1 to 4 node figures that the reader must join in their head. Split only
   when the structure is over budget, and then as an overview plus a detail figure.
@@ -107,60 +107,17 @@ decided what the figure is for. Two more rules follow:
 ## 2. Page anatomy
 
 Every page puts the answer before the evidence: the first screen states what happened, what was
-decided, or what the reader must do. Then the detail follows. The skeletons below list section
-*types*, in order. Optional sections are marked. The caller fills the content.
+decided, or what the reader must do. Then the detail follows. The skeletons list section
+*types*, in order. The caller fills the content. Section order per anatomy kind:
 
-**Incident or finding report**
+- **Incident or finding report**: masthead, cause and action, impact, symptoms and reasons, normal mechanism (figure), broken mechanism (figure), how the failure formed, timeline, verified versus not verified, the fix (figure), rollout or next steps, sources footer.
+- **Design document**: masthead and summary, goal and principles, the main map, decision tables, rationale callouts, open questions.
+- **Plan**: goal and success criteria, current versus target, work breakdown, dependencies, risks table, verification, not in this plan.
+- **Diff explainer**: what changed and why, before/after mechanism figure, one chapter per capability (use case), edge cases and risks, how it was verified.
+- **Research report**: the question and the bottom-line answer, confidence summary, findings (claim, evidence, sources, status), comparison table or matrix, figures only for mechanisms or structural comparisons, contradictions and open questions, method and source list.
 
-1. Masthead: status pill (for example "26대 고착 지속"), page type, and the event date with timezone when the source gives one. No writing date of your own.
-2. Cause and action in two short paragraphs.
-3. Impact: stat tiles or a to-scale bar, each number with its scope ("전체 약 1,620대 중 41대").
-4. Symptoms and why each happens: a two-column row list.
-5. The normal mechanism (figure).
-6. The broken mechanism, drawn on the same layout as the normal one (figure).
-7. How the failure formed: numbered steps (a real sequence).
-8. Timeline of one representative case, with timezone.
-9. Verified versus not verified: two panels.
-10. The fix, with an "after" figure on the same layout. Optional: what does not change.
-11. Rollout or next steps. Optional: reproduction plan.
-12. Sources footer.
+The numbered skeletons, with the content of each section, are in [references/page-anatomy.md](references/page-anatomy.md).
 
-**Design document**
-
-1. Masthead and one-paragraph summary of the design.
-2. Goal and principles (one stat tile only if a number motivates the design).
-3. The main map: architecture or state machine, optionally with a scenario selector ([section 10](#10-interaction-patterns)).
-4. Decision tables, one per gate or rule.
-5. Rationale callouts for choices a reviewer would question.
-6. Open questions. Optional: out of scope.
-
-**Plan**
-
-1. Goal and success criteria (checkable).
-2. Current versus target (before/after figure, only if the structure changes).
-3. Work breakdown: ordered list, or a CSS timeline when dates matter.
-4. Dependencies: a figure only when they are not a straight line.
-5. Risks table: risk, impact, mitigation.
-6. Verification: how each success criterion is checked.
-7. Not in this plan.
-
-**Diff explainer**
-
-1. What changed, in one sentence, and why (the problem before the change).
-2. Before/after mechanism figure on one layout.
-3. One chapter per capability (use case): behavior, the code path it takes, the key excerpt.
-4. Edge cases and risks.
-5. How it was verified. The caller adds its own sections (for example a quiz).
-
-**Research report**
-
-1. The question and the bottom-line answer.
-2. Confidence summary: what is established, what is contested, what is unknown.
-3. Findings, each with claim, evidence, sources, and status.
-4. Comparison table or matrix.
-5. Figures only for mechanisms or structural comparisons.
-6. Contradictions and open questions.
-7. Method and source list.
 
 ---
 
@@ -361,177 +318,25 @@ an accent rail on the side of rounded cards; tracked ALL-CAPS eyebrows above eve
 **Layout never changes meaning.** A phone shows the same nodes, the same edges, and the same order as the
 desktop. A reader must not see a transition on a phone that the desktop does not draw, or miss one that it does.
 
-Never build a graph (flow, state machine, sequence, ERD, architecture) from HTML boxes that reflow. In testing,
-a state diagram made of flex boxes stacked into one column at 400px. Boxes that sat side by side as unrelated
-states then read as a chain of transitions that does not exist. The fix is the same at every width: a graph is
-an SVG, and its geometry (positions, edges, order) does not change with the viewport.
-
-Rendered text size is `font-size × (drawn width ÷ viewBox width)`. At a 400px viewport, a figure inside
-a padded, bordered container has about 346px to draw in. A 13px label in an 840-wide viewBox renders at
-about 5px there: unreadable. So every graph needs one of these strategies:
-
-1. **Narrow-first, one geometry.** Design the figure at a viewBox width of 360 or less (13px labels then render
-   at 12.5px or more on a phone). Flows run top to bottom, lanes become rows. The same SVG scales down from
-   1280px to 400px. This is the default, and the only choice for the page's key figure when it fits.
-2. **Scale down.** A wider drawing may shrink with `width: 100%` while every label stays at 12px or more
-   (Hangul) or 11px or more (Latin) at 400px. Check the `svg-text-small` results of the 400px lint run.
-3. **Scroll in its own container.** When labels would fall under that floor, set `min-width` to the value that
-   keeps them at 12px (usually the viewBox width, so the drawing is 1:1). Then add all three:
-   - the part the claim depends on at the *left*, which is the scroll start;
-   - a visible hint ("그림은 좌우로 밀어서 볼 수 있어요");
-   - an adjacent text table of every edge (columns: from, label or condition, to; for a sequence: order,
-     from, to, message; for an ERD: from, multiplicity, to, verb), placed directly under the figure and
-     shown at phone width only (`@media (max-width: 640px)`), so a wide screen does not repeat the figure.
-4. **Two layouts of the same graph** (rare). A wide SVG and a narrow SVG swapped by width with `display: none`
-   on the hidden one. Both must hold the same nodes, the same edges, the same labels and the same order, only
-   re-arranged. Count nodes and edges in both. If a node or an edge exists in one only, use strategy 3.
-
-```html
-<figure>
-  <div class="fig-scroll" tabindex="0" role="region" aria-label="그림 2 상태 전이, 좌우 스크롤">
-    <svg viewBox="0 0 840 352" role="img" aria-label="(claim)">...</svg>
-  </div>
-  <p class="fig-hint">그림은 좌우로 밀어서 볼 수 있어요. 모든 전이는 아래 표에도 있어요.</p>
-  <div class="edge-table table-scroll"><table>...</table></div>
-  <figcaption>...</figcaption>
-</figure>
-```
-```css
-.fig-hint, .edge-table { display: none; }
-@media (max-width: 640px) { .fig-hint { display: block; } .edge-table { display: block; } }
-```
-
-A key figure, the one the page's main claim rests on, uses strategy 1 or 2. In testing, a before/after figure
-in a scroll container showed only its left 47% on a phone, so the changed half was off screen. `lint.sh`
-reports every sideways-scrolling figure with the visible fraction (`figure-scrolls`).
-
-HTML boxes may stay HTML only for content that is not a directed graph: cards, stat tiles, row lists, a
-to-scale bar. They are never wrapped in a `<figure>` as if they were a diagram.
+Every graph needs one of four strategies: (1) narrow-first, one geometry (the default); (2) scale down; (3) scroll in its own container, with a hint and an edge table; (4) two layouts of the same graph (rare).
+A key figure, the one the page's main claim rests on, uses strategy 1 or 2.
+The strategy details and code are in [references/layout.md](references/layout.md#phone-strategy-for-figures).
 
 ### Card grids without orphans
 
-A grid of N cards must fill its rows at every breakpoint. `repeat(auto-fit, minmax(210px, 1fr))` with
-five items at 1040px gives four columns and one lonely card with three empty cells beside it (seen in
-testing). Pick the column count from the item count:
-
-```css
-.tiles { display: grid; gap: 12px; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); }
-@media (max-width: 900px) { .tiles { --cols: 2; } .tiles > :last-child:nth-child(odd) { grid-column: 1 / -1; } }
-@media (max-width: 480px) { .tiles { --cols: 1; } }
-```
-```html
-<div class="tiles" style="--cols: 4"> four tiles </div>
-```
-
-Use 2, 3, 4, or 6 items per row. Five items: show them as a vertical list (a sequence reads better as rows
-anyway), or as 3 + 2 with the last two spanning. Let content set heights; nothing stretches over empty space.
+A grid of N cards must fill its rows at every breakpoint. Pick the column count from the item count.
+Use 2, 3, 4, or 6 items per row. The CSS and the five-item rule are in [references/layout.md](references/layout.md#card-grids-without-orphans).
 
 ---
 
 ## 6. Component vocabulary
 
 Use card styling (border, fill, radius) by role, to set off the element that needs it, not on every
-block. Radii stay at 6 to 10px. No shadows. Each component below is the minimum CSS; extend it from the tokens.
+block. Radii stay at 6 to 10px. No shadows. Each component is the minimum CSS; extend it from the tokens.
 
-**Masthead.** A kicker line (status pill, page type, and a source date with timezone when the source gives one), the `h1` name, a lede paragraph,
-and an optional stat strip.
+Components: masthead, pills, stat tiles, to-scale bar, row list, tables with pills, decision table, CSS timeline, numbered steps (only for a real sequence), known / unknown panels, callout (at most one per section), disclosure, code block, footer.
 
-```html
-<header class="mast">
-  <div class="kicker"><span class="pill bad">26대 고착 지속</span><span>사고 보고서 · 2026-10-17 (KST) 업데이트 후</span></div>
-  <h1>디스펜서 USB 고착</h1>
-  <p class="lede">...</p>
-</header>
-```
-
-**Pills** carry state in form as well as color:
-
-```css
-.pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; line-height: 1.6; }
-.pill.ok { background: var(--ok-bg); color: var(--ok); }
-.pill.bad { background: var(--bad-bg); color: var(--bad); }
-.pill.warn { background: var(--warn-bg); color: var(--warn); }
-```
-
-**Stat tiles.** Use them only when the numbers are the point. Each label says what the number counts and
-its scope. Pick the column count from the item count (see above).
-
-```css
-.facts { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
-.fact { padding: 14px 18px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 -1px -1px 0; }
-.fact b { font-size: 28px; line-height: 1.2; font-variant-numeric: tabular-nums; }
-.fact span { font-size: 14px; color: var(--ink-2); }
-```
-
-**To-scale bar.** For a share of a whole (41 of 1,620), draw the segments at their true widths and
-label the small one beside the bar, not inside it.
-
-```html
-<div class="bar" role="img" aria-label="전체 약 1,620대 중 41대(2.6%)가 고착">
-  <span class="seg ok" style="width:97.4%">나머지 정상</span><span class="seg bad" style="width:2.6%"></span>
-</div>
-```
-
-**Row list** (symptom and reason, claim and evidence): a two-column grid that stacks below 640px.
-
-```css
-.row3 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 4px 28px; padding: 16px 20px; border-top: 1px solid var(--line); }
-@media (max-width: 640px) { .row3 { grid-template-columns: 1fr; } }
-```
-
-**Tables with pills.** Wrap every table in a scroll container; keep cells wrapping.
-
-```css
-.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-table { border-collapse: collapse; width: 100%; font-size: 15px; line-height: 1.6; }
-th, td { text-align: left; vertical-align: top; padding: 12px 16px; border-top: 1px solid var(--line); }
-thead th { border-top: 0; font-size: 13.5px; color: var(--ink-3); font-weight: 600; background: var(--surface-2); }
-```
-
-**Decision table** (condition to result, for gates and rules). Bold the result. Shade rows that apply
-regardless of the other conditions (`tr.always td { background: var(--surface-2); }`). If the source
-does not say which override wins, write that on the page ("둘의 우선순위는 문서에 없음"); do not invent an order.
-
-**CSS timeline.** The default timeline: vertical, responsive, times in mono with tabular digits, the
-timezone stated once in the section heading. A dashed connector marks elided time.
-
-```css
-.tl { list-style: none; padding: 0; display: flex; flex-direction: column; }
-.tl li { display: grid; grid-template-columns: 78px 18px minmax(0, 1fr); gap: 0 14px; padding-bottom: 20px; }
-.tl time { font-family: var(--mono); font-size: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.tl .dot { position: relative; }
-.tl .dot::before { content: ""; position: absolute; left: 50%; top: 9px; width: 12px; height: 12px; border-radius: 50%; transform: translateX(-50%); background: var(--surface); border: 2.5px solid var(--line-strong); z-index: 1; }
-.tl .dot::after { content: ""; position: absolute; left: 50%; top: 21px; bottom: -20px; width: 2px; transform: translateX(-50%); background: var(--line); }
-.tl li:last-child .dot::after { display: none; }
-.tl li.bad .dot::before { border-color: var(--bad); background: var(--bad); }
-.tl li.gap .dot::after { background: repeating-linear-gradient(to bottom, var(--line-strong) 0 4px, transparent 4px 9px); }
-```
-
-**Numbered steps** only for a real sequence. Numbering that does not encode order is decoration.
-Highlight the step where things break (`li.hot::before { background: var(--bad); }`).
-
-**Known / unknown panels.** Two panels side by side, stacking on a phone, each with a pill in its
-heading ("확인됨", "확인 못 함"). List evidence on the left and inference or open questions on the right.
-
-```css
-.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; }
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; min-width: 0; }
-```
-
-**Callout.** At most one per section, for a rationale a reviewer would question ("관문을 서명이 아니라
-「확인」에 둔 이유"). A tinted surface with a bold lead-in line. No colored side rail on a rounded card.
-
-```css
-.note { background: var(--surface-2); border-radius: 8px; padding: 16px 20px; max-width: 820px; }
-.note b { display: block; margin-bottom: 4px; }
-```
-
-**Disclosure** for long evidence such as raw logs: `<details><summary>`. The summary line states the
-gist, so the page is complete without opening it.
-
-**Code block:** `<pre>` inside a scroll container, mono, 14px, no wrapping.
-
-**Footer:** sources, in one or two lines.
+The HTML and CSS for each are in [references/components.md](references/components.md).
 
 ---
 
@@ -698,7 +503,7 @@ Read the recipe for each type you draw. Every type is SVG with drawn edges. The 
 | Before / after | Identical layout and coordinates, only the difference changes | The same viewBox and lane y-values in every figure |
 
 Read the recipe's phone paragraph for each type. A sequence, a state machine, and an ERD keep their SVG
-geometry on a phone ([section 5](#phone-strategy-for-figures)); none of them becomes a numbered list or a
+geometry on a phone ([section 5](references/layout.md#phone-strategy-for-figures)); none of them becomes a numbered list or a
 column of cards.
 
 ---
@@ -727,46 +532,16 @@ containers get `tabindex="0"`; nothing is hover-only; the default view shows eve
 
 ## 11. Anti-patterns
 
-| Anti-pattern | Why it fails | Do instead |
-|---|---|---|
-| Two edge labels sharing one stretch of space | They collide or read as one label | One label per route segment; offset routes 12px+ |
-| Label sitting on its own arrow line | Text and stroke merge | Baseline 12px+ above the arrow; halo for near misses |
-| Key figure in a sideways scroller at 400px | The changed half is off screen | Narrow-first or scale-down (section 5) |
-| SVG text under 12px rendered (Hangul) or 11px (Latin) | Unreadable, muddy Hangul | Larger `min-width`, narrower viewBox, shorter labels |
-| 4 + 1 card grid with empty cells | Looks broken, implies a missing item | Column count from item count; sequences as a list |
-| English chrome on a Korean page ("LEGEND", "SEND / RECEIVE") | Mixed register, reads as template | "읽는 법", "보내기 / 받기" |
-| Serif display face on a Korean page | Hangul falls back to a mismatched face | Korean sans, weight and size for hierarchy |
-| Failure path faint, thin, or dashed | The key path disappears | Solid `--bad` at full weight with a ✗ stop |
-| Literal color in SVG (`fill="#fff"`) | Breaks the other theme | Page CSS classes with tokens |
-| `word-break: break-all` on code | Identifiers split mid-word | `word-break: normal; overflow-wrap: anywhere` |
-| Table `min-width` wider than the phone | Columns clipped or hidden | `min-width: 0`, wrapping cells, a scroll container |
-| Step badge on top of an edge label | Both unreadable | Badge at a node corner clear of labels |
-| Text on a box's bottom edge | Looks clipped | 8px+ inside the edge |
-| Dead band inside the viewBox | Wasted height, figure looks unbalanced | Crop the viewBox |
-| Mono as the blanket "technical" font | Names and Hangul belong in sans | Mono for identifiers only |
-| Identical boxes for every node | Erases hierarchy | Treatment by role: focal, store, external, screen |
-| Legend floating among nodes | Collides with nodes | Bottom strip or HTML list beside the figure |
-| Arrow label with no mask or halo over a line | The line runs through the text | Surface-colored mask or `paint-order: stroke` halo |
-| Vertical `writing-mode` text | Unreadable | Horizontal labels beside vertical segments |
-| Shadows; radius above 10px | Template look | 1px borders; 6 to 10px radius |
-| Accent on every important node | No focal point | Accent on 1 to 2 elements per figure |
-| Numbered markers on things that are not a sequence | Implies an order that does not exist | Numbers only for real sequences |
-| Copying an automatic layout (Mermaid-style spacing) | Generic routing, no editorial choice | Lay out by hand on a grid |
-| "예시" on real data, or real-looking numbers that are invented | Misleads the reader | Section 13 |
-| Graph built from HTML boxes and `↓ →` glyphs (`figure-graph-nosvg`) | Boxes reflow on a phone, glyphs cannot show branches, joins, or returns | Inline SVG with drawn edges (section 7.6) |
-| SVG boxes with no edges (`svg-no-edges`) | The reader cannot tell how the boxes relate | A path or line with an arrowhead for each relation |
-| A phone layout that rearranges a graph's boxes | A flex state diagram stacked at 400px read as a transition that does not exist | Keep the SVG geometry; scale down or scroll in its own container, plus an edge table (section 5) |
-| A source diagram replaced by a table or prose | The shape the reader came for is gone | Keep it as a figure; drop one only when the source has no structure to show (section 1) |
-| ER relations written as card text ("→ `household_id`") | Cardinality and direction are invisible | Relationship lines with multiplicity at both ends (diagram-recipes.md, ERD) |
-| Sequence on a phone as a numbered list | Actors and the time axis vanish | Keep lifelines; scroll in its own container with a message table |
-| The same relations as a figure, a table, and cards | Three copies drift apart and bury the claim | One form per relation (section 1) |
-| One structure split into several 1 to 4 node figures | The reader joins the pieces in their head | One figure within budget (section 12) |
-| A fixed-width figure (`width: 960px`) | Breaks between 400px and 1280px | `width: 100%`, with `min-width` only in a scroll container |
-| A writing date, "저는" or "I decided", or a mention of NOTES.md / SKILL.md on the page | The page speaks for its author, not its source | Dates, voice, and notes come from the source only (section 13) |
-| A status the source never gives ("미판정", "pending review") | The page invents a verdict | Quote the source's own status (section 13.2) |
-| Timestamps converted or stripped of timezone | Times mismatch their source | Keep the source timezone, state it |
+Top-line rules (full table with reasons: [references/anti-patterns.md](references/anti-patterns.md)):
 
----
+- One label per route segment; offset routes 12px+.
+- Narrow-first or scale-down for a key figure (section 5).
+- Larger `min-width`, narrower viewBox, shorter labels for SVG text under 12px rendered (Hangul) or 11px (Latin).
+- Solid `--bad` at full weight with a ✗ stop for a failure path.
+- Page CSS classes with tokens, never a literal color in SVG.
+- Inline SVG with drawn edges for every graph (section 7.6); keep the SVG geometry on a phone.
+- Keep a source diagram as a figure (section 1); one form per relation (section 1).
+- Dates, voice, and notes come from the source only (section 13).
 
 ---
 
@@ -946,28 +721,10 @@ finds nothing to fix. Run at least two rounds: in testing, the second round foun
 round's fix had introduced. Stop after the round that finds nothing; if a lint error remains by design, name it and the reason in
 your report.
 
-**Lint checks and their usual fixes:**
+**Lint checks and their usual fixes:** the check table (check, meaning, usual fix) is in
+[references/lint-checks.md](references/lint-checks.md). The checks that matter most: `page-overflow`, `svg-text-overlap`,
+`svg-text-small-korean`, `figure-graph-nosvg` (error), `figure-scrolls`, `contrast`.
 
-| Check | Meaning | Usual fix |
-|---|---|---|
-| `page-overflow`, `page-overflow-source` | The page scrolls sideways at 400px; the source element is named | `min-width: 0` on the flex/grid child, wrap or scroll the wide element |
-| `svg-text-overlap` | Two SVG labels' glyph boxes intersect | Move one onto its own segment; shorten |
-| `svg-text-outside` | SVG text extends past the `<svg>` viewport | Widen the viewBox or move the text in |
-| `svg-text-on-stroke` | A line, path, or box outline passes through a label | Raise the label 12px+ above the line, or reroute |
-| `svg-text-on-stroke-halo` (warn) | Same, but the label has a halo | Look at it; halos hide short crossings, not a label lying on its own arrow |
-| `svg-text-small`, `svg-text-small-korean` | Rendered size under 11px, or Hangul under 12px | Larger `min-width`, narrower viewBox, shorter labels, or a narrow variant |
-| `html-clipped`, `html-overflow` | Content cut by `overflow: hidden`, or spilling with no scroll container | Remove fixed heights/widths; wrap; add a scroll container |
-| `figure-graph-nosvg` (error) | A `<figure>` with no `<svg>` draws a graph from HTML boxes or arrow glyphs (`↓ → ← ↑ ⇒`) | Redraw as inline SVG with drawn edges (section 7.6) |
-| `svg-no-edges` (warn) | An SVG has 3 or more boxes and no path, line, or polyline edge | Draw the edges, or remove the boxes if they are not a graph |
-| `number-not-in-source`, `masthead-date-not-in-source` (warn, only with `--source`) | A number or date on the page occurs in no source file | Copy it from the source, or label it as computed; drop an invented masthead date |
-| `author-first-person` (warn) | "저는", "제가", "나는", or "I decided" on the page | Rewrite in the source's voice (section 13.3) |
-| `authoring-notes-mention` (warn) | The page mentions NOTES.md, SKILL.md, or authoring notes | Delete the mention |
-| `figure-scrolls` (warn under 60% visible) | A figure scrolls sideways at 400px | Fine for secondary figures; a key figure needs strategy 1 or 2 |
-| `contrast` | Text below 4.5:1 (3:1 large) against its real background, per theme | Adjust the token for that theme; never a literal color |
-
-Elements dimmed to under 50% opacity (unselected scenario paths) are skipped by the contrast check and counted
-in the `contrast-sample` line. The self-test `bash <skill-dir>/scripts/lint_test.sh` checks that lint still
-catches every planted defect and flags none of the clean fixtures; run it after changing `lint.js`.
 Lint cannot see everything. It cannot count a source's transitions, judge a verdict, or see a reflowed
 graph inside a `<div>` that is not a `<figure>`. Sections 13.1 and 13.2 and the frame checklist above are the checks for those.
 
@@ -981,17 +738,3 @@ final `summary` from `lint.sh` with any remaining errors and why they remain; th
 receipt path when the caller required one (`--receipt`, section 14); which
 states and the offline view you captured; and anything you could not verify (for example, "contrast inside the
 map was not measured for the hover state").
-
----
-
-## Background and attribution
-
-This guide transcribes, for agents without access to them, the substance of Anthropic's design guidance for
-claude.ai Artifacts (the `artifact-design`, `artifact-diagramming`, and `frontend-design` skills), with every
-hosting-specific instruction removed (publishing, sandbox limits, the CDN allowlist, host metadata tags). It adds
-rules from the MIT-licensed diagram-design project (anti-patterns, complexity budget, connector rules, accessible
-SVG contract, Korean label rules, contrast contract, sequence-diagram grammar, the CSS-only `:has()` scenario
-selector); see `NOTICE`. The defects named "seen in testing" come from a bake-off in which reports were authored
-under these rules and critiqued from screenshots over three rounds, and from a blind-judged follow-up of 150
-reports whose weak spots (graphs built from HTML boxes, source diagrams replaced by tables, invented statuses and
-dates) produced sections 1, 5, 7.6, and 13. The finished pages are in `exemplars/`.
