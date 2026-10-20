@@ -127,6 +127,12 @@ if bash "$HERE/../capture.sh" "$HERE/errors-flood.html" "$CAP/flood" >"$CAP/floo
 else
   echo "FAIL capture.sh error flood:"; cat "$CAP/flood.txt"; fail=1
 fi
+if bash "$HERE/../capture.sh" "$HERE/console-flood.html" "$CAP/cflood" >"$CAP/cflood.txt" 2>&1 \
+   && [ "$(grep -c '^page errors .*: unknown (console buffer full)$' "$CAP/cflood.txt")" = 4 ]; then
+  echo "ok   capture.sh: 1100 console errors -> exit 0, 'unknown (console buffer full)'"
+else
+  echo "FAIL capture.sh console flood:"; cat "$CAP/cflood.txt"; fail=1
+fi
 if bash "$HERE/../capture.sh" "$HERE/errors-on-scroll.html" "$CAP/scroll" >"$CAP/scroll.txt" 2>&1 \
    && grep -q '^page errors 1280 light: 0$' "$CAP/scroll.txt" \
    && grep -q '^page errors 1280 dark: 1 - Error: scroll-boom$' "$CAP/scroll.txt" \

@@ -10,7 +10,8 @@
 # and prints, per configuration, document scrollWidth vs innerWidth (the page must never be wider),
 # then one line "page errors <width> <theme>: <N>" or "page errors <width> <theme>: <N> - <first message>",
 # or "page errors <width> <theme>: unknown (error buffer full)" when agent-browser's 1000-entry error buffer
-# is full (later errors cannot be counted), or "page errors <width> <theme>: not checked (<reason>)".
+# is full (later errors cannot be counted), or "... unknown (console buffer full)" when its 1000-entry console
+# buffer (all levels share it) is full (older messages were evicted, so the error count would be too low), or "page errors <width> <theme>: not checked (<reason>)".
 # N counts uncaught JavaScript exceptions/script errors plus console messages of level error raised
 # by that configuration's load and scrolling (printed once its frames and figures are captured).
 # The line is informational: the exit code does not change. Needs jq.
@@ -58,12 +59,14 @@ pe_mark() { # records the buffer length; never fails. JSON goes through files, n
 page_errors() { # <width> <theme>; call after the configuration's scrolling and capture
   command -v jq >/dev/null 2>&1 || { echo "page errors $1 $2: not checked (jq not found)"; return 0; }
   [ -n "$PE_START" ] || { echo "page errors $1 $2: not checked (could not read the error buffer)"; return 0; }
-  local total n first
+  local total n m first
   ab errors --json >"$PE_TMP/pe.json" 2>/dev/null || { echo "page errors $1 $2: not checked (errors command failed)"; return 0; }
   ab console --json >"$PE_TMP/ce.json" 2>/dev/null || echo '{}' >"$PE_TMP/ce.json"
   ab console --clear >/dev/null 2>&1 || true
   total=$(jq -r '[.data.errors[]?] | length' "$PE_TMP/pe.json" 2>/dev/null) || { echo "page errors $1 $2: not checked (unreadable error list)"; return 0; }
   if [ "$total" -ge "$PE_CAP" ]; then echo "page errors $1 $2: unknown (error buffer full)"; return 0; fi
+  m=$(jq -r '[.data.messages[]?] | length' "$PE_TMP/ce.json" 2>/dev/null) || m=0
+  if [ "$m" -ge "$PE_CAP" ]; then echo "page errors $1 $2: unknown (console buffer full)"; return 0; fi
   # jq slurps the two files; a malformed console file only drops the console half
   jq -c '[.data.messages[]? | select(.type == "error") | .text]' "$PE_TMP/ce.json" >"$PE_TMP/ce.list.json" 2>/dev/null || echo '[]' >"$PE_TMP/ce.list.json"
   jq -c '[.data.errors[]?.text]' "$PE_TMP/pe.json" >"$PE_TMP/pe.list.json" 2>/dev/null || { echo "page errors $1 $2: not checked (unreadable error list)"; return 0; }
