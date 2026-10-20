@@ -177,7 +177,7 @@ Before reporting, run the self-critique loop of `${CLAUDE_SKILL_DIR}/../html-rep
 ```bash
 OUT="$OMT_DIR/reviews/.visual-check/round-1"
 bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh "$OMT_DIR/reviews/{slug}.html" "$OUT"
-bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh "$OMT_DIR/reviews/{slug}.html" > "$OUT/lint.json"
+bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh "$OMT_DIR/reviews/{slug}.html" --strict > "$OUT/lint.json"
 jq '.summary' "$OUT/lint.json"
 ```
 
