@@ -244,7 +244,7 @@ bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh REPORT.html --source SYN
 jq '.summary' "$OUT/lint.json"
 ```
 
-Later rounds use `round-2`, `round-3`, … and `$OUT` names the latest round. Look at every frame, fix REPORT.html (never the claims or citations it carries from REPORT.md), then follow `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` §14 to choose the next check (a new capture round after a layout, style, or SVG change or any edit that adds or lengthens text in a box; otherwise a lint-only rerun into the latest round directory) and to decide when to stop. The loop ends at 0 errors (`--strict` exits 2 while any error remains); a remaining warn is read and either fixed or written, with the reason it stays, to `warnings.md` in the latest round directory, `$OUT/warnings.md` (the final chat response stays the coverage table plus the REPORT.md path).
+Later rounds use `round-2`, `round-3`, … and `$OUT` names the latest round. Look at every frame, fix REPORT.html (never the claims or citations it carries from REPORT.md), then follow `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` §14 to choose the next check (a new round or a lint-only rerun) and to decide when to stop. The loop ends at 0 errors (`--strict` exits 2 while any error remains); a remaining warn is read and either fixed or written, with the reason it stays, to `warnings.md` in the latest round directory, `$OUT/warnings.md` (the final chat response stays the coverage table plus the REPORT.md path).
 
 There is no rendered-document (e.g. PDF) output. The ultraresearch content rules below (reader, required content, section order, evidence gates, output path) stay in force; html-report owns the visual and format rules. The render holds two floors:
 

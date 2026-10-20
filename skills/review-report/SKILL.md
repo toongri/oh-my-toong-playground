@@ -181,7 +181,7 @@ bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh "$OMT_DIR/reviews/{slug}
 jq '.summary' "$OUT/lint.json"
 ```
 
-Look at every frame, fix the body HTML (never the findings cards' verdicts), re-substitute and rewrite the file, then follow `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` §14 to choose the next check (a new capture round after a layout, style, or SVG change or any edit that adds or lengthens text in a box; otherwise a lint-only rerun into the latest round directory) and to decide when to stop. Walkthrough figures are the usual source of errors (`svg-text-overlap`, `svg-text-small`, `figure-scrolls`). Findings cards are not figures and keep their card format.
+Look at every frame, fix the body HTML (never the findings cards' verdicts), re-substitute and rewrite the file, then follow `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` §14 to choose the next check (a new round or a lint-only rerun) and to decide when to stop. Walkthrough figures are the usual source of errors (`svg-text-overlap`, `svg-text-small`, `figure-scrolls`). Findings cards are not figures and keep their card format.
 
 ### Step R5: Open and Print Terminal Pointer
 

@@ -336,7 +336,7 @@ The page itself stays renderer-owned; only this one slot is yours.
   big-picture frames in light and dark, and fix the `bigPictureSvg` until lint
   reports 0 errors for the figure. A finding outside the big picture (the rest of
   the page is renderer-owned) is a renderer limitation: note it, never fix it by
-  editing `qa-report.ts` during a cycle.
+  editing `qa-report.ts` during a cycle. The report's `<title>` carries qa's target name, which follows qa's own naming rule and is often longer than 6 words or contains " — ", so a `title-name` warning on the QA report is an expected renderer limitation to note, not to fix.
 
 ## 쓰기 전에 소개 (introduce before you use) — first-occurrence gloss
 The reader is a PO/designer with no prior context, so **every product/domain entity the report leans

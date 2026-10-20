@@ -143,7 +143,7 @@ html-report section 13.3. The resulting `author-first-person` lint warnings are 
 other lint warning is fixed or named in the report. Writing dates stay off the page.
 
 Self-critique loop (html-report section 14, mandatory): run capture and lint, look at every frame,
-fix, then follow html-report section 14 to choose the next check (a new round directory or a lint-only rerun into the latest round directory) until lint reports 0 errors and the frame checklist passes. The latest round directory holds the current receipt.
+fix, then follow html-report section 14 to choose the next check (a new round or a lint-only rerun) and to decide when to stop. Submit with the receipt from the latest round directory (`$OUT`). The latest round directory holds the current receipt.
 
 ```bash
 OUT=$OMT_DIR/deep-interview/{slug}.visual-check/round-1
