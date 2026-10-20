@@ -263,6 +263,16 @@ describe("정적 리뷰와 Test value 책임 경계 계약", () => {
 		expect(requirement).toContain("implements and/or tests it");
 	});
 
+	it("`requirement maps explicit decision rules like ACs in the mapping path`", () => {
+		const requirement = readFileSync(join(MEMBER_PROMPT_DIR, "requirement.md"), "utf-8");
+		const mappingPath = requirement.slice(requirement.indexOf("#### When acceptance criteria"));
+
+		expect(mappingPath).toMatch(/decision rules?/i);
+		expect(mappingPath).toMatch(/every branch/i);
+		expect(mappingPath).toContain("implements and/or tests it");
+		expect(requirement).toMatch(/Do NOT write new acceptance criteria or decision rules/);
+	});
+
 	it("`the dispatch fallback and configuration synchronize the static-only responsibility split`", () => {
 		const dispatchFallback = readFileSync(join(MEMBER_PROMPT_DIR, "default.md"), "utf-8");
 		const config = readFileSync(CODE_REVIEW_CONFIG, "utf-8");

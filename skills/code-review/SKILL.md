@@ -189,6 +189,8 @@ Sources to consult per input mode:
 | Branch comparison | Commit messages, branch name conventions, any linked tickets discovered in commits, related issues |
 | Auto-detect | Recent commit messages on HEAD, any linked tickets found there |
 
+- **Explicit decision rules** — when an intent source (plan, spec, issue, PR description) states explicit decision rules (for example plan ADR items `### D-N: <title>` with a `Decision` field, or rule sentences in an issue), copy them verbatim into `{REQUIREMENTS}` as a `Decision rules:` block alongside the acceptance criteria. These are rules the frozen intent source already states, not new acceptance criteria, so copying them is not the addition that scope-contract mode forbids; never paraphrase and never author a rule the source does not state.
+
 ### User interview — only for what artifacts cannot reveal
 
 After exhausting fetchable sources, ask the user about:

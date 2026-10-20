@@ -3544,6 +3544,70 @@ describe("serializeRequirements (internal helper, used by serialize-review-conte
 		const out = serializeRequirements(S);
 		expect(out).toBe("");
 	});
+
+	// A plan with `### D-N:` ADR items adds a Decision rules block: Decision field
+	// text for an item that has one, the body for an item without one. Code-block
+	// headings are ignored. The block stays out of ScopeContract.
+	test("플랜의 ADR 결정 규칙을 Decision rules 블록으로 덧붙인다", () => {
+		const planPath = join(tmpDir, "plan.md");
+		writeFileSync(
+			planPath,
+			[
+				"## ADR",
+				"",
+				"### D-5: Shapes live in schemas",
+				"**Tier: solo**",
+				"Decision: New `record-v2.ts` exports the shapes.",
+				"Why: shared contract.",
+				"",
+				"### D-6: Rule for payload-schema failure",
+				"**Tier: solo**",
+				'Decision (rule sentence, verbatim): "If any v2 row fails the schema, the document\'s v2 output is `null`:',
+				'no v2 row is written or invalidated."',
+				"Why: one bad document must not fail the sync.",
+				"",
+				"### D-7: Body only",
+				"Plain body without a decision field.",
+				"",
+				"```",
+				"### D-9: inside a code block",
+				"```",
+				"",
+			].join("\n"),
+		);
+		setGoalState(S, { phase: "planning", outcome: "ship it", plan_path: planPath });
+		const story: Story = {
+			id: "S1",
+			story: "ship the feature",
+			acceptance_criteria: ["ac1"],
+			verification_surface: "v",
+			status: "unconfirmed",
+		};
+		setStories(S, [story]);
+		confirmStory(S, "S1");
+
+		const out = serializeRequirements(S);
+		expect(out).toBe(
+			[
+				"[S1] ship the feature — AC: ac1 — verify: v",
+				"Decision rules:",
+				"[D-5] Shapes live in schemas — New `record-v2.ts` exports the shapes.",
+				'[D-6] Rule for payload-schema failure — "If any v2 row fails the schema, the document\'s v2 output is `null`: no v2 row is written or invalidated."',
+				"[D-7] Body only — Plain body without a decision field.",
+				"",
+			].join("\n"),
+		);
+		expect(JSON.parse(runCli("serialize-review-context")).project_context).not.toContain("D-6");
+	});
+
+	test("플랜 파일이 없으면 블록 없이 오류도 내지 않는다", () => {
+		setGoalState(S, {
+			phase: "planning",
+			outcome: "ship it",
+			plan_path: join(tmpDir, "missing-plan.md"),
+		});
+		expect(serializeRequirements(S)).toBe("[outcome] ship it — AC: ship it — verify: ship it\n");
+	});
 });
 
 // ---------------------------------------------------------------------------

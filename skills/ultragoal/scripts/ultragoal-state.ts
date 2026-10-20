@@ -77,6 +77,7 @@ import {
 	ensureSeed,
 } from "@lib/state-core";
 import { renderHelp, type CliCommand } from "@lib/cli-help";
+import { linesOutsideBlocks } from "@lib/markdown-blocks";
 import { deliverableRefusalBody } from "@lib/deliverable-refusal";
 import {
 	acquireDevice,
@@ -2422,6 +2423,55 @@ export function requestComplete(sessionId: string, codexGoalArg?: string): boole
 	});
 }
 
+const ADR_HEADING = /^### (D-\d+):[ \t]*(.*?)[ \t]*$/;
+const ANY_HEADING = /^#{1,6}[ \t]/;
+const DECISION_FIELD = /^Decision(?:[ \t]*\([^)]*\))?:[ \t]*(.*)$/;
+const FIELD_LABEL = /^[A-Z][A-Za-z -]*(?:[ \t]*\([^)]*\))?:/;
+
+/**
+ * Explicit decision rules of the plan at `planPath`: one `[D-N] <title> — <text>`
+ * line per `### D-<n>: <title>` ADR item, under a `Decision rules:` header, with
+ * a trailing newline. <text> is the item's `Decision` field (its first line plus
+ * continuation lines up to a blank line or the next field label, joined by single
+ * spaces); an item with no `Decision` field contributes its whole body up to the
+ * next heading. Headings inside code blocks and comments are ignored. Returns ""
+ * for a missing/unreadable plan or a plan without ADR items — the plan is an
+ * optional enrichment, so no error. Rules ride in the requirements slot only,
+ * never in ScopeContract, so scope_contract_sha256 is unaffected.
+ */
+function planDecisionRules(planPath: string): string {
+	if (planPath.trim() === "") return "";
+	let text: string;
+	try {
+		text = readFileSync(planPath, "utf-8");
+	} catch {
+		return "";
+	}
+	const lines = linesOutsideBlocks(text, ["code", "comment"]);
+	const entries: string[] = [];
+	for (let i = 0; i < lines.length; i++) {
+		const heading = ADR_HEADING.exec(lines[i]);
+		if (heading === null) continue;
+		let end = i + 1;
+		while (end < lines.length && !ANY_HEADING.test(lines[end])) end++;
+		const body = lines.slice(i + 1, end);
+		const start = body.findIndex((l) => DECISION_FIELD.test(l));
+		let decision: string[];
+		if (start === -1) {
+			decision = body;
+		} else {
+			decision = [DECISION_FIELD.exec(body[start])![1]];
+			for (let k = start + 1; k < body.length; k++) {
+				if (body[k].trim() === "" || body[k].trim() === "---" || FIELD_LABEL.test(body[k])) break;
+				decision.push(body[k]);
+			}
+		}
+		const rule = decision.map((l) => l.trim()).filter((l) => l !== "").join(" ");
+		entries.push(`[${heading[1]}] ${heading[2]} — ${rule}`);
+	}
+	return entries.length > 0 ? `Decision rules:\n${entries.join("\n")}\n` : "";
+}
+
 /**
  * Formats all confirmed stories as a requirements block:
  * one line per story — `[id] story — AC: a1; a2 — verify: surface` — with a
@@ -2433,24 +2483,27 @@ export function requestComplete(sessionId: string, codexGoalArg?: string): boole
  * requirement finder, which then falls back to inferring intent from the
  * diff/commits/tests instead of mapping against acceptance criteria).
  * An empty outcome has nothing to fall back to, so it still returns "".
+ * When the plan file (state.plan_path) carries ADR decision rules, a
+ * `Decision rules:` block follows (see planDecisionRules).
  * Feeds the code-review lane's `{REQUIREMENTS}` input (Hop B).
  */
 export function serializeRequirements(sessionId: string): string {
 	const state = readGoalState(sessionId);
 	const stories: Story[] = state?.stories ?? [];
 	const confirmed = stories.filter((s) => s.status === "confirmed");
+	const rules = planDecisionRules(state?.plan_path ?? "");
 	if (confirmed.length === 0) {
 		const outcome = state?.outcome ?? "";
 		if (outcome.trim() === "") return "";
 		const surface = state?.verification_surface ?? "";
 		const criterion = surface.trim() !== "" ? surface : outcome;
-		return `[outcome] ${outcome} — AC: ${criterion} — verify: ${criterion}\n`;
+		return `[outcome] ${outcome} — AC: ${criterion} — verify: ${criterion}\n${rules}`;
 	}
 	const lines = confirmed.map(
 		(s) =>
 			`[${s.id}] ${s.story} — AC: ${s.acceptance_criteria.join("; ")} — verify: ${s.verification_surface}`,
 	);
-	return lines.join("\n") + "\n";
+	return lines.join("\n") + "\n" + rules;
 }
 
 /**
