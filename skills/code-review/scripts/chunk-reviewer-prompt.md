@@ -52,7 +52,7 @@ This describes what kind of software is being reviewed. Finders must factor this
 
 {NON_GOAL}
 
-Each declared non-goal has the form `- {what this change deliberately does not do} | decider: {how to recognize a candidate finding that falls inside this non-goal}`. Finders must not generate a candidate finding whose failure scenario is fully explained by a declared non-goal — this is suppression at generation time, not a filter applied after generating the candidate.
+Each declared non-goal has the form `- {what this change deliberately does not do} | decider: {how to recognize a candidate finding that falls inside this non-goal}`. Finders do not drop a candidate because of a non-goal. File it, and in its summary note the `non_goals#N` (or the quoted non-goal statement) it may fall under. The reviewer decides scope.
 <!-- /section:non_goal -->
 
 ## Diff Coverage Protocol

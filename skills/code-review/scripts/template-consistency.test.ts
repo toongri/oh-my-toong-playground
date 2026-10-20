@@ -337,6 +337,19 @@ describe("finder prompts use the diff cursor and state only their own lens", () 
 		}
 	});
 
+	it("angle prompts start from their angle but let the finder file any real defect", () => {
+		for (const m of ["correctness", "regression", "cleanup", "requirement"]) {
+			expect(prompts[m], `${m}.md`).toContain("file any real defect you meet, whatever its class");
+			expect(prompts[m], `${m}.md`).not.toMatch(/single lens|assigned angle|through this angle/i);
+		}
+	});
+
+	it("the template tells finders to file non-goal candidates and note the non-goal, not suppress them", () => {
+		expect(template).toContain("`non_goals#N`");
+		expect(template).toContain("The reviewer decides scope.");
+		expect(template).not.toMatch(/suppression at generation time/i);
+	});
+
 	it("every angle prompt points at the protocol and permits only ledger writes through the cursor", () => {
 		for (const [name, content] of Object.entries(prompts)) {
 			expect(content, `${name}.md`).toContain("## Diff Coverage Protocol");
