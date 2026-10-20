@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lint regression html palette</title>
+<style>
+/* theme-state-mismatch must NOT fire: the palette sits on html, the body is transparent */
+:root { --ink: #1a1a1a; color-scheme: light; }
+html { background: #ffffff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink: #eeeeee; color-scheme: dark; } html:not([data-theme="light"]) { background: #111111; } }
+:root[data-theme="dark"] { --ink: #eeeeee; color-scheme: dark; }
+html[data-theme="dark"] { background: #111111; }
+body { margin: 0; color: var(--ink); font: 16px/1.6 system-ui, sans-serif; padding: 24px 16px; }
+</style>
+</head>
+<body>
+<p>Palette on html, transparent body.</p>
+</body>
+</html>

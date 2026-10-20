@@ -87,7 +87,12 @@ run 1280 light "$CHECKS_MAIN" "$TMP/source.json"
 run 1280 dark  '["contrast","theme"]'
 run 400  light '["overflow","svgsize","clip"]'
 
-jq -s --arg file "$ABS" --arg state "$STATE" '{
+# body-bg-transparent is checked in both theme runs; an identical finding in a later run is dropped from findings and totals
+DEDUPE='. as $r | [range(0; length)] | map(. as $i | $r[$i] | ([$r[0:$i][].findings[] | select(.check == "body-bg-transparent") | [.where, .detail]]) as $seen
+  | ([.findings[] | select(.check == "body-bg-transparent" and ([.where, .detail] | IN($seen[])))] | length) as $dup
+  | if $dup == 0 then . else .findings |= map(select(.check != "body-bg-transparent" or ([.where, .detail] | IN($seen[]) | not))) | .totals["body-bg-transparent"].warn -= $dup end)'
+jq -s "$DEDUPE" "$TMP/run-1280-light.json" "$TMP/run-1280-dark.json" "$TMP/run-400-light.json" > "$TMP/runs.json"
+jq --arg file "$ABS" --arg state "$STATE" '{
   file: $file,
   state: (if $state == "" then null else $state end),
   runs: map({viewport, theme, scrollWidth, innerWidth, pageOverflow: (.scrollWidth > .innerWidth)}),
@@ -100,7 +105,7 @@ jq -s --arg file "$ABS" --arg state "$STATE" '{
     byRun:    (map({key: "\(.viewport) \(.theme)", value: ([.totals[] | (.error // 0) + (.warn // 0)] | add // 0)}) | from_entries)
   },
   findings: [.[].findings[]]
-}' "$TMP/run-1280-light.json" "$TMP/run-1280-dark.json" "$TMP/run-400-light.json" > "$TMP/out.json"
+}' "$TMP/runs.json" > "$TMP/out.json"
 
 cat "$TMP/out.json"
 

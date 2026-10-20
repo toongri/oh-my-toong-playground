@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lint regression token</title>
+<style>
+/* theme-token-scope must fire: --accent is defined only inside a width media query and the dark blocks, so a 400px page has no value for it */
+:root { --bg: #ffffff; --ink: #1a1a1a; color-scheme: light; }
+@media (min-width: 700px) { :root { --accent: #2255aa; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #111111; --ink: #eeeeee; --accent: #88aaff; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #111111; --ink: #eeeeee; --accent: #88aaff; color-scheme: dark; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, sans-serif; padding: 24px 16px; }
+a { color: var(--accent); }
+</style>
+</head>
+<body>
+<p>A token defined only in a min-width media query. <a href="#x">link</a></p>
+</body>
+</html>

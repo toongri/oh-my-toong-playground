@@ -6,8 +6,8 @@
 <title>Lint clean fixture</title>
 <style>
 :root, :root[data-theme="light"] { --bg: #ffffff; --surface: #ffffff; --ink: #1a1a1a; --ink-2: #444444; --line: #888888; color-scheme: light; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #111111; --surface: #1c1c1c; --ink: #eeeeee; --ink-2: #bbbbbb; --line: #777777; color-scheme: dark; } }
-:root[data-theme="dark"] { --bg: #111111; --surface: #1c1c1c; --ink: #eeeeee; --ink-2: #bbbbbb; --line: #777777; color-scheme: dark; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #111111; --surface: #1c1c1c; --ink: #eeeeee; --ink-2: #bbbbbb; --line: #777777; --tint: #88aaff; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #111111; --surface: #1c1c1c; --ink: #eeeeee; --ink-2: #bbbbbb; --line: #777777; --tint: #88aaff; color-scheme: dark; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, sans-serif; padding: 24px 16px; word-break: keep-all; }
 svg { display: block; width: 100%; max-width: 520px; height: auto; }
 svg text { font-size: 13px; fill: var(--ink); }
@@ -15,6 +15,7 @@ svg .nd { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
 svg .ed { fill: none; stroke: var(--ink-2); stroke-width: 2; }
 svg .mk { fill: var(--ink-2); }
 svg .life { stroke: var(--line); stroke-dasharray: 3 3; fill: none; }
+html { --tint: #2255aa; }
 </style>
 </head>
 <body>
@@ -46,6 +47,13 @@ svg .life { stroke: var(--line); stroke-dasharray: 3 3; fill: none; }
     <rect class="nd" x="12" y="10" width="316" height="40" mask="url(#c-mask)"/>
   </svg>
   <figcaption>그림 3. 마스크는 리터럴 흰색을 쓸 수 있다.</figcaption>
+</figure>
+<figure>
+  <svg viewBox="0 0 340 60" role="img" aria-label="클립 경로로 잘린 막대.">
+    <defs><clipPath id="c-clip"><rect x="0" y="0" width="200" height="60" fill="#000000"/></clipPath></defs>
+    <rect class="nd" x="12" y="10" width="316" height="40" clip-path="url(#c-clip)"/>
+  </svg>
+  <figcaption>그림 4. 클립 경로는 리터럴 색을 써도 된다.</figcaption>
 </figure>
 </body>
 </html>

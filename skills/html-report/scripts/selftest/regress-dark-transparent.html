@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lint regression dark bg</title>
+<style>
+/* body-bg-transparent must fire exactly once: opaque in light, transparent in dark */
+:root { --ink: #1a1a1a; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink: #eeeeee; color-scheme: dark; } }
+:root[data-theme="dark"] { --ink: #eeeeee; color-scheme: dark; }
+body { margin: 0; background: #ffffff; color: var(--ink); font: 16px/1.6 system-ui, sans-serif; padding: 24px 16px; }
+@media (prefers-color-scheme: dark) { body { background: transparent; } }
+</style>
+</head>
+<body>
+<p>Opaque body in light, transparent body in dark.</p>
+</body>
+</html>

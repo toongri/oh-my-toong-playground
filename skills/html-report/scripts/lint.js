@@ -543,8 +543,8 @@ async function __hrLint(opts) {
         for (const rule of rules) {
           if (rule instanceof CSSStyleRule) {
             const themed = themedCtx || rule.selectorText.includes("[data-theme");
-            // base block: any rule outside a prefers-color-scheme block whose selector list has a bare :root or html
-            const isBase = !themedCtx && splitSelectors(rule.selectorText).some((s) => s === ":root" || s === "html");
+            // base block: any rule outside every @media block whose selector list has a bare :root or html
+            const isBase = !themedCtx && !inMedia && splitSelectors(rule.selectorText).some((s) => s === ":root" || s === "html");
             const rootExact = !inMedia && rule.selectorText.trim() === ":root";
             for (let i = 0; i < rule.style.length; i++) {
               const prop = rule.style[i];
@@ -570,11 +570,11 @@ async function __hrLint(opts) {
       if (themedOnly.length) add("theme-token-scope", "warn", document.documentElement, `${themedOnly.length} token(s) defined only inside a theme block: ${themedOnly.slice(0, 5).join(", ")}; define it on bare :root first`);
       if (hardCoded.length) add("theme-token-scope", "warn", document.documentElement, `${hardCoded.length} rule(s) hold a literal colour instead of var(--token): ${hardCoded.slice(0, 5).join("; ")}; it will not follow the light/dark theme`);
     }
-    const bodyBg = () => getComputedStyle(document.body).backgroundColor;
-    if (theme === "light") { // reported once per page; the dark run would repeat it
-      const opaque = (c) => { const p = parse(c); return !!p && p.a > 0; };
-      if (!opaque(bodyBg()) && !opaque(getComputedStyle(document.documentElement).backgroundColor)) add("body-bg-transparent", "warn", document.body, "<body> and <html> backgrounds are both transparent; the page shows the browser canvas colour, not its own palette");
-    }
+    const opaque = (c) => { const p = parse(c); return !!p && p.a > 0; };
+    // effective page background: <body>'s when opaque, else <html>'s (html paints the canvas)
+    const pageBg = () => { const b = getComputedStyle(document.body).backgroundColor; return opaque(b) ? b : getComputedStyle(document.documentElement).backgroundColor; };
+    // runs in every theme run (a page can be transparent in one theme only); lint.sh merges identical findings of the two runs into one
+    if (!opaque(pageBg())) add("body-bg-transparent", "warn", document.body, "<body> and <html> backgrounds are both transparent; the page shows the browser canvas colour, not its own palette");
     const twoTheme = (rules) => Array.from(rules).some((r) => (r instanceof CSSMediaRule && r.conditionText.includes("prefers-color-scheme: dark")) || (r.cssRules && twoTheme(r.cssRules)));
     let two = false;
     for (const sheet of document.styleSheets) {
@@ -588,9 +588,9 @@ async function __hrLint(opts) {
       document.head.appendChild(noTransition);
       try {
         const forced = theme === "dark" ? "light" : "dark";
-        const before = bodyBg();
+        const before = pageBg();
         root.setAttribute("data-theme", forced);
-        const after = bodyBg();
+        const after = pageBg();
         if (before === after) add("theme-state-mismatch", "warn", root, forced === "dark"
           ? "explicit dark choice ([data-theme=dark]) does not switch the palette; add a :root[data-theme=\"dark\"] block with the dark token values"
           : "explicit light choice ([data-theme=light]) is ignored under a dark OS; guard the dark media block with :root:not([data-theme=\"light\"])");
