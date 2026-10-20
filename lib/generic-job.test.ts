@@ -6270,15 +6270,15 @@ describe("collect 데드라인 — coverage-gated 잡", () => {
 	const cases: [string, CollectBudgetMeta, number, CollectBudget][] = [
 		[
 			"최근 진행이 있으면 생성 시각 기준 데드라인이 지나도 계속 폴한다",
-			{ coverageGated: true, lastProgressAt: at(1740) },
-			at(1800),
-			{ nextAction: "poll_again", elapsedSec: 1800, deadlineSec: 2340 },
+			{ coverageGated: true, lastProgressAt: at(1700) },
+			at(1750),
+			{ nextAction: "poll_again", elapsedSec: 1750, deadlineSec: 2300 },
 		],
 		[
 			"마지막 진행 뒤 한 턴 타임아웃이 지나면 stop_and_degrade",
-			{ coverageGated: true, lastProgressAt: at(1200) },
-			at(1800),
-			{ nextAction: "stop_and_degrade", elapsedSec: 1800, deadlineSec: 1800 },
+			{ coverageGated: true, lastProgressAt: at(1150) },
+			at(1750),
+			{ nextAction: "stop_and_degrade", elapsedSec: 1750, deadlineSec: 1750 },
 		],
 		[
 			"진행이 계속돼도 job 생성부터 상한이 지나면 stop_and_degrade",
@@ -6294,9 +6294,9 @@ describe("collect 데드라인 — coverage-gated 잡", () => {
 		],
 		[
 			"coverage-gated가 아니면 진행 시각을 무시하고 생성 시각 + 타임아웃으로 자른다",
-			{ coverageGated: false, lastProgressAt: at(1740) },
-			at(1800),
-			{ nextAction: "stop_and_degrade", elapsedSec: 1800, deadlineSec: 600 },
+			{ coverageGated: false, lastProgressAt: at(1700) },
+			at(1750),
+			{ nextAction: "stop_and_degrade", elapsedSec: 1750, deadlineSec: 600 },
 		],
 		[
 			"coverage-gated가 아니면 상한도 없다",
