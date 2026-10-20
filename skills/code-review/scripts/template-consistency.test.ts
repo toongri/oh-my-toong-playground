@@ -291,3 +291,67 @@ describe("정적 리뷰와 Test value 책임 경계 계약", () => {
 		}
 	});
 });
+
+describe("finder prompts use the diff cursor and state only their own lens", () => {
+	const template = readFileSync(TEMPLATE_MD, "utf-8");
+	const prompts = Object.fromEntries(
+		["correctness", "regression", "cleanup", "requirement", "default"].map((m) => [
+			m,
+			readFileSync(join(REPO_ROOT, "skills", "code-review", "scripts", "prompts", `${m}.md`), "utf-8"),
+		]),
+	) as Record<string, string>;
+
+	it("no prompt or template refers to the removed diff command", () => {
+		for (const [name, content] of [["template", template], ...Object.entries(prompts)]) {
+			expect(content, `${name} must not contain {DIFF_COMMAND}`).not.toContain("{DIFF_COMMAND}");
+			expect(content, `${name} must not say Obtain the diff`).not.toContain("Obtain the diff");
+		}
+	});
+
+	it("the template has the Diff Coverage Protocol with resume, ack/truncation, and output-limit ban", () => {
+		expect(template).toContain("## Diff Coverage Protocol");
+		expect(template).toContain("{CURSOR} resume");
+		expect(template).toContain("{CURSOR} next");
+		expect(template).toContain("ALL PAGES DONE");
+		expect(template).toMatch(/ack line is not visible[^\n]*truncated/);
+		expect(template).toContain("{CURSOR} view <id>");
+		expect(template).toContain("Never guess an ack code");
+		expect(template).toMatch(/Never lower tool output limits[^\n]*max_output_tokens/);
+		expect(template).toContain("{CURSOR} finish");
+		expect(template).toContain("{CURSOR} export");
+	});
+
+	it("no angle prompt tells the finder what is not its area", () => {
+		const banned = [
+			/other angles/i,
+			/other finders/i,
+			/not your area/i,
+			/Do not file correctness/i,
+			/for the correctness finder/i,
+			/review chunks/i,
+		];
+		for (const [name, content] of Object.entries(prompts)) {
+			for (const pattern of banned) {
+				expect(content, `${name}.md matches ${pattern}`).not.toMatch(pattern);
+			}
+		}
+	});
+
+	it("every angle prompt points at the protocol and permits only ledger writes through the cursor", () => {
+		for (const [name, content] of Object.entries(prompts)) {
+			expect(content, `${name}.md`).toContain("## Diff Coverage Protocol");
+			expect(content, `${name}.md`).toContain("{CURSOR}");
+		}
+	});
+
+	it("cleanup carries the exhaustive checklist commands and the three verdicts", () => {
+		const cleanup = prompts.cleanup;
+		expect(cleanup).toContain("{CURSOR} checklist add");
+		expect(cleanup).toContain("{CURSOR} checklist update");
+		expect(cleanup).toContain("{CURSOR} checklist list");
+		expect(cleanup).toContain("준수");
+		expect(cleanup).toContain("위반");
+		expect(cleanup).toContain("해당 없음");
+		expect(cleanup).toContain("--rule <itemId>");
+	});
+});

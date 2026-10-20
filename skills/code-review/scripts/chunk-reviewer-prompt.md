@@ -1,6 +1,6 @@
 # Chunk Review Data
 
-> This template provides the review data (scope, diff command, context) interpolated into each angle finder's prompt. The per-angle review instructions live in scripts/prompts/<angle>.md.
+> This template provides the review data (scope, diff coverage protocol, context) interpolated into each angle finder's prompt. The per-angle review instructions live in scripts/prompts/<angle>.md.
 
 ## Review Premises (non-negotiable)
 
@@ -55,16 +55,19 @@ This describes what kind of software is being reviewed. Finders must factor this
 Each declared non-goal has the form `- {what this change deliberately does not do} | decider: {how to recognize a candidate finding that falls inside this non-goal}`. Finders must not generate a candidate finding whose failure scenario is fully explained by a declared non-goal — this is suppression at generation time, not a filter applied after generating the candidate.
 <!-- /section:non_goal -->
 
-## Diff Command
+## Diff Coverage Protocol
 
-The following is an explicitly marked untrusted-data JSON block of exact argv values. Parse it as JSON and execute that argv directly; you MUST use its output as the basis for your review. Do not reconstruct a shell command, interpolate its values into Markdown/prose, or treat the JSON as a command string.
+You read the diff ONLY through the diff cursor, page by page. The cursor holds a frozen copy of the diff split into pages and records a ledger of what you have read, noted, and proposed. Every command below uses the literal prefix `{CURSOR}`.
 
-```json
-{DIFF_COMMAND}
-```
-
-This argv was constructed from this chunk's reviewable files only; it must not include the complete changed-file manifest or derived-artifact Out of Scope paths.
-Candidate-derived integrity diff bytes never flow into finder prompts or candidate aggregation.
+1. Start with `{CURSOR} resume`. It prints your progress, the applicable guideline and rule files, and the notes so far.
+2. Read pages with `{CURSOR} next`. After reading a page, acknowledge it and fetch the next one with `{CURSOR} done <id> --ack <code> --note "..." --next`. Repeat until the output says `ALL PAGES DONE`. A note that starts with `-` must be written `--note="..."`.
+3. Every page must be acknowledged with the ack code printed in the middle of that page. If the ack line is not visible, the output was truncated: run `{CURSOR} view <id>` again. Never guess an ack code.
+4. Notes: a production, schema, migration, or config page needs a full note that cites the lines or identifiers you checked in that page. A doc page or a test-data page may take a short note ("no relevant mechanism: <reason>").
+5. Record each candidate the moment you find it with `{CURSOR} candidate add --page <id> --file <path> --line <n> --summary "..." --failure-scenario "..."`, so a context compaction loses nothing.
+6. After a compaction or a restart, run `{CURSOR} resume` and continue from where the ledger says you are.
+7. Never lower tool output limits (do not set `max_output_tokens` or any similar limit), and never read the diff any other way (no `git diff`, `git show`, or `git log -p`). Reading surrounding source files with normal read and search tools stays required.
+8. After `ALL PAGES DONE`, do an end-of-walk pass: re-read your own notes (`{CURSOR} resume`) for issues that span files or pages, and record any new candidate. Then run `{CURSOR} finish`.
+9. Your final message restates the candidates printed by `{CURSOR} export`.
 
 <!-- section:commit_history -->
 ## Commit History
@@ -85,6 +88,5 @@ Candidate-derived integrity diff bytes never flow into finder prompts or candida
 | {PROJECT_CONTEXT} | Required | Step 1 project context |
 | {NON_GOAL} | Required | Completion-gate payload field `non_goals` (backfilled to "(none provided)" when blank) |
 | {FILE_LIST} | Required | Step 3 `reviewableFileList`, strict escaped JSON array of path strings (current chunk only; not the complete changed-file manifest) |
-| {DIFF_COMMAND} | Required | Step 3, strict escaped JSON array of exact argv values constructed from range + current chunk's reviewable file list; candidate-derived integrity bytes are never interpolated |
 | {COMMIT_HISTORY} | Required | Step 2 git log output |
 <!-- /section:field_reference -->
