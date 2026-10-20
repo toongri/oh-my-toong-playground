@@ -107,7 +107,8 @@ and the resulting visible state; a persistence claim needs the relevant value
 before/after reopening. A still image of the form cannot establish either.
 Do not add outcomes in presentation prose that are absent from the claim review.
 Open the final HTML: every claimed result must remain legible in its embedded
-capture. If not, repair the presentation/capture and repeat the review.
+capture. If not, repair the presentation/capture, render again and check the
+card again; a capture whose bytes changed needs a new `review-evidence`.
 The renderer records a receipt for the generated HTML. After checking the
 final HTML, run `qa-state.ts review-report --path <html>` before `complete`.
 Changing the HTML or recorded facts requires re-rendering and another check.

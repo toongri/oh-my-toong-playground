@@ -1524,7 +1524,7 @@ export function completeQa(sessionId: string): void {
 		if (uncovered.length) {
 			throw new Error(`complete: refused — ${uncovered.length} H scenario(s) passed by driving the boundary but have no saved case or reason. Save each as a reusable case (qa-cases.ts save), replay it (qa-replay.ts), then link it; if it cannot be a case, record why:\n${uncovered.map((scenario) => `  record-case --story ${scenario.story} --scenario ${scenario.id} (--case <id> | --none "<reason>")`).join("\n")}`);
 		}
-		if (!qaReportComplete(prior, stateProbe)) throw new Error("complete: report missing, changed, or not visually reviewed; render qa-report then review-report --path <html>");
+		if (!qaReportComplete(prior, stateProbe)) throw new Error("complete: report missing, changed, or not checked against the record; render qa-report then review-report --path <html>");
 		const verdict = prior.verdict;
 		const canComplete =
 			(verdict === "APPROVE" && approveOk(prior, stateProbe)) ||

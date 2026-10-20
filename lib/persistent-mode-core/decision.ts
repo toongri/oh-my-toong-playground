@@ -302,10 +302,10 @@ function buildQaContinuationMessage(
 			}
 			: !qaReportComplete(state, probe)
 				? {
-					deliverable: "inspected QA HTML report",
-					problem: "qaReportComplete=false — the QA report is missing, changed, or not visually reviewed",
-					guideline: "presentation.md (QA report render and inspection)",
-					produce: "render the qa-report HTML and visually inspect it",
+					deliverable: "QA HTML report checked against the record",
+					problem: "qaReportComplete=false — the QA report is missing, changed, or not checked against the record",
+					guideline: "presentation.md (QA report render and record check)",
+					produce: "render the qa-report HTML and check that each card carries its recorded images and observation",
 					submit: "qa-state.ts review-report --path <html>",
 				}
 			: verdict === "APPROVE"
