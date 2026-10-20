@@ -43,6 +43,7 @@ import {
 	claimReviewDispatch,
 	approveReviewDispatchRenewal,
 	renderOverrideSummary,
+	validateReviewArtifact,
 	type Story,
 } from "./ultragoal-state.ts";
 
@@ -4586,5 +4587,113 @@ describe("help subcommand", () => {
 		const r = runCliCaptured("help", { OMT_SESSION_ID: "", CODEX_THREAD_ID: "" });
 		expect(r.status).toBe(0);
 		expect(r.stdout).toContain("ultragoal-state commands:");
+	});
+});
+
+describe("non_goal exclusion quote matching", () => {
+	const SID = "quote-session";
+
+	/** Returns the non_goal quote problem for a rationale against a non_goals slot, or null when the quote is accepted. */
+	function quoteProblem(nonGoals: string, rationale: string): string[] {
+		writeFileSync(
+			resolveStatePath(SID),
+			JSON.stringify({
+				active: true, phase: "pursuing", iteration: 0, max_iterations: 10,
+				started_at: "2026-01-01T00:00:00", last_touched_at: "2026-01-01T00:00:00",
+				outcome: "ship", verification_surface: "tests", constraints: "none",
+				boundaries: "src", non_goals: nonGoals, blocked_stop: "never", plan_path: "",
+				resume_summary: "", budget_limit_notified: false, blocked_reason: "",
+				completion_evidence_paths: [], objective_verdict: "APPROVE",
+				schema_version: 1, stories: [],
+			}),
+			"utf8",
+		);
+		const state = JSON.parse(readFileSync(resolveStatePath(SID), "utf8"));
+		const artifact = {
+			status: "COMPLETE",
+			scope_contract_sha256: scopeContractSha256(state),
+			findings: [
+				{
+					class: "cleanup", verdict: "CONFIRMED", impact: "LOW", priority: "LOW",
+					assessment: { unfixed_cost: "c", exposure: "e", remedy: "r", added_cost: "a", rationale: "why" },
+					scope: "OUT_OF_SCOPE",
+					scope_evidence: { basis: "non_goal", reference: "non_goals", rationale },
+					ref: "a.ts:1",
+				},
+			],
+			reviewer: "reviewer",
+			at: "2026-01-01T00:00:00",
+		};
+		writeFileSync(join(tmpDir, `ultragoal-codereview-${SID}.json`), JSON.stringify(artifact), "utf8");
+		return validateReviewArtifact(SID).problems;
+	}
+
+	test("verbatim quote is accepted", () => {
+		expect(quoteProblem("- redesign the login screen | decider: x", 'excluded: "redesign the login screen"')).toEqual([]);
+	});
+
+	test("matching ignores case", () => {
+		expect(quoteProblem("- Redesign The Login Screen | decider: x", "excluded: REDESIGN the LOGIN screen")).toEqual([]);
+	});
+
+	test("matching maps typographic quotes to ASCII", () => {
+		expect(quoteProblem("- do not rename the \"legacy\" flag | decider: x", "excluded: do not rename the “legacy” flag")).toEqual([]);
+		expect(quoteProblem("- keep the user’s locale | decider: x", "excluded: keep the user's locale")).toEqual([]);
+	});
+
+	test("matching strips markdown emphasis and backticks on either side", () => {
+		expect(quoteProblem("- no change to `retry.ts` backoff | decider: x", "excluded: no change to **retry.ts** backoff")).toEqual([]);
+		expect(quoteProblem("- **no** change to retry backoff | decider: x", "excluded: no change to `retry` backoff")).toEqual([]);
+	});
+
+	test("matching ignores trailing punctuation of the statement", () => {
+		expect(quoteProblem("- no change to retry backoff. | decider: x", "excluded: no change to retry backoff")).toEqual([]);
+	});
+
+	test("an unrelated rationale is still rejected", () => {
+		expect(quoteProblem("- redesign the login screen | decider: x", "the plan is silent about this")).toHaveLength(1);
+	});
+
+	test("a too-short statement is not quotable", () => {
+		expect(quoteProblem("- none | decider: x", "there is none of this in scope")).toHaveLength(1);
+		expect(quoteProblem("- n/a | decider: x", "n/a")).toHaveLength(1);
+	});
+
+	test("a rationale quoting only the too-short statement does not count when a long one exists", () => {
+		const nonGoals = "- none | decider: x\n- redesign the login screen | decider: y";
+		expect(quoteProblem(nonGoals, "none of the listed items apply")).toHaveLength(1);
+		expect(quoteProblem(nonGoals, "excluded: redesign the login screen")).toEqual([]);
+	});
+
+	test("the minimum is 8 normalized characters", () => {
+		expect(quoteProblem("- skip ui | decider: x", "skip ui")).toHaveLength(1); // 7
+		expect(quoteProblem("- no ui work | decider: x", "no ui work")).toEqual([]); // 10
+		expect(quoteProblem("- skip uis. | decider: x", "skip uis")).toEqual([]); // 8 after trimming "."
+	});
+});
+
+describe("plan decision rules keep continuation lines that look like labels", () => {
+	test("only known plan field labels end the Decision field", () => {
+		const planPath = join(tmpDir, "plan-labels.md");
+		writeFileSync(
+			planPath,
+			[
+				"## ADR",
+				"",
+				"### D-1: Scoped rule",
+				"**Tier: solo**",
+				"Decision: Retry is capped at three attempts.",
+				"Applies when: the upstream returns 503.",
+				"Note: the cap is per request.",
+				"Why: bounded latency.",
+				"",
+			].join("\n"),
+		);
+		setGoalState(S, { phase: "planning", outcome: "ship it", plan_path: planPath });
+		setStories(S, [{ id: "S1", story: "s", acceptance_criteria: ["ac1"], verification_surface: "v", status: "unconfirmed" }]);
+		confirmStory(S, "S1");
+		expect(serializeRequirements(S)).toContain(
+			"[D-1] Scoped rule — Retry is capped at three attempts. Applies when: the upstream returns 503. Note: the cap is per request.\n",
+		);
 	});
 });

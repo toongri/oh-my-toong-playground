@@ -1819,6 +1819,24 @@ function collapseWhitespace(text: string): string {
 	return text.replace(/\s+/g, " ").trim();
 }
 
+/** A non_goals statement shorter than this (after normalization) is too generic to count as a quote: "none", "n/a", "tbd" would match almost any rationale. */
+const MIN_QUOTABLE_STATEMENT_CHARS = 8;
+
+/**
+ * Comparison form of a quote: typographic quotes mapped to ASCII, markdown
+ * emphasis (`*`, `__`) and backticks removed, whitespace collapsed, lowercased,
+ * trailing punctuation trimmed. Applied to both the statement and the rationale.
+ */
+function normalizeQuote(text: string): string {
+	return collapseWhitespace(
+		text
+			.replace(/[\u2018\u2019]/g, "'")
+			.replace(/[\u201C\u201D]/g, '"')
+			.replace(/[`*]|__/g, "")
+			.toLowerCase(),
+	).replace(/[\s.,;:!?]+$/, "");
+}
+
 /**
  * Returns null when the finding's scope evidence validates against the current
  * contract, or an actionable message (naming the offending value and the allowed
@@ -1873,10 +1891,12 @@ function scopeEvidenceReferenceProblem(
 			// An exclusion must be an explicit statement, quoted, not a stretched requirement:
 			// the rationale carries one non_goals statement verbatim (whitespace-insensitive).
 			// Whether that statement directly addresses the defect stays the reviewer's call.
-			const statements = nonGoalStatements(slotValue);
-			const rationale = collapseWhitespace(finding.scope_evidence.rationale);
-			if (!statements.some((statement) => rationale.includes(statement)))
-				return `OUT_OF_SCOPE + non_goal rationale must quote verbatim the non_goals statement that excludes this defect (one of: ${statements.map((statement) => `"${statement}"`).join(", ")}); a requirement's silence or a decision about a different behavior is not an exclusion — a defect in code this change added or modified is IN_SCOPE + changed_code`;
+			const statements = nonGoalStatements(slotValue).filter(
+				(statement) => normalizeQuote(statement).length >= MIN_QUOTABLE_STATEMENT_CHARS,
+			);
+			const rationale = normalizeQuote(finding.scope_evidence.rationale);
+			if (!statements.some((statement) => rationale.includes(normalizeQuote(statement))))
+				return `OUT_OF_SCOPE + non_goal rationale must quote verbatim the non_goals statement (case, smart quotes, markdown and trailing punctuation are ignored; statements under ${MIN_QUOTABLE_STATEMENT_CHARS} characters are not quotable) that excludes this defect (one of: ${statements.map((statement) => `"${statement}"`).join(", ")}); a requirement's silence or a decision about a different behavior is not an exclusion — a defect in code this change added or modified is IN_SCOPE + changed_code`;
 		}
 	}
 	return null;
@@ -2448,7 +2468,10 @@ export function requestComplete(sessionId: string, codexGoalArg?: string): boole
 const ADR_HEADING = /^### (D-\d+):[ \t]*(.*?)[ \t]*$/;
 const ANY_HEADING = /^#{1,6}[ \t]/;
 const DECISION_FIELD = /^Decision(?:[ \t]*\([^)]*\))?:[ \t]*(.*)$/;
-const FIELD_LABEL = /^[A-Z][A-Za-z -]*(?:[ \t]*\([^)]*\))?:/;
+// Plan ADR field labels (see skills/prometheus/plan-template.md). A continuation line
+// like `Applies when: x` is Decision text, not a field, so only these end the field.
+const FIELD_LABEL =
+	/^(?:\*\*)?(?:Tier|Context|Decision Drivers|Considered Options|Decision|Rationale|Consequences|Follow-ups|Why|Invalidated alternative|Cites|Owns|Must NOT own|Edges)(?:[ \t]*\([^)]*\))?:/;
 
 /**
  * Explicit decision rules of the plan at `planPath`: one `[D-N] <title> — <text>`
