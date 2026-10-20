@@ -41,6 +41,8 @@ import {
 	readCollectBudgetMeta,
 	cmdResumeMember,
 	COVERAGE_STALL_LIMIT,
+	COVERAGE_JOB_WALL_CAP_SEC,
+	recordCoverageResumeBaseline,
 	type CoverageHooks,
 	type CoverageProgress,
 	assertMembersOrExit,
@@ -5674,7 +5676,13 @@ describe("cmdResumeMember — coverage-gated 재개 정책", () => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	const base: CoverageProgress = { pagesAcked: 0, pagesTotal: 40, finished: false, issuedPage: null };
+	const base: CoverageProgress = {
+		pagesAcked: 0,
+		pagesTotal: 40,
+		finished: false,
+		issuedPage: null,
+		lastProgressAt: null,
+	};
 
 	test("진행이 늘어나는 동안에는 3회를 넘어 계속 재개한다", async () => {
 		writeJob(true);
@@ -5690,36 +5698,56 @@ describe("cmdResumeMember — coverage-gated 재개 정책", () => {
 
 	test("진행 없는 재개가 3회 연속이면 발급된 페이지를 절반 크기로 재분할한 뒤 재개한다", async () => {
 		writeJob(true);
+		// The worker records the baseline when the job's initial turn starts.
+		recordCoverageResumeBaseline(memberDir, 7);
 		writeStatus({ state: "awaiting_resume", resume_count: 0 });
 		const { hooks, resplits } = makeHooks({
 			...base,
 			pagesAcked: 7,
 			issuedPage: { id: "p0008", bytes: 24000 },
 		});
-		// First resume sets the baseline; the next COVERAGE_STALL_LIMIT resumes see no progress.
-		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		// Every resume sees no progress since the baseline; the third one applies the remedy.
+		for (let i = 0; i < COVERAGE_STALL_LIMIT - 1; i++) await resume(hooks);
 		expect(resplits).toEqual([]);
 		await resume(hooks);
 		expect(resplits).toEqual([{ member: "correctness", pageId: "p0008", pageBytes: 12000 }]);
 		expect(readStatus().state).toBe("awaiting_resume");
 	});
 
+	test("기준선은 job 시작 시점이라 첫 턴이 진행했으면 첫 재개는 진행으로 센다", async () => {
+		writeJob(true);
+		recordCoverageResumeBaseline(memberDir, 0);
+		writeStatus({ state: "awaiting_resume" });
+		const { state, hooks, resplits } = makeHooks(base);
+		state.progress.pagesAcked = 4; // the initial turn acknowledged 4 pages
+		await resume(hooks);
+		for (let i = 0; i < COVERAGE_STALL_LIMIT - 1; i++) await resume(hooks);
+		expect(resplits).toEqual([]);
+		expect(JSON.parse(fs.readFileSync(path.join(memberDir, "coverage-resume.json"), "utf8"))).toEqual({
+			lastPagesAcked: 4,
+			stalledResumes: COVERAGE_STALL_LIMIT - 1,
+			plainRemedyUsed: false,
+		});
+	});
+
 	test("재분할 크기는 4096바이트 아래로 내려가지 않는다", async () => {
 		writeJob(true);
 		writeStatus({ state: "awaiting_resume" });
+		recordCoverageResumeBaseline(memberDir, 0);
 		const { hooks, resplits } = makeHooks({ ...base, issuedPage: { id: "p0001.1", bytes: 6000 } });
-		for (let i = 0; i <= COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
 		expect(resplits[0]?.pageBytes).toBe(4096);
 	});
 
 	test("재분할할 수 없으면 평범한 재개를 한 번 쓰고, 그래도 진행이 없으면 stalled로 멈춘다", async () => {
 		writeJob(true);
 		writeStatus({ state: "awaiting_resume" });
+		recordCoverageResumeBaseline(memberDir, 2);
 		const { hooks, resplits } = makeHooks(
 			{ ...base, pagesAcked: 2, issuedPage: { id: "p0003", bytes: 3000 } },
 			false,
 		);
-		for (let i = 0; i <= COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
 		expect(resplits.length).toBe(1);
 		await expect(resume(hooks)).rejects.toThrow("member stalled");
 		const status = readStatus();
@@ -5733,8 +5761,9 @@ describe("cmdResumeMember — coverage-gated 재개 정책", () => {
 	test("발급된 페이지가 없으면 평범한 재개 한 번 후 진행이 없을 때 stalled가 된다", async () => {
 		writeJob(true);
 		writeStatus({ state: "awaiting_resume" });
+		recordCoverageResumeBaseline(memberDir, 0);
 		const { hooks, resplits } = makeHooks(base);
-		for (let i = 0; i <= COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
 		await expect(resume(hooks)).rejects.toThrow("plain resume from the ledger did not help");
 		expect(resplits).toEqual([]);
 		expect(readStatus().state).toBe("stalled");
@@ -5780,6 +5809,71 @@ describe("cmdResumeMember — coverage-gated 재개 정책", () => {
 		expect(readStatus().state).toBe("stalled");
 	});
 
+	test("세션 ID가 없는 stalled 멤버는 --retry-stalled로 같은 원장에 새 초기 턴을 띄운다", async () => {
+		fs.mkdirSync(memberDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({
+				id: "chunk-review-x",
+				settings: { timeoutSec: 60, coverageGated: true },
+				members: [{ name: "correctness" }],
+			}),
+		);
+		writeStatus({
+			state: "missing_cli",
+			sessionID: null,
+			message: "spawn codex ENOENT",
+			workerEnv: { OMT_DIFF_CURSOR_LEDGER: "/l/ledgers/correctness" },
+		});
+		const { hooks } = makeHooks({ ...base, pagesAcked: 3 });
+		await expect(resume(hooks)).rejects.toThrow("binary was not found");
+		expect(readStatus().state).toBe("stalled");
+
+		const calls: string[][] = [];
+		const spawnFn = ((_command: string, args: string[]) => {
+			calls.push(args);
+			return { unref: () => {} } as unknown as ReturnType<typeof spawn>;
+		}) as unknown as typeof spawn;
+		await cmdResumeMember(jobDir, "correctness", "continue", config, {
+			driverFactory: () => driver,
+			coverage: hooks,
+			retryStalled: true,
+			workerPath: "/fake/worker.ts",
+			spawnFn,
+		});
+
+		expect(calls).toEqual([
+			[
+				"/fake/worker.ts",
+				"--job-dir",
+				jobDir,
+				"--member",
+				"correctness",
+				"--command",
+				"opencode --format json",
+				"--env",
+				"OMT_DIFF_CURSOR_LEDGER=/l/ledgers/correctness",
+				"--timeout",
+				"60",
+			],
+		]);
+		expect(readStatus().state).toBe("queued");
+		// The stall count starts over; the fresh turn's worker records the new baseline.
+		expect(JSON.parse(fs.readFileSync(path.join(memberDir, "coverage-resume.json"), "utf8"))).toEqual({
+			lastPagesAcked: null,
+			stalledResumes: 0,
+			plainRemedyUsed: false,
+		});
+	});
+
+	test("세션 ID가 없는 멤버의 새 초기 턴은 workerPath 없이는 거부하고 상태를 바꾸지 않는다", async () => {
+		writeJob(true);
+		writeStatus({ state: "stalled", sessionID: null, message: "no session to resume" });
+		const { hooks } = makeHooks(base);
+		await expect(resume(hooks, { retryStalled: true })).rejects.toThrow("needs workerPath");
+		expect(readStatus().state).toBe("stalled");
+	});
+
 	test("크래시(error)·timed_out 턴은 coverage-gated 잡에서 원장에서 재개한다", async () => {
 		writeJob(true);
 		writeStatus({ state: "error" });
@@ -5815,10 +5909,10 @@ describe("collect 데드라인 — coverage-gated 잡", () => {
 	const createdAt = "2026-08-06T00:00:00.000Z";
 	const created = Date.parse(createdAt);
 
-	test("최근 활동이 있는 coverage-gated 잡은 생성 시각 기준 데드라인이 지나도 계속 폴한다", () => {
+	test("최근 진행이 있는 coverage-gated 잡은 생성 시각 기준 데드라인이 지나도 계속 폴한다", () => {
 		const now = created + 3 * 600_000;
 		const budget = resolveCollectNextAction(
-			{ createdAt, timeoutSec: 600, coverageGated: true, lastActivityAt: now - 60_000 },
+			{ createdAt, timeoutSec: 600, coverageGated: true, lastProgressAt: now - 60_000 },
 			now,
 		);
 		expect(budget.nextAction).toBe("poll_again");
@@ -5826,25 +5920,52 @@ describe("collect 데드라인 — coverage-gated 잡", () => {
 		expect(budget.deadlineSec).toBe(1740 + 600);
 	});
 
-	test("마지막 활동 뒤 한 턴 타임아웃이 지나면 stop_and_degrade", () => {
+	test("마지막 진행 뒤 한 턴 타임아웃이 지나면 stop_and_degrade", () => {
 		const now = created + 3 * 600_000;
 		const budget = resolveCollectNextAction(
-			{ createdAt, timeoutSec: 600, coverageGated: true, lastActivityAt: now - 600_000 },
+			{ createdAt, timeoutSec: 600, coverageGated: true, lastProgressAt: now - 600_000 },
 			now,
 		);
 		expect(budget.nextAction).toBe("stop_and_degrade");
 	});
 
-	test("coverage-gated가 아니면 활동 시각을 무시하고 생성 시각 기준으로 자른다", () => {
+	test("진행이 계속돼도 job 생성부터 COVERAGE_JOB_WALL_CAP_SEC가 지나면 stop_and_degrade", () => {
+		const now = created + COVERAGE_JOB_WALL_CAP_SEC * 1000;
+		const budget = resolveCollectNextAction(
+			{ createdAt, timeoutSec: 600, coverageGated: true, lastProgressAt: now - 1_000 },
+			now,
+		);
+		expect(budget).toEqual({
+			nextAction: "stop_and_degrade",
+			elapsedSec: COVERAGE_JOB_WALL_CAP_SEC,
+			deadlineSec: COVERAGE_JOB_WALL_CAP_SEC,
+		});
+		expect(
+			resolveCollectNextAction(
+				{ createdAt, timeoutSec: 600, coverageGated: true, lastProgressAt: now - 1_000 },
+				now - 2_000,
+			).nextAction,
+		).toBe("poll_again");
+	});
+
+	test("coverage-gated가 아니면 진행 시각과 상한을 무시하고 생성 시각 + 타임아웃으로만 자른다", () => {
 		const now = created + 3 * 600_000;
 		const budget = resolveCollectNextAction(
-			{ createdAt, timeoutSec: 600, coverageGated: false, lastActivityAt: now - 60_000 },
+			{ createdAt, timeoutSec: 600, coverageGated: false, lastProgressAt: now - 60_000 },
 			now,
 		);
 		expect(budget.nextAction).toBe("stop_and_degrade");
+		const longTimeout = COVERAGE_JOB_WALL_CAP_SEC * 2;
+		expect(
+			resolveCollectNextAction({ createdAt, timeoutSec: longTimeout }, created + COVERAGE_JOB_WALL_CAP_SEC * 1000 + 60_000),
+		).toEqual({
+			nextAction: "poll_again",
+			elapsedSec: COVERAGE_JOB_WALL_CAP_SEC + 60,
+			deadlineSec: longTimeout,
+		});
 	});
 
-	test("readCollectBudgetMeta는 coverage-gated 잡에서 멤버의 최신 활동 시각을 읽는다", () => {
+	test("readCollectBudgetMeta는 원장 진행 시각만 읽고, 진행 없는 하트비트·재큐잉은 데드라인을 늘리지 않는다", () => {
 		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "collect-meta-test-"));
 		try {
 			const config: JobConfig = {
@@ -5855,28 +5976,50 @@ describe("collect 데드라인 — coverage-gated 잡", () => {
 				uiLabel: "[Chunk Review]",
 				configTopLevelKey: "chunk-review",
 			};
-			fs.mkdirSync(path.join(tmp, "members", "a"), { recursive: true });
-			fs.mkdirSync(path.join(tmp, "members", "b"), { recursive: true });
+			for (const m of ["a", "b", "c"]) fs.mkdirSync(path.join(tmp, "members", m), { recursive: true });
 			fs.writeFileSync(
 				path.join(tmp, "job.json"),
 				JSON.stringify({ createdAt, settings: { timeoutSec: 600, coverageGated: true } }),
 			);
+			// A hung finder: fresh heartbeat and a just-requeued resume, but no page acknowledged since 00:10.
 			fs.writeFileSync(
 				path.join(tmp, "members", "a", "status.json"),
-				JSON.stringify({ state: "running", startedAt: "2026-08-06T00:30:00.000Z", lastHeartbeat: "2026-08-06T00:45:00.000Z" }),
+				JSON.stringify({ state: "running", queuedAt: "2026-08-06T00:50:00.000Z", lastHeartbeat: "2026-08-06T00:55:00.000Z" }),
 			);
-			fs.writeFileSync(
-				path.join(tmp, "members", "b", "status.json"),
-				JSON.stringify({ state: "done", finishedAt: "2026-08-06T00:10:00.000Z" }),
-			);
-			const meta = readCollectBudgetMeta(tmp, config);
+			const progressAt: Record<string, number | null> = {
+				a: Date.parse("2026-08-06T00:10:00.000Z"),
+				b: Date.parse("2026-08-06T00:20:00.000Z"),
+			};
+			const hooks: CoverageHooks = {
+				readProgress: (member) => {
+					if (!(member in progressAt)) throw new Error(`no ledger for ${member}`);
+					return { pagesAcked: 1, pagesTotal: 9, finished: false, issuedPage: null, lastProgressAt: progressAt[member] };
+				},
+				resplit: () => ({ ok: false, message: "unused" }),
+			};
+			const meta = readCollectBudgetMeta(tmp, config, hooks);
 			expect(meta.coverageGated).toBe(true);
-			expect(meta.lastActivityAt).toBe(Date.parse("2026-08-06T00:45:00.000Z"));
+			expect(meta.lastProgressAt).toBe(Date.parse("2026-08-06T00:20:00.000Z"));
+			// The hung finder's heartbeat at 00:55 does not keep the job alive past 00:20 + 600s.
+			expect(resolveCollectNextAction(meta, Date.parse("2026-08-06T00:56:00.000Z")).nextAction).toBe(
+				"stop_and_degrade",
+			);
 
+			// Progress (a page acknowledged at 00:50) does extend it.
+			progressAt.a = Date.parse("2026-08-06T00:50:00.000Z");
+			const extended = readCollectBudgetMeta(tmp, config, hooks);
+			expect(extended.lastProgressAt).toBe(progressAt.a);
+			expect(resolveCollectNextAction(extended, Date.parse("2026-08-06T00:56:00.000Z")).nextAction).toBe(
+				"poll_again",
+			);
+
+			// No hooks → no progress signal → deadline from creation.
+			expect(readCollectBudgetMeta(tmp, config).lastProgressAt).toBe(null);
 			fs.writeFileSync(path.join(tmp, "job.json"), JSON.stringify({ createdAt, settings: { timeoutSec: 600 } }));
-			expect(readCollectBudgetMeta(tmp, config).lastActivityAt).toBe(null);
+			expect(readCollectBudgetMeta(tmp, config, hooks).lastProgressAt).toBe(null);
 		} finally {
 			fs.rmSync(tmp, { recursive: true, force: true });
 		}
 	});
 });
+

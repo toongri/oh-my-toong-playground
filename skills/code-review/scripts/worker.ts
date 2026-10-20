@@ -8,6 +8,7 @@ import { exitWithError, parseArgs, logRootForJobsDir } from "@lib/job-utils";
 import { getOmtDir } from "@lib/omt-dir";
 import {
 	splitCommand,
+	assemblePrompt,
 	atomicWriteJson,
 	runOneTurn,
 	resumeOneTurn,
@@ -15,7 +16,12 @@ import {
 	type OneTurnResult,
 	type CompletionGateResult,
 } from "@lib/worker-utils";
-import { detectCliType, type CoverageHooks, type CoverageProgress } from "@lib/generic-job";
+import {
+	detectCliType,
+	recordCoverageResumeBaseline,
+	type CoverageHooks,
+	type CoverageProgress,
+} from "@lib/generic-job";
 import type { CliType } from "@lib/agent-drivers/types";
 import { run as runDiffCursor, loadPlan, LEDGER_ENV } from "./diff-cursor";
 
@@ -189,8 +195,18 @@ function runCursor(ledgerDir: string, args: string[]): string {
 	return r.stdout;
 }
 
-/** Creates the member's ledger (idempotent). */
+/** Throws when `<planDir>/plan.json` no longer carries the planSha job.json recorded at start. */
+function assertPlanUnchanged(coverage: JobCoverage): void {
+	const current = loadPlan(coverage.planDir).planSha;
+	if (current !== coverage.planSha)
+		throw new Error(
+			`plan changed since job start: job.json planSha ${coverage.planSha}, ${path.join(coverage.planDir, "plan.json")} planSha ${current}; start a new job for the new plan`,
+		);
+}
+
+/** Creates the member's ledger (idempotent), refusing a plan that changed since job start. */
 export function initMemberLedger(coverage: JobCoverage, member: string): string {
+	assertPlanUnchanged(coverage);
 	return runCursor(memberLedgerDir(coverage, member), [
 		"init",
 		"--plan",
@@ -217,9 +233,19 @@ export function readCoverageProgress(ledgerDir: string): CoverageProgress {
 	const finished = status.finished === true;
 	const currentPage = typeof status.currentPage === "string" ? status.currentPage : null;
 
+	const ledger = JSON.parse(fs.readFileSync(path.join(ledgerDir, "ledger.json"), "utf8"));
+	let lastProgressAt: number | null = null;
+	const progressStamps = [
+		...Object.values<{ doneAt?: unknown }>(ledger?.pages ?? {}).map((page) => page?.doneAt),
+		ledger?.finishedAt,
+	];
+	for (const stamp of progressStamps) {
+		const at = typeof stamp === "string" ? Date.parse(stamp) : NaN;
+		if (Number.isFinite(at) && (lastProgressAt === null || at > lastProgressAt)) lastProgressAt = at;
+	}
+
 	let issuedPage: CoverageProgress["issuedPage"] = null;
 	if (currentPage !== null) {
-		const ledger = JSON.parse(fs.readFileSync(path.join(ledgerDir, "ledger.json"), "utf8"));
 		if (ledger?.pages?.[currentPage]?.state === "issued") {
 			const extraBytes = ledger.extraPages?.[currentPage]?.bytes;
 			const bytes =
@@ -229,13 +255,21 @@ export function readCoverageProgress(ledgerDir: string): CoverageProgress {
 			if (typeof bytes === "number") issuedPage = { id: currentPage, bytes };
 		}
 	}
-	return { pagesAcked, pagesTotal, finished, issuedPage };
+	return { pagesAcked, pagesTotal, finished, issuedPage, lastProgressAt };
 }
 
-/** A turn is complete only when the member's ledger is finished (100% of pages, finish run). */
-export function coverageCompletionGate(ledgerDir: string): () => CompletionGateResult {
+/**
+ * A turn is complete only when the member's ledger is finished (100% of pages, finish run). A plan
+ * that changed since job start can never complete: the gate reports it fatal, so the turn is error.
+ */
+export function coverageCompletionGate(coverage: JobCoverage, member: string): () => CompletionGateResult {
 	return () => {
-		const p = readCoverageProgress(ledgerDir);
+		try {
+			assertPlanUnchanged(coverage);
+		} catch (error: unknown) {
+			return { complete: false, fatal: true, message: error instanceof Error ? error.message : String(error) };
+		}
+		const p = readCoverageProgress(memberLedgerDir(coverage, member));
 		const detail = { pagesAcked: p.pagesAcked, pagesTotal: p.pagesTotal, finished: p.finished };
 		if (p.finished) return { complete: true, detail };
 		return {
@@ -249,7 +283,11 @@ export function coverageCompletionGate(ledgerDir: string): () => CompletionGateR
 /** Cursor probes for lib/generic-job's coverage-gated resume policy. */
 export function coverageHooks(coverage: JobCoverage): CoverageHooks {
 	return {
-		readProgress: (member) => readCoverageProgress(memberLedgerDir(coverage, member)),
+		// A changed plan throws here, so the resume policy stalls the member with that reason.
+		readProgress: (member) => {
+			assertPlanUnchanged(coverage);
+			return readCoverageProgress(memberLedgerDir(coverage, member));
+		},
 		resplit: (member, pageId, pageBytes) => {
 			const r = runDiffCursor([
 				"resplit",
@@ -276,6 +314,32 @@ const CURSOR_WALK_STEPS = [
 export const COVERAGE_EXECUTION_INSTRUCTION = `${CURSOR_WALK_STEPS}\nReview ONLY the files listed in Review Scope. Produce your full analysis following system instructions.`;
 
 export const COVERAGE_RESUME_INSTRUCTION = `Your previous turn ended before your diff cursor ledger was finished. Continue the walk from the ledger.\n${CURSOR_WALK_STEPS}`;
+
+const CURSOR_PLACEHOLDER = "{CURSOR}";
+
+/**
+ * The stdin prompt a turn would send, assembled the way runOnce assembles it (role file + review
+ * content when promptsDir is given, then the literal substitutions).
+ */
+function assembleTurnPrompt(turn: {
+	prompt: string;
+	member: string;
+	reviewContent?: string;
+	promptsDir?: string;
+	substitutions?: Record<string, string>;
+}): string {
+	let text = turn.promptsDir
+		? assemblePrompt({
+				promptsDir: turn.promptsDir,
+				entityName: turn.member,
+				rawPrompt: turn.prompt,
+				reviewContent: turn.reviewContent,
+			}).assembled
+		: turn.prompt;
+	for (const [placeholder, value] of Object.entries(turn.substitutions ?? {}))
+		text = text.split(placeholder).join(value);
+	return text;
+}
 
 async function main() {
 	const options = parseArgs(process.argv);
@@ -329,8 +393,8 @@ async function main() {
 	const EXECUTION_INSTRUCTION = coverage
 		? COVERAGE_EXECUTION_INSTRUCTION
 		: "Execute the diff command from REVIEW CONTENT. Review ONLY the files listed in Review Scope. Produce your full analysis following system instructions.";
-	const promptSubstitutions = ledgerDir ? { "{CURSOR}": cursorCommand(ledgerDir) } : undefined;
-	const completionGate = ledgerDir ? coverageCompletionGate(ledgerDir) : undefined;
+	const promptSubstitutions = ledgerDir ? { [CURSOR_PLACEHOLDER]: cursorCommand(ledgerDir) } : undefined;
+	const completionGate = coverage ? coverageCompletionGate(coverage, member) : undefined;
 
 	const tokens = splitCommand(command);
 	if (!tokens || tokens.length === 0) {
@@ -363,10 +427,40 @@ async function main() {
 	const resumePrompt = options.prompt;
 	const isResume =
 		typeof session === "string" && session !== "" && typeof resumePrompt === "string" && resumePrompt !== "";
+	const resumeTurnPrompt =
+		coverage && typeof resumePrompt === "string"
+			? `${COVERAGE_RESUME_INSTRUCTION}\n\nConductor note: ${resumePrompt}`
+			: resumePrompt;
 
-	if (coverage && !isResume) {
+	// The finder prompts read the diff only through `{CURSOR}`. A literal one left in the prompt
+	// (a job started without --ledger-root) would let the finder end `done` without reading it.
+	const turnPrompt = isResume
+		? assembleTurnPrompt({ prompt: String(resumeTurnPrompt), member, substitutions: promptSubstitutions })
+		: assembleTurnPrompt({
+				prompt: EXECUTION_INSTRUCTION,
+				member,
+				reviewContent: promptContent,
+				promptsDir: PROMPTS_DIR,
+				substitutions: promptSubstitutions,
+			});
+	if (turnPrompt.includes(CURSOR_PLACEHOLDER)) {
+		const message = `turn not run: the prompt still contains a literal ${CURSOR_PLACEHOLDER} because this job has no diff cursor ledger (job.json has no coverage); start the job with job.ts start --ledger-root <dir>`;
+		logError(message);
+		atomicWriteJson(path.join(memberDir, "status.json"), {
+			member,
+			state: "error",
+			message,
+			finishedAt: new Date().toISOString(),
+			command,
+		});
+		logEnd();
+		process.exit(1);
+	}
+
+	if (coverage && ledgerDir && !isResume) {
 		try {
 			logInfo(initMemberLedger(coverage, member).trim());
+			recordCoverageResumeBaseline(memberDir, readCoverageProgress(ledgerDir).pagesAcked);
 		} catch (error: unknown) {
 			const message = `coverage ledger init failed: ${error instanceof Error ? error.message : String(error)}`;
 			logError(message);
@@ -390,9 +484,7 @@ async function main() {
 			? resumeOneTurn(session, {
 					program,
 					args,
-					prompt: coverage
-						? `${COVERAGE_RESUME_INSTRUCTION}\n\nConductor note: ${resumePrompt}`
-						: resumePrompt,
+					prompt: String(resumeTurnPrompt),
 					member,
 					memberDir,
 					command,

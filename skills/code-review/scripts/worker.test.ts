@@ -12,6 +12,7 @@ import {
 	readJobCoverage,
 	readCoverageProgress,
 	coverageCompletionGate,
+	coverageHooks,
 	initMemberLedger,
 	memberLedgerDir,
 	DIFF_CURSOR_PATH,
@@ -267,10 +268,15 @@ describe("filterPromptSections", () => {
 describe("main() 배선: prompt.txt가 필터링되어 reviewContent로 전달된다", () => {
 	let tmpRoot: string;
 
+	// A coverage job: without a ledger the worker refuses a prompt that still holds {CURSOR}.
 	function makeJobDir(): string {
 		tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "chunk-worker-wiring-test-"));
 		const jobDir = path.join(tmpRoot, "jobs", "chunk-review-wiring-test");
 		fs.mkdirSync(path.join(jobDir, "members", "correctness"), { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "chunk-review-wiring-test", settings: { coverageGated: true }, coverage: makeCoverageFixture(tmpRoot) }),
+		);
 		return jobDir;
 	}
 
@@ -288,7 +294,8 @@ describe("main() 배선: prompt.txt가 필터링되어 reviewContent로 전달�
 			const jobDir = makeJobDir();
 			fs.writeFileSync(path.join(jobDir, "prompt.txt"), buildFixturePrompt(), "utf8");
 
-			execFileSync(
+			// spawnSync: the turn ends awaiting_resume (ledger not walked), so the worker exits 1.
+			spawnSync(
 				process.execPath,
 				[WORKER_PATH, "--job-dir", jobDir, "--member", "correctness", "--command", "true"],
 				// HOME isolates the machine-wide worker slot pool under
@@ -472,6 +479,11 @@ describe("worker.ts 종료 경로 — reapOwnProcessGroup 연결", () => {
 				const jobDir = path.join(tmpDir, "job");
 				const memberDir = path.join(jobDir, "members", "leaker");
 				fs.mkdirSync(memberDir, { recursive: true });
+				// A coverage job: without a ledger the worker refuses a prompt that still holds {CURSOR}.
+				fs.writeFileSync(
+					path.join(jobDir, "job.json"),
+					JSON.stringify({ id: "job", settings: { coverageGated: true }, coverage: makeCoverageFixture(tmpDir) }),
+				);
 
 				const worker = spawn(
 					process.execPath,
@@ -621,9 +633,10 @@ describe("diff cursor coverage helpers", () => {
 		initMemberLedger(coverage, "correctness");
 		expect(initMemberLedger(coverage, "correctness")).toContain("LEDGER EXISTS");
 		const ledger = memberLedgerDir(coverage, "correctness");
-		const gate = coverageCompletionGate(ledger);
+		const gate = coverageCompletionGate(coverage, "correctness");
 
 		const total = readCoverageProgress(ledger).pagesTotal;
+		expect(readCoverageProgress(ledger).lastProgressAt).toBe(null);
 		expect(gate()).toEqual({
 			complete: false,
 			detail: { pagesAcked: 0, pagesTotal: total, finished: false },
@@ -634,6 +647,16 @@ describe("diff cursor coverage helpers", () => {
 		const issued = readCoverageProgress(ledger).issuedPage;
 		expect(issued?.id).toBe(pageIdOf(out));
 		expect(issued?.bytes).toBe(loadPlan(coverage.planDir).pages[0]?.bytes);
+
+		const beforeDone = Date.now();
+		const first = runDiffCursor([
+			"done", pageIdOf(out), "--ack", ackOf(out), "--note", "no relevant mechanism: doc page", "--next", "--ledger", ledger,
+		]);
+		if (first.code !== 0) throw new Error(first.stderr);
+		out = first.stdout;
+		const progressAt = readCoverageProgress(ledger).lastProgressAt;
+		expect(progressAt).toBeGreaterThanOrEqual(beforeDone - 1000);
+		expect(progressAt).toBeLessThanOrEqual(Date.now());
 
 		while (!out.includes("ALL PAGES DONE")) {
 			const r = runDiffCursor([
@@ -648,6 +671,24 @@ describe("diff cursor coverage helpers", () => {
 			complete: true,
 			detail: { pagesAcked: total, pagesTotal: total, finished: true },
 		});
+	});
+
+	it("job.json planSha가 plan.json과 다르면 init·게이트·재개 진행 조회 모두 이유와 함께 거부한다", () => {
+		setup();
+		initMemberLedger(coverage, "correctness");
+		const stale: JobCoverage = { ...coverage, planSha: "0".repeat(64) };
+
+		expect(() => initMemberLedger(stale, "regression")).toThrow("plan changed since job start");
+		expect(fs.existsSync(memberLedgerDir(stale, "regression"))).toBe(false);
+
+		const result = coverageCompletionGate(stale, "correctness")();
+		expect(result.complete).toBe(false);
+		expect(result.fatal).toBe(true);
+		expect(result.message).toContain("plan changed since job start");
+		expect(result.message).toContain(coverage.planSha);
+
+		expect(() => coverageHooks(stale).readProgress("correctness")).toThrow("plan changed since job start");
+		expect(coverageHooks(coverage).readProgress("correctness").pagesAcked).toBe(0);
 	});
 });
 
@@ -702,6 +743,7 @@ describe("main() 배선: coverage job", () => {
 		const memberDir = path.join(jobDir, "members", "correctness");
 		return {
 			exitCode: worker.status,
+			memberDir,
 			ledger: memberLedgerDir(coverage, "correctness"),
 			assembled: fs.readFileSync(path.join(memberDir, "assembled-prompt.txt"), "utf8"),
 			stdin: fs.readFileSync(path.join(root, "stdin.txt"), "utf8"),
@@ -713,7 +755,7 @@ describe("main() 배선: coverage job", () => {
 	it(
 		"원장을 만들고 {CURSOR}를 치환하며 finder env에 원장 변수를 넣고, 원장이 미완이면 awaiting_resume으로 끝난다",
 		() => {
-			const { exitCode, ledger, assembled, stdin, env, status } = runWorker(false);
+			const { exitCode, memberDir, ledger, assembled, stdin, env, status } = runWorker(false);
 
 			expect(exitCode).toBe(1);
 			expect(fs.existsSync(path.join(ledger, "ledger.json"))).toBe(true);
@@ -726,6 +768,12 @@ describe("main() 배선: coverage job", () => {
 			expect(status.state).toBe("awaiting_resume");
 			expect(status.coverage).toMatchObject({ pagesAcked: 0, finished: false });
 			expect(status.workerEnv).toMatchObject({ OMT_LEDGER_WORKER: "1", OMT_DIFF_CURSOR_LEDGER: ledger });
+			// Progress baseline recorded at the start of the initial turn (lib/generic-job resume policy).
+			expect(JSON.parse(fs.readFileSync(path.join(memberDir, "coverage-resume.json"), "utf8"))).toEqual({
+				lastPagesAcked: 0,
+				stalledResumes: 0,
+				plainRemedyUsed: false,
+			});
 		},
 		30000,
 	);
@@ -738,6 +786,69 @@ describe("main() 배선: coverage job", () => {
 			expect(r.status.state).toBe("done");
 			expect(r.status.coverage).toMatchObject({ finished: true });
 			expect(r.status.coverage.pagesAcked).toBe(r.status.coverage.pagesTotal);
+		},
+		30000,
+	);
+});
+
+// Guards in main(): a turn never runs with an unresolved {CURSOR} or against a plan that changed.
+describe("main() 가드: {CURSOR} 미치환·planSha 불일치", () => {
+	let root: string;
+
+	afterEach(() => {
+		fs.rmSync(root, { recursive: true, force: true });
+	});
+
+	/** Runs main() for member correctness with a command that only records that it ran. */
+	function runGuardedWorker(jobMeta: Record<string, unknown>) {
+		const jobDir = path.join(root, "jobs", "chunk-review-guard");
+		const memberDir = path.join(jobDir, "members", "correctness");
+		fs.mkdirSync(memberDir, { recursive: true });
+		fs.writeFileSync(path.join(jobDir, "prompt.txt"), buildFixturePrompt(), "utf8");
+		fs.writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ id: "chunk-review-guard", ...jobMeta }));
+		const ranMarker = path.join(root, "ran");
+		const worker = spawnSync(
+			process.execPath,
+			[WORKER_PATH, "--job-dir", jobDir, "--member", "correctness", "--command", `/usr/bin/touch ${ranMarker}`],
+			{ stdio: "pipe", env: { ...process.env, HOME: root, OMT_DIR: root } },
+		);
+		return {
+			exitCode: worker.status,
+			ran: fs.existsSync(ranMarker),
+			assembledWritten: fs.existsSync(path.join(memberDir, "assembled-prompt.txt")),
+			status: JSON.parse(fs.readFileSync(path.join(memberDir, "status.json"), "utf8")),
+		};
+	}
+
+	it(
+		"coverage 없는 job에서 조립된 프롬프트에 {CURSOR}가 남으면 턴을 돌리지 않고 error로 끝난다",
+		() => {
+			root = fs.mkdtempSync(path.join(os.tmpdir(), "worker-guard-cursor-"));
+			const r = runGuardedWorker({ settings: {} });
+			expect(r.exitCode).toBe(1);
+			expect(r.ran).toBe(false);
+			expect(r.assembledWritten).toBe(false);
+			expect(r.status.state).toBe("error");
+			expect(r.status.message).toContain("{CURSOR}");
+			expect(r.status.message).toContain("--ledger-root");
+		},
+		30000,
+	);
+
+	it(
+		"job.json planSha가 plan.json과 다르면 원장을 만들지 않고 error로 끝난다",
+		() => {
+			root = fs.mkdtempSync(path.join(os.tmpdir(), "worker-guard-plansha-"));
+			const coverage = makeCoverageFixture(root);
+			const r = runGuardedWorker({
+				settings: { coverageGated: true },
+				coverage: { ...coverage, planSha: "f".repeat(64) },
+			});
+			expect(r.exitCode).toBe(1);
+			expect(r.ran).toBe(false);
+			expect(r.status.state).toBe("error");
+			expect(r.status.message).toContain("plan changed since job start");
+			expect(fs.existsSync(memberLedgerDir(coverage, "correctness"))).toBe(false);
 		},
 		30000,
 	);

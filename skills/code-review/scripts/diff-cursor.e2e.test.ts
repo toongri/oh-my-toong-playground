@@ -264,7 +264,7 @@ describe("diff-cursor E2E: 한 페이지 모자란 finder", () => {
 				fs.writeFileSync(path.join(o.memberDir, "error.txt"), "");
 				return { member: o.member, command: o.command, attempt: 0, state: "done", exitCode: 0, message: null, finishedAt: new Date().toISOString() };
 			},
-			completionGate: coverageCompletionGate(ledgerOf(SHORT)),
+			completionGate: coverageCompletionGate(coverage, SHORT),
 		});
 		expect(result.state).toBe("awaiting_resume");
 		const status = JSON.parse(fs.readFileSync(path.join(memberDir, "status.json"), "utf8"));
@@ -306,7 +306,7 @@ describe("diff-cursor E2E: 한 페이지 모자란 finder", () => {
 					driverFactory: () => driver,
 					// The finder's turn makes no progress: the real ledger gate still says unfinished.
 					resumeOneTurnFn: async () => {
-						expect(coverageCompletionGate(ledgerOf(SHORT))().complete).toBe(false);
+						expect(coverageCompletionGate(coverage, SHORT)().complete).toBe(false);
 						writeStatus("awaiting_resume");
 						return { state: "awaiting_resume", sessionID: "sess-1", text: "", exitCode: 0 };
 					},

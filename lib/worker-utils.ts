@@ -580,7 +580,8 @@ export interface RunOneTurnOpts {
 	promptSubstitutions?: Record<string, string>;
 	/**
 	 * Optional completion check, run only when a turn would end as `done`. When it reports the
-	 * work incomplete, the turn ends as `awaiting_resume` instead, so the caller resumes it.
+	 * work incomplete, the turn ends as `awaiting_resume` instead, so the caller resumes it, or as
+	 * `error` when the gate reports it fatal.
 	 */
 	completionGate?: () => CompletionGateResult;
 	/** Test-only: override driver factory. */
@@ -595,6 +596,8 @@ export interface RunOneTurnOpts {
 
 export interface CompletionGateResult {
 	complete: boolean;
+	/** With complete:false: the work can never complete (its input changed), so the turn ends as error. */
+	fatal?: boolean;
 	/** Progress detail persisted as status.json `coverage`. */
 	detail?: Record<string, unknown>;
 	/** Readable reason persisted as status.json `message` when incomplete. */
@@ -804,7 +807,7 @@ async function executeOneTurn(
 		const gate = evaluateCompletionGate(opts.completionGate);
 		gateDetail = gate.detail;
 		if (!gate.complete) {
-			state = "awaiting_resume";
+			state = gate.fatal ? "error" : "awaiting_resume";
 			message = gate.message ?? "completion gate: work incomplete";
 		}
 	}

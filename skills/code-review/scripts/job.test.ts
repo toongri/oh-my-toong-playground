@@ -24,6 +24,7 @@ import * as GenericJob from "@lib/generic-job";
 import * as JobUtils from "@lib/job-utils";
 import { getOmtDir } from "@lib/omt-dir";
 import { tryAcquireWorkerSlot, releaseWorkerSlot } from "@lib/worker-slots";
+import { run as runDiffCursor } from "./diff-cursor.ts";
 
 // Snapshot the real bindings before any test mocks "@lib/job-utils" — mock.module mutates the
 // shared module namespace object in place (and the swap leaks across this file's boundary since
@@ -208,6 +209,44 @@ function cleanupStartedWorkerGroups(jobDir: string): void {
 // keeps the stub alive for every test in this file, past any worker's real exec.
 let sharedStubDir: string;
 
+function gitIn(cwd: string, ...args: string[]): string {
+	return execFileSync(
+		"git",
+		["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", ...args],
+		{ cwd, encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } },
+	);
+}
+
+/**
+ * A git repo with one changed doc file, frozen into a real diff cursor plan under
+ * `<root>/ledger-root/plan`. Returns the ledger root `start --ledger-root` takes.
+ */
+function makeLedgerRoot(root: string): string {
+	const repo = path.join(root, "repo");
+	fs.mkdirSync(path.join(repo, "docs"), { recursive: true });
+	gitIn(repo, "init", "-q", "-b", "main");
+	fs.writeFileSync(path.join(repo, "docs", "guide.md"), "# 안내\n");
+	gitIn(repo, "add", "-A");
+	gitIn(repo, "commit", "-q", "-m", "base");
+	const base = gitIn(repo, "rev-parse", "HEAD").trim();
+	fs.writeFileSync(path.join(repo, "docs", "guide.md"), "# 안내\n리뷰 커서 문단\n");
+	gitIn(repo, "commit", "-qam", "head");
+	const head = gitIn(repo, "rev-parse", "HEAD").trim();
+	const ledgerRoot = path.join(root, "ledger-root");
+	const r = runDiffCursor([
+		"plan", "--repo", repo, "--range", `${base}...${head}`, "--files", JSON.stringify(["docs/guide.md"]), "--out", path.join(ledgerRoot, "plan"),
+	]);
+	if (r.code !== 0) throw new Error(r.stderr);
+	return ledgerRoot;
+}
+
+/**
+ * `start` refuses to run without --ledger-root, so every test that starts a job passes this one
+ * suite-scoped plan. Members' ledgers land under it; init is idempotent per member name.
+ */
+let sharedLedgerFixtureDir: string;
+let sharedLedgerRoot: string;
+
 /**
  * Log filename a jobDir's fixture produces, mirroring initLoggerFromJobDir's
  * (job.ts) jobId extraction and initLogger's (lib/logging.ts) filename template.
@@ -292,10 +331,13 @@ for (const basename of SUITE_JOB_DIR_BASENAMES) {
 
 beforeAll(() => {
 	sharedStubDir = makeCliStubDir();
+	sharedLedgerFixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), "chunk-job-ledger-"));
+	sharedLedgerRoot = makeLedgerRoot(sharedLedgerFixtureDir);
 });
 
 afterAll(() => {
 	fs.rmSync(sharedStubDir, { recursive: true, force: true });
+	fs.rmSync(sharedLedgerFixtureDir, { recursive: true, force: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -1713,7 +1755,7 @@ describe("cmdStart reaps orphan jobs on start", () => {
 		);
 
 		await cmdStart(
-			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			{ config: configPath, "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true },
 			"test prompt",
 		);
 
@@ -1758,7 +1800,7 @@ describe("cmdStart reaps orphan jobs on start", () => {
 		);
 
 		await cmdStart(
-			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			{ config: configPath, "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true },
 			"test prompt",
 		);
 
@@ -1803,7 +1845,7 @@ describe("cmdStart reaps orphan jobs on start", () => {
 			);
 
 			await cmdStart(
-				{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+				{ config: configPath, "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true },
 				"test prompt",
 			);
 
@@ -1942,7 +1984,7 @@ describe("cmdStart reap 로그 — 생존 프로세스를 회수됐다고 보고
 
 		try {
 			await cmdStart(
-				{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+				{ config: configPath, "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true },
 				"test prompt",
 			);
 		} finally {
@@ -1964,7 +2006,7 @@ describe("cmdStart reap 로그 — 생존 프로세스를 회수됐다고 보고
 		const configPath = writeStartConfig();
 
 		await cmdStart(
-			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			{ config: configPath, "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true },
 			"test prompt",
 		);
 
@@ -1993,7 +2035,7 @@ describe("cmdStart reap 로그 — 생존 프로세스를 회수됐다고 보고
 
 		try {
 			await cmdStart(
-				{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+				{ config: configPath, "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true },
 				"test prompt",
 			);
 		} finally {
@@ -2186,6 +2228,8 @@ describe("spawnWorkers safe name collision detection", () => {
 				[
 					SCRIPT,
 					"start",
+					"--ledger-root",
+					sharedLedgerRoot,
 					"--config",
 					configPath,
 					"--jobs-dir",
@@ -2246,6 +2290,8 @@ describe("start: empty members config exits non-zero", () => {
 				[
 					SCRIPT,
 					"start",
+					"--ledger-root",
+					sharedLedgerRoot,
 					"--config",
 					configPath,
 					"--jobs-dir",
@@ -2315,6 +2361,8 @@ describe("--exclude-chairman=false keeps chairman in reviewers", () => {
 			[
 				SCRIPT,
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--config",
 				configPath,
 				"--jobs-dir",
@@ -2369,6 +2417,8 @@ describe("--exclude-chairman=false keeps chairman in reviewers", () => {
 			[
 				SCRIPT,
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--config",
 				configPath,
 				"--jobs-dir",
@@ -2424,6 +2474,8 @@ describe("--exclude-chairman=false keeps chairman in reviewers", () => {
 			[
 				SCRIPT,
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--config",
 				configPath,
 				"--jobs-dir",
@@ -2482,6 +2534,8 @@ describe("--exclude-chairman=false keeps chairman in reviewers", () => {
 			[
 				SCRIPT,
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--config",
 				configPath,
 				"--jobs-dir",
@@ -2555,6 +2609,8 @@ describe("--include-chairman=false normalizeBool parsing", () => {
 			[
 				SCRIPT,
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--config",
 				configPath,
 				"--jobs-dir",
@@ -2611,6 +2667,8 @@ describe("--include-chairman=false normalizeBool parsing", () => {
 			[
 				SCRIPT,
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--config",
 				configPath,
 				"--jobs-dir",
@@ -2665,6 +2723,8 @@ describe("--include-chairman=false normalizeBool parsing", () => {
 			[
 				SCRIPT,
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--config",
 				configPath,
 				"--jobs-dir",
@@ -2719,6 +2779,8 @@ describe("--include-chairman=false normalizeBool parsing", () => {
 			[
 				SCRIPT,
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--config",
 				configPath,
 				"--jobs-dir",
@@ -3968,6 +4030,8 @@ describe("start + collect integration", () => {
 			[
 				SCRIPT,
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--config",
 				configPath,
 				"--jobs-dir",
@@ -4093,6 +4157,8 @@ describe("start + collect integration", () => {
 			[
 				SCRIPT,
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--config",
 				configPath,
 				"--jobs-dir",
@@ -4192,6 +4258,8 @@ describe('exclude_chairman_from_members: 문자열 "no" (YAML 1.2) 회귀', () =
 			[
 				SCRIPT,
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--config",
 				configPath,
 				"--jobs-dir",
@@ -4397,6 +4465,8 @@ describe("start: settings.deny.skills recorded in job.json settings.denySkills",
 			[
 				SCRIPT,
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--config",
 				configPath,
 				"--jobs-dir",
@@ -4443,6 +4513,8 @@ describe("start: settings.deny.skills recorded in job.json settings.denySkills",
 			[
 				SCRIPT,
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--config",
 				configPath,
 				"--jobs-dir",
@@ -4634,7 +4706,7 @@ describe("start: settings.mcp recorded in job.json members", () => {
 		);
 
 		await cmdStart(
-			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			{ config: configPath, "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true },
 			"test prompt",
 		);
 
@@ -4679,7 +4751,7 @@ describe("start: settings.mcp recorded in job.json members", () => {
 
 		try {
 			await cmdStart(
-				{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+				{ config: configPath, "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true },
 				"test prompt",
 			);
 
@@ -4709,7 +4781,7 @@ describe("start: settings.mcp recorded in job.json members", () => {
 		);
 
 		await cmdStart(
-			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			{ config: configPath, "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true },
 			"test prompt",
 		);
 
@@ -4746,6 +4818,8 @@ describe("start: settings.mcp recorded in job.json members", () => {
 				[
 					path.join(import.meta.dirname, "job.ts"),
 					"start",
+					"--ledger-root",
+					sharedLedgerRoot,
 					"--config",
 					configPath,
 					"--jobs-dir",
@@ -4820,6 +4894,8 @@ describe("start: assertDenyEnforceable gate wiring", () => {
 				[
 					SCRIPT,
 					"start",
+					"--ledger-root",
+					sharedLedgerRoot,
 					"--config",
 					configPath,
 					"--jobs-dir",
@@ -4875,6 +4951,8 @@ describe("start: assertDenyEnforceable gate wiring", () => {
 			[
 				SCRIPT,
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--config",
 				configPath,
 				"--jobs-dir",
@@ -4943,7 +5021,7 @@ describe("cmdStart writes workerPgid to job.json", () => {
 		fs.mkdirSync(jobsDir, { recursive: true });
 
 		await cmdStart(
-			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			{ config: configPath, "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true },
 			"test prompt",
 		);
 
@@ -4990,7 +5068,7 @@ describe("cmdStart writes workerPgid to job.json", () => {
 		fs.mkdirSync(jobsDir, { recursive: true });
 
 		await cmdStart(
-			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			{ config: configPath, "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true },
 			"test prompt",
 		);
 
@@ -5052,7 +5130,7 @@ describe("cmdStart writes workerPgid to job.json", () => {
 
 		const mod = await import(`./job.ts?workerpgid-merge=${Date.now()}-${Math.random()}`);
 		await mod.cmdStart(
-			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			{ config: configPath, "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true },
 			"test prompt",
 		);
 
@@ -5122,7 +5200,7 @@ describe("cmdStart records the trustworthy conductor session in job.json", () =>
 			fs.mkdirSync(jobsDir, { recursive: true });
 
 			await cmdStart(
-				{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+				{ config: configPath, "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true },
 				"test prompt",
 			);
 
@@ -5193,7 +5271,7 @@ describe("start: deny reaches spawnWorkers entities (AC6 wiring)", () => {
 
 		const mod = await import(`./job.ts?ac6-orchestrate-review=${Date.now()}-${Math.random()}`);
 		await mod.cmdStart(
-			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			{ config: configPath, "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true },
 			"test prompt",
 		);
 
@@ -5275,7 +5353,7 @@ describe("start: MCP fields reach spawnWorkers entities", () => {
 
 		const mod = await import(`./job.ts?mcpblock-transmission=${Date.now()}-${Math.random()}`);
 		await mod.cmdStart(
-			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			{ config: configPath, "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true },
 			"test prompt",
 		);
 
@@ -5341,7 +5419,7 @@ describe("start durable review identity", () => {
 		const mod = await import(`./job.ts?identity-persist=${Date.now()}-${Math.random()}`);
 		const jobsDir = path.join(tmpDir, "jobs");
 		await mod.cmdStart(
-			{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", json: true, identity },
+			{ config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true, identity },
 			"prompt",
 		);
 		const jobDir = fs.readdirSync(jobsDir).map((name) => path.join(jobsDir, name))[0];
@@ -5364,6 +5442,7 @@ describe("start durable review identity", () => {
 		const options = {
 			config: writeConfig(),
 			"jobs-dir": jobsDir,
+			"ledger-root": sharedLedgerRoot,
 			chairman: "none",
 			json: true,
 			identity,
@@ -5389,13 +5468,14 @@ describe("start durable review identity", () => {
 		const mod = await import(`./job.ts?identity-mismatch=${Date.now()}-${Math.random()}`);
 		const jobsDir = path.join(tmpDir, "jobs");
 		await mod.cmdStart(
-			{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", json: true, identity },
+			{ config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true, identity },
 			"prompt",
 		);
 		await mod.cmdStart(
 			{
 				config: writeConfig(),
 				"jobs-dir": jobsDir,
+				"ledger-root": sharedLedgerRoot,
 				chairman: "none",
 				json: true,
 				identity: { ...identity, headSha: "other-head" },
@@ -5419,7 +5499,7 @@ describe("start durable review identity", () => {
 		}));
 		const mod = await import(`./job.ts?identity-legacy=${Date.now()}-${Math.random()}`);
 		const jobsDir = path.join(tmpDir, "jobs");
-		const options = { config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", json: true };
+		const options = { config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true };
 		await mod.cmdStart(options, "prompt");
 		await mod.cmdStart(options, "prompt");
 		expect(fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-")).length).toBe(
@@ -5479,7 +5559,7 @@ describe("start durable review identity", () => {
 			].join("\n"),
 		);
 		const jobsDir = path.join(tmpDir, "jobs");
-		const options = { config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true, identity };
+		const options = { config: configPath, "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true, identity };
 		await expect(mod.cmdStart(options, "prompt")).resolves.toBeUndefined();
 		const jobDirName = fs.readdirSync(jobsDir).find((name) => name.startsWith("chunk-review-"));
 		if (!jobDirName) throw new Error("expected durable job");
@@ -5529,7 +5609,7 @@ describe("start durable review identity", () => {
 			},
 		}));
 		const mod = await import(`./job.ts?identity-pre-callback=${Date.now()}-${Math.random()}`);
-		const options = { config: writeConfig(), "jobs-dir": path.join(tmpDir, "jobs"), chairman: "none", json: true, identity };
+		const options = { config: writeConfig(), "jobs-dir": path.join(tmpDir, "jobs"), "ledger-root": sharedLedgerRoot, chairman: "none", json: true, identity };
 		await expect(mod.cmdStart(options, "prompt")).rejects.toThrow("before callback");
 		expect(fs.readdirSync(options["jobs-dir"]).filter((name) => name.startsWith("chunk-review-")).length).toBe(0);
 		await expect(mod.cmdStart(options, "prompt")).resolves.toBeUndefined();
@@ -5545,7 +5625,7 @@ describe("start durable review identity", () => {
 			const jobsDir = path.join(tmpDir, `invalid-${args.length}`);
 			const result = spawnSync(
 				process.execPath,
-				[script, "start", "--jobs-dir", jobsDir, ...args, "prompt"],
+				[script, "start", "--ledger-root", sharedLedgerRoot, "--jobs-dir", jobsDir, ...args, "prompt"],
 				{
 					encoding: "utf8",
 				},
@@ -5565,6 +5645,8 @@ describe("start durable review identity", () => {
 		const jobsDir = path.join(tmpDir, "concurrent-jobs");
 		const args = [
 			"start",
+			"--ledger-root",
+			sharedLedgerRoot,
 			"--config",
 			configPath,
 			"--jobs-dir",
@@ -5641,7 +5723,7 @@ describe("start durable review identity", () => {
 		);
 		const mod = await import(`./job.ts?identity-stale=${Date.now()}-${Math.random()}`);
 		await mod.cmdStart(
-			{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
+			{ config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", identity },
 			"prompt",
 		);
 		expect(fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-")).length).toBe(
@@ -5667,6 +5749,8 @@ describe("start durable review identity", () => {
 			[
 				path.resolve(import.meta.dir, "job.ts"),
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--jobs-dir",
 				jobsDir,
 				"--review-id",
@@ -5713,7 +5797,7 @@ describe("start durable review identity", () => {
 		fs.utimesSync(malformedLockPath, staleAt, staleAt);
 		const mod = await import(`./job.ts?identity-malformed-stale=${Date.now()}-${Math.random()}`);
 		await mod.cmdStart(
-			{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
+			{ config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", identity },
 			"prompt",
 		);
 		expect(fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-")).length).toBe(
@@ -5734,6 +5818,8 @@ describe("start durable review identity", () => {
 			[
 				path.resolve(import.meta.dir, "job.ts"),
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--jobs-dir",
 				jobsDir,
 				"--review-id",
@@ -5774,7 +5860,7 @@ describe("start durable review identity", () => {
 		try {
 			const mod = await import(`./job.ts?identity-new-witness=${Date.now()}-${Math.random()}`);
 			await mod.cmdStart(
-				{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
+				{ config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", identity },
 				"prompt",
 			);
 		} finally {
@@ -5802,7 +5888,7 @@ describe("start durable review identity", () => {
 		);
 		const mod = await import(`./job.ts?identity-reused-live=${Date.now()}-${Math.random()}`);
 		await mod.cmdStart(
-			{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
+			{ config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", identity },
 			"prompt",
 		);
 		expect(fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-")).length).toBe(1);
@@ -5820,7 +5906,7 @@ describe("start durable review identity", () => {
 		);
 		const result = spawnSync(
 			process.execPath,
-			[path.resolve(import.meta.dirname, "job.ts"), "start", "--jobs-dir", jobsDir, "--review-id", identity.reviewId, "--chunk-key", identity.chunkKey, "--attempt", String(identity.attempt), "--worktree-realpath", identity.worktreeRealpath, "--base-sha", identity.baseSha, "--head-sha", identity.headSha, "--diff-fingerprint", identity.diffFingerprint, "prompt"],
+			[path.resolve(import.meta.dirname, "job.ts"), "start", "--ledger-root", sharedLedgerRoot, "--jobs-dir", jobsDir, "--review-id", identity.reviewId, "--chunk-key", identity.chunkKey, "--attempt", String(identity.attempt), "--worktree-realpath", identity.worktreeRealpath, "--base-sha", identity.baseSha, "--head-sha", identity.headSha, "--diff-fingerprint", identity.diffFingerprint, "prompt"],
 			{ encoding: "utf8", timeout: 60_000, env: { ...process.env, CHUNK_REVIEW_IDENTITY_LOCK_DEADLINE_MS: "500" } },
 		);
 		expect(typeof result.status).toBe("number");
@@ -5835,7 +5921,7 @@ describe("start durable review identity", () => {
 		fs.writeFileSync(lockPath(jobsDir), JSON.stringify({ pid: process.pid, createdAt: Date.now() - 11 * 60 * 1000 }));
 		const result = spawnSync(
 			process.execPath,
-			[path.resolve(import.meta.dirname, "job.ts"), "start", "--jobs-dir", jobsDir, "--review-id", identity.reviewId, "--chunk-key", identity.chunkKey, "--attempt", String(identity.attempt), "--worktree-realpath", identity.worktreeRealpath, "--base-sha", identity.baseSha, "--head-sha", identity.headSha, "--diff-fingerprint", identity.diffFingerprint, "prompt"],
+			[path.resolve(import.meta.dirname, "job.ts"), "start", "--ledger-root", sharedLedgerRoot, "--jobs-dir", jobsDir, "--review-id", identity.reviewId, "--chunk-key", identity.chunkKey, "--attempt", String(identity.attempt), "--worktree-realpath", identity.worktreeRealpath, "--base-sha", identity.baseSha, "--head-sha", identity.headSha, "--diff-fingerprint", identity.diffFingerprint, "prompt"],
 			{ encoding: "utf8", timeout: 60_000, env: { ...process.env, CHUNK_REVIEW_IDENTITY_LOCK_DEADLINE_MS: "500" } },
 		);
 		expect(typeof result.status).toBe("number");
@@ -5855,7 +5941,7 @@ describe("start durable review identity", () => {
 			},
 		}));
 		const mod = await import(`./job.ts?identity-setup-failure=${Date.now()}-${Math.random()}`);
-		const options = { config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity };
+		const options = { config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", identity };
 		await expect(mod.cmdStart(options, "prompt")).rejects.toThrow("setup failed");
 		expect(fs.existsSync(lockPath(jobsDir))).toBe(false);
 		expect(fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-"))).toEqual([]);
@@ -5880,6 +5966,8 @@ describe("start durable review identity", () => {
 		);
 		const args = [
 			"start",
+			"--ledger-root",
+			sharedLedgerRoot,
 			"--config",
 			config,
 			"--jobs-dir",
@@ -5963,6 +6051,8 @@ describe("start durable review identity", () => {
 			[
 				path.resolve(import.meta.dir, "job.ts"),
 				"start",
+				"--ledger-root",
+				sharedLedgerRoot,
 				"--config",
 				writeConfig(),
 				"--jobs-dir",
@@ -6005,7 +6095,7 @@ describe("start durable review identity", () => {
 			const jobsDir = path.join(tmpDir, `malformed-${label}`);
 			fs.writeFileSync(
 				script,
-				`import { cmdStart } from ${JSON.stringify(jobModule)};\nconst identity = ${JSON.stringify(identity)};\nawait cmdStart({ config: ${JSON.stringify(writeConfig())}, "jobs-dir": ${JSON.stringify(jobsDir)}, identity: ${expression} }, "prompt");\n`,
+				`import { cmdStart } from ${JSON.stringify(jobModule)};\nconst identity = ${JSON.stringify(identity)};\nawait cmdStart({ config: ${JSON.stringify(writeConfig())}, "jobs-dir": ${JSON.stringify(jobsDir)}, "ledger-root": ${JSON.stringify(sharedLedgerRoot)}, identity: ${expression} }, "prompt");\n`,
 			);
 			const result = spawnSync(process.execPath, [script], { encoding: "utf8" });
 			expect(result.status).not.toBe(0);
@@ -6028,7 +6118,7 @@ describe("start durable review identity", () => {
 		const mod = await import(`./job.ts?initializing-no-lock=${Date.now()}-${Math.random()}`);
 		await expect(
 			mod.cmdStart(
-				{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
+				{ config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", identity },
 				"prompt",
 			),
 		).resolves.toBeUndefined();
@@ -6049,7 +6139,7 @@ describe("start durable review identity", () => {
 		const mod = await import(`./job.ts?initializing-dead-anchor=${Date.now()}-${Math.random()}`);
 		await expect(
 			mod.cmdStart(
-				{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
+				{ config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", identity },
 				"prompt",
 			),
 		).resolves.toBeUndefined();
@@ -6073,7 +6163,7 @@ describe("start durable review identity", () => {
 		const mod = await import(`./job.ts?initializing-live-anchor=${Date.now()}-${Math.random()}`);
 		await expect(
 			mod.cmdStart(
-				{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
+				{ config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", identity },
 				"prompt",
 			),
 		).rejects.toThrow("initializing");
@@ -6103,7 +6193,7 @@ describe("start durable review identity", () => {
 			JSON.stringify({ member: "alice", state: "queued" }),
 		);
 		const mod = await import(`./job.ts?initializing-dead-partial=${Date.now()}-${Math.random()}`);
-		const options = { config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity };
+		const options = { config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", identity };
 		await expect(mod.cmdStart(options, "prompt")).resolves.toBeUndefined();
 		expect(fs.existsSync(jobDir)).toBe(true);
 		const metadata = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
@@ -6135,7 +6225,7 @@ describe("start durable review identity", () => {
 		);
 		const mod = await import(`./job.ts?initializing-dead-directory-only=${Date.now()}-${Math.random()}`);
 		await expect(
-			mod.cmdStart({ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity }, "prompt"),
+			mod.cmdStart({ config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", identity }, "prompt"),
 		).resolves.toBeUndefined();
 		for (const name of ["alice", "bob"]) {
 			expect(JSON.parse(fs.readFileSync(path.join(jobDir, "members", name, "status.json"), "utf8"))).toMatchObject({
@@ -6167,7 +6257,7 @@ describe("start durable review identity", () => {
 		);
 		const mod = await import(`./job.ts?initializing-live-partial=${Date.now()}-${Math.random()}`);
 		await expect(
-			mod.cmdStart({ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity }, "prompt"),
+			mod.cmdStart({ config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", identity }, "prompt"),
 		).rejects.toThrow("initializing");
 		expect(fs.existsSync(path.join(jobDir, "members", "bob"))).toBe(false);
 	});
@@ -6184,7 +6274,7 @@ describe("start durable review identity", () => {
 		const mod = await import(`./job.ts?initializing-enotdir=${Date.now()}-${Math.random()}`);
 		await expect(
 			mod.cmdStart(
-				{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
+				{ config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", identity },
 				"prompt",
 			),
 		).rejects.toThrow("initializing");
@@ -6204,7 +6294,7 @@ describe("start durable review identity", () => {
 			},
 		}));
 		const mod = await import(`./job.ts?spawn-anchor=${Date.now()}-${Math.random()}`);
-		const options = { config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity };
+		const options = { config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", identity };
 		await expect(mod.cmdStart(options, "prompt")).rejects.toThrow("spawn failed");
 		const jobs = fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-"));
 		expect(jobs).toEqual([]);
@@ -6264,7 +6354,7 @@ describe("start --ledger-root: coverage-gated job.json", () => {
 		fs.mkdirSync(jobsDir, { recursive: true });
 		const mod = await import(`./job.ts?ledger-root=${Date.now()}-${Math.random()}`);
 		await mod.cmdStart(
-			{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", json: true, ...extra },
+			{ config: writeConfig(), "jobs-dir": jobsDir, "ledger-root": sharedLedgerRoot, chairman: "none", json: true, ...extra },
 			"test prompt",
 		);
 		expect(capturedJobDir).not.toBe("");
@@ -6285,10 +6375,18 @@ describe("start --ledger-root: coverage-gated job.json", () => {
 		expect((jobMeta.settings as Record<string, unknown>).coverageGated).toBe(true);
 	});
 
-	test("--ledger-root가 없으면 coverage와 coverageGated를 기록하지 않는다", async () => {
-		const jobMeta = await startWithMockedSpawn({});
-		expect("coverage" in jobMeta).toBe(false);
-		expect("coverageGated" in (jobMeta.settings as Record<string, unknown>)).toBe(false);
+	test("--ledger-root 없이는 잡을 만들지 않고 conductor의 plan 단계를 가리키며 거부한다", () => {
+		const jobsDir = path.join(tmpDir, "jobs");
+		const r = spawnSync(
+			process.execPath,
+			[SCRIPT, "start", "--config", writeConfig(), "--jobs-dir", jobsDir, "--chairman", "none", "prompt"],
+			{ stdio: "pipe" },
+		);
+		expect(r.status).toBe(1);
+		const stderr = r.stderr.toString();
+		expect(stderr).toContain("--ledger-root is required");
+		expect(stderr).toContain("diff-cursor.ts plan --out <dir>/plan");
+		expect(fs.existsSync(jobsDir) ? fs.readdirSync(jobsDir).filter((n) => n.startsWith("chunk-review-")) : []).toEqual([]);
 	});
 
 	test("plan.json이 없는 --ledger-root는 잡을 만들지 않고 거부한다", () => {
@@ -6360,4 +6458,53 @@ describe("resume-member CLI: coverage-gated job은 coverage 훅을 넘긴다", (
 		expect(status.message).toContain("usage limit");
 		expect(status.resume_count ?? 0).toBe(0);
 	});
+});
+
+describe("collect CLI: coverage-gated job의 데드라인은 원장 진행으로 늘어난다", () => {
+	const SCRIPT = path.join(import.meta.dirname, "job.ts");
+	let tmpDir: string;
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	function collectBudget(jobDir: string): Record<string, unknown> {
+		const out = execFileSync(process.execPath, [SCRIPT, "collect", "--timeout-ms", "1", jobDir], { stdio: "pipe" });
+		return JSON.parse(out.toString());
+	}
+
+	test("방금 페이지를 끝낸 멤버가 있으면 생성 기준 데드라인이 지나도 poll_again, 진행이 없으면 stop_and_degrade", () => {
+		tmpDir = makeTmpDir();
+		const ledgerRoot = makeLedgerRoot(tmpDir);
+		const planDir = path.join(ledgerRoot, "plan");
+		const planSha = JSON.parse(fs.readFileSync(path.join(planDir, "plan.json"), "utf8")).planSha;
+		const jobDir = path.join(tmpDir, "jobs", "chunk-review-progress");
+		const memberDir = path.join(jobDir, "members", "correctness");
+		fs.mkdirSync(memberDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({
+				id: "chunk-review-progress",
+				createdAt: new Date(Date.now() - 3 * 3600_000).toISOString(),
+				settings: { timeoutSec: 600, coverageGated: true },
+				coverage: { ledgerRoot, planDir, planSha },
+				members: [{ name: "correctness" }],
+			}),
+		);
+		// A fresh heartbeat alone never extends the deadline.
+		fs.writeFileSync(
+			path.join(memberDir, "status.json"),
+			JSON.stringify({ member: "correctness", state: "running", lastHeartbeat: new Date().toISOString() }),
+		);
+		const ledger = path.join(ledgerRoot, "ledgers", "correctness");
+		expect(runDiffCursor(["init", "--plan", planDir, "--angle", "correctness", "--ledger", ledger]).code).toBe(0);
+		expect(collectBudget(jobDir).nextAction).toBe("stop_and_degrade");
+
+		const page = runDiffCursor(["next", "--ledger", ledger]).stdout;
+		const id = /\[PAGE (\S+) ·/.exec(page)?.[1] ?? "";
+		const ack = /### ACK (\S+): ([0-9a-f]{8}) ###/.exec(page)?.[2] ?? "";
+		const done = runDiffCursor(["done", id, "--ack", ack, "--note", "no relevant mechanism: doc page", "--ledger", ledger]);
+		expect(done.stderr).toBe("");
+		expect(collectBudget(jobDir).nextAction).toBe("poll_again");
+	}, 60_000);
 });

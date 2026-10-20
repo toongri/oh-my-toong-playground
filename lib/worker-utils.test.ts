@@ -2199,6 +2199,22 @@ describe("executeOneTurn completionGate", () => {
 		expect(status.sessionID).toBe("s1");
 	});
 
+	test("게이트가 fatal 미완료를 보고하면 done도 awaiting_resume도 아닌 error로 기록한다", async () => {
+		const memberDir = join(tmpDir, "fatal");
+		mkdirSync(memberDir, { recursive: true });
+		const result = await runOneTurn(
+			makeOneTurnOpts(memberDir, {
+				driverFactory: () => makeOneTurnMockDriver(doneParse),
+				runOnceFn: makeFlexibleMockRunOnce("raw", doneRun),
+				completionGate: () => ({ complete: false, fatal: true, message: "plan changed since job start" }),
+			}),
+		);
+		expect(result.state).toBe("error");
+		const status = JSON.parse(readFileSync(join(memberDir, "status.json"), "utf8"));
+		expect(status.state).toBe("error");
+		expect(status.message).toBe("plan changed since job start");
+	});
+
 	test("게이트가 완료를 보고하면 done을 유지한다", async () => {
 		const memberDir = join(tmpDir, "complete");
 		mkdirSync(memberDir, { recursive: true });

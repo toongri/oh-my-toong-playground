@@ -46,6 +46,7 @@ import {
 	cmdStop as _cmdStop,
 	cmdClean as _cmdClean,
 	cmdCollect as _cmdCollect,
+	COVERAGE_JOB_WALL_CAP_SEC,
 	buildManifest as _buildManifest,
 	cmdResumeMember as _cmdResumeMember,
 	reapOrphanJobs,
@@ -280,7 +281,13 @@ function logMemberDurations(jobDir: string): void {
 async function cmdCollect(options: Record<string, unknown>, jobDir: string): Promise<void> {
 	initLoggerFromJobDir(jobDir);
 	logInfo(`collect: ${path.resolve(jobDir)}`);
-	await _cmdCollect(options, jobDir, CHUNK_REVIEW_JOB_CONFIG);
+	const coverage = readJobCoverage(path.resolve(jobDir));
+	await _cmdCollect(
+		options,
+		jobDir,
+		CHUNK_REVIEW_JOB_CONFIG,
+		coverage ? coverageHooks(coverage) : undefined,
+	);
 	logMemberDurations(jobDir);
 }
 
@@ -464,8 +471,8 @@ function printHelp(): void {
 	process.stdout.write(`Chunk Review (job mode)
 
 Usage:
-  job.ts start [--config path] [--chairman auto|claude|codex|...] [--jobs-dir path] [--ledger-root dir] [--json] "question"
-  job.ts start --stdin
+  job.ts start --ledger-root dir [--config path] [--chairman auto|claude|codex|...] [--jobs-dir path] [--json] "question"
+  job.ts start --ledger-root dir --stdin
   job.ts status [--json|--text|--checklist] [--verbose] <jobDir>
   job.ts collect [--timeout-ms N] <jobDir>
   job.ts results [--json|--manifest] <jobDir>
@@ -478,23 +485,28 @@ Usage:
 Notes:
   - start returns immediately and runs reviewers in parallel via detached Node workers
   - poll status with repeated short calls to update TODO/plan UIs in host agents
-  - --ledger-root <dir>: coverage-gated job. Run diff-cursor.ts plan --out <dir>/plan first;
-    start records coverage {ledgerRoot, planDir, planSha} and settings.coverageGated in job.json.
+  - --ledger-root <dir> is required: start refuses without it. Run diff-cursor.ts plan --out <dir>/plan
+    first; start records coverage {ledgerRoot, planDir, planSha} and settings.coverageGated in job.json.
+    A member whose plan.json planSha no longer matches job.json ends error, never done.
     Each member walks the diff through its ledger at <dir>/ledgers/<member>. A turn that ends
     before the ledger is finished becomes awaiting_resume (status.json coverage: pagesAcked,
     pagesTotal, finished:false), never done.
   - resume-member is run by the conductor: after collect returns awaiting_resume, resume each
     awaiting_resume member, then collect again. Nothing resumes automatically.
-    Without --ledger-root: at most 3 resumes per member; error/non_retryable are not resumable.
+    A job.json without coverage (created before --ledger-root was required): at most 3 resumes
+    per member; error/non_retryable are not resumable.
     With --ledger-root: no resume cap while pagesAcked grows between resumes; timed_out and error
-    turns resume from the ledger. After 3 resumes in a row without progress, resume-member first
-    re-splits the issued page to half its size (min 4096 bytes), or else spends one plain resume.
+    turns resume from the ledger. When 3 turns in a row end without progress (the initial turn
+    counts), that 3rd resume-member first re-splits the issued page to half its size (min 4096
+    bytes), or else spends one plain resume.
     It then marks the member stalled (exit 1, reason in status.json message) when progress still
     does not come back, when the turn failed outside the member (missing CLI, non_retryable such
     as auth expiry or quota/rate limit), or when no session id was recorded. A stalled member is
     never done: tell the user, and rerun with --retry-stalled only after the cause is fixed.
-  - collect on a --ledger-root job counts its job deadline from the latest member activity, so a
-    member that is still working through resumed turns is not cut
+    --retry-stalled on a member with no session id starts a fresh initial turn on the same ledger.
+  - collect counts the job deadline (settings timeout) from the latest page any member acknowledged,
+    so a member still making progress through resumed turns is not cut; heartbeats and resumes
+    without progress do not extend it, and it never passes ${COVERAGE_JOB_WALL_CAP_SEC / 3600} hours after job start
   - reap kills orphaned job process groups (SIGTERM then SIGKILL); all its output goes to
     stderr — stdout is always empty, since a SessionStart hook calls it and must not vary
   - doctor reports orphan counts on stdout without killing anything (diagnostic only)
@@ -932,14 +944,19 @@ function cmdDoctor(options: Record<string, unknown>): void {
 }
 
 /**
- * `--ledger-root <dir>` → the job's coverage record. The plan must already exist at
+ * `--ledger-root <dir>` (required) → the job's coverage record. The plan must already exist at
  * `<dir>/plan/plan.json` (diff-cursor.ts plan); its planSha is recorded so readers never guess.
+ * The finder prompts read the diff only through the cursor, so a job without a ledger could end
+ * `done` without reading the diff.
  */
 function resolveStartCoverage(
 	options: Record<string, unknown>,
-): { ledgerRoot: string; planDir: string; planSha: string } | null {
+): { ledgerRoot: string; planDir: string; planSha: string } {
 	const raw = options["ledger-root"];
-	if (raw === undefined || raw === null) return null;
+	if (raw === undefined || raw === null)
+		exitWithError(
+			"start: --ledger-root is required: run the conductor's plan step first (diff-cursor.ts plan --out <dir>/plan, code-review SKILL.md), then pass --ledger-root <dir>. Finders read the diff only through the cursor ledger under <dir>.",
+		);
 	if (typeof raw !== "string" || raw === "") exitWithError("start: --ledger-root needs a directory");
 	const ledgerRoot = path.resolve(raw);
 	const planDir = path.join(ledgerRoot, "plan");
@@ -1110,9 +1127,9 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 				timeoutSec: timeoutSec || null,
 				denySkills,
 				denySubagents,
-				...(coverage ? { coverageGated: true } : {}),
+				coverageGated: true,
 			},
-			...(coverage ? { coverage } : {}),
+			coverage,
 			...(identity ? { identity } : {}),
 			state: identity ? "initializing" : undefined,
 			...(identity

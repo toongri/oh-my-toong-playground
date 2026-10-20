@@ -2493,13 +2493,23 @@ export type CollectBudgetMeta = {
 	timeoutSec?: unknown;
 	/** job.json `settings.coverageGated`: members walk until their coverage is complete. */
 	coverageGated?: boolean;
-	/** Latest member activity (turn queued/started, heartbeat, turn end), epoch ms. */
-	lastActivityAt?: number | null;
+	/** Latest coverage progress (a page acknowledged or a ledger finished) of any member, epoch ms. */
+	lastProgressAt?: number | null;
 };
 
 /**
- * Coverage-gated jobs: one per-turn timeout counts from the latest member activity, not from job
- * creation, so a member still working through resumed turns is never cut by the job deadline.
+ * Absolute wall-time cap for a coverage-gated job, counted from job creation. 6 hours is three
+ * full turns at code-review's 2-hour per-turn timeout: a large diff still walks to the end while
+ * pages keep being acknowledged, and a finder that keeps a trickle of progress cannot hold the
+ * conductor past the point where the review is still useful in the session that asked for it.
+ */
+export const COVERAGE_JOB_WALL_CAP_SEC = 6 * 60 * 60;
+
+/**
+ * Coverage-gated jobs: one per-turn timeout counts from the latest coverage progress, not from
+ * job creation, so a member still acknowledging pages through resumed turns is not cut. Turn
+ * activity without progress (requeue, heartbeat) does not extend it, and the deadline never
+ * passes COVERAGE_JOB_WALL_CAP_SEC after creation. Other jobs: creation + timeout.
  */
 export function resolveCollectNextAction(meta: CollectBudgetMeta, now: number): CollectBudget {
 	const createdAt = Date.parse(String(meta.createdAt ?? ""));
@@ -2507,11 +2517,15 @@ export function resolveCollectNextAction(meta: CollectBudgetMeta, now: number): 
 	if (!Number.isFinite(createdAt) || !Number.isFinite(timeoutSec) || timeoutSec <= 0)
 		return { nextAction: "poll_again", elapsedSec: null, deadlineSec: null };
 	const elapsedSec = Math.round((now - createdAt) / 1000);
-	const anchor =
-		meta.coverageGated && typeof meta.lastActivityAt === "number"
-			? Math.max(createdAt, meta.lastActivityAt)
-			: createdAt;
-	const deadlineSec = Math.round((anchor - createdAt) / 1000) + timeoutSec;
+	let deadlineSec = timeoutSec;
+	if (meta.coverageGated) {
+		const anchor =
+			typeof meta.lastProgressAt === "number" ? Math.max(createdAt, meta.lastProgressAt) : createdAt;
+		deadlineSec = Math.min(
+			Math.round((anchor - createdAt) / 1000) + timeoutSec,
+			COVERAGE_JOB_WALL_CAP_SEC,
+		);
+	}
 	return {
 		nextAction: elapsedSec >= deadlineSec ? "stop_and_degrade" : "poll_again",
 		elapsedSec,
@@ -2519,10 +2533,8 @@ export function resolveCollectNextAction(meta: CollectBudgetMeta, now: number): 
 	};
 }
 
-const ACTIVITY_FIELDS = ["queuedAt", "startedAt", "lastHeartbeat", "finishedAt"];
-
-/** Latest activity timestamp across every member's status.json, or null when none is recorded. */
-function readLastMemberActivityAt(entitiesDir: string): number | null {
+/** Latest coverage progress across every member's ledger, or null when none is recorded. */
+function readLastCoverageProgressAt(entitiesDir: string, hooks: CoverageHooks): number | null {
 	let latest: number | null = null;
 	let entries: string[];
 	try {
@@ -2531,17 +2543,23 @@ function readLastMemberActivityAt(entitiesDir: string): number | null {
 		return null;
 	}
 	for (const entry of entries) {
-		const status = readJsonIfExists(path.join(entitiesDir, entry, "status.json"));
-		if (!isRecord(status)) continue;
-		for (const field of ACTIVITY_FIELDS) {
-			const ts = Date.parse(String(status[field] ?? ""));
-			if (Number.isFinite(ts) && (latest === null || ts > latest)) latest = ts;
+		let at: number | null;
+		try {
+			at = hooks.readProgress(entry).lastProgressAt;
+		} catch {
+			continue; // ledger not created yet: no progress from this member
 		}
+		if (at !== null && (latest === null || at > latest)) latest = at;
 	}
 	return latest;
 }
 
-export function readCollectBudgetMeta(jobDir: string, config: JobConfig): CollectBudgetMeta {
+/** `coverage` is required to read progress: a coverage-gated job without it gets no extension. */
+export function readCollectBudgetMeta(
+	jobDir: string,
+	config: JobConfig,
+	coverage?: CoverageHooks,
+): CollectBudgetMeta {
 	try {
 		const meta = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
 		const settings = isRecord(meta?.settings) ? meta.settings : undefined;
@@ -2550,9 +2568,10 @@ export function readCollectBudgetMeta(jobDir: string, config: JobConfig): Collec
 			createdAt: meta?.createdAt,
 			timeoutSec: settings?.timeoutSec,
 			coverageGated,
-			lastActivityAt: coverageGated
-				? readLastMemberActivityAt(path.join(jobDir, config.entityDirName))
-				: null,
+			lastProgressAt:
+				coverageGated && coverage
+					? readLastCoverageProgressAt(path.join(jobDir, config.entityDirName), coverage)
+					: null,
 		};
 	} catch {
 		return {};
@@ -2563,6 +2582,7 @@ export async function cmdCollect(
 	options: Record<string, unknown>,
 	jobDir: string,
 	config: JobConfig,
+	coverage?: CoverageHooks,
 ): Promise<void> {
 	const timeoutMs = resolveCollectWaitMs(options["timeout-ms"]);
 
@@ -2578,7 +2598,10 @@ export async function cmdCollect(
 			return;
 		}
 		if (Date.now() - start >= timeoutMs) {
-			const budget = resolveCollectNextAction(readCollectBudgetMeta(jobDir, config), Date.now());
+			const budget = resolveCollectNextAction(
+				readCollectBudgetMeta(jobDir, config, coverage),
+				Date.now(),
+			);
 			process.stdout.write(
 				`${JSON.stringify(
 					{
@@ -2651,6 +2674,8 @@ export type CoverageProgress = {
 	finished: boolean;
 	/** The page issued to the member and not acknowledged yet, or null when there is none. */
 	issuedPage: { id: string; bytes: number } | null;
+	/** Latest page acknowledgement or ledger finish, epoch ms; null when nothing is acknowledged. */
+	lastProgressAt: number | null;
 };
 
 export type CoverageHooks = {
@@ -2661,7 +2686,10 @@ export type CoverageHooks = {
 
 /** Per-member bookkeeping in `<memberDir>/coverage-resume.json`. */
 type CoverageResumeRecord = {
-	/** pagesAcked observed at the previous resume; null before the first one. */
+	/**
+	 * pagesAcked at the previous resume, or at the start of the member's initial turn (the
+	 * baseline the worker records); null when neither was recorded.
+	 */
 	lastPagesAcked: number | null;
 	/** Consecutive resumes after which pagesAcked had not increased. */
 	stalledResumes: number;
@@ -2675,12 +2703,29 @@ const FRESH_COVERAGE_RECORD: CoverageResumeRecord = {
 	plainRemedyUsed: false,
 };
 
-export type CoverageResumeOutcome = {
-	pagesAcked: number;
-	pagesTotal: number;
-	stalledResumes: number;
-	remedy: string | null;
-};
+export type CoverageResumeOutcome =
+	| {
+			kind: "resume";
+			pagesAcked: number;
+			pagesTotal: number;
+			stalledResumes: number;
+			remedy: string | null;
+	  }
+	/** --retry-stalled on a member with no session: a new initial turn against the same ledger. */
+	| { kind: "fresh_turn"; reason: string };
+
+const coverageResumeRecordPath = (memberDir: string) => path.join(memberDir, "coverage-resume.json");
+
+/**
+ * Records pagesAcked at the start of a member's initial turn, so the first resume already judges
+ * whether that turn made progress and COVERAGE_STALL_LIMIT counts every turn without progress.
+ */
+export function recordCoverageResumeBaseline(memberDir: string, pagesAcked: number): void {
+	atomicWriteJson(coverageResumeRecordPath(memberDir), {
+		...FRESH_COVERAGE_RECORD,
+		lastPagesAcked: pagesAcked,
+	});
+}
 
 function readCoverageResumeRecord(recordPath: string): CoverageResumeRecord {
 	const raw = readJsonIfExists(recordPath);
@@ -2721,6 +2766,8 @@ function isCoverageGatedJob(jobDir: string): boolean {
  *   to half its size (min RESPLIT_MIN_PAGE_BYTES); when there is no such page or it cannot be
  *   split, spend one plain resume. Still no progress after that → stalled.
  * - External failure (missing CLI, failed turn) or no session to resume → stalled at once.
+ * - retryStalled (the user fixed the cause) → the counters restart; a member with no session to
+ *   resume gets a fresh initial turn instead of a resume.
  */
 export function applyCoverageResumePolicy(
 	memberDir: string,
@@ -2730,7 +2777,7 @@ export function applyCoverageResumePolicy(
 	retryStalled: boolean,
 ): CoverageResumeOutcome {
 	const statusPath = path.join(memberDir, "status.json");
-	const recordPath = path.join(memberDir, "coverage-resume.json");
+	const recordPath = coverageResumeRecordPath(memberDir);
 	const state = String(status.state ?? "");
 	let record = retryStalled ? { ...FRESH_COVERAGE_RECORD } : readCoverageResumeRecord(recordPath);
 
@@ -2753,16 +2800,19 @@ export function applyCoverageResumePolicy(
 		);
 	}
 	const external = EXTERNAL_FAILURE_STATES[state];
-	if (external) {
+	if (external && !retryStalled) {
 		const detail = [status.message, lastErrorLine(memberDir)].filter(
 			(v): v is string => typeof v === "string" && v !== "",
 		);
 		stall(`${external} (${state}${detail.length ? `: ${detail.join(" / ")}` : ""})`);
 	}
 	if (!status.sessionID) {
-		stall(
-			`no session to resume (last state ${state || "unknown"}${typeof status.message === "string" && status.message ? `: ${status.message}` : ""})`,
-		);
+		const reason = `no session to resume (last state ${state || "unknown"}${typeof status.message === "string" && status.message ? `: ${status.message}` : ""})`;
+		if (!retryStalled) stall(reason);
+		// The user fixed the cause: start over with an initial turn on the same ledger (init is
+		// idempotent). Its worker records the new progress baseline.
+		atomicWriteJson(recordPath, record);
+		return { kind: "fresh_turn", reason };
 	}
 
 	let progress: CoverageProgress;
@@ -2807,6 +2857,7 @@ export function applyCoverageResumePolicy(
 
 	atomicWriteJson(recordPath, record);
 	return {
+		kind: "resume",
 		pagesAcked: progress.pagesAcked,
 		pagesTotal: progress.pagesTotal,
 		stalledResumes: record.stalledResumes,
@@ -2886,6 +2937,9 @@ export async function cmdResumeMember(
 		coverageGated && opts.coverage
 			? applyCoverageResumePolicy(memberDir, name, status, opts.coverage, opts.retryStalled === true)
 			: null;
+	const freshTurn = coverageOutcome?.kind === "fresh_turn";
+	if (freshTurn && !opts.workerPath)
+		throw new Error("a fresh initial turn for a member without a session needs workerPath");
 	if (!coverageGated && resumeCount >= 3) throw new Error("resume cap exceeded (3/3)");
 	const reservedStatus = { ...status, resume_count: resumeCount + 1 };
 	atomicWriteJson(statusPath, reservedStatus);
@@ -2931,10 +2985,8 @@ export async function cmdResumeMember(
 			name,
 			"--command",
 			cmdStr,
-			"--session",
-			String(sessionID),
-			"--prompt",
-			prompt,
+			// Without --session/--prompt the worker runs an initial turn (ledger init, full prompt).
+			...(freshTurn ? [] : ["--session", String(sessionID), "--prompt", prompt]),
 		];
 		for (const [key, value] of Object.entries(storedWorkerEnv)) {
 			workerArgs.push("--env", `${key}=${value}`);
