@@ -1500,6 +1500,12 @@ export interface CodeReviewArtifact {
 	findings: CodeReviewFinding[];
 	/** Path to the findings.md card report — the full 7-field cards the summary findings were cut from. */
 	findings_report?: string;
+	/**
+	 * Present on an INCONCLUSIVE artifact whose review stopped on an external cause
+	 * (quota, auth, missing CLI). The reviewer writes the full object; this reader
+	 * requires only the two keys the caller acts on and passes the rest through.
+	 */
+	external_stall?: { invocation_id: string; cause_kind: string; [key: string]: unknown };
 	reviewer: string;
 	at: string;
 }
@@ -1521,6 +1527,8 @@ export interface ReviewResult {
 	};
 	reason?: string;
 	resolution?: ReviewResolution;
+	/** Copied from the artifact: the caller's cue to `await-user`, then re-dispatch with `resume_invocation_id`. */
+	external_stall?: CodeReviewArtifact["external_stall"];
 }
 
 function isReviewResolution(value: unknown): value is ReviewResolution {
@@ -1657,6 +1665,8 @@ function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
 	// string when present — a non-string path is a malformed reviewer output.
 	const report = value["findings_report"];
 	if (report !== undefined && typeof report !== "string") return false;
+	const stall = value["external_stall"];
+	if (stall !== undefined && (!isRecord(stall) || typeof stall["invocation_id"] !== "string" || typeof stall["cause_kind"] !== "string")) return false;
 	// Validate each finding; any violation → whole artifact null.
 	// `impact`, `priority`, and `assessment` are REQUIRED for COMPLETE findings — a finding without one is schema-invalid exactly like
 	// an artifact without `status`: no default-to-LOW (or any) coercion, because a
@@ -1757,7 +1767,7 @@ function reviewResultFromArtifact(raw: string, artifact: CodeReviewArtifact, sta
 	// caller sees why it blocks (never-false-complete) instead of a mystery UNKNOWN.
 	if (degraded.length > 0) result.reason = `scope evidence degraded to blocking UNKNOWN — ${degraded.join("; ")}`;
 	// An unfinished review still lists what it found, but it can never pass the gate.
-	if (artifact.status !== "COMPLETE") return { ...result, verdict: "REQUEST_CHANGES", reason: "inconclusive review" };
+	if (artifact.status !== "COMPLETE") return { ...result, verdict: "REQUEST_CHANGES", reason: "inconclusive review", ...(artifact.external_stall ? { external_stall: artifact.external_stall } : {}) };
 	if (result.findings.adjudicate.length > 0 || result.findings.repair.some((f) => classifyReviewFindingOutcome(f) === "BLOCK")) result.verdict = "REQUEST_CHANGES";
 	else if (result.findings.repair.length > 0 || result.findings.notes.length > 0) result.verdict = "COMMENT";
 	const resolution = state.review_resolution;

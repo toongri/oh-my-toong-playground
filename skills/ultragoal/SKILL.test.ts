@@ -132,13 +132,13 @@ describe("ported from goal: Completion Gate detail lives in references/completio
 describe("code-review dispatch payload contract: exactly two items, first dispatch and re-dispatch alike", () => {
 	test("dispatch payload contract detail is absent from SKILL.md body", () => {
 		expect(skillMd).not.toContain(
-			"carries exactly two things:** the `serialize-review-context` 5-slot JSON verbatim and the session-derived artifact path",
+			"carries two things and one optional third field:** the `serialize-review-context` 5-slot JSON verbatim and the session-derived artifact path",
 		);
 	});
 
 	test("dispatch payload contract detail is present in references/completion-gate.md", () => {
 		expect(completionGateMd).toContain(
-			"carries exactly two things:** the `serialize-review-context` 5-slot JSON verbatim and the session-derived artifact path",
+			"carries two things and one optional third field:** the `serialize-review-context` 5-slot JSON verbatim and the session-derived artifact path",
 		);
 	});
 
@@ -158,7 +158,7 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 	test("the dispatch-prompt contract paragraph sits after the last code-review-lane bullet and before the artifact schema block", () => {
 		const codeReviewLaneIntro =
 			"**Code-review lane (starts at the final story";
-		const contractParagraphLead = "The code-reviewer dispatch prompt carries exactly two things:**";
+		const contractParagraphLead = "The code-reviewer dispatch prompt carries two things and one optional third field:**";
 		const artifactSchemaHeader =
 			"The original `CodeReviewArtifact` consumed and scope-validated by `ultragoal-state.ts get-review-result`:";
 
@@ -186,7 +186,7 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 	});
 
 	test("범위 계약이 재수정 경로보다 앞에 있고 재리뷰에도 유지된다", () => {
-		const contract = completionGateMd.indexOf("carries exactly two things:**");
+		const contract = completionGateMd.indexOf("carries two things and one optional third field:**");
 		const repairs = completionGateMd.indexOf("- **REQUEST_CHANGES result**");
 		expect(contract).toBeGreaterThan(-1);
 		expect(repairs).toBeGreaterThan(contract);

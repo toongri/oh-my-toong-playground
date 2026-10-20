@@ -191,3 +191,47 @@ describe("plan decision rules carry the whole ADR rule", () => {
 		expect(rules(["### D-4: No field", "Why: because", ""])).toContain("plan has 1 decision headings but none");
 	});
 });
+
+describe("external_stall on an INCONCLUSIVE artifact", () => {
+	const stall = {
+		invocation_id: "inv-1",
+		job_dir: "/jobs/a",
+		ledger_root: "/ledgers/a",
+		plan_sha: "abc",
+		reviewed_head_sha: "def",
+		cause_kind: "quota",
+		detail: "You've hit your usage limit.",
+		reset_text: "try again at Sep 20th, 2026 10:17 PM.",
+		members: [{ angle: "correctness", state: "stalled", pages_acked: 1, pages_total: 3 }],
+	};
+
+	test("is accepted and surfaced by get-review-result while the verdict stays REQUEST_CHANGES", () => {
+		pursuing();
+		writeArtifact({ status: "INCONCLUSIVE", findings: [], external_stall: stall });
+		expect(state.readCodeReviewArtifact(SID)).not.toBeNull();
+		const result = state.getReviewResult(SID);
+		expect(result.verdict).toBe("REQUEST_CHANGES");
+		expect(result.reason).toBe("inconclusive review");
+		expect(result.external_stall).toEqual(stall);
+	});
+
+	test("is absent from the result when the artifact carries none", () => {
+		pursuing();
+		writeArtifact({ status: "INCONCLUSIVE", findings: [] });
+		expect("external_stall" in state.getReviewResult(SID)).toBe(false);
+	});
+
+	test("a malformed external_stall rejects the whole artifact", () => {
+		pursuing();
+		for (const bad of ["quota", [], { invocation_id: "x" }, { cause_kind: "quota" }, { invocation_id: 1, cause_kind: "quota" }, { invocation_id: "x", cause_kind: 2 }]) {
+			writeArtifact({ status: "INCONCLUSIVE", findings: [], external_stall: bad });
+			expect(state.readCodeReviewArtifact(SID)).toBeNull();
+		}
+	});
+
+	test("request-complete refuses while the artifact is INCONCLUSIVE with external_stall", () => {
+		pursuing();
+		writeArtifact({ status: "INCONCLUSIVE", findings: [], external_stall: stall });
+		expect(state.requestComplete(SID)).toBe(false);
+	});
+});
