@@ -352,6 +352,14 @@ function readSkill(path: string): string {
 	}
 }
 
+/** An item kind with no dedicated format still records what the agent did; inline image data is left out. */
+function codexGenericLine(item: Json): string {
+	const fields = Object.entries(item)
+		.filter(([key, value]) => key !== "type" && key !== "id" && !(typeof value === "string" && value.startsWith("data:")))
+		.map(([key, value]) => `${key}=${(typeof value === "string" ? value : JSON.stringify(value)).slice(0, 200)}`);
+	return `[tool ${str(item.type)}] ${fields.join(" ")}`;
+}
+
 export function extractCodex(records: Json[], windowStart = 0, sessionsRoot?: string): WorkLog {
 	const log = new LogBuilder();
 	records.forEach((record, index) => {
@@ -417,6 +425,16 @@ export function extractCodex(records: Json[], windowStart = 0, sessionsRoot?: st
 					log.agentResult(`Agent ${str(item.agent_path)} finished :: ${final || "(final message not found)"}`);
 				}
 				return;
+			// No agent action to carry: internal reasoning (Claude drops thinking too), the compaction marker,
+			// hook-injected text (Claude drops isMeta records; rules come back after the reset), and
+			// subagent spawn/wait calls that SubAgentActivity already logs.
+			case "Reasoning":
+			case "ContextCompaction":
+			case "HookPrompt":
+			case "CollabAgentToolCall":
+				return;
+			default:
+				log.lines.push(codexGenericLine(item));
 		}
 	});
 	return log.result();

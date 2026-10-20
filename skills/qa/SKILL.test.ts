@@ -1497,7 +1497,7 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts --session <id> --out <path> [--narrative <json-file>]",
 		);
 		const inspectHtml = skillMd.indexOf(
-			"open the rendered HTML and verify all claim images remain legible",
+			"open the rendered HTML and check that it carries the record",
 		);
 		const reviewReport = skillMd.indexOf(
 			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts review-report --path <html>",

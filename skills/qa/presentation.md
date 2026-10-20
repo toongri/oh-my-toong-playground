@@ -10,7 +10,7 @@ product experience, not functions and files.**
 ## Core principle — the completion condition is a person, not a document
 For a screen scenario, the required scenario-card structure is **before image → actor action and observed explanation → after image**. Both images are captures from that scenario's actual software/device run. An authored observation accompanies them; it does not replace either image. API/CLI and test scenarios instead carry an observation grounded in the received response, output, or the test's assertions. A screenshot of a log is not UI proof. A `blocked` screen scenario is the exception: it shows the recorded before/after images if any exist (not required, since it may never reach the screen), and its `observed` is required.
 
-The final `qa-report.ts` CLI validates visual images and observations before writing. Missing, unreadable, oversized, or cumulatively unembeddable images block the final report; a path-only placeholder does not satisfy visual proof. Optimize captures, update their recorded paths, and re-render. Inspect the actual HTML cards before completion, checking that each image shows the claimed actor, screen, and asserted state. Capture failure leaves an evidence gap, not an invented pass/fail or an `na` excuse.
+The final `qa-report.ts` CLI validates visual images and observations before writing. Missing, unreadable, oversized, or cumulatively unembeddable images block the final report; a path-only placeholder does not satisfy visual proof. Optimize captures, update their recorded paths, and re-render. Before completion, open the HTML and check that each card carries the images and observation recorded for its scenario. Capture failure leaves an evidence gap, not an invented pass/fail or an `na` excuse.
 
 The report is done when a **PO/designer with no context** can, from the report
 alone, correctly understand: who this change affects, how those people use the
@@ -107,16 +107,13 @@ and the resulting visible state; a persistence claim needs the relevant value
 before/after reopening. A still image of the form cannot establish either.
 Do not add outcomes in presentation prose that are absent from the claim review.
 Open the final HTML: every claimed result must remain legible in its embedded
-capture. If not, repair the presentation/capture and repeat the review.
-The renderer records a receipt for the generated HTML. After inspecting the
-actual final HTML, run `qa-state.ts review-report --path <html>` before `complete`.
-Changing the HTML or recorded facts requires re-rendering and another inspection.
-This is an inspection attestation, not automated visual understanding.
-Consume the browser/image inspection result before submitting `review-report`.
-Do not batch capture/view and attestation/completion in one unobserved tool call.
-A clipped diagram or unreadable claim is unfinished review: repair, re-render,
-and inspect again before attesting. Mechanical acceptance cannot excuse a defect
-you have not yet assessed.
+capture. If not, repair the presentation/capture, render again and check the
+card again; a capture whose bytes changed needs a new `review-evidence`.
+The renderer records a receipt for the generated HTML. After checking the
+final HTML, run `qa-state.ts review-report --path <html>` before `complete`.
+Changing the HTML or recorded facts requires re-rendering and another check.
+A clipped diagram or unreadable claim is unfinished: repair, re-render, and
+check again before `review-report`.
 
 ## Purpose & perspective (the bar)
 Write the report in the **first person of the QA engineer who verified this
