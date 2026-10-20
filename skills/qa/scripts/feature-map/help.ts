@@ -65,7 +65,7 @@ export const FEATURE_MAP_COMMANDS: FeatureMapCommand[] = [
 		usage: "configure --location PATH [--project DIR]",
 		effect: "sets the feature-map storage location",
 		details:
-			"ask the user to agree on a storage location first, then run this command. relative paths resolve against the manifest directory. The chosen missing directory is created; no data migration is performed.",
+			"run only when the user names another location; the default store needs no configure. relative paths resolve against the manifest directory. The chosen missing directory is created; no data migration is performed.",
 		examples: [
 			"bun skills/qa/scripts/feature-map/feature-map.ts configure --location ./docs/features --project .",
 		],

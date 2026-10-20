@@ -179,8 +179,8 @@ QA 실행 후 저장은 실제로 확인한 사실만 대상으로 한다. produ
 지도를 갱신할 때는 방금 받은 `get`/`query`의 64자리 `revision`을 그대로 쓴다.
 
 ```bash
-# Use an explicitly chosen external draft path; do not create project residue.
-FEATURE_DRAFT="/absolute/path/approved-by-user/stock.view.md"
+# Draft outside the project so it leaves no residue.
+FEATURE_DRAFT="$OMT_DIR/feature-drafts/stock.view.md"
 bun "${CLAUDE_SKILL_DIR}/scripts/feature-map/feature-map.ts" \
   save --file "$FEATURE_DRAFT" --expect new --project .
 bun "${CLAUDE_SKILL_DIR}/scripts/feature-map/feature-map.ts" \

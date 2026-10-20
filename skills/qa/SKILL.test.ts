@@ -1341,7 +1341,7 @@ describe("new-prose: precondition bootstrap precedes unreachability", () => {
 			"`로컬 환경 — PR #4444 섭취 대조 작업의 매일 04:50 예약 제거`",
 		);
 		expect(skillMd).toContain(
-			"When you cannot place an item, interview the user before `set-acceptance`.",
+			"When the sources contradict each other about what the product should do, and the code does not settle it, ask the user before `set-acceptance`.",
 		);
 	});
 
@@ -1603,7 +1603,7 @@ describe("new-prose: stack/seed/auth info is mined from repo docs and scripts", 
 
 	test("stage1-commands.md states mining applies to stack/seed/auth, not only build/test/lint", () => {
 		expect(stage1Md).toContain("Mining for stack/seed/auth");
-		expect(stage1Md).toContain("before asking the user or declaring a precondition unreachable");
+		expect(stage1Md).toContain("before declaring a precondition unreachable");
 	});
 });
 
