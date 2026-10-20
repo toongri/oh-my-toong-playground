@@ -128,7 +128,7 @@ describe("code-review direct finder-job contract", () => {
 		expect(step4).not.toContain("partial coverage");
 		expect(step4).toContain("There is no fixed resume cap while progress continues");
 		expect(step4).toContain("job.ts resume-member");
-		expect(step4).toContain("stop the review in this resumable state");
+		expect(step4).toContain("Publish an `INCONCLUSIVE` artifact through the normal publisher with `findings: []`");
 		expect(step4).toContain("never report a passed review below 100%");
 	});
 
@@ -1145,5 +1145,37 @@ describe("verdict ladder: concurrency/races are not a generic PLAUSIBLE default"
 		const verdictLadder = extractSection(verifierPrompt, "## Verdict ladder (recall-biased)", "## No-safe-default domains:");
 
 		expect(verdictLadder).toContain("single-threaded event loop or `fixedDelay` alone is NOT sufficient");
+	});
+});
+
+describe("external stall: record, then resume the same review", () => {
+	test("SKILL.md publishes INCONCLUSIVE with external_stall instead of verifying below 100%", () => {
+		expect(skillMd).toContain("`stall_cause_kind` of `quota`, `auth` or `missing_cli`");
+		expect(skillMd).toContain("`external_stall`");
+		for (const key of ["invocation_id", "job_dir", "ledger_root", "plan_sha", "reviewed_head_sha", "cause_kind", "reset_text", "pages_acked", "pages_total"]) {
+			expect(skillMd).toContain(key);
+		}
+		expect(skillMd).toContain("`git rev-parse HEAD` when you run `plan`");
+		expect(skillMd).toContain("never run candidate verification below 100%");
+		expect(skillMd).not.toContain("If the cause needs the user (login, quota, install), stop the review");
+	});
+
+	test("SKILL.md attaches on resume_invocation_id and fails closed without external_stall", () => {
+		expect(skillMd).toContain("`resume_invocation_id`");
+		expect(skillMd).toContain("current HEAD equals `reviewed_head_sha`");
+		expect(skillMd).toContain("resume-member --job <jobDir> --member <angle> --retry-stalled");
+		expect(skillMd).toContain("without `external_stall`");
+		expect(skillMd).toContain("OS temp cleanup");
+	});
+
+	test("wall cap restarts only for an external-cause --retry-stalled", () => {
+		expect(skillMd).toContain("restarts the 6-hour window");
+		expect(skillMd).toContain("does not override it, except on a member stalled by an external cause, where it restarts the window");
+		expect(skillMd).toContain("A no-progress stall never restarts it");
+	});
+
+	test("code-reviewer agent points to the external stall and resume flow", () => {
+		expect(codeReviewerAgent).toContain("external_stall");
+		expect(codeReviewerAgent).toContain("resume_invocation_id");
 	});
 });
