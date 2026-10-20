@@ -425,9 +425,13 @@ export function extractCodex(records: Json[], windowStart = 0, sessionsRoot?: st
 					log.agentResult(`Agent ${str(item.agent_path)} finished :: ${final || "(final message not found)"}`);
 				}
 				return;
-			// Internal reasoning (Claude's thinking blocks are dropped too) and the compaction marker carry no action.
+			// No agent action to carry: internal reasoning (Claude drops thinking too), the compaction marker,
+			// hook-injected text (Claude drops isMeta records; rules come back after the reset), and
+			// subagent spawn/wait calls that SubAgentActivity already logs.
 			case "Reasoning":
 			case "ContextCompaction":
+			case "HookPrompt":
+			case "CollabAgentToolCall":
 				return;
 			default:
 				log.lines.push(codexGenericLine(item));

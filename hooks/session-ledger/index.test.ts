@@ -165,13 +165,15 @@ describe("Codex rollout 추출", () => {
 		expect(log.editedFiles).toEqual(["/repo/a.ts"]);
 	});
 
-	test("처리 규칙이 없는 항목 종류도 한 줄로 남기고, 내부 사고와 압축 표시만 버린다", () => {
+	test("처리 규칙이 없는 항목 종류도 한 줄로 남기고, 에이전트 행동이 아닌 항목만 버린다", () => {
 		const item = (payload: Record<string, unknown>) => ({ type: "event_msg", payload: { type: "item_completed", item: payload } });
 		const records = [
 			item({ type: "ImageView", id: "exec-1", path: "file:///tmp/frame-p01.png" }),
 			item({ type: "FutureTool", id: "x-2", target: "a".repeat(300), image_url: "data:image/png;base64,AAAA", options: { mode: "fast" } }),
 			item({ type: "Reasoning", id: "r-1", summary: ["생각"] }),
 			item({ type: "ContextCompaction", id: "c-1" }),
+			item({ type: "HookPrompt", id: "h-1", fragments: [{ text: "<qa-continuation> not visually reviewed" }] }),
+			item({ type: "CollabAgentToolCall", id: "w-1", tool: "wait", receiver_thread_ids: [] }),
 		];
 		expect(extractCodex(records).lines).toEqual([
 			"[tool ImageView] path=file:///tmp/frame-p01.png",
