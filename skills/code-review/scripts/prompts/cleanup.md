@@ -40,9 +40,9 @@ Look for tests that create false confidence or fake coverage; consider whether t
 - **Simplification**: unnecessary complexity the change adds — redundant or derivable state, copy-paste with slight variation, deep nesting, dead code left behind. Name the simpler form that does the same job.
 - **Efficiency**: wasted work the change introduces — redundant computation or repeated I/O, independent operations run sequentially, blocking work added to startup or hot paths; and work that is correct but fails at scale — an N+1 query, a query or expensive call inside a loop, O(n²) over realistic input sizes, or unbounded memory/allocation growth — name the cheaper algorithm or the batched/single-query form. Name the cheaper alternative.
 - **Altitude**: fragile bandaids — special cases layered on shared infrastructure are a sign the fix is not deep enough. Prefer generalizing the underlying mechanism over adding special cases.
-- **Project guidelines and rules checklist** (exhaustive): the applicable files are already computed by the cursor plan. `{CURSOR} resume` lists them under applicable files: the `CLAUDE.md` / `AGENTS.md` guideline files and the `.claude/rules` / `.codex/rules` files whose paths match the changed files. Work through them in this order:
+- **Project guidelines and rules checklist** (exhaustive): the applicable files are already computed by the cursor plan. `{CURSOR} resume` lists them under applicable files: the `CLAUDE.md` / `AGENTS.md` guideline files and the `.claude/rules` / `.codex/rules` files whose paths match the changed files. The checklist starts from these applicable files, and you may also cite any other repo guideline or rules file (any existing `.md` file) you find relevant. Work through them in this order:
   1. Before the walk, read every listed file in full, in bounded reads so no output is truncated. Do not skip a file because it looks unrelated.
-  2. Record one checklist item per rule item (a numbered or bulleted rule, or a section-level rule) with `{CURSOR} checklist add --source <path:line> --rule "<rule text>"`. Rules about correctness (concurrency, UTC and time zones, transactions, idempotency) are included like any other rule.
+  2. Record one checklist item per rule item (a numbered or bulleted rule, or a section-level rule) with `{CURSOR} checklist add --source <path[:line]> --rule "<rule text>"`. Rules about correctness (concurrency, UTC and time zones, transactions, idempotency) are included like any other rule.
   3. While you walk the diff pages, accumulate evidence on the items with `{CURSOR} checklist update <itemId> --evidence "<file:line in the change, or why the rule does not apply>"`.
   4. After the walk, set the final verdict on every item with `{CURSOR} checklist update <itemId> --verdict <준수|위반|해당 없음>`. The only verdicts are 준수 (complied), 위반 (violated), and 해당 없음 (not applicable); there is no "cannot verify" verdict, because you have read 100% of the diff. Review the list with `{CURSOR} checklist list`.
   5. Every 위반 must also be a candidate: `{CURSOR} candidate add ... --rule <itemId>`, citing the rule (`path:line`) and the code that diverges from it.
@@ -54,7 +54,7 @@ Look for tests that create false confidence or fake coverage; consider whether t
 
 ## Scope
 
-Surface candidates ONLY for files listed in `## Review Scope`. Files outside the list are reference material you read to understand the change.
+File a candidate where the defect actually is, including unchanged files the change breaks.
 
 ## Output
 

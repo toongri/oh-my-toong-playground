@@ -38,7 +38,7 @@ Read the diff only as `## Diff Coverage Protocol` in the REVIEW CONTENT describe
 
 ## Scope
 
-Surface candidates ONLY for files listed in `## Review Scope`. Files outside the list are reference material you read to understand the change.
+File a candidate where the defect actually is, including unchanged files the change breaks.
 
 ## Output
 

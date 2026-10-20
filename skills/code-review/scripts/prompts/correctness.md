@@ -45,7 +45,7 @@ For every hunk in the diff, read the enclosing function, not just the changed li
 
 ## Scope
 
-Surface candidates ONLY for files listed in `## Review Scope`. Files outside the list are reference material — you read callers/callees there to assess the change, but you file candidates only against the listed files.
+File a candidate where the defect actually is, including unchanged files the change breaks. You read callers and callees to assess the change; `## Review Scope` lists the files this chunk changes.
 
 ## Output
 

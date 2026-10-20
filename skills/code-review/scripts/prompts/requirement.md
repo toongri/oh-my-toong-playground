@@ -47,7 +47,7 @@ Your lens is requirement gaps: ACs and decision rules the diff simply does not a
 
 ## Scope
 
-Surface candidates ONLY for files listed in `## Review Scope`. Files outside the list are reference material you read to understand the change — do not file candidates against them.
+File a candidate where the defect actually is, including unchanged files the change breaks.
 
 ## Output
 

@@ -528,7 +528,7 @@ describe("ledger 진행 규칙", () => {
 		expect(Buffer.byteLength(r.stdout)).toBeLessThan(TOOL_OUTPUT_CEILING);
 	});
 
-	test("candidate add는 목록 밖 파일과 발급 전 페이지를 거부하고 같은 후보는 한 번만 저장한다", () => {
+	test("candidate add는 저장소에 없는 경로와 발급 전 페이지를 거부하고 변경 밖 기존 파일은 조용히 받아들이며 같은 후보는 한 번만 저장한다", () => {
 		const ledger = newLedger("regression");
 		cli(ledger, "next");
 		const add = (...extra: string[]) =>
@@ -550,7 +550,7 @@ describe("ledger 진행 규칙", () => {
 			);
 		expect(add().stdout).toContain("c001 recorded");
 		expect(add().stdout).toContain("c001 already recorded");
-		expect(
+		const addAt = (file: string, ...extra: string[]) =>
 			cli(
 				ledger,
 				"candidate",
@@ -558,15 +558,24 @@ describe("ledger 진행 규칙", () => {
 				"--page",
 				plan.pages[0]?.id as string,
 				"--file",
-				"lib/CLAUDE.md",
+				file,
 				"--line",
 				"1",
 				"--summary",
-				"s",
+				"s2",
 				"--failure-scenario",
 				"f",
-			).code,
-		).toBe(1);
+				...extra,
+			);
+		for (const bad of [" ", "/etc/passwd", "../x", "src/../lib/CLAUDE.md", "nope/missing.ts", "src"])
+			expect(addAt(bad).code).toBe(1);
+		const outside = addAt("lib/CLAUDE.md");
+		expect(outside.code).toBe(0);
+		expect(outside.stdout).toBe("CANDIDATE c002 recorded (lib/CLAUDE.md:1)\n");
+		expect(outside.stderr).toBe("");
+		// --rule may cite any existing .md file, applicable or not, silently
+		expect(addAt("src/app.ts", "--rule", "docs/guide.md:2").code).toBe(0);
+		expect(addAt("src/app.ts", "--rule", "docs/missing.md:2").code).toBe(1);
 		expect(
 			cli(
 				ledger,
@@ -585,7 +594,7 @@ describe("ledger 진행 규칙", () => {
 			).code,
 		).toBe(1);
 		const exported = JSON.parse(cli(ledger, "export").stdout);
-		expect(exported.candidates).toHaveLength(1);
+		expect(exported.candidates).toHaveLength(3);
 		expect(exported.candidates[0]).toMatchObject({
 			id: "c001",
 			found_by: "regression",
@@ -595,8 +604,20 @@ describe("ledger 진행 규칙", () => {
 			pagesTotal: plan.pages.length,
 			pagesDelivered: 1,
 			pagesAcked: 0,
-			candidates: 1,
+			candidates: 3,
 		});
+	});
+
+	test("checklist --source는 적용 목록 밖 저장소 .md 파일도 조용히 받아들이고 줄 번호는 선택이다", () => {
+		const ledger = newLedger("cleanup");
+		const add = (src: string) => cli(ledger, "checklist", "add", "--source", src, "--rule", "x");
+		const lib = add("lib/CLAUDE.md:1");
+		expect(lib.code).toBe(0);
+		expect(lib.stdout).toBe("CHECKLIST r001 added (lib/CLAUDE.md:1, no verdict yet)\n");
+		expect(add("docs/guide.md").stdout).toContain("r002 added (docs/guide.md,");
+		expect(add("docs/guide.md:9999").code).toBe(1);
+		// the finish gate still wants every applicable file covered
+		expect(cli(ledger, "finish").stderr).toContain("without a checklist item");
 	});
 
 	test("cleanup finish는 적용 파일마다 체크리스트 항목, 모든 항목의 최종 판정, 위반 항목의 후보를 요구한다", () => {
@@ -606,7 +627,11 @@ describe("ledger 진행 규칙", () => {
 		expect(noItems.code).toBe(1);
 		expect(noItems.stderr).toContain("without a checklist item");
 
-		expect(cli(ledger, "checklist", "add", "--source", "lib/CLAUDE.md:1", "--rule", "x").code).toBe(
+		expect(cli(ledger, "checklist", "add", "--source", "lib/missing.md:1", "--rule", "x").code).toBe(
+			1,
+		);
+		expect(cli(ledger, "checklist", "add", "--source", "src/app.ts:1", "--rule", "x").code).toBe(1);
+		expect(cli(ledger, "checklist", "add", "--source", "../CLAUDE.md:1", "--rule", "x").code).toBe(
 			1,
 		);
 		expect(cli(ledger, "checklist", "add", "--source", "CLAUDE.md:99", "--rule", "x").code).toBe(1);

@@ -1515,21 +1515,38 @@ function findApplicable(plan: Plan, p: string): ApplicableFile | undefined {
 	return plan.applicable.find((a) => a.path === p || a.aliases.includes(p));
 }
 
+/** The reviewed tree: the head commit of the range, or the working tree for a single revision. */
+function reviewedTree(plan: Plan): TreeSource {
+	const head = reviewedHead(plan.range);
+	return head === null ? fsSource(plan.repo) : gitSource(plan.repo, head);
+}
+
+/** Validates a repo-relative path and returns its normalized form; the file must exist in the reviewed tree. */
+function existingRepoFile(plan: Plan, raw: string, flag: string): string {
+	const p = raw.trim();
+	if (p === "") throw refuse(`${flag} must not be blank`);
+	if (p.startsWith("/") || p.split("/").includes(".."))
+		throw refuse(`${flag} must be a repo-relative path without "..", got: ${raw}`);
+	if (reviewedTree(plan).kind(p) !== "file")
+		throw refuse(`${flag} ${p} is not a file in the reviewed tree`);
+	return p;
+}
+
+/** A guideline or rule citation: any existing repo .md file, optionally with :line. */
 function parseSource(plan: Plan, source: string): string {
-	const m = /^(.+):(\d+)$/.exec(source.trim());
-	if (!m)
+	const m = /^(.+?)(?::(\d+))?$/.exec(source.trim());
+	const given = m?.[1] ?? "";
+	const known = findApplicable(plan, given);
+	if (known === undefined && !given.endsWith(".md"))
 		throw refuse(
-			`--source must be <path>:<line> of an applicable guideline or rule file, got: ${source}`,
+			`--source must be the path of an existing repo .md file, optionally <path>:<line>, got: ${source}`,
 		);
-	const file = findApplicable(plan, m[1]);
-	if (!file)
-		throw refuse(
-			`--source ${m[1]} is not an applicable guideline or rule file; see resume for the list`,
-		);
+	const file = known?.path ?? existingRepoFile(plan, given, "--source");
+	if (m?.[2] === undefined) return file;
 	const line = Number(m[2]);
-	if (line < 1 || line > file.lines)
-		throw refuse(`--source line ${line} is outside ${file.path} (1-${file.lines})`);
-	return `${file.path}:${line}`;
+	const lines = known?.lines ?? lineCount(reviewedTree(plan).read(file));
+	if (line < 1 || line > lines) throw refuse(`--source line ${line} is outside ${file} (1-${lines})`);
+	return `${file}:${line}`;
 }
 
 function parseVerdict(value: string | undefined): Verdict | null {
@@ -1551,8 +1568,7 @@ function cmdCandidate(v: Values, env: NodeJS.ProcessEnv, sub: string | undefined
 		const summary = required(v.summary, "--summary").trim();
 		const failure = required(v["failure-scenario"], "--failure-scenario").trim();
 		const pageId = required(v.page, "--page");
-		if (!ctx.plan.files.includes(file))
-			throw refuse(`--file ${file} is not in the reviewable file list`);
+		existingRepoFile(ctx.plan, file, "--file");
 		if (!Number.isInteger(lineNo) || lineNo < 1) throw refuse("--line must be a positive integer");
 		if (summary === "" || failure === "")
 			throw refuse("--summary and --failure-scenario must not be blank");
@@ -2038,7 +2054,7 @@ FINDER (ledger dir via --ledger <dir> or env ${LEDGER_ENV})
                                             acknowledge the current page; --next prints the next one
   view <pageId>                             re-print an issued or done page
   candidate add --page <id> --file <path> --line <n> --summary <text> --failure-scenario <text> [--rule <itemId | path:line>]
-  checklist add --source <path:line> --rule <text> [--verdict 준수|위반|해당 없음] [--evidence <text>]
+  checklist add --source <path[:line]> --rule <text> [--verdict 준수|위반|해당 없음] [--evidence <text>]
   checklist update <itemId> [--verdict 준수|위반|해당 없음] [--evidence <text>]
   checklist list [--json]
   status [--json]                           progress counts

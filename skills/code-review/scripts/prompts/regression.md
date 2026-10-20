@@ -38,7 +38,7 @@ For every line the diff DELETES or replaces, name the invariant or behavior it e
 
 ## Scope
 
-Surface candidates ONLY for files listed in `## Review Scope`. Files outside the list are reference material you read to understand the change — you do not file candidates against them.
+File a candidate where the defect actually is, including unchanged files the change breaks. A regression whose real location is an unchanged caller is filed at that caller.
 
 ## Output
 
