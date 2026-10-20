@@ -4,13 +4,14 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { execFileSync, spawnSync } from "child_process";
+import { execFileSync, spawn, spawnSync } from "child_process";
 
 import {
 	run,
 	classifyPath,
 	globMatch,
 	noteCitesPage,
+	parseDiff,
 	parseRuleFrontmatter,
 	DYNAMIC_RESERVE,
 	TOOL_OUTPUT_CEILING,
@@ -924,18 +925,44 @@ describe("finish 이후 ledger는 닫혀 있다", () => {
 });
 
 describe("ledger 잠금", () => {
-	test("죽은 보유자가 남긴 오래된 잠금은 대기 한도 안에 인수된다", () => {
+	const deadPid = () => spawnSync(process.execPath, ["-e", ""]).pid as number;
+
+	test("죽은 보유자가 남긴 잠금은 나이와 무관하게 인수된다", () => {
 		const ledger = newLedger("correctness");
 		const lock = path.join(ledger, ".lock");
-		fs.writeFileSync(lock, "99999");
-		const old = new Date(Date.now() - 8_000);
-		fs.utimesSync(lock, old, old);
+		fs.writeFileSync(lock, `${deadPid()}.abcdef`);
 		const t0 = Date.now();
 		expect(cli(ledger, "next").code).toBe(0);
 		expect(Date.now() - t0).toBeLessThan(5_000);
 		expect(fs.existsSync(lock)).toBe(false);
-		expect(fs.readdirSync(ledger).filter((n) => n.includes("stale"))).toEqual([]);
+		expect(fs.readdirSync(ledger).filter((n) => n.includes("stale") || n.includes("aside"))).toEqual([]);
 	});
+
+	test("살아 있는 보유자의 오래된 잠금은 대기 한도까지 인수되지 않고 보유자 pid를 알려 거부한다", () => {
+		const ledger = newLedger("correctness");
+		const lock = path.join(ledger, ".lock");
+		fs.writeFileSync(lock, `${process.pid}.abcdef`);
+		const old = new Date(Date.now() - 60_000);
+		fs.utimesSync(lock, old, old);
+		const r = cli(ledger, "next");
+		expect(r.code).toBe(1);
+		expect(r.stderr).toContain(`pid ${process.pid}`);
+		expect(fs.readFileSync(lock, "utf8")).toBe(`${process.pid}.abcdef`);
+	}, 20_000);
+
+	test("떠 있는 자식 프로세스가 보유한 잠금도 인수되지 않는다", () => {
+		const ledger = newLedger("correctness");
+		const lock = path.join(ledger, ".lock");
+		const child = spawn(process.execPath, ["-e", "setTimeout(()=>{},30000)"], { stdio: "ignore" });
+		try {
+			fs.writeFileSync(lock, `${child.pid}.abcdef`);
+			const r = cli(ledger, "next");
+			expect(r.code).toBe(1);
+			expect(r.stderr).toContain(`pid ${child.pid}`);
+		} finally {
+			child.kill();
+		}
+	}, 20_000);
 });
 
 describe("파일 권한", () => {
@@ -1015,5 +1042,160 @@ describe("CLI 프로세스", () => {
 		const env = { ...process.env };
 		delete env.OMT_DIFF_CURSOR_LEDGER;
 		expect(spawnSync(process.execPath, [SCRIPT, "next"], { encoding: "utf8", env }).status).toBe(2);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// notes / export paging, git config, rule frontmatter, glob safety
+// ---------------------------------------------------------------------------
+
+describe("notes 와 resume 은 오래된 메모와 열린 질문을 잃지 않는다", () => {
+	test("메모 8개 중 첫 페이지의 240자 뒤 `check later` 질문까지 notes 로 전부 읽히고 호출마다 예산 이하다", () => {
+		const ledger = newLedger("correctness");
+		let out = cli(ledger, "next").stdout;
+		const filler = "가".repeat(200);
+		const question = "check later: OPEN_QUESTION_MARKER 는 src/app.ts 의 재시도 경로에서 확인";
+		for (let i = 0; i < 8; i++) {
+			const note = `${noteFor(out)} ${i === 0 ? `${filler} ${question}` : filler} 끝${i}`;
+			const r = cli(ledger, "done", pageIdOf(out), "--ack", ackOf(out), "--note", note, "--next");
+			expect(r.code).toBe(0);
+			out = r.stdout;
+		}
+		const resume = cli(ledger, "resume").stdout;
+		expect(resume).not.toContain("OPEN_QUESTION_MARKER");
+		expect(resume).toContain("OPEN QUESTIONS");
+		expect(resume).toContain(`notes --from ${plan.pages[0]?.id}`);
+
+		let text = "";
+		let cmd = cli(ledger, "notes");
+		let calls = 0;
+		for (;;) {
+			expect(cmd.code).toBe(0);
+			expect(Buffer.byteLength(cmd.stdout)).toBeLessThanOrEqual(PAGE_BYTES);
+			text += cmd.stdout;
+			calls++;
+			const more = /^MORE: notes --from (\S+)$/m.exec(cmd.stdout)?.[1];
+			if (more === undefined) break;
+			cmd = cli(ledger, "notes", "--from", more);
+		}
+		expect(calls).toBeGreaterThan(1);
+		expect(text).toContain(question);
+		for (let i = 0; i < 8; i++) expect(text).toContain(`끝${i}`);
+	});
+
+	test("메모가 없으면 그렇게 알리고 모르는 --from 페이지는 거부한다", () => {
+		const ledger = newLedger("correctness");
+		expect(cli(ledger, "notes").stdout).toContain("no notes yet");
+		expect(cli(ledger, "notes", "--from", "nope").code).toBe(1);
+	});
+});
+
+describe("export 는 예산 이하의 독립 JSON 부분으로 나뉜다", () => {
+	test("40KB 가 넘는 ledger 도 부분들을 합치면 후보·체크리스트·메모가 빠짐없이 돌아온다", () => {
+		const ledger = newLedger("correctness");
+		const first = cli(ledger, "next").stdout;
+		const pid = pageIdOf(first);
+		const N = 130;
+		for (let i = 0; i < N; i++) {
+			const r = cli(
+				ledger, "candidate", "add", "--page", pid, "--file", "src/app.ts", "--line", String(i + 1),
+				"--summary", `후보${i} ${"요".repeat(150)}`, "--failure-scenario", `시나리오${i} ${"시".repeat(150)}`,
+			);
+			expect(r.code).toBe(0);
+		}
+		expect(cli(ledger, "done", pid, "--ack", ackOf(first), "--note", `${noteFor(first)} 첫 메모`).code).toBe(0);
+		const outFile = path.join(fx.tmp, `export-full-${++ledgerSeq}.json`);
+		const w = cli(ledger, "export", "--out", outFile);
+		expect(w.code).toBe(0);
+		const full = JSON.parse(fs.readFileSync(outFile, "utf8"));
+		expect(Buffer.byteLength(JSON.stringify(full, null, 2))).toBeGreaterThan(40_000);
+		expect(full.candidates).toHaveLength(N);
+
+		const parts: any[] = [];
+		const p1 = cli(ledger, "export");
+		expect(p1.code).toBe(0);
+		const total = JSON.parse(p1.stdout).parts as number;
+		expect(total).toBeGreaterThan(1);
+		for (let n = 1; n <= total; n++) {
+			const r = n === 1 ? p1 : cli(ledger, "export", "--part", String(n));
+			expect(Buffer.byteLength(r.stdout)).toBeLessThanOrEqual(PAGE_BYTES);
+			const j = JSON.parse(r.stdout);
+			expect(j).toMatchObject({ part: n, parts: total, angle: "correctness" });
+			parts.push(j);
+		}
+		const cands = parts.flatMap((p) => p.candidates);
+		expect(cands.map((c: any) => c.line)).toEqual(Array.from({ length: N }, (_, i) => i + 1));
+		expect(cands.every((c: any) => c.found_by === "correctness")).toBe(true);
+		expect(parts.flatMap((p) => p.notes).map((x: any) => x.pageId)).toEqual([pid]);
+		// candidates come before notes across the whole sequence
+		const lastCandPart = parts.map((p) => p.candidates.length > 0).lastIndexOf(true);
+		const firstNotePart = parts.findIndex((p) => p.notes.length > 0);
+		expect(lastCandPart).toBeLessThanOrEqual(firstNotePart);
+		expect(cli(ledger, "export", "--part", String(total + 1)).code).toBe(1);
+	});
+});
+
+describe("diff.suppressBlankEmpty 가 켜진 사용자 설정", () => {
+	test("parseDiff 는 hunk 안의 빈 줄을 문맥 줄로 세어 줄 번호가 어긋나지 않는다", () => {
+		const patch =
+			"diff --git a/x.ts b/x.ts\nindex 1..2 100644\n--- a/x.ts\n+++ b/x.ts\n@@ -1,4 +1,4 @@\n a\n\n b\n-c\n+d\n";
+		const d = parseDiff(patch, ["x.ts"]);
+		const plus = d.atoms.find((a) => a.text === "+d");
+		expect(plus?.newNo).toBe(4);
+	});
+
+	test("plan 은 사용자 설정과 무관하게 빈 문맥 줄을 공백 줄로 받고 줄 번호가 맞다", () => {
+		const cfg = path.join(fx.tmp, "blank.gitconfig");
+		fs.writeFileSync(cfg, "[diff]\n\tsuppressBlankEmpty = true\n");
+		const saved = process.env.GIT_CONFIG_GLOBAL;
+		process.env.GIT_CONFIG_GLOBAL = cfg;
+		try {
+			const m = miniRepo(
+				"blank-ctx",
+				{ "src/b.ts": "export const a = 1;\n\nexport const b = 2;\n\nexport const c = 3;\n" },
+				{ "src/b.ts": "export const a = 1;\n\nexport const b = 2;\n\nexport const c = 4;\n" },
+			);
+			expect(m.plan.gitArgv.join(" ")).toContain("diff.suppressBlankEmpty=false");
+			const page = fs.readFileSync(path.join(m.out, "pages", `${m.plan.pages[0]?.id}.txt`), "utf8");
+			expect(page).toMatch(/ 5 \|\+export const c = 4;/);
+		} finally {
+			if (saved === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+			else process.env.GIT_CONFIG_GLOBAL = saved;
+		}
+	});
+});
+
+describe("규칙 frontmatter 보강", () => {
+	test("`paths: # 주석` 뒤의 블록 목록을 읽는다", () => {
+		expect(parseRuleFrontmatter("---\npaths: # where\n  - src/**\n  - docs/**\n---\n").patterns).toEqual([
+			"src/**",
+			"docs/**",
+		]);
+	});
+
+	test("블록 목록 항목 사이의 # 주석 줄은 목록을 끝내지 않는다", () => {
+		expect(
+			parseRuleFrontmatter("---\npaths:\n  - src/**\n  # note\n  - docs/**\n---\n").patterns,
+		).toEqual(["src/**", "docs/**"]);
+	});
+
+	test("앞의 BOM 은 `---` 검사 전에 지운다", () => {
+		expect(parseRuleFrontmatter("\uFEFF---\npaths: src/**\n---\n").patterns).toEqual(["src/**"]);
+	});
+});
+
+describe("잘못된 glob", () => {
+	test("globMatch 는 던지지 않고 일치하지 않는다고 답한다", () => {
+		expect(globMatch("src/[z-a].ts", "src/a.ts")).toBe(false);
+	});
+
+	test("plan 은 규칙 파일과 패턴을 이름으로 든 경고를 남기고 계속한다", () => {
+		const m = miniRepo(
+			"bad-glob",
+			{ "src/g.ts": "export const g = 1;\n", ".claude/rules/bad.md": "---\npaths: [\"src/[z-a].ts\"]\n---\n# bad\n" },
+			{ "src/g.ts": "export const g = 2;\n" },
+		);
+		expect(m.plan.warnings?.some((w) => w.includes(".claude/rules/bad.md") && w.includes("src/[z-a].ts"))).toBe(true);
+		expect(m.plan.applicable.map((a) => a.path)).not.toContain(".claude/rules/bad.md");
 	});
 });

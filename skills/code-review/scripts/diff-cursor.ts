@@ -278,7 +278,8 @@ export function parseDiff(patch: string, knownFiles: readonly string[]): ParsedD
 			continue;
 		}
 		const c = line[0];
-		const n = hunk >= 0 && (c === "+" || c === " ") ? newNo++ : null;
+		// An empty line inside a hunk is a context line whose single space was dropped (`diff.suppressBlankEmpty`).
+		const n = hunk >= 0 && (c === "+" || c === " " || line === "") ? newNo++ : null;
 		atoms.push({ file: fileIdx, hunk, type: hunk >= 0 ? "body" : "file", text: line, newNo: n });
 		if (hunk >= 0) file.hunkLastAtom[hunk] = atoms.length - 1;
 	}
@@ -616,7 +617,7 @@ export interface ApplicableFile {
 	aliases: string[];
 }
 
-const globCache = new Map<string, RegExp>();
+const globCache = new Map<string, RegExp | null>();
 
 function globSource(g: string): string {
 	let re = "";
@@ -677,14 +678,23 @@ function globSource(g: string): string {
  * lazy: no extglob or escapes; add when a rule uses them.
  */
 export function globMatch(pattern: string, filePath: string): boolean {
+	return compileGlob(pattern)?.test(filePath) ?? false;
+}
+
+/** The anchored regex of a glob, or null when the glob is invalid (e.g. the class `[z-a]`). */
+function compileGlob(pattern: string): RegExp | null {
 	let g = pattern.trim().replace(/^\.\//, "").replace(/^\//, "");
 	if (g.endsWith("/")) g += "**";
 	let re = globCache.get(g);
 	if (re === undefined) {
-		re = new RegExp(`^${globSource(g)}$`);
+		try {
+			re = new RegExp(`^${globSource(g)}$`);
+		} catch {
+			re = null;
+		}
 		globCache.set(g, re);
 	}
-	return re.test(filePath);
+	return re;
 }
 
 function splitTopLevel(value: string): string[] {
@@ -712,7 +722,7 @@ function stripYamlComment(s: string): string {
 		if (quote !== "") {
 			if (c === quote) quote = "";
 		} else if (c === '"' || c === "'") quote = c;
-		else if (c === "#" && i > 0 && /\s/.test(s[i - 1] ?? "")) return s.slice(0, i).trimEnd();
+		else if (c === "#" && (i === 0 || /\s/.test(s[i - 1] ?? ""))) return s.slice(0, i).trimEnd();
 	}
 	return s;
 }
@@ -728,7 +738,7 @@ export function parseRuleFrontmatter(content: string): {
 	patterns: string[];
 	alwaysApply: boolean;
 } {
-	const norm = content.replace(/\r\n/g, "\n");
+	const norm = content.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
 	const result: { patterns: string[]; alwaysApply: boolean } = { patterns: [], alwaysApply: false };
 	if (!norm.startsWith("---\n")) return result;
 	const close = norm.indexOf("\n---", 3);
@@ -747,10 +757,13 @@ export function parseRuleFrontmatter(content: string): {
 				...splitTopLevel(value.replace(/^\[/, "").replace(/\]$/, "")).map(unquote),
 			);
 		else if (value === "") {
-			while (i + 1 < lines.length && /^\s*-\s+/.test(lines[i + 1] ?? ""))
-				result.patterns.push(
-					unquote(stripYamlComment((lines[++i] ?? "").replace(/^\s*-\s+/, ""))),
-				);
+			while (i + 1 < lines.length) {
+				const next = lines[i + 1] ?? "";
+				if (/^\s*#/.test(next)) i++;
+				else if (/^\s*-\s+/.test(next))
+					result.patterns.push(unquote(stripYamlComment(lines[++i]?.replace(/^\s*-\s+/, "") ?? "")));
+				else break;
+			}
 		} else
 			result.patterns.push(
 				...(/^["']/.test(value) ? [unquote(value)] : splitTopLevel(value).map(unquote)),
@@ -888,6 +901,7 @@ export function computeApplicable(
 	top: string,
 	changed: readonly string[],
 	head: string | null,
+	warnings: string[] = [],
 ): ApplicableFile[] {
 	const src = head === null ? fsSource(top) : gitSource(top, head);
 	const out: ApplicableFile[] = [];
@@ -934,6 +948,9 @@ export function computeApplicable(
 		for (const rulesDir of [".claude/rules", ".codex/rules"]) {
 			for (const rel of listMarkdown(src, dir === "" ? rulesDir : `${dir}/${rulesDir}`, seenDirs)) {
 				const fm = parseRuleFrontmatter(src.read(rel));
+				for (const pat of fm.patterns)
+					if (compileGlob(pat.replace(/^!/, "")) === null)
+						warnings.push(`rule ${rel}: invalid glob pattern "${pat}" (treated as non-matching)`);
 				let reason: string | null = null;
 				if (fm.alwaysApply) reason = `rule: alwaysApply: true${scope}`;
 				else if (fm.patterns.length === 0)
@@ -971,6 +988,8 @@ export interface Plan {
 	filesWithoutDiff: string[];
 	pages: PageRecord[];
 	applicable: ApplicableFile[];
+	/** Problems found while computing the plan that did not stop it (absent in older plans). */
+	warnings?: string[];
 	stats: { pages: number; maxPageBytes: number; kinds: Record<string, number> };
 }
 
@@ -1055,6 +1074,7 @@ function planSummary(planDir: string, plan: Plan, created: boolean) {
 			reason: a.reason,
 			aliases: a.aliases,
 		})),
+		warnings: plan.warnings ?? [],
 	};
 }
 
@@ -1084,6 +1104,8 @@ function cmdPlan(v: Values): Output {
 		"diff.noprefix=false",
 		"-c",
 		"diff.mnemonicPrefix=false",
+		"-c",
+		"diff.suppressBlankEmpty=false",
 		"--literal-pathspecs",
 		"diff",
 		"--no-ext-diff",
@@ -1137,6 +1159,7 @@ function cmdPlan(v: Values): Output {
 	const inDiff = new Set(parsed.files.map((f) => f.path));
 	const kinds: Record<string, number> = {};
 	for (const p of pages) kinds[p.record.kind] = (kinds[p.record.kind] ?? 0) + 1;
+	const warnings: string[] = [];
 	const plan: Plan = {
 		version: 1,
 		createdAt: now(),
@@ -1151,7 +1174,8 @@ function cmdPlan(v: Values): Output {
 		fileKinds: parsed.files.map((f) => ({ path: f.path, kind: f.kind })),
 		filesWithoutDiff: files.filter((f) => !inDiff.has(f)),
 		pages: pages.map((p) => p.record),
-		applicable: computeApplicable(repoTop, files, reviewedHead(range)),
+		applicable: computeApplicable(repoTop, files, reviewedHead(range), warnings),
+		warnings,
 		stats: {
 			pages: pages.length,
 			maxPageBytes: Math.max(...pages.map((p) => p.record.bytes)),
@@ -1227,54 +1251,81 @@ function sleepSync(ms: number): void {
 }
 
 const LOCK_WAIT_MS = 10_000;
-/** A holder keeps the lock for one synchronous ledger update; older than this means it crashed. */
-const LOCK_STALE_MS = 5_000;
 
-/** Serializes ledger mutations: a finder's tool may run several cursor calls in parallel. */
-function withLock<T>(dir: string, fn: () => T): T {
-	fs.mkdirSync(dir, { recursive: true, mode: DIR_MODE });
-	const lock = path.join(dir, ".lock");
-	const token = `${process.pid}.${crypto.randomBytes(6).toString("hex")}`;
-	const deadline = Date.now() + LOCK_WAIT_MS;
-	for (;;) {
-		try {
-			fs.writeFileSync(lock, token, { flag: "wx", mode: FILE_MODE });
-			break;
-		} catch (e) {
-			if (!(e instanceof Error && "code" in e && e.code === "EEXIST")) throw e;
-			takeOverStaleLock(lock);
-			if (Date.now() > deadline) throw refuse(`ledger busy: ${lock} is held by another call`);
-			sleepSync(50);
-		}
-	}
+/** True unless the OS says no process has this pid (EPERM means it exists). */
+function pidAlive(pid: number): boolean {
 	try {
-		return fn();
-	} finally {
-		try {
-			if (fs.readFileSync(lock, "utf8") === token) fs.rmSync(lock, { force: true });
-		} catch {
-			// lock already gone
-		}
+		process.kill(pid, 0);
+		return true;
+	} catch (e) {
+		return !(e instanceof Error && "code" in e && e.code === "ESRCH");
 	}
 }
 
 /**
- * Moves a stale lock aside with an atomic rename, so only one waiter wins it; the winner then
- * retries the exclusive create. If the renamed file turns out fresh (another waiter had already
- * replaced the stale lock), it is linked back.
+ * Serializes ledger mutations: a finder's tool may run several cursor calls in parallel.
+ * The lock file holds `<holder pid>.<token>`. A waiter reclaims it only when that pid is dead and
+ * otherwise waits up to LOCK_WAIT_MS for a live holder, then refuses naming the pid.
+ */
+function withLock<T>(dir: string, fn: () => T): T {
+	fs.mkdirSync(dir, { recursive: true, mode: DIR_MODE });
+	const lock = path.join(dir, ".lock");
+	const token = `${process.pid}.${crypto.randomBytes(6).toString("hex")}`;
+	const tmp = `${lock}.${token}.tmp`;
+	fs.writeFileSync(tmp, token, { mode: FILE_MODE });
+	const deadline = Date.now() + LOCK_WAIT_MS;
+	try {
+		for (;;) {
+			try {
+				fs.linkSync(tmp, lock); // atomic create-with-content: a lock is never seen empty
+				break;
+			} catch (e) {
+				if (!(e instanceof Error && "code" in e && e.code === "EEXIST")) throw e;
+			}
+			const seen = readLock(lock);
+			if (seen === null) continue; // released between the failed create and the read
+			const holder = Number.parseInt(seen, 10);
+			if (!(holder > 0) || !pidAlive(holder)) {
+				takeOverDeadLock(lock, seen);
+				continue;
+			}
+			if (Date.now() > deadline)
+				throw refuse(`ledger busy: ${lock} is held by live pid ${holder}`);
+			sleepSync(50);
+		}
+	} finally {
+		fs.rmSync(tmp, { force: true });
+	}
+	try {
+		return fn();
+	} finally {
+		if (readLock(lock) === token) fs.rmSync(lock, { force: true });
+	}
+}
+
+function readLock(lock: string): string | null {
+	try {
+		return fs.readFileSync(lock, "utf8");
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Moves a dead holder's lock aside with an atomic rename, so only one waiter wins it. If the
+ * renamed file is not the lock content that was judged dead (another waiter had already replaced
+ * it), it is linked back.
  * lazy: a narrow window remains where that link-back loses to a third creator; a lock service if it matters.
  */
-function takeOverStaleLock(lock: string): void {
-	const stale = (p: string) => Date.now() - fs.statSync(p).mtimeMs > LOCK_STALE_MS;
-	const aside = `${lock}.stale.${process.pid}.${crypto.randomBytes(4).toString("hex")}`;
+function takeOverDeadLock(lock: string, seen: string): void {
+	const aside = `${lock}.aside.${process.pid}.${crypto.randomBytes(4).toString("hex")}`;
 	try {
-		if (!stale(lock)) return;
 		fs.renameSync(lock, aside);
 	} catch {
 		return; // lock vanished or another waiter moved it first
 	}
 	try {
-		if (!stale(aside)) fs.linkSync(aside, lock);
+		if (readLock(aside) !== seen) fs.linkSync(aside, lock);
 	} catch {
 		// link-back lost the race; the holder's own release check tolerates a missing lock
 	}
@@ -1329,9 +1380,11 @@ const currentPage = (l: Ledger) => l.order.find((id) => l.pages[id]?.state !== "
 const doneCount = (l: Ledger) => l.order.filter((id) => l.pages[id]?.state === "done").length;
 const deliveredCount = (l: Ledger) => l.order.filter((id) => l.pages[id] !== undefined).length;
 
+const outputBudget = (ctx: Ctx) => Math.min(ctx.plan.pageBytes, TOOL_OUTPUT_CEILING);
+
 function emit(ctx: Ctx, text: string): string {
 	const size = bytes(text);
-	if (size > Math.min(ctx.plan.pageBytes, TOOL_OUTPUT_CEILING))
+	if (size > outputBudget(ctx))
 		throw new Error(
 			`internal: output of ${size} bytes exceeds the page budget ${ctx.plan.pageBytes}`,
 		);
@@ -1728,6 +1781,49 @@ function cmdStatus(v: Values, env: NodeJS.ProcessEnv): Output {
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
+/** Pages whose note holds a "check later" question; the notes themselves are read in full with `notes`. */
+function openQuestionLines(ctx: Ctx): string[] {
+	const l = ctx.ledger;
+	const ids = l.order.filter(
+		(id) => l.pages[id]?.state === "done" && /check later/i.test(l.pages[id]?.note ?? ""),
+	);
+	if (ids.length === 0) return [];
+	const shown = ids.slice(0, 20).join(", ") + (ids.length > 20 ? ", …" : "");
+	return [
+		`OPEN QUESTIONS: ${ids.length} note(s) contain "check later" (pages ${shown}); read every note in full with: notes --from ${ids[0]}`,
+	];
+}
+
+/** Full notes in page order, as many as fit the output budget, then a `MORE:` line. */
+function cmdNotes(v: Values, env: NodeJS.ProcessEnv): Output {
+	const ctx = openLedger(ledgerDirOf(v, env));
+	const l = ctx.ledger;
+	const done = l.order.filter((id) => l.pages[id]?.state === "done");
+	let start = 0;
+	if (v.from !== undefined) {
+		const at = l.order.indexOf(v.from);
+		if (at < 0) throw refuse(`unknown page ${v.from}`);
+		start = done.findIndex((id) => l.order.indexOf(id) >= at);
+		if (start < 0) start = done.length;
+	}
+	if (done.length === 0) return { text: emit(ctx, `NOTES angle=${l.angle}: no notes yet\n`) };
+	const MORE_RESERVE = 200;
+	let text = `NOTES angle=${l.angle}: ${done.length} note(s) in total, from ${done[start] ?? "the end"}\n`;
+	let i = start;
+	for (; i < done.length; i++) {
+		const id = done[i] ?? "";
+		const entry = `\n[${id}]\n${l.pages[id]?.note ?? ""}\n`;
+		if (bytes(text + entry) > outputBudget(ctx) - MORE_RESERVE) break;
+		text += entry;
+	}
+	if (i === start && start < done.length)
+		throw refuse(
+			`the note of ${done[start]} is larger than the output budget ${outputBudget(ctx)}; read it with export --out <file>`,
+		);
+	text += i < done.length ? `\nMORE: notes --from ${done[i]}\n` : "\nEND OF NOTES\n";
+	return { text: emit(ctx, text) };
+}
+
 function cmdResume(v: Values, env: NodeJS.ProcessEnv): Output {
 	const ctx = openLedger(ledgerDirOf(v, env));
 	const l = ctx.ledger;
@@ -1743,6 +1839,7 @@ function cmdResume(v: Values, env: NodeJS.ProcessEnv): Output {
 		`NEXT PAGE: ${c.currentPage === null ? "none (all pages done; run finish)" : `${c.currentPage} (${l.pages[c.currentPage] ? "issued, not done" : "not issued yet"})`}`,
 		`LAST ${notes.length} NOTE(S):`,
 		...notes.map((id) => `  ${id}: ${clip(l.pages[id]?.note ?? "", 240)}`),
+		...openQuestionLines(ctx),
 		`CANDIDATES: ${l.candidates.length}`,
 		...l.candidates.slice(-10).map((k) => `  ${k.id} ${k.file}:${k.line} ${clip(k.summary, 120)}`),
 		`CHECKLIST: ${checklistSummary(l)}`,
@@ -1855,21 +1952,63 @@ function cmdVerify(v: Values, extra: string[]): Output {
 	};
 }
 
+/**
+ * `export` prints the ledger as JSON parts that each fit the output budget: candidates first, then
+ * checklist, then notes, never splitting an item. `--out <file>` writes the whole export instead.
+ */
 function cmdExport(v: Values, env: NodeJS.ProcessEnv): Output {
 	const ctx = openLedger(ledgerDirOf(v, env));
 	const l = ctx.ledger;
-	const payload = {
-		angle: l.angle,
-		planSha: l.planSha,
-		coverage: coverage(ctx),
-		candidates: l.candidates.map((c) => ({ ...c, found_by: l.angle })),
-		checklist: l.checklist,
-		applicable: ctx.plan.applicable,
-		notes: l.order
-			.filter((id) => l.pages[id]?.state === "done")
-			.map((id) => ({ pageId: id, note: l.pages[id]?.note ?? "" })),
-	};
-	return { text: JSON.stringify(payload, null, 2) + "\n" };
+	const head = { angle: l.angle, planSha: l.planSha, coverage: coverage(ctx) };
+	const candidates = l.candidates.map((c) => ({ ...c, found_by: l.angle }));
+	const notes = l.order
+		.filter((id) => l.pages[id]?.state === "done")
+		.map((id) => ({ pageId: id, note: l.pages[id]?.note ?? "" }));
+	if (v.out !== undefined) {
+		const file = path.resolve(v.out);
+		fs.mkdirSync(path.dirname(file), { recursive: true });
+		const full = JSON.stringify(
+			{ ...head, candidates, checklist: l.checklist, applicable: ctx.plan.applicable, notes },
+			null,
+			2,
+		);
+		atomicWrite(file, full + "\n");
+		return {
+			text: `EXPORT WRITTEN ${file} (${bytes(full) + 1} bytes, ${candidates.length} candidate(s), ${l.checklist.length} checklist item(s), ${notes.length} note(s))\n`,
+		};
+	}
+	type Group = { candidates: unknown[]; checklist: unknown[]; notes: unknown[] };
+	const render = (part: number, parts: number, g: Group) =>
+		JSON.stringify(
+			{ ...head, part, parts, next: part < parts ? `export --part ${part + 1}` : null, ...g },
+			null,
+			2,
+		) + "\n";
+	const fits = (g: Group) => bytes(render(999, 999, g)) <= outputBudget(ctx);
+	let g: Group = { candidates: [], checklist: [], notes: [] };
+	const groups: Group[] = [g];
+	const items: [keyof Group, unknown][] = [
+		...candidates.map((x): [keyof Group, unknown] => ["candidates", x]),
+		...l.checklist.map((x): [keyof Group, unknown] => ["checklist", x]),
+		...notes.map((x): [keyof Group, unknown] => ["notes", x]),
+	];
+	for (const [section, item] of items) {
+		g[section].push(item);
+		if (fits(g)) continue;
+		g[section].pop();
+		g = { candidates: [], checklist: [], notes: [] };
+		g[section].push(item);
+		if (!fits(g))
+			throw refuse(
+				`one ${section} item is larger than the output budget ${outputBudget(ctx)}; use export --out <file>`,
+			);
+		groups.push(g);
+	}
+	const part = v.part === undefined ? 1 : Number(v.part);
+	const chosen = groups[part - 1];
+	if (!Number.isInteger(part) || chosen === undefined)
+		throw refuse(`--part must be an integer from 1 to ${groups.length}`);
+	return { text: emit(ctx, render(part, groups.length, chosen)) };
 }
 
 // ---------------------------------------------------------------------------
@@ -1899,6 +2038,8 @@ const OPTIONS = {
 	verdict: { type: "string" },
 	evidence: { type: "string" },
 	notes: { type: "string" },
+	from: { type: "string" },
+	part: { type: "string" },
 	json: { type: "boolean" },
 	help: { type: "boolean", short: "h" },
 } as const;
@@ -1926,6 +2067,8 @@ interface Values {
 	verdict?: string;
 	evidence?: string;
 	notes?: string;
+	from?: string;
+	part?: string;
 	json?: boolean;
 	help?: boolean;
 }
@@ -1960,10 +2103,13 @@ FINDER (ledger dir via --ledger <dir> or env ${LEDGER_ENV})
   checklist update <itemId> [--verdict 준수|위반|해당 없음] [--evidence <text>]
   checklist list [--json]
   status [--json]                           progress counts
-  resume [--notes N]                        everything needed to continue after an interruption
+  resume [--notes N]                        everything needed to continue after an interruption; lists the pages whose note says "check later"
+  notes [--from <pageId>]                   every note in full, in page order, up to the output budget; "MORE: notes --from <pageId>" means call again
   resplit <pageId> --page-bytes N           re-cut a page that is not done into <pageId>.1, <pageId>.2, …
   finish                                    refused until 100% of pages are done (cleanup: checklist complete)
-  export                                    JSON: coverage, candidates, checklist, notes
+  export [--part N]                         JSON part N of "parts" (default 1): coverage, candidates, then checklist, then notes; each part fits the output budget, read parts 1..parts
+  export --out <file>                       write the whole export (also the applicable files) to a file instead
+  (an argument value that starts with "-" must be written --flag=value, e.g. --note="-1 is not handled")
 
 Exit codes: 0 success, 1 refused, 2 usage error.
 `;
@@ -2012,6 +2158,9 @@ export function run(
 				break;
 			case "resume":
 				out = cmdResume(v, env);
+				break;
+			case "notes":
+				out = cmdNotes(v, env);
 				break;
 			case "resplit":
 				out = cmdResplit(v, env, arg1);

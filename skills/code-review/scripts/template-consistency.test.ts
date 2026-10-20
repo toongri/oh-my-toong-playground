@@ -375,6 +375,16 @@ describe("finder page notes are free prose that cite the page", () => {
 		expect(protocol).not.toMatch(/do not pad notes/i);
 	});
 
+	it("the protocol reads all notes with `notes`, pages `export`, names resplit and the --flag=value form", () => {
+		expect(protocol).toContain("{CURSOR} notes");
+		expect(protocol).toContain("MORE: notes --from");
+		expect(protocol).toContain("{CURSOR} export --part N");
+		expect(protocol).toMatch(/resplit <id> --page-bytes N/);
+		expect(protocol).toMatch(/starts with `-`[^\n]*`--flag=value`/);
+		for (const angle of ["correctness", "regression", "requirement", "cleanup"])
+			expect(read(angle)).toContain("{CURSOR} notes");
+	});
+
 	it("each angle prompt carries the same free-prose note guidance and no structured labels", () => {
 		for (const angle of ["correctness", "regression", "requirement", "cleanup"]) {
 			const content = read(angle);
