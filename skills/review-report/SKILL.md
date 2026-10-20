@@ -177,11 +177,11 @@ Before reporting, run the self-critique loop of `${CLAUDE_SKILL_DIR}/../html-rep
 ```bash
 OUT="$OMT_DIR/reviews/.visual-check/round-1"
 bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh "$OMT_DIR/reviews/{slug}.html" "$OUT"
-bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh "$OMT_DIR/reviews/{slug}.html" > "$OUT/lint.json"
+bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh "$OMT_DIR/reviews/{slug}.html" --strict > "$OUT/lint.json"
 jq '.summary' "$OUT/lint.json"
 ```
 
-Look at every frame, fix the body HTML (never the findings cards' verdicts), re-substitute and rewrite the file, and repeat until lint reports 0 errors and a full visual pass finds nothing to fix. Walkthrough figures are the usual source of errors (`svg-text-overlap`, `svg-text-small`, `figure-scrolls`). Findings cards are not figures and keep their card format.
+Look at every frame, fix the body HTML (never the findings cards' verdicts), re-substitute and rewrite the file, then follow `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` §14 to choose the next check (a new capture round only after a layout, style, or SVG fix; lint only after a text-only fix) and to decide when to stop. Walkthrough figures are the usual source of errors (`svg-text-overlap`, `svg-text-small`, `figure-scrolls`). Findings cards are not figures and keep their card format.
 
 ### Step R5: Open and Print Terminal Pointer
 

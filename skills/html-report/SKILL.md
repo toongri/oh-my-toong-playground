@@ -14,7 +14,10 @@ shell and file access can follow it. The only external tools are the `agent-brow
 explainer, a research skill) decides *what* the page says: its sections, its claims, its
 evidence. This guide decides *how* the page is built and checked. When the two conflict,
 the caller's content rule wins and this guide's form rules adapt around it. A caller never
-copies these rules. It points here and keeps only its own content rules.
+copies these rules. It points here and keeps only its own content rules. For form, the order is: the
+user's own words, then the caller skill's form rules, then the target project's existing design system
+(its tokens, theme file, component styles), then this guide's defaults. A project system supplies values
+such as colors and faces. The theme structure of section 3 and the checks of section 14 still apply.
 
 **Output contract.**
 
@@ -24,9 +27,10 @@ copies these rules. It points here and keeps only its own content rules.
 - Opens from disk (`file://`). No server, no fetch of local files.
 - Works in light and dark themes, from 400px to 1280px+ wide, with no page-level sideways scroll.
 - Complete at rest: everything the reader needs is visible after load, with no click, hover, or scroll
-  needed to reveal it.
+  needed to reveal it. Nothing waits at `opacity: 0` for a scroll observer or an animation (lint: `hidden-at-rest`),
+  and the masthead is as tall as its content, never `100vh`, so the first frame already shows the answer.
 - Every directed graph with 3 or more nodes is inline SVG with drawn edges ([section 7.6](#76-directed-graphs-are-svg)),
-  and a phone never changes what a diagram means ([section 5](#phone-strategy-for-figures)).
+  and a phone never changes what a diagram means ([section 5](references/layout.md#phone-strategy-for-figures)).
 - Faithful to the source: no invented status, owner, date, number, or definition ([section 13](#13-fidelity-rules)).
 - Passes the self-critique loop in [section 14](#14-self-critique-loop-mandatory) before you report it done.
 
@@ -42,6 +46,8 @@ Two finished reports are in `<skill-dir>/exemplars/` (read `exemplars/README.md`
 
 ## 0. Workflow
 
+0. **Check that each part earns its place.** The caller has chosen a page. Where a sentence says a thing
+   faster than a figure, a table, or a card, write the sentence ([section 1](#1-draw-or-write)).
 1. **Name the reader and the job.** One sentence: who reads this, and what they must be able to
    decide or explain after reading. Pick the page anatomy from [section 2](#2-page-anatomy).
 2. **Inventory the source's diagrams.** Before you write, list every state, transition, message,
@@ -55,7 +61,8 @@ Two finished reports are in `<skill-dir>/exemplars/` (read `exemplars/README.md`
 6. **Reconcile with the inventory.** Map every inventory row to a figure, a table, or "omitted", and
    compare the counts ([section 13.1](#131-source-diagram-inventory)). Any omission is stated on the page with its reason.
 7. **Run the self-critique loop** ([section 14](#14-self-critique-loop-mandatory)): capture, lint
-   (with `--source` when the source is on disk), look, fix, repeat. This step is not optional.
+   (with `--source` when the source is on disk), look, fix. Capture again only after a fix that changed
+   layout, style, or an SVG; a text-only fix needs lint only. This step is not optional.
 8. **Report** the file path, the rounds you ran, the final lint summary, the reconciliation counts,
    and what you could not verify ([section 15](#15-what-to-report)).
 
@@ -97,7 +104,7 @@ decided what the figure is for. Two more rules follow:
 
 - **Say each relation once.** Do not show the same relations as a figure, then a table, then cards. Pick the
   form that carries them best and refer to it. The one allowed repeat is the phone fallback table of
-  [section 5](#phone-strategy-for-figures), which is hidden on wide screens.
+  [section 5](references/layout.md#phone-strategy-for-figures), which is hidden on wide screens.
 - **Do not fragment a structure.** One structure that fits the budget of [section 12](#12-complexity-budget-and-the-split-rule)
   is one figure, not a row of 1 to 4 node figures that the reader must join in their head. Split only
   when the structure is over budget, and then as an overview plus a detail figure.
@@ -107,60 +114,24 @@ decided what the figure is for. Two more rules follow:
 ## 2. Page anatomy
 
 Every page puts the answer before the evidence: the first screen states what happened, what was
-decided, or what the reader must do. Then the detail follows. The skeletons below list section
-*types*, in order. Optional sections are marked. The caller fills the content.
+decided, or what the reader must do. Then the detail follows. The skeletons list section
+*types*, in order. The caller fills the content. Section order per anatomy kind:
 
-**Incident or finding report**
+- **Incident or finding report**: masthead, cause and action, impact, symptoms and reasons, normal mechanism (figure), broken mechanism (figure), how the failure formed, timeline, verified versus not verified, the fix (figure), rollout or next steps, sources footer.
+- **Design document**: masthead and summary, goal and principles, the main map, decision tables, rationale callouts, open questions.
+- **Plan**: goal and success criteria, current versus target, work breakdown, dependencies, risks table, verification, not in this plan.
+- **Diff explainer**: what changed and why, before/after mechanism figure, one chapter per capability (use case), edge cases and risks, how it was verified.
+- **Research report**: the question and the bottom-line answer, confidence summary, findings (claim, evidence, sources, status), comparison table or matrix, figures only for mechanisms or structural comparisons, contradictions and open questions, method and source list.
 
-1. Masthead: status pill (for example "26대 고착 지속"), page type, and the event date with timezone when the source gives one. No writing date of your own.
-2. Cause and action in two short paragraphs.
-3. Impact: stat tiles or a to-scale bar, each number with its scope ("전체 약 1,620대 중 41대").
-4. Symptoms and why each happens: a two-column row list.
-5. The normal mechanism (figure).
-6. The broken mechanism, drawn on the same layout as the normal one (figure).
-7. How the failure formed: numbered steps (a real sequence).
-8. Timeline of one representative case, with timezone.
-9. Verified versus not verified: two panels.
-10. The fix, with an "after" figure on the same layout. Optional: what does not change.
-11. Rollout or next steps. Optional: reproduction plan.
-12. Sources footer.
+The numbered skeletons, with the content of each section, are in [references/page-anatomy.md](references/page-anatomy.md).
 
-**Design document**
+**Treatment.** Every page here is a working document. Give it a real type hierarchy, even spacing, and a
+deliberate palette, and keep flourishes few. No viewport-tall hero, no decorative opener. Stat tiles open a
+section only when the numbers are what the reader came for (an incident's impact). In a design document or a
+plan, write a motivating number in a sentence.
 
-1. Masthead and one-paragraph summary of the design.
-2. Goal and principles (one stat tile only if a number motivates the design).
-3. The main map: architecture or state machine, optionally with a scenario selector ([section 10](#10-interaction-patterns)).
-4. Decision tables, one per gate or rule.
-5. Rationale callouts for choices a reviewer would question.
-6. Open questions. Optional: out of scope.
-
-**Plan**
-
-1. Goal and success criteria (checkable).
-2. Current versus target (before/after figure, only if the structure changes).
-3. Work breakdown: ordered list, or a CSS timeline when dates matter.
-4. Dependencies: a figure only when they are not a straight line.
-5. Risks table: risk, impact, mitigation.
-6. Verification: how each success criterion is checked.
-7. Not in this plan.
-
-**Diff explainer**
-
-1. What changed, in one sentence, and why (the problem before the change).
-2. Before/after mechanism figure on one layout.
-3. One chapter per capability (use case): behavior, the code path it takes, the key excerpt.
-4. Edge cases and risks.
-5. How it was verified. The caller adds its own sections (for example a quiz).
-
-**Research report**
-
-1. The question and the bottom-line answer.
-2. Confidence summary: what is established, what is contested, what is unknown.
-3. Findings, each with claim, evidence, sources, and status.
-4. Comparison table or matrix.
-5. Figures only for mechanisms or structural comparisons.
-6. Contradictions and open questions.
-7. Method and source list.
+**Subject detail.** Carry at least one detail that only this subject has: its units and scales, its document
+conventions, its terms of art. Take it from the source; section 13.4 forbids inventing one.
 
 ---
 
@@ -196,7 +167,13 @@ viewer's OS theme and also an explicit `data-theme` attribute on `<html>` if a h
   }
 }
 :root[data-theme="dark"] { /* the same dark values again, so an explicit choice wins both ways */
-  --bg: #0E1117; /* ... every dark value from the block above ... */
+  --bg: #0E1117; --surface: #161A22; --surface-2: #1F242E;
+  --ink: #E8EBF1; --ink-2: #B4BBC9; --ink-3: #8F98AA;
+  --line: #2B313D; --line-strong: #566074;
+  --accent: #9DAAFF;
+  --ok: #4FD6A4;  --ok-bg: #11302A;
+  --bad: #FF8A7E; --bad-bg: #3B1B18;
+  --warn: #F3BC5C; --warn-bg: #392B10;
   color-scheme: dark;
 }
 body { background: var(--bg); color: var(--ink); }
@@ -205,11 +182,14 @@ body { background: var(--bg); color: var(--ink); }
 Rules:
 
 - **Every token gets its first definition on bare `:root`.** The dark blocks only redefine.
-  A color that exists only inside a media or `[data-theme]` block is the classic unreadable-page bug.
-- **`body` sets an explicit background** from a token. A transparent body shows whatever the viewer paints behind it.
+  A color that exists only inside a media or `[data-theme]` block is the classic unreadable-page bug (lint: `theme-token-scope`).
+  Lint warns with `theme-state-mismatch` when an explicit `data-theme` choice does not switch the palette.
+- **`body` sets an explicit background** from a token. A transparent body shows whatever the viewer paints
+  behind it (lint: `body-bg-transparent`).
 - **No literal colors in components or in SVG.** Not in CSS rules, not in `fill="#fff"` attributes.
   A literal white box behind light-ink text is invisible in dark mode (the lint self-test plants
   exactly this defect). SVG shapes take colors from page CSS classes: `svg .box { fill: var(--surface); stroke: var(--line-strong); }`.
+  Lint flags a literal color on an SVG element (`svg-literal-color`).
 - **Choose neutrals deliberately.** A grey with a slight hue bias toward the accent reads as chosen;
   pure mid-grey reads as a default.
 - **Semantic colors are separate from the accent.** `--ok`, `--warn`, `--bad` (each with a tinted
@@ -237,29 +217,26 @@ Rules:
 - Composite translucent colors over their real background before measuring.
 - Text on a tinted surface (`--bad-bg`, `--surface-2`) is measured against that surface, not the page.
 - `lint.sh` measures text contrast in both themes and reports every failure.
+- Do not dim text the reader must read. Lint skips elements under 50% opacity, so a label drawn at
+  `opacity: 0.4` is never measured. Dim only what a scenario selector deselects.
 
-**Avoid the generated-looking defaults** unless the caller asks for one: warm cream with a serif
-display and a terracotta accent; near-black with one acid-green or vermilion accent; hairline
-broadsheet columns; a purple-to-blue gradient hero; Inter or Space Grotesk as the safe choice;
-emoji section markers; everything centered; one large radius and one soft shadow on every block;
-an accent rail on the side of rounded cards; tracked ALL-CAPS eyebrows above every heading.
+**Avoid the looks that read as machine-made** unless the user or the caller asks for one. A cream page
+with a serif display face and a rust accent. A near-black page with one neon green or orange-red highlight.
+Newspaper hairlines over dense columns. A hero that fades from purple to blue. Inter or Space Grotesk,
+picked because it is safe. Emoji as section markers. Every block centered. One big radius and one soft
+shadow on every block. A colored rail down one side of rounded cards. Tracked ALL-CAPS eyebrows over every
+heading. Big-number tiles opening each section, 01 / 02 / 03 markers on content with no order, and a
+middle-dot kicker of mood words (section 6).
 
 ---
 
 ## 4. Typography (Korean first)
 
-- Set `<html lang="ko">` (or the page's language). The browser uses it for line breaking and font fallback.
-- **Font stack.** Option A, proven in testing: IBM Plex Sans KR with IBM Plex Mono from Google Fonts.
-  Option B: Noto Sans KR. Always end with the system Korean faces:
-
-  ```html
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-  ```
-  ```css
-  --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
-  ```
+- Set `<html lang="ko">` (or the page's language). The browser uses it for line breaking and font fallback
+  (lint: `html-lang`).
+- **Font stack.** Option A, proven in testing: IBM Plex Sans KR with IBM Plex Mono from Google Fonts (the
+  `<link>` tags are in the [page skeleton](references/layout.md#page-skeleton)). Option B: Noto Sans KR. Always
+  end with the system Korean faces, as the `--font` token in section 3 does.
 - **No serif display face on a Korean page.** Latin serifs carry no Hangul, so the Korean half of a
   heading falls back to the platform's serif (or sans) and the two halves of one line disagree.
   Give headings their weight through size, weight (600 to 700), and tight letter-spacing (-0.01 to -0.02em).
@@ -279,55 +256,42 @@ an accent rail on the side of rounded cards; tracked ALL-CAPS eyebrows above eve
   Latin characters). Captions may run to 760px.
 - **Korean line breaking.** On `body`: `word-break: keep-all; overflow-wrap: break-word;` so words
   are not split mid-syllable-group. On `code`: `word-break: normal; overflow-wrap: anywhere;`.
-  With `break-all`, identifiers break visibly mid-word (`isBooted=fals` / `e`).
+  With `break-all`, identifiers break visibly mid-word (`isBooted=fals` / `e`). Lint samples Korean blocks
+  and warns when they lack `keep-all` (`word-break-korean`).
 - **Headings** get `text-wrap: balance`. Digits that line up get `font-variant-numeric: tabular-nums`.
 - **Mono is for technical tokens only:** identifiers, paths, ports, commands, field types. Never for
   names, UI labels, or Korean text (mono faces carry no Hangul).
 - **No English UI chrome on a Korean page.** Write the legend title as "읽는 법" or "범례", lane labels
   as "보내기 / 받기", captions as "그림 1.", status as "확인됨 / 확인 못 함". Keep technical
   identifiers verbatim (`isBooted`, `HTTP 500`). No uppercase-and-tracked labels.
+- **Title.** The `<title>` names the thing in 2 to 4 words, the way a document is named. Use the name the
+  source or the caller already gives it (an incident name, a feature name). No category label alone
+  ("보고서"), and no explainer after a colon or a dash ("결제 재시도: 설계 설명"). The explanation goes in the lede (lint: `title-name`).
+- **Page copy.** These rules cover the words the page adds: headings, labels, captions, hints, legends. They
+  never license rewording text that the caller passes as source or requires verbatim.
+  - Name things the way the reader knows them: a heading says "결제 알림 재시도" and keeps internal module
+    names out. Identifiers that the source uses stay verbatim.
+  - Use the active voice. A control says what it does ("표 펼치기"). A hint says how to proceed.
+  - Write plainly, in short sentences. Avoid mannered devices: em-dash asides, "X가 아니라 Y다" framed for effect,
+    a colon that sets up a reveal, scare quotes around a coined label, and stock openers such as
+    "참고로", "주목할 점은", "솔직히 말하면" (in English, "worth noting", "honest caveat").
 
 ---
 
 ## 5. Layout
 
-**Skeleton.**
-
-```html
-<!doctype html>
-<html lang="ko">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>디스펜서 USB 고착</title>   <!-- a 2-4 word name, not a summary -->
-<!-- font links -->
-<style>
-  /* layout comment + tokens (section 3) */
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font: 16px/1.75 var(--font);
-    padding-block: 40px 72px;
-    padding-left: max(16px, env(safe-area-inset-left, 0px));
-    padding-right: max(16px, env(safe-area-inset-right, 0px));
-    word-break: keep-all; overflow-wrap: break-word;
-  }
-  .wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
-  .col  { max-width: 720px; }
-  section { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
-  h1, h2, h3, p, ul, ol, figure, table { margin: 0; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
-</style>
-</head>
-<body><main class="wrap"> ... </main></body>
-</html>
-```
+**Skeleton.** Start from the page skeleton in [references/layout.md](references/layout.md#page-skeleton). It holds
+`lang`, the viewport meta with `viewport-fit=cover`, the `<title>`, the token block, the body gutter, the
+`.wrap` stage and `.col` reading column, the flex sections with `gap`, the visible focus ring, and the
+reduced-motion rule.
 
 **Rules.**
 
-- **Side gutter of at least 16px at every width,** written as the two `max()` paddings above, set once
-  on `body`. Give vertical padding with `padding-block`. Never a `padding` shorthand that zeroes the sides.
+- **Side gutter of at least 16px at every width,** written as `padding-left: max(16px, env(safe-area-inset-left, 0px))`
+  and the matching `padding-right`, set once on `body`. Give vertical padding with `padding-block`. A `padding` shorthand would reset the side gutter, so do not use one.
+- **Use px for type, widths, and spacing.** The SVG label floors (12px Hangul, 11px Latin) and the 400px phone
+  check are measured in rendered px, so px keeps the page and its checks on one scale.
+- **Rows wrap or stack at phone width.** A row of cards or columns wraps, or stacks to one column, at 400px.
 - **Two widths.** A reading column (720px) for prose, and a wider stage (up to 1040 to 1240px) for
   figures and tables. Sections are flex columns with `gap`; do not space siblings with margins.
 - **`min-width: 0`** on every flex or grid child that holds running text, code, or a table, so long
@@ -352,186 +316,44 @@ an accent rail on the side of rounded cards; tracked ALL-CAPS eyebrows above eve
 - **Give nothing a `min-width` wider than the screen** outside a scroll container. Images and
   `aspect-ratio` boxes get `max-width: 100%`.
 
-
 - **No fixed-width figures.** A figure's CSS width is `100%` of its container. A `width: 960px` figure breaks
   the layout between 400px and 1280px. Only a figure that scrolls in its own container gets a `min-width`.
+- **Repeated elements match.** Siblings of one kind (cards in a row, label and value pairs, pills on items)
+  share edges, baselines, and inner padding, and a part that recurs keeps one position on each. Content
+  decides a container's height. Long text gets room: it wraps, or it scrolls inside a container of its own.
+  Cut-off text is a defect (lint: `html-clipped`).
+- **Build cleanly.** Keep the skeleton's focus ring and reduced-motion rule. Close every non-void element and
+  double-quote attributes. Give each spacing one owner, preferably the parent's `gap`: when two classes on
+  one element both set padding or margin, the more specific one silently undoes the other.
 
 ### Phone strategy for figures
 
 **Layout never changes meaning.** A phone shows the same nodes, the same edges, and the same order as the
 desktop. A reader must not see a transition on a phone that the desktop does not draw, or miss one that it does.
 
-Never build a graph (flow, state machine, sequence, ERD, architecture) from HTML boxes that reflow. In testing,
-a state diagram made of flex boxes stacked into one column at 400px. Boxes that sat side by side as unrelated
-states then read as a chain of transitions that does not exist. The fix is the same at every width: a graph is
-an SVG, and its geometry (positions, edges, order) does not change with the viewport.
-
-Rendered text size is `font-size × (drawn width ÷ viewBox width)`. At a 400px viewport, a figure inside
-a padded, bordered container has about 346px to draw in. A 13px label in an 840-wide viewBox renders at
-about 5px there: unreadable. So every graph needs one of these strategies:
-
-1. **Narrow-first, one geometry.** Design the figure at a viewBox width of 360 or less (13px labels then render
-   at 12.5px or more on a phone). Flows run top to bottom, lanes become rows. The same SVG scales down from
-   1280px to 400px. This is the default, and the only choice for the page's key figure when it fits.
-2. **Scale down.** A wider drawing may shrink with `width: 100%` while every label stays at 12px or more
-   (Hangul) or 11px or more (Latin) at 400px. Check the `svg-text-small` results of the 400px lint run.
-3. **Scroll in its own container.** When labels would fall under that floor, set `min-width` to the value that
-   keeps them at 12px (usually the viewBox width, so the drawing is 1:1). Then add all three:
-   - the part the claim depends on at the *left*, which is the scroll start;
-   - a visible hint ("그림은 좌우로 밀어서 볼 수 있어요");
-   - an adjacent text table of every edge (columns: from, label or condition, to; for a sequence: order,
-     from, to, message; for an ERD: from, multiplicity, to, verb), placed directly under the figure and
-     shown at phone width only (`@media (max-width: 640px)`), so a wide screen does not repeat the figure.
-4. **Two layouts of the same graph** (rare). A wide SVG and a narrow SVG swapped by width with `display: none`
-   on the hidden one. Both must hold the same nodes, the same edges, the same labels and the same order, only
-   re-arranged. Count nodes and edges in both. If a node or an edge exists in one only, use strategy 3.
-
-```html
-<figure>
-  <div class="fig-scroll" tabindex="0" role="region" aria-label="그림 2 상태 전이, 좌우 스크롤">
-    <svg viewBox="0 0 840 352" role="img" aria-label="(claim)">...</svg>
-  </div>
-  <p class="fig-hint">그림은 좌우로 밀어서 볼 수 있어요. 모든 전이는 아래 표에도 있어요.</p>
-  <div class="edge-table table-scroll"><table>...</table></div>
-  <figcaption>...</figcaption>
-</figure>
-```
-```css
-.fig-hint, .edge-table { display: none; }
-@media (max-width: 640px) { .fig-hint { display: block; } .edge-table { display: block; } }
-```
-
-A key figure, the one the page's main claim rests on, uses strategy 1 or 2. In testing, a before/after figure
-in a scroll container showed only its left 47% on a phone, so the changed half was off screen. `lint.sh`
-reports every sideways-scrolling figure with the visible fraction (`figure-scrolls`).
-
-HTML boxes may stay HTML only for content that is not a directed graph: cards, stat tiles, row lists, a
-to-scale bar. They are never wrapped in a `<figure>` as if they were a diagram.
+Every graph needs one of four strategies: (1) narrow-first, one geometry (the default); (2) scale down; (3) scroll in its own container, with a hint and an edge table; (4) two layouts of the same graph (rare).
+A key figure, the one the page's main claim rests on, uses strategy 1 or 2.
+The strategy details and code are in [references/layout.md](references/layout.md#phone-strategy-for-figures).
 
 ### Card grids without orphans
 
-A grid of N cards must fill its rows at every breakpoint. `repeat(auto-fit, minmax(210px, 1fr))` with
-five items at 1040px gives four columns and one lonely card with three empty cells beside it (seen in
-testing). Pick the column count from the item count:
-
-```css
-.tiles { display: grid; gap: 12px; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); }
-@media (max-width: 900px) { .tiles { --cols: 2; } .tiles > :last-child:nth-child(odd) { grid-column: 1 / -1; } }
-@media (max-width: 480px) { .tiles { --cols: 1; } }
-```
-```html
-<div class="tiles" style="--cols: 4"> four tiles </div>
-```
-
-Use 2, 3, 4, or 6 items per row. Five items: show them as a vertical list (a sequence reads better as rows
-anyway), or as 3 + 2 with the last two spanning. Let content set heights; nothing stretches over empty space.
+A grid of N cards must fill its rows at every breakpoint. Pick the column count from the item count.
+Use 2, 3, 4, or 6 items per row. The CSS and the five-item rule are in [references/layout.md](references/layout.md#card-grids-without-orphans).
 
 ---
 
 ## 6. Component vocabulary
 
 Use card styling (border, fill, radius) by role, to set off the element that needs it, not on every
-block. Radii stay at 6 to 10px. No shadows. Each component below is the minimum CSS; extend it from the tokens.
+block. Radii stay at 6 to 10px. No shadows. Each component is the minimum CSS; extend it from the tokens.
 
-**Masthead.** A kicker line (status pill, page type, and a source date with timezone when the source gives one), the `h1` name, a lede paragraph,
-and an optional stat strip.
+Components: masthead, pills, stat tiles (only when the numbers are the point), to-scale bar, row list, tables with pills, decision table, CSS timeline, numbered steps (only for a real sequence), known / unknown panels, callout (at most one per section), disclosure, code block, footer.
 
-```html
-<header class="mast">
-  <div class="kicker"><span class="pill bad">26대 고착 지속</span><span>사고 보고서 · 2026-10-17 (KST) 업데이트 후</span></div>
-  <h1>디스펜서 USB 고착</h1>
-  <p class="lede">...</p>
-</header>
-```
+The HTML and CSS for each are in [references/components.md](references/components.md).
 
-**Pills** carry state in form as well as color:
-
-```css
-.pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; line-height: 1.6; }
-.pill.ok { background: var(--ok-bg); color: var(--ok); }
-.pill.bad { background: var(--bad-bg); color: var(--bad); }
-.pill.warn { background: var(--warn-bg); color: var(--warn); }
-```
-
-**Stat tiles.** Use them only when the numbers are the point. Each label says what the number counts and
-its scope. Pick the column count from the item count (see above).
-
-```css
-.facts { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
-.fact { padding: 14px 18px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 -1px -1px 0; }
-.fact b { font-size: 28px; line-height: 1.2; font-variant-numeric: tabular-nums; }
-.fact span { font-size: 14px; color: var(--ink-2); }
-```
-
-**To-scale bar.** For a share of a whole (41 of 1,620), draw the segments at their true widths and
-label the small one beside the bar, not inside it.
-
-```html
-<div class="bar" role="img" aria-label="전체 약 1,620대 중 41대(2.6%)가 고착">
-  <span class="seg ok" style="width:97.4%">나머지 정상</span><span class="seg bad" style="width:2.6%"></span>
-</div>
-```
-
-**Row list** (symptom and reason, claim and evidence): a two-column grid that stacks below 640px.
-
-```css
-.row3 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 4px 28px; padding: 16px 20px; border-top: 1px solid var(--line); }
-@media (max-width: 640px) { .row3 { grid-template-columns: 1fr; } }
-```
-
-**Tables with pills.** Wrap every table in a scroll container; keep cells wrapping.
-
-```css
-.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-table { border-collapse: collapse; width: 100%; font-size: 15px; line-height: 1.6; }
-th, td { text-align: left; vertical-align: top; padding: 12px 16px; border-top: 1px solid var(--line); }
-thead th { border-top: 0; font-size: 13.5px; color: var(--ink-3); font-weight: 600; background: var(--surface-2); }
-```
-
-**Decision table** (condition to result, for gates and rules). Bold the result. Shade rows that apply
-regardless of the other conditions (`tr.always td { background: var(--surface-2); }`). If the source
-does not say which override wins, write that on the page ("둘의 우선순위는 문서에 없음"); do not invent an order.
-
-**CSS timeline.** The default timeline: vertical, responsive, times in mono with tabular digits, the
-timezone stated once in the section heading. A dashed connector marks elided time.
-
-```css
-.tl { list-style: none; padding: 0; display: flex; flex-direction: column; }
-.tl li { display: grid; grid-template-columns: 78px 18px minmax(0, 1fr); gap: 0 14px; padding-bottom: 20px; }
-.tl time { font-family: var(--mono); font-size: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.tl .dot { position: relative; }
-.tl .dot::before { content: ""; position: absolute; left: 50%; top: 9px; width: 12px; height: 12px; border-radius: 50%; transform: translateX(-50%); background: var(--surface); border: 2.5px solid var(--line-strong); z-index: 1; }
-.tl .dot::after { content: ""; position: absolute; left: 50%; top: 21px; bottom: -20px; width: 2px; transform: translateX(-50%); background: var(--line); }
-.tl li:last-child .dot::after { display: none; }
-.tl li.bad .dot::before { border-color: var(--bad); background: var(--bad); }
-.tl li.gap .dot::after { background: repeating-linear-gradient(to bottom, var(--line-strong) 0 4px, transparent 4px 9px); }
-```
-
-**Numbered steps** only for a real sequence. Numbering that does not encode order is decoration.
-Highlight the step where things break (`li.hot::before { background: var(--bad); }`).
-
-**Known / unknown panels.** Two panels side by side, stacking on a phone, each with a pill in its
-heading ("확인됨", "확인 못 함"). List evidence on the left and inference or open questions on the right.
-
-```css
-.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; }
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; min-width: 0; }
-```
-
-**Callout.** At most one per section, for a rationale a reviewer would question ("관문을 서명이 아니라
-「확인」에 둔 이유"). A tinted surface with a bold lead-in line. No colored side rail on a rounded card.
-
-```css
-.note { background: var(--surface-2); border-radius: 8px; padding: 16px 20px; max-width: 820px; }
-.note b { display: block; margin-bottom: 4px; }
-```
-
-**Disclosure** for long evidence such as raw logs: `<details><summary>`. The summary line states the
-gist, so the page is complete without opening it.
-
-**Code block:** `<pre>` inside a scroll container, mono, 14px, no wrapping.
-
-**Footer:** sources, in one or two lines.
+**Structure is information.** A number, an eyebrow, a divider, or a part of the kicker states a fact about the
+content. Numbered markers mark a real order. A kicker joins real facts only (page type, a source date with
+its timezone), each in its own element; it is never a middle-dot string of mood words.
 
 ---
 
@@ -539,11 +361,12 @@ gist, so the page is complete without opening it.
 
 ### 7.1 What to draw
 
-- **Depict the mechanism, not its name.** A box labeled "cache" says less than the prose. The path a
-  request takes through it, the two stores it sits between, and the arrow that disappears when it is
-  removed say what words cannot. Draw the boundary crossed, the hop added, the data moved.
+- **Depict the mechanism, not its name.** A box with the word "캐시" in it adds nothing to the prose. Draw
+  what it does: the route a request follows through it, the store on each side of it, and the edge that
+  vanishes once it is gone. Draw the boundary crossed, the hop added, the data moved.
 - **Draw the difference.** For before/after or option A/B, use the same layout and the same coordinates
-  for every figure, and change only what differs. The reader should be able to point at the change.
+  for every figure, and change only what differs, down to the one edge an option adds or removes. The
+  reader can then put a finger on the change.
   Separate boxes per option with nothing connecting them to the system are a restated list, not a comparison.
 - **Label every arrow with a verb or a fact:** `쓰기`, `읽기`, `500ms마다 재시도`, `코드 13 거절`.
   An unlabeled arrow means only "related somehow".
@@ -594,12 +417,13 @@ figcaption .vf { display: block; margin-top: 6px; color: var(--ink-3); }
 - **Size by `viewBox`.** Choose W and H for the content. Crop dead bands: a 56px empty strip above the
   drawing wasted space in testing; tighten the viewBox (`0 32 840 352`) instead of moving every shape.
   CSS scales it: `width: 100%; height: auto`. Never give a figure a fixed pixel width (no `width: 960px`).
-- **Color through page CSS classes and tokens,** or `currentColor`. No `<style>` or `<script>` inside the SVG,
-  no literal hex in attributes. Give every drawn shape an explicit `fill` (`fill: none` for lines and paths).
+- **Color through page CSS classes and tokens,** or `currentColor`. No `<style>` or `<script>` inside the SVG
+  (lint: `svg-embedded-code`), no literal hex in attributes (lint: `svg-literal-color`). Give every drawn shape an explicit `fill` (`fill: none` for lines and paths).
 - **Arrowheads are `<marker>` elements** (or small polygons), one marker per stroke color, with ids
-  unique in the whole document. Prefix them with the figure slug (`f1-ah-ok`) so two figures never
+  unique in the whole document (lint: `duplicate-id`). Prefix them with the figure slug (`f1-ah-ok`) so two figures never
   collide when one is copied. A single hidden `<svg width="0" height="0" style="position:absolute" aria-hidden="true">`
-  holding shared `<defs>` also works.
+  holding shared `<defs>` also works. Gradients, patterns, and `<use>` refer only to ids inside the same `<svg>`
+  or in that shared hidden defs block.
 - **Grid.** Put coordinates, widths, heights, and gaps on a 4px grid (8px for major spacing). Columns and
   lane y-values are shared constants, written in a comment at the top of the SVG. Shared baselines and
   even gaps are most of what makes a hand diagram look deliberate.
@@ -615,7 +439,10 @@ figcaption .vf { display: block; margin-top: 6px; color: var(--ink-3); }
 - **Accessibility.** `<svg role="img" aria-label="...">` carries the same claim as the caption. Or use
   `aria-labelledby` pointing at a `<title>` (first child) and `<desc>` with figure-prefixed ids
   (`f2-title`, `f2-desc`), never bare `title` / `desc`. Decorative SVG gets `aria-hidden="true"`.
+  An SVG with neither is flagged (lint: `svg-no-label`).
 - **No `<foreignObject>`.** HTML inside SVG does not scale or wrap predictably. Use `<text>` and `<tspan>`.
+  Lint reports it as an error (`svg-foreignobject`). A shape that needs long hand-traced path data is
+  decoration: simplify it to native shapes or drop it.
 - **Caption = claim + epistemic status.** "그림 N." then the claim in bold, then one line saying what is
   verified and what is not: "확인됨: 고착 기기 10대의 Sentry 이벤트. 확인 못 함: 두 인스턴스의 생성
   순서는 로그로 재구성했으며 실기기에서 재현하지 않았습니다." A figure of a design that is not built yet says so.
@@ -698,7 +525,7 @@ Read the recipe for each type you draw. Every type is SVG with drawn edges. The 
 | Before / after | Identical layout and coordinates, only the difference changes | The same viewBox and lane y-values in every figure |
 
 Read the recipe's phone paragraph for each type. A sequence, a state machine, and an ERD keep their SVG
-geometry on a phone ([section 5](#phone-strategy-for-figures)); none of them becomes a numbered list or a
+geometry on a phone ([section 5](references/layout.md#phone-strategy-for-figures)); none of them becomes a numbered list or a
 column of cards.
 
 ---
@@ -721,52 +548,24 @@ A scenario selector over one map, a CSS-only variant with radio inputs and `:has
 focus, and motion rules are in
 [references/data-driven-and-interaction.md](references/data-driven-and-interaction.md#interaction-patterns).
 The rules that always apply: every control is a real `<button>`, `<label>`, or link; focus is visible; scroll
-containers get `tabindex="0"`; nothing is hover-only; the default view shows everything.
+containers get `tabindex="0"`; nothing is hover-only; the default view shows everything. A script that keeps a
+view choice in `localStorage` wraps every read and write in `try/catch`, because a `file://` page may be denied
+storage, and the page renders the same without it.
 
 ---
 
 ## 11. Anti-patterns
 
-| Anti-pattern | Why it fails | Do instead |
-|---|---|---|
-| Two edge labels sharing one stretch of space | They collide or read as one label | One label per route segment; offset routes 12px+ |
-| Label sitting on its own arrow line | Text and stroke merge | Baseline 12px+ above the arrow; halo for near misses |
-| Key figure in a sideways scroller at 400px | The changed half is off screen | Narrow-first or scale-down (section 5) |
-| SVG text under 12px rendered (Hangul) or 11px (Latin) | Unreadable, muddy Hangul | Larger `min-width`, narrower viewBox, shorter labels |
-| 4 + 1 card grid with empty cells | Looks broken, implies a missing item | Column count from item count; sequences as a list |
-| English chrome on a Korean page ("LEGEND", "SEND / RECEIVE") | Mixed register, reads as template | "읽는 법", "보내기 / 받기" |
-| Serif display face on a Korean page | Hangul falls back to a mismatched face | Korean sans, weight and size for hierarchy |
-| Failure path faint, thin, or dashed | The key path disappears | Solid `--bad` at full weight with a ✗ stop |
-| Literal color in SVG (`fill="#fff"`) | Breaks the other theme | Page CSS classes with tokens |
-| `word-break: break-all` on code | Identifiers split mid-word | `word-break: normal; overflow-wrap: anywhere` |
-| Table `min-width` wider than the phone | Columns clipped or hidden | `min-width: 0`, wrapping cells, a scroll container |
-| Step badge on top of an edge label | Both unreadable | Badge at a node corner clear of labels |
-| Text on a box's bottom edge | Looks clipped | 8px+ inside the edge |
-| Dead band inside the viewBox | Wasted height, figure looks unbalanced | Crop the viewBox |
-| Mono as the blanket "technical" font | Names and Hangul belong in sans | Mono for identifiers only |
-| Identical boxes for every node | Erases hierarchy | Treatment by role: focal, store, external, screen |
-| Legend floating among nodes | Collides with nodes | Bottom strip or HTML list beside the figure |
-| Arrow label with no mask or halo over a line | The line runs through the text | Surface-colored mask or `paint-order: stroke` halo |
-| Vertical `writing-mode` text | Unreadable | Horizontal labels beside vertical segments |
-| Shadows; radius above 10px | Template look | 1px borders; 6 to 10px radius |
-| Accent on every important node | No focal point | Accent on 1 to 2 elements per figure |
-| Numbered markers on things that are not a sequence | Implies an order that does not exist | Numbers only for real sequences |
-| Copying an automatic layout (Mermaid-style spacing) | Generic routing, no editorial choice | Lay out by hand on a grid |
-| "예시" on real data, or real-looking numbers that are invented | Misleads the reader | Section 13 |
-| Graph built from HTML boxes and `↓ →` glyphs (`figure-graph-nosvg`) | Boxes reflow on a phone, glyphs cannot show branches, joins, or returns | Inline SVG with drawn edges (section 7.6) |
-| SVG boxes with no edges (`svg-no-edges`) | The reader cannot tell how the boxes relate | A path or line with an arrowhead for each relation |
-| A phone layout that rearranges a graph's boxes | A flex state diagram stacked at 400px read as a transition that does not exist | Keep the SVG geometry; scale down or scroll in its own container, plus an edge table (section 5) |
-| A source diagram replaced by a table or prose | The shape the reader came for is gone | Keep it as a figure; drop one only when the source has no structure to show (section 1) |
-| ER relations written as card text ("→ `household_id`") | Cardinality and direction are invisible | Relationship lines with multiplicity at both ends (diagram-recipes.md, ERD) |
-| Sequence on a phone as a numbered list | Actors and the time axis vanish | Keep lifelines; scroll in its own container with a message table |
-| The same relations as a figure, a table, and cards | Three copies drift apart and bury the claim | One form per relation (section 1) |
-| One structure split into several 1 to 4 node figures | The reader joins the pieces in their head | One figure within budget (section 12) |
-| A fixed-width figure (`width: 960px`) | Breaks between 400px and 1280px | `width: 100%`, with `min-width` only in a scroll container |
-| A writing date, "저는" or "I decided", or a mention of NOTES.md / SKILL.md on the page | The page speaks for its author, not its source | Dates, voice, and notes come from the source only (section 13) |
-| A status the source never gives ("미판정", "pending review") | The page invents a verdict | Quote the source's own status (section 13.2) |
-| Timestamps converted or stripped of timezone | Times mismatch their source | Keep the source timezone, state it |
+Top-line rules (full table with reasons: [references/anti-patterns.md](references/anti-patterns.md)):
 
----
+- One label per route segment; offset routes 12px+.
+- Narrow-first or scale-down for a key figure (section 5).
+- Larger `min-width`, narrower viewBox, shorter labels for SVG text under 12px rendered (Hangul) or 11px (Latin).
+- Solid `--bad` at full weight with a ✗ stop for a failure path.
+- Page CSS classes with tokens, never a literal color in SVG.
+- Inline SVG with drawn edges for every graph (section 7.6); keep the SVG geometry on a phone.
+- Keep a source diagram as a figure (section 1); one form per relation (section 1).
+- Dates, voice, and notes come from the source only (section 13).
 
 ---
 
@@ -861,7 +660,9 @@ empty and you skip the counts. You still follow the rest of this section.
   show the original too.
 - **Label examples correctly.** "예시" or "예:" marks illustrative values only. Real figures never carry it,
   and illustrative values never appear without it. A sample row in a design doc is labeled as a sample.
-- **Draw charts and bars to scale,** and check that parts sum to their whole (41 = 26 + 15).
+- **Draw charts and bars to scale,** and check that parts sum to their whole (41 = 26 + 15). Marks, ticks, and
+  labels share one scale, every tick label names a value the chart reaches, and the viewBox leaves room for
+  the outermost labels.
 - **Captions state epistemic status:** verified (with the source), inferred, or not verified. A figure of
   an unbuilt design says it is a design.
 - **Gaps in the source stay visible.** When the source does not settle a question, write that on the page
@@ -876,15 +677,16 @@ empty and you skip the counts. You still follow the rest of this section.
 ## 14. Self-critique loop (MANDATORY)
 
 You are not done when the HTML is written. You are done when the rendered page has been captured, linted,
-looked at, and fixed, and the final round found nothing left to fix. Requirements: `agent-browser` and `jq`
+looked at, and fixed, the last look found nothing that needs a layout or style fix, and the last lint run
+ended with no errors. Requirements: `agent-browser` and `jq`
 on PATH. Install agent-browser with `npm i -g agent-browser && agent-browser install` if it is missing.
 
-**Each round:**
+**A full round** (capture, lint, look):
 
 ```bash
 OUT=./.visual-check/round-1
 bash <skill-dir>/scripts/capture.sh report.html "$OUT"
-bash <skill-dir>/scripts/lint.sh report.html --source <source-dir-or-file> > "$OUT/lint.json"
+bash <skill-dir>/scripts/lint.sh report.html --source <source-dir-or-file> --strict > "$OUT/lint.json"
 jq '.runs, .summary' "$OUT/lint.json"
 jq -r '.findings[] | select(.severity != "info") | "\(.severity)\t\(.check)\t\(.viewport) \(.theme)\t\(.where)\t\(.text)\t\(.detail)"' "$OUT/lint.json"
 ```
@@ -893,33 +695,29 @@ For each interaction state, run both again with `--state` (one output directory 
 
 ```bash
 bash <skill-dir>/scripts/capture.sh report.html ./.visual-check/round-1-s3 --state "window.__select('s3')"
-bash <skill-dir>/scripts/lint.sh report.html --state "window.__select('s3')" > ./.visual-check/round-1-s3/lint.json
+bash <skill-dir>/scripts/lint.sh report.html --state "window.__select('s3')" --strict > ./.visual-check/round-1-s3/lint.json
 ```
 
 `--source` takes the directory (or one file) that holds the caller's source material. Leave it out when the
-source is not on disk; then say so in your report. Once, before the final round, check the font fallback:
+source is not on disk; then say so in your report. Once, after the last layout or style fix, check the font fallback:
 
 ```bash
 bash <skill-dir>/scripts/capture.sh report.html ./.visual-check/offline --offline
 ```
 
-`capture.sh` writes, for 1280px light, 1280px dark, and 400px light: scrolled viewport frames (`-p01.png` ...),
+`capture.sh` writes, for 1280px light, 1280px dark, 400px light, and 400px dark: scrolled viewport frames (`-p01.png` ...),
 one frame per `<figure>` (`-fig1.png` ...), and at 400px the far end of each sideways scroller (`-fig1-end.png`).
-It prints `scrollWidth / innerWidth` per configuration. `lint.sh` prints one JSON document; `--strict` makes it
-exit 2 when any error remains (the strict run is `bash <skill-dir>/scripts/lint.sh report.html --strict`).
+It prints `scrollWidth / innerWidth` and a "page errors <width> <theme>: N" line per configuration. Read the
+"page errors" lines: any non-zero count is a defect to fix, because a broken script leaves a half-drawn figure
+that no lint check names. `lint.sh` prints one JSON document. Pass `--strict` on
+every lint call: the JSON stays the same, and the exit code is 2 while an error remains. When the caller asks for
+a receipt, add `--receipt <path>` to that same call; there is no separate strict run.
 
-**Lint receipt.** `lint.sh report.html [--source ...] --receipt <path>` also writes a JSON receipt to `<path>`
-(atomic tmp + mv) when the run ends with 0 errors. The consuming skill decides the receipt path and passes it
-to its submit command. Fields: `schema_version` (2), `html_sha256` (of the linted bytes, taken at lint start),
-`html_path` (absolute), `errors`, `warnings`, `runs` (the three standard runs: 1280 light, 1280 dark, 400 light),
-`source` (absolute `--source` path or null), `source_sha256` (sha256 of the `--source` file's bytes, taken at lint
-start; null when `--source` is a directory or absent), `strict`, `lint_js_sha256`, `created_at` (UTC). With errors above 0,
-or when the HTML or the source file changed during linting, no receipt is written. An old receipt at that path is never deleted;
-a gate compares `html_sha256` to the submitted file and `source_sha256` to the current source file, so a receipt for
-older bytes fails (a revised source needs a new lint run, because the source-aware checks ran on the old one). The receipt proves lint
-ran clean on those exact bytes. It guards against mistakes (editing after lint, skipping lint); it is not
-tamper-proof. Re-run lint with `--receipt` after every edit of the HTML. An example is in
-`scripts/selftest/receipt.example.json`.
+**Lint receipt.** With `--receipt <path>`, a run that ends with 0 errors also writes a JSON receipt bound to
+the exact HTML bytes (and the `--source` file's bytes). The consuming skill chooses the path and its gate checks
+`schema_version`, `errors`, `html_sha256`, `html_path`, `runs`, `source`, and `source_sha256`; the fields
+`warnings`, `lint_js_sha256`, and `created_at` are audit-only. Re-run lint with `--receipt` after every edit of
+the HTML. Field meanings and the write rules are in [references/lint-checks.md](references/lint-checks.md#lint-receipt).
 
 **Look at every frame.** Open each PNG with your environment's image viewer or file reader that renders images.
 If you cannot view images, say so in your report and rely on lint alone; never claim a visual check you did not do.
@@ -929,7 +727,7 @@ Check each frame for:
 2. Text on or outside a box edge; text cut at the figure edge.
 3. A figure's key difference visible at 400px without scrolling (see `-fig*.png` at 400).
 4. Grids with empty cells; cards of uneven height in one row.
-5. Dark theme: any box, text, or line that disappeared or turned into a bright block.
+5. Dark theme, at 1280px and at 400px: any box, text, or line that disappeared or turned into a bright block.
 6. English chrome or ALL CAPS on a Korean page; fallback-font glyph mismatch (offline frames).
 7. The failure path at least as visible as the success path.
 8. Every number, time, and timezone matches the source.
@@ -941,33 +739,19 @@ Check each frame for:
 12. Verdicts, owners, and certainty words match the source. No new status word, no first person, no
     writing date, no definition the source lacks.
 
-**Fix, then run the next round** into a new directory. Repeat until lint reports no errors and a full visual pass
-finds nothing to fix. Run at least two rounds: in testing, the second round found a defect that the first
-round's fix had introduced. Stop after the round that finds nothing; if a lint error remains by design, name it and the reason in
-your report.
+**Fix, then choose the next check by what the fix touched.**
 
-**Lint checks and their usual fixes:**
+- **Layout, CSS or tokens, an SVG (its text included), or a figure's geometry:** run a full round into a new
+  directory. In testing, a geometry fix introduced a defect that only the next capture showed.
+- **Only HTML text outside any SVG** (wording, a caption, a number copied from the source): re-run lint, which
+  is cheap. A new capture of unchanged geometry finds nothing new, so skip it.
+- **Stop** when the last look found nothing that needs a layout or style fix and the last lint run has no errors.
+  If a lint error remains by design, name it and the reason in your report.
 
-| Check | Meaning | Usual fix |
-|---|---|---|
-| `page-overflow`, `page-overflow-source` | The page scrolls sideways at 400px; the source element is named | `min-width: 0` on the flex/grid child, wrap or scroll the wide element |
-| `svg-text-overlap` | Two SVG labels' glyph boxes intersect | Move one onto its own segment; shorten |
-| `svg-text-outside` | SVG text extends past the `<svg>` viewport | Widen the viewBox or move the text in |
-| `svg-text-on-stroke` | A line, path, or box outline passes through a label | Raise the label 12px+ above the line, or reroute |
-| `svg-text-on-stroke-halo` (warn) | Same, but the label has a halo | Look at it; halos hide short crossings, not a label lying on its own arrow |
-| `svg-text-small`, `svg-text-small-korean` | Rendered size under 11px, or Hangul under 12px | Larger `min-width`, narrower viewBox, shorter labels, or a narrow variant |
-| `html-clipped`, `html-overflow` | Content cut by `overflow: hidden`, or spilling with no scroll container | Remove fixed heights/widths; wrap; add a scroll container |
-| `figure-graph-nosvg` (error) | A `<figure>` with no `<svg>` draws a graph from HTML boxes or arrow glyphs (`↓ → ← ↑ ⇒`) | Redraw as inline SVG with drawn edges (section 7.6) |
-| `svg-no-edges` (warn) | An SVG has 3 or more boxes and no path, line, or polyline edge | Draw the edges, or remove the boxes if they are not a graph |
-| `number-not-in-source`, `masthead-date-not-in-source` (warn, only with `--source`) | A number or date on the page occurs in no source file | Copy it from the source, or label it as computed; drop an invented masthead date |
-| `author-first-person` (warn) | "저는", "제가", "나는", or "I decided" on the page | Rewrite in the source's voice (section 13.3) |
-| `authoring-notes-mention` (warn) | The page mentions NOTES.md, SKILL.md, or authoring notes | Delete the mention |
-| `figure-scrolls` (warn under 60% visible) | A figure scrolls sideways at 400px | Fine for secondary figures; a key figure needs strategy 1 or 2 |
-| `contrast` | Text below 4.5:1 (3:1 large) against its real background, per theme | Adjust the token for that theme; never a literal color |
+**Lint checks and their usual fixes:** the check table (check, meaning, usual fix) is in
+[references/lint-checks.md](references/lint-checks.md). The checks that matter most: `page-overflow`, `svg-text-overlap`,
+`svg-text-small-korean`, `figure-graph-nosvg` and `svg-foreignobject` (errors), `figure-scrolls`, `contrast`.
 
-Elements dimmed to under 50% opacity (unselected scenario paths) are skipped by the contrast check and counted
-in the `contrast-sample` line. The self-test `bash <skill-dir>/scripts/lint_test.sh` checks that lint still
-catches every planted defect and flags none of the clean fixtures; run it after changing `lint.js`.
 Lint cannot see everything. It cannot count a source's transitions, judge a verdict, or see a reflowed
 graph inside a `<div>` that is not a `<figure>`. Sections 13.1 and 13.2 and the frame checklist above are the checks for those.
 
@@ -981,17 +765,3 @@ final `summary` from `lint.sh` with any remaining errors and why they remain; th
 receipt path when the caller required one (`--receipt`, section 14); which
 states and the offline view you captured; and anything you could not verify (for example, "contrast inside the
 map was not measured for the hover state").
-
----
-
-## Background and attribution
-
-This guide transcribes, for agents without access to them, the substance of Anthropic's design guidance for
-claude.ai Artifacts (the `artifact-design`, `artifact-diagramming`, and `frontend-design` skills), with every
-hosting-specific instruction removed (publishing, sandbox limits, the CDN allowlist, host metadata tags). It adds
-rules from the MIT-licensed diagram-design project (anti-patterns, complexity budget, connector rules, accessible
-SVG contract, Korean label rules, contrast contract, sequence-diagram grammar, the CSS-only `:has()` scenario
-selector); see `NOTICE`. The defects named "seen in testing" come from a bake-off in which reports were authored
-under these rules and critiqued from screenshots over three rounds, and from a blind-judged follow-up of 150
-reports whose weak spots (graphs built from HTML boxes, source diagrams replaced by tables, invented statuses and
-dates) produced sections 1, 5, 7.6, and 13. The finished pages are in `exemplars/`.

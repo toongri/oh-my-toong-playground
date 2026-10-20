@@ -234,7 +234,18 @@ Every claim in `SYNTHESIS.md` carries a provenance label at its origin: `[from-c
 
 ## REPORT.md and REPORT.html — the deliverable
 
-`$SESSION_DIR/REPORT.md` is the SSOT deliverable. `$SESSION_DIR/REPORT.html` is its high-expressiveness rendering: the same claims and the same citations, presented with MORE visual structure than markdown can carry — never less. Author `REPORT.html` by hand, following `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` (its output contract, page anatomy for a research report, SVG diagram recipes, and fidelity rules), and run its self-critique loop (`${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh` and `lint.sh`): `bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh REPORT.html --source <the research workspace dir or SYNTHESIS.md>` must end at 0 errors. There is no rendered-document (e.g. PDF) output. The ultraresearch content rules below (reader, required content, section order, evidence gates, output path) stay in force; html-report owns the visual and format rules. The render holds two floors:
+`$SESSION_DIR/REPORT.md` is the SSOT deliverable. `$SESSION_DIR/REPORT.html` is its high-expressiveness rendering: the same claims and the same citations, presented with MORE visual structure than markdown can carry — never less. Author `REPORT.html` by hand, following `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` (its output contract, page anatomy for a research report, SVG diagram recipes, and fidelity rules), and run its self-critique loop (section 14) before the final response. Run the commands from `$SESSION_DIR`:
+
+```bash
+OUT="$SESSION_DIR/.visual-check/round-1"
+bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh "$SESSION_DIR/REPORT.html" "$OUT"
+bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh REPORT.html --source <the research workspace dir or SYNTHESIS.md> --strict > "$OUT/lint.json"
+jq '.summary' "$OUT/lint.json"
+```
+
+Look at every frame, fix REPORT.html (never the claims or citations it carries from REPORT.md), then follow `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` §14 to choose the next check (a new capture round only after a layout, style, or SVG fix; lint only after a text-only fix) and to decide when to stop. The loop ends at 0 errors (`--strict` exits 2 while any error remains); a remaining warn is read and either fixed or written, with the reason it stays, to `$OUT/warnings.md` (the final chat response stays the coverage table plus the REPORT.md path).
+
+There is no rendered-document (e.g. PDF) output. The ultraresearch content rules below (reader, required content, section order, evidence gates, output path) stay in force; html-report owns the visual and format rules. The render holds two floors:
 
 - **Content parity.** Every section, every candidate profile, and every citation link in `REPORT.md` appears in `REPORT.html`. After rendering, count the citation links in both files and reconcile any difference — a lower link count in the HTML is a rendering defect to fix, not an editorial choice.
 - **Expressiveness promotion.** Every flow, pipeline, timeline, or architecture that `REPORT.md` carries as a text block or as prose is promoted to an inline SVG diagram in the HTML; comparison tables gain visual verdict state (recommended / conditional / rejected). A REPORT.html whose diagrams are byte-identical `<pre>` copies of the markdown's text blocks has not been rendered — it has been transcoded.

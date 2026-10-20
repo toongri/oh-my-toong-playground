@@ -17,7 +17,7 @@ No script. Pure HTML, CSS, and inline SVG.
 
 What it demonstrates:
 
-- The incident anatomy from SKILL.md section 2: status pill masthead, cause and action first, impact as a
+- The incident anatomy from `../references/page-anatomy.md` (SKILL.md section 2): status pill masthead, cause and action first, impact as a
   to-scale bar, symptom-to-reason rows, normal / broken / fixed mechanism figures, numbered formation steps,
   a one-device timeline with timezone, verified versus not-verified panels, fix list, rollout, repro plan.
 - **Before / after on one grid.** Figures 1, 2, 3 share the viewBox (`0 32 840 352`), the column x-values,
@@ -30,7 +30,7 @@ What it demonstrates:
 - CSS timeline with a dashed connector for elided time (03:13 to 08:52).
 - Korean typography: IBM Plex Sans KR with system fallbacks, `word-break: keep-all`, code with
   `overflow-wrap: anywhere`.
-- Phone strategy 3 of SKILL.md section 5: each mechanism figure scrolls in its own container at a 900px
+- Phone strategy 3 of `../references/layout.md` (SKILL.md section 5): each mechanism figure scrolls in its own container at a 900px
   `min-width` (labels stay at 11.5px or more), with a hint line. The numbered formation steps below the
   figures carry the same sequence as text.
 
@@ -66,5 +66,5 @@ Remaining warnings (do not copy):
 - `figure-scrolls` (1): 23% of the map is visible at rest at 400px. A chosen scenario's step list carries its
   path as text; the whole-map view has no text edge table.
 - `svg-text-on-stroke-halo` (2): the two "사실 읽기" labels are centered on their dotted connectors.
-- The step list sits below the map, so map and steps are not on screen together on a laptop. SKILL.md
-  section 10 asks for the list beside the map at 1100px and up.
+- The step list sits below the map, so map and steps are not on screen together on a laptop. `../references/data-driven-and-interaction.md`
+  (SKILL.md section 10) asks for the list beside the map at 1100px and up.

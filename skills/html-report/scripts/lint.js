@@ -6,7 +6,7 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- lint.sh가 이 파일 뒤에 호출문을 이어붙여 평가하므로 파일 안에서는 호출되지 않는다
 async function __hrLint(opts) {
   opts = opts || {};
-  const checks = new Set(opts.checks || ["overflow", "svg", "clip", "contrast"]); // also "svgsize", "graph", "prose", "source"
+  const checks = new Set(opts.checks || ["overflow", "svg", "clip", "contrast"]); // also "svgsize", "graph", "prose", "source", "doc", "theme"
   const theme = opts.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   const vp = innerWidth;
   const findings = [];
@@ -285,6 +285,42 @@ async function __hrLint(opts) {
     }
   }
 
+  // ---------- (b2) SVG that breaks portability: foreignObject, literal colours ----------
+  if (checks.has("svg")) {
+    document.querySelectorAll("svg foreignObject").forEach((fo) =>
+      add("svg-foreignobject", "error", fo, "<foreignObject> embeds HTML in SVG; many SVG renderers and exports drop it. Draw the content with SVG elements"));
+    const ALLOWED = /^(none|currentcolor|transparent|inherit|initial|unset|revert|url\(.*\)|var\(.*\))$/i;
+    const literal = (v) => !!v && !ALLOWED.test(v.trim()) && CSS.supports("color", v.trim());
+    for (const svg of document.querySelectorAll("svg")) {
+      if (svg.parentElement.closest("svg")) continue;
+      const bad = [];
+      for (const el of [svg, ...svg.querySelectorAll("*")]) {
+        for (const prop of ["fill", "stroke", "stop-color", "color"]) {
+          const a = el.getAttribute(prop);
+          const st = el.style ? el.style.getPropertyValue(prop) : "";
+          const hit = literal(a) ? `${prop}="${a}"` : literal(st) ? `style ${prop}:${st}` : "";
+          if (hit) { bad.push(`<${el.tagName.toLowerCase()} ${hit}>`); break; }
+        }
+      }
+      if (bad.length) add("svg-literal-color", "warn", svg, `${bad.length} element(s) hold a literal colour instead of a theme token (var(--x), currentColor): ${bad.slice(0, 3).join(", ")}; it will not follow the light/dark theme`);
+    }
+  }
+
+  // ---------- (b3) SVG accessibility and embedded code: no name for assistive tech, <style>/<script> inside ----------
+  if (checks.has("svg")) {
+    let unlabeled = 0;
+    for (const svg of document.querySelectorAll("svg")) {
+      if (svg.parentElement.closest("svg")) continue;
+      const code = svg.querySelector("style, script");
+      if (code) add("svg-embedded-code", "warn", svg, `<${code.tagName.toLowerCase()}> inside <svg>; styles and scripts belong in the page, where the theme tokens and the lint can see them`);
+      if (!rendered(svg) || svg.closest('[aria-hidden="true"]')) continue;
+      const named = svg.getAttribute("aria-label") || svg.getAttribute("aria-labelledby");
+      if ((svg.getAttribute("role") !== "img" || !named) && unlabeled++ < 5) {
+        add("svg-no-label", "warn", svg, 'svg needs role="img" and an aria-label (or aria-labelledby) that states what the figure shows, or aria-hidden="true" when it only decorates');
+      }
+    }
+  }
+
   // ---------- (d) clipped / spilling HTML, and figures that scroll sideways ----------
   if (checks.has("clip")) {
     document.body.querySelectorAll("*").forEach((el) => {
@@ -433,6 +469,122 @@ async function __hrLint(opts) {
         if (reported.has(key)) continue;
         reported.add(key);
         add(check, "warn", el, `${isDate ? "date" : t.k === "t" ? "time" : "number"} "${t.raw}" does not occur in the source; ${check === "masthead-date-not-in-source" ? "show only dates the source gives" : "quote the source's number, or state that you computed it"}`);
+      }
+    }
+  }
+
+  // ---------- (i) document: lang, Korean word-break, content hidden at rest ----------
+  if (checks.has("doc")) {
+    const titleText = ((document.querySelector("title") || {}).textContent || "").trim();
+    const titleWords = titleText ? titleText.split(/\s+/).length : 0;
+    if (!titleText) add("title-name", "warn", document.documentElement, "<title> is missing or empty; the title is the page's 2-4 word name");
+    else if (/: | — | – | - /.test(titleText) || titleWords > 6) add("title-name", "warn", document.documentElement, `<title> "${titleText.slice(0, 60)}" is a sentence or has an explainer appended; the title is the page's 2-4 word name, and the explanation goes in the lede`);
+    const idCount = new Map();
+    document.querySelectorAll("[id]").forEach((e) => idCount.set(e.id, (idCount.get(e.id) || 0) + 1));
+    const dupIds = Array.from(idCount).filter(([, n]) => n > 1).map(([id]) => id);
+    if (dupIds.length) add("duplicate-id", "warn", document.documentElement, `${dupIds.length} id value(s) used by more than one element: ${dupIds.slice(0, 5).join(", ")}; duplicate marker ids silently break arrowheads`);
+    const lang = document.documentElement.lang;
+    if (!lang) add("html-lang", "warn", document.documentElement, "<html> has no lang attribute; set lang=\"ko\" or lang=\"en\" for screen readers and hyphenation");
+    if (/^ko/i.test(lang)) {
+      const sample = Array.from(document.querySelectorAll("p, li, td, figcaption")).filter((e) => rendered(e) && HANGUL.test(e.textContent)).slice(0, 20);
+      const bad = sample.filter((e) => getComputedStyle(e).wordBreak !== "keep-all");
+      if (bad.length) add("word-break-korean", "warn", bad[0], `${bad.length} of ${sample.length} sampled Korean blocks have word-break other than keep-all; Korean words break mid-word at line ends`);
+    }
+    const closedDetails = (el) => {
+      for (let n = el; n.parentElement; n = n.parentElement) {
+        const p = n.parentElement;
+        if (p.tagName === "DETAILS" && !p.open && n.tagName !== "SUMMARY") return true;
+      }
+      return false;
+    };
+    let hidden = 0;
+    for (const el of document.body.querySelectorAll("*")) {
+      if (hidden >= 5) break;
+      if (el.closest('[hidden], [aria-hidden="true"], template, script, style, noscript') || closedDetails(el)) continue;
+      if (!Array.from(el.childNodes).some((c) => c.nodeType === 3 && c.nodeValue.trim())) continue;
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      if ((r.width === 0 && r.height === 0) || cs.display === "none") continue;
+      const op = opacityChain(el);
+      if (op < 0.1 || cs.visibility === "hidden") {
+        hidden++;
+        add("hidden-at-rest", "warn", el, cs.visibility === "hidden" ? "text has visibility: hidden at rest; it is invisible in a still frame" : `text has effective opacity ${op.toFixed(2)} at rest; content waiting for an observer or animation is invisible in a still frame`);
+      }
+    }
+  }
+
+  // ---------- (j) theme: body background, explicit data-theme choice ----------
+  if (checks.has("theme")) {
+    if (theme === "light") {
+      const CSS_VAR = /var\((?:[^()]|\([^()]*\))*\)/g;
+      const COLOR_PROP = /^(color|background(-color|-image)?|border(-[a-z]+)*-color|outline-color|text-decoration-color|fill|stroke|column-rule-color|caret-color)$/;
+      const NOT_COLOR = /^(currentcolor|transparent|inherit|initial|unset|revert|none)$/i;
+      const hasLiteralColor = (value) => {
+        const v = value.replace(CSS_VAR, " ").replace(/url\([^)]*\)/gi, " ");
+        if (/#[0-9a-f]{3,8}\b/i.test(v)) return true;
+        for (const m of v.matchAll(/\b(?:rgb|hsl)a?\(([^)]*)\)/gi)) {
+          const parts = m[1].split(/[\s,/]+/).filter(Boolean);
+          const alpha = parts[3];
+          if (!(alpha !== undefined && parseFloat(alpha) === 0)) return true;
+        }
+        const rest = v.replace(/\b(?:rgb|hsl)a?\([^)]*\)/gi, " ");
+        return (rest.match(/[a-z]+/gi) || []).some((w) => !NOT_COLOR.test(w) && CSS.supports("color", w));
+      };
+      const baseTokens = new Set(), themedTokens = new Set(), hardCoded = [];
+      const walk = (rules, inMedia, themedCtx) => {
+        for (const rule of rules) {
+          if (rule instanceof CSSStyleRule) {
+            const themed = themedCtx || rule.selectorText.includes("[data-theme");
+            const isBase = !inMedia && rule.selectorText.trim() === ":root";
+            for (let i = 0; i < rule.style.length; i++) {
+              const prop = rule.style[i];
+              if (prop.startsWith("--")) { if (isBase) baseTokens.add(prop); else if (themed) themedTokens.add(prop); }
+              else if (!isBase && !themed && COLOR_PROP.test(prop)) {
+                const value = rule.style.getPropertyValue(prop);
+                if (value && hasLiteralColor(value)) hardCoded.push(`${rule.selectorText} { ${prop}: ${value} }`);
+              }
+            }
+          } else if (rule.cssRules) {
+            const cond = rule instanceof CSSMediaRule ? rule.conditionText : "";
+            const scheme = /prefers-color-scheme/.test(cond);
+            if (/\bprint\b/.test(cond) && !scheme) continue;
+            walk(rule.cssRules, inMedia || rule instanceof CSSMediaRule, themedCtx || scheme);
+          }
+        }
+      };
+      for (const sheet of document.styleSheets) {
+        if (sheet.ownerNode && sheet.ownerNode.closest && sheet.ownerNode.closest("svg")) continue;
+        try { walk(sheet.cssRules, false, false); } catch { /* cross-origin sheet */ }
+      }
+      const themedOnly = Array.from(themedTokens).filter((t) => !baseTokens.has(t));
+      if (themedOnly.length) add("theme-token-scope", "warn", document.documentElement, `${themedOnly.length} token(s) defined only inside a theme block: ${themedOnly.slice(0, 5).join(", ")}; define it on bare :root first`);
+      if (hardCoded.length) add("theme-token-scope", "warn", document.documentElement, `${hardCoded.length} rule(s) hold a literal colour instead of var(--token): ${hardCoded.slice(0, 5).join("; ")}; it will not follow the light/dark theme`);
+    }
+    const bodyBg = () => getComputedStyle(document.body).backgroundColor;
+    const bg = parse(bodyBg());
+    if (!bg || bg.a === 0) add("body-bg-transparent", "warn", document.body, "<body> background is transparent; the page shows the browser canvas colour, not its own palette");
+    const twoTheme = (rules) => Array.from(rules).some((r) => (r instanceof CSSMediaRule && r.conditionText.includes("prefers-color-scheme: dark")) || (r.cssRules && twoTheme(r.cssRules)));
+    let two = false;
+    for (const sheet of document.styleSheets) {
+      try { if (twoTheme(sheet.cssRules)) { two = true; break; } } catch { /* cross-origin sheet */ }
+    }
+    if (two) {
+      const root = document.documentElement;
+      const orig = root.getAttribute("data-theme");
+      const noTransition = document.createElement("style");
+      noTransition.textContent = "*,*::before,*::after{transition:none!important}";
+      document.head.appendChild(noTransition);
+      try {
+        const forced = theme === "dark" ? "light" : "dark";
+        const before = bodyBg();
+        root.setAttribute("data-theme", forced);
+        const after = bodyBg();
+        if (before === after) add("theme-state-mismatch", "warn", root, forced === "dark"
+          ? "explicit dark choice ([data-theme=dark]) does not switch the palette; add a :root[data-theme=\"dark\"] block with the dark token values"
+          : "explicit light choice ([data-theme=light]) is ignored under a dark OS; guard the dark media block with :root:not([data-theme=\"light\"])");
+      } finally {
+        if (orig === null) root.removeAttribute("data-theme"); else root.setAttribute("data-theme", orig);
+        noTransition.remove();
       }
     }
   }

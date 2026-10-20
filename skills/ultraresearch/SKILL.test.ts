@@ -854,6 +854,9 @@ describe("place axis — REPORT is the deliverable, SYNTHESIS is intermediate", 
 		expect(context).toContain("${CLAUDE_SKILL_DIR}/../html-report/SKILL.md");
 		expect(context).toContain("${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh");
 		expect(context).toContain("${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh REPORT.html --source");
+		expect(context).toContain("--strict");
+		expect(context).toContain('capture.sh "$SESSION_DIR/REPORT.html" "$OUT"');
+		expect(context).toContain("§14");
 		expect(context).toContain("0 errors");
 		expect(context).not.toContain("no external CSS, JS, fonts, or images");
 	});

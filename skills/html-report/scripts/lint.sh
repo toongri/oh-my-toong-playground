@@ -6,14 +6,16 @@
 # Runs scripts/lint.js in three configurations and prints one JSON document on stdout:
 #   1280px light : SVG text overlap / outside figure / on strokes / size, clipped HTML, contrast,
 #                  graphs drawn without SVG (figure-graph-nosvg), SVG boxes without edges (svg-no-edges),
+#                  foreignObject and literal colours in SVG, html lang, Korean word-break, text hidden at rest,
+#                  body background, explicit [data-theme=dark] switch,
 #                  author first person and authoring-notes mentions, and with --source the numbers and dates
 #                  (number-not-in-source, masthead-date-not-in-source) that no file under <dir> contains
-#   1280px dark  : contrast
+#   1280px dark  : contrast, and the theme checks (explicit [data-theme=light] under a dark OS)
 #   400px  light : page-level horizontal overflow, SVG text size, clipped HTML, sideways-scrolling figures
 # Findings are allowed; the JSON "summary" counts every error and warning (by check and by run);
 # "findings" lists at most 100 per check per run, plus "info" notes (sampling counts, truncation).
 # --receipt <path> writes a JSON receipt (schema_version 2) after a run with 0 errors: html_sha256 of the linted bytes,
-#   html_path, errors, warnings, runs, source, source_sha256, strict, lint_js_sha256, created_at. source_sha256 is the
+#   html_path, errors, warnings, runs, source, source_sha256, lint_js_sha256, created_at. source_sha256 is the
 #   sha256 of the --source file's bytes when --source is a regular file, null when --source is a directory or absent.
 #   It proves lint ran clean on those exact bytes (a mistake-guard, not tamper-proof). With errors > 0, or when the
 #   HTML or the source file changed during the run, no receipt is written; an existing file at <path> is never
@@ -58,12 +60,12 @@ trap cleanup EXIT
 
 # --source: all text files under the source, as one JSON string (binary files skipped, 8 MB cap)
 echo null > "$TMP/source.json"; echo null > "$TMP/null.json"
-CHECKS_MAIN='["svg","clip","contrast","graph","prose"]'
+CHECKS_MAIN='["svg","clip","contrast","graph","prose","doc","theme"]'
 SRC_SHA=""
 if [ -n "$SOURCE" ]; then
   if [ -f "$SOURCE" ]; then SRC_SHA=$(sha256_of "$SOURCE"); fi
   { find "$SOURCE" -type f -print0 | xargs -0 grep -I -h '' 2>/dev/null || true; } | head -c 8000000 | jq -Rs . > "$TMP/source.json"
-  CHECKS_MAIN='["svg","clip","contrast","graph","prose","source"]'
+  CHECKS_MAIN='["svg","clip","contrast","graph","prose","source","doc","theme"]'
 fi
 
 run() { # <width> <light|dark> <checks-json-array> [source.json]
@@ -82,7 +84,7 @@ run() { # <width> <light|dark> <checks-json-array> [source.json]
 }
 
 run 1280 light "$CHECKS_MAIN" "$TMP/source.json"
-run 1280 dark  '["contrast"]'
+run 1280 dark  '["contrast","theme"]'
 run 400  light '["overflow","svgsize","clip"]'
 
 jq -s --arg file "$ABS" --arg state "$STATE" '{
@@ -116,7 +118,7 @@ if [ -n "$RECEIPT" ]; then
     fi
     mkdir -p "$(dirname "$RECEIPT")"
     RTMP="$RECEIPT.tmp.$$"
-    jq --arg sha "$HTML_SHA" --arg path "$ABS" --arg src "$SRC_ABS" --arg srcsha "$SRC_SHA" --argjson strict "$STRICT" \
+    jq --arg sha "$HTML_SHA" --arg path "$ABS" --arg src "$SRC_ABS" --arg srcsha "$SRC_SHA" \
        --arg js "$(sha256_of "$DIR/lint.js")" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
       schema_version: 2,
       html_sha256: $sha,
@@ -126,7 +128,6 @@ if [ -n "$RECEIPT" ]; then
       runs: (.runs | map({viewport, theme})),
       source: (if $src == "" then null else $src end),
       source_sha256: (if $srcsha == "" then null else $srcsha end),
-      strict: ($strict == 1),
       lint_js_sha256: $js,
       created_at: $at
     }' "$TMP/out.json" > "$RTMP" && mv "$RTMP" "$RECEIPT"

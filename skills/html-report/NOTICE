@@ -5,19 +5,20 @@ html-report — third-party notices
    License: MIT
 
    Content adapted from it, rewritten in this skill's words and adjusted for local HTML reports:
-   - skills/diagram-design/SKILL.md: the universal anti-pattern table (SKILL.md section 11), the complexity
-     budget and the overview + detail split rule (section 12), the six mandatory connector rules (section 7.4),
-     the accessible SVG contract (section 7.2), the philosophy that every node and connection must carry
+   - skills/diagram-design/SKILL.md: the universal anti-pattern table (references/anti-patterns.md), the complexity
+     budget and the overview + detail split rule (SKILL.md section 12), the six mandatory connector rules (SKILL.md section 7.4),
+     the accessible SVG contract (SKILL.md section 7.2), the philosophy that every node and connection must carry
      information, the 4px grid, the remove test.
    - skills/diagram-design/references/style-guide.md: the Korean label rules (per-character width budget with
      wide characters at 1em, 12px floor for Hangul, labels switching out of mono for Hangul) and the contrast
      contract table (section 3).
    - skills/diagram-design/references/type-sequence.md: the sequence-diagram grammar (lifelines, call / return /
      async message kinds, open arrowhead for fire-and-forget, self-message, branch frames, sequence budget)
-     in section 8.
+     in references/diagram-recipes.md.
    - The bake-off output built with it (route B, report1.html figure 2 and report2.html): the sequence
      diagram example coordinates in section 8, the lesson that Korean arrow labels need gaps of about 56px
-     or more (section 7.3), and the CSS-only `:has()` radio scenario selector (section 10).
+     or more (SKILL.md section 7.3), and the CSS-only `:has()` radio scenario selector
+     (references/data-driven-and-interaction.md).
 
    MIT License
 
@@ -41,15 +42,6 @@ html-report — third-party notices
    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE.
 
-2. Anthropic design guidance (background, not code)
-   The page contract, theming, layout, typography, diagramming, and copy principles in SKILL.md sections 1,
-   3 to 7, and 10 restate, in this guide's own words, the substance of the design guidance that ships with
-   Claude for claude.ai Artifacts (the artifact-design, artifact-diagramming, and frontend-design skills).
-   Hosting-specific instructions (publishing, the sandbox, the CDN allowlist, host meta tags) were removed.
-   No text or code from those skills is reproduced verbatim beyond short CSS idioms such as the
-   `:root` / `prefers-color-scheme` / `[data-theme]` token pattern and the `max(16px, env(safe-area-inset-*))`
-   gutter.
-
-3. Exemplars
+2. Exemplars
    exemplars/report1.html and exemplars/report2.html were authored in the same bake-off session that
    produced this guide. Their content comes from the bake-off brief, not from this guide.
