@@ -132,8 +132,13 @@ describe("code-review direct finder-job contract", () => {
 		expect(step4).toContain("never report a passed review below 100%");
 	});
 
-	test("orchestrator limits diff access to integrity and hashing while agent uses direct jobs", () => {
-		expect(skillMd).toContain("never inspects, loads, or displays diff text");
+	test("orchestrator limits diff access to integrity, hashing, and candidate-file line membership while agent uses direct jobs", () => {
+		expect(skillMd).not.toContain("never inspects, loads, or displays diff text");
+		expect(skillMd).toContain("The orchestrator never loads the whole review diff as general raw-diff review input.");
+		expect(skillMd).toContain("In Phase 2 it may read one candidate file's own diff, in bounded parts, to establish which lines this change added or modified.");
+		expect(verifierPrompt).not.toContain("do not load raw diff text");
+		expect(verifierPrompt).toContain("The diff argv reads this candidate file's own diff.");
+		expect(verifierPrompt).toContain("never load the whole review diff");
 		expect(skillMd).toContain(
 			"stdout byte stream flows directly to SHA-256 outside model context",
 		);
@@ -689,8 +694,50 @@ describe("code-review verifier finding artifact contract", () => {
 		const output = extractSection(verifierPrompt, "## Output", "##");
 
 		expect(output).toContain("REFUTED candidates are audit-only");
+		expect(output).toContain("list them in the Refuted section of findings.md");
 		expect(output).toContain("do not copy them into the full card or completion artifact findings");
 		expect(output).toContain("CONFIRMED or PLAUSIBLE findings preserve this JSON");
+		expect(output).toContain("An `IN_SCOPE` PLAUSIBLE finding stays in the artifact like any other finding; it does not make the review INCONCLUSIVE");
+	});
+
+	test("findings.md lists refuted candidates with location, reason, and evidence", () => {
+		const phase3 = extractSection(skillMd, "### Phase 3: Findings Synthesis", "#### Edge Cases");
+		expect(phase3).toContain("a `## Refuted` section lists each REFUTED candidate with its structured location, a one-line reason, and its evidence");
+		expect(phase3.indexOf("## Refuted")).toBeLessThan(phase3.indexOf("## Coverage"));
+	});
+
+	test("a different defect noticed while verifying becomes a new candidate", () => {
+		expect(verifierPrompt).not.toContain("Do not look for other issues");
+		expect(verifierPrompt).toContain("record it as a new candidate (file, line, summary, failure scenario,\nfound by: verifier) and verify it in turn.");
+		const phase2 = extractSection(skillMd, "### Phase 2: Candidate Verification", "### Phase 3:");
+		expect(phase2).toContain("add it as a new candidate (file, line, summary, failure scenario, `found by: verifier`) and verify it in turn");
+	});
+
+	test("class follows the defect's nature, not the finding angle", () => {
+		expect(skillMd).not.toContain("1:1");
+		expect(skillMd).toContain("**Class** each finding by the defect's nature, not by the angle that found it");
+		expect(skillMd).toContain("`found by` records the angle(s) that surfaced it");
+	});
+
+	test("PR comments and review threads are not intent sources", () => {
+		expect(skillMd).not.toContain("comments,reviews");
+		expect(skillMd).not.toContain("gh pr view --comments");
+		expect(skillMd).not.toContain("review comments, and derived expected-items");
+		expect(skillMd).toContain("`gh pr view --json title,body,labels`");
+		expect(skillMd).toContain("PR comments and review threads are not intent sources");
+	});
+
+	test("a review base commit line in project_context sets the range", () => {
+		const step0 = extractSection(skillMd, "## Step 0: Input Parsing", "### PR Mode");
+		expect(step0).toContain("contains a line `Review base commit: <sha> — …`, use `<sha>...HEAD` as the range");
+	});
+
+	test("severity guidance carries no numeric calibration anchors", () => {
+		expect(skillMd).not.toContain("Calibration examples");
+		expect(skillMd).not.toContain("현행 규칙에는 수정 비용으로 수리를 면제하는 경로가 없습니다");
+		expect(skillMd).not.toContain("as a proxy for harm");
+		expect(skillMd).toContain("A short deadline, seniority, “all bugs must be fixed,” or sunk cost never changes impact or\npriority by itself.");
+		expect(skillMd).toContain("Priority is a response recommendation, not a severity score");
 	});
 });
 
@@ -717,6 +764,26 @@ describe("code-review 변경 코드 기본 범위 계약", () => {
 		expect(verifierPrompt).toContain("the defect lies in code this change did not touch");
 	});
 
+	test("an untouched-code defect enters scope only when it blocks a requirement or the change worsens it", () => {
+		expect(skillMd).not.toContain("A pre-existing legacy billing defect remains unrelated even when severe.");
+		expect(skillMd).toContain("unless it prevents an approved requirement from working (IN_SCOPE, basis `requirement`) or this change worsens it (IN_SCOPE, basis `regression`)");
+		expect(verifierPrompt).not.toContain("even if the defect itself is real and HIGH impact");
+		expect(verifierPrompt).toContain("the change does not worsen it, and it does not prevent an approved requirement from working");
+	});
+
+	test("UNKNOWN is reserved for an excluded-only remedy or an unclear requirement", () => {
+		expect(skillMd).toContain("when a smaller remedy inside the change exists, judge IN_SCOPE with that remedy");
+		expect(verifierPrompt).toContain("- **UNKNOWN / uncertain:** only when the only known remedy needs excluded behavior or a new capability outside the change, or the product requirement itself is unclear.");
+		expect(verifierPrompt).not.toContain("If no authorized remedy is established, use UNKNOWN");
+	});
+
+	test("finders do not suppress non-goal candidates; the reviewer decides scope", () => {
+		for (const source of [skillMd, codeReviewerAgent]) {
+			expect(source).not.toMatch(/Finders suppress|Finder suppression/);
+			expect(source).toContain("Finders do not suppress candidates because of a non-goal");
+		}
+	});
+
 	test("an explicit exclusion stays a note and a contradicting premise is only noted", () => {
 		expect(skillMd).toContain("the defect remains an OUT_OF_SCOPE note, not a repair demand");
 		expect(verifierPrompt).toContain("add that contradiction to the note");
@@ -729,14 +796,18 @@ describe("code-review 변경 코드 기본 범위 계약", () => {
 		expect(verifierPrompt).toContain("list every sibling site in the FIX");
 	});
 
-	test("a scope reason never yields REFUTED and REFUTED cites a code fact", () => {
+	test("a scope reason never yields REFUTED and REFUTED cites code or, for a requirement-gap, intent evidence", () => {
 		expect(skillMd).toContain("**A scope reason never produces REFUTED.** REFUTED is a quality verdict only");
 		expect(skillMd).toContain("appears in `findings.md` and the artifact as a visible nonblocking note");
 		expect(skillMd).toContain('CODE EVIDENCE: {"file": <strict escaped JSON string>, "line": <line>}');
-		expect(skillMd).toContain("A REFUTED entry without `CODE EVIDENCE`, or one whose reason is a plan, requirement, decision, or exclusion instead of code, is invalid.");
+		expect(skillMd).toContain("INTENT EVIDENCE: <requirement-gap only, in place of CODE EVIDENCE: the quoted intent text that shows the requirement was never stated>");
+		expect(skillMd).toContain("A REFUTED entry with neither `CODE EVIDENCE` nor, for a requirement-gap, `INTENT EVIDENCE` is invalid.");
+		expect(skillMd).toContain("For a requirement-gap, it is the satisfying line, or the quoted intent text that shows the requirement was never stated.");
 		const ladder = extractSection(verifierPrompt, "## Verdict ladder", "## No-safe-default");
-		expect(ladder).toContain("Every REFUTED\n  cites the code fact (`file:line`) that disproves the candidate.");
+		expect(ladder).toContain("Every REFUTED\n  cites its evidence. For a code defect, that is the code fact (`file:line`) that disproves the\n  candidate.");
+		expect(ladder).toContain("For a requirement-gap, it is the satisfying line, or the quoted intent text that shows\n  the requirement was never stated.");
 		expect(ladder).toContain("a scope reason never yields REFUTED");
+		expect(verifierPrompt).toContain("A REFUTED with neither `CODE EVIDENCE` nor, for a requirement-gap, `INTENT EVIDENCE` is invalid.");
 		const output = extractSection(verifierPrompt, "## Output", "##");
 		expect(output).toContain("Audit-only never hides a real defect");
 		expect(verifierPrompt).toContain('CODE EVIDENCE: {"file": <strict escaped JSON string>, "line": <line>}');
@@ -999,27 +1070,23 @@ describe("no-safe-default-verdict: concurrency/race verdicts are earned from the
 		expect(region).toContain("is NOT a basis for PLAUSIBLE");
 	});
 
-	test("an unverified candidate has no finding verdict and remains in the INCONCLUSIVE diagnostic", () => {
-		expect(region).toContain("emits no finding verdict");
-		expect(region).toContain("review artifact `INCONCLUSIVE`");
-		expect(region).toContain("preserves the candidate in the diagnostic/findings report");
+	test("an execution model still unestablished after tracing yields a kept PLAUSIBLE finding, not INCONCLUSIVE", () => {
+		expect(region).not.toContain("emits no finding verdict");
+		expect(region).toContain("When you have traced it and the execution model still cannot be established");
+		expect(region).toContain("record **PLAUSIBLE** and name the exact runtime fact that would settle it");
+		expect(region).toContain("Keep the finding in the full card, findings.md, and the artifact `findings` with its priority and assessment");
+		expect(region).toContain("Never omit it, and never mark the review `INCONCLUSIVE` for this reason.");
 	});
 
-	test("the no-safe-default exception is explicit and scoped apart from finding verdicts", () => {
-		const exception =
-			"The unverified no-safe-default case above is an exception to this output contract: emit no finding verdict or enriched finding card; stop the review, set the review artifact's status to INCONCLUSIVE, preserve the candidate and missing execution-model evidence in findings_report, and omit the candidate from artifact findings. Otherwise, return exactly one verdict. Evidence must quote or cite the relevant line(s). Do not hedge between two verdicts.";
+	test("the output contract has no no-safe-default omission exception", () => {
 		const output = extractSection(verifierPrompt, "## Output", "##");
 
-		expect(verifierPrompt).toContain(exception);
-		expect(verifierPrompt).not.toContain("Return exactly one verdict.");
-		expect(output).toContain("emit no finding verdict or enriched finding card");
-		expect(output).toContain("stop the review");
-		expect(output).toContain("set the review artifact's status to INCONCLUSIVE");
-		expect(output).toContain("preserve the candidate and missing execution-model evidence in findings_report");
-		expect(output).toContain("omit the candidate from artifact findings");
-		expect(output).toContain("Otherwise, return exactly one verdict.");
-		expect(output.indexOf("Otherwise, return exactly one verdict.")).toBeGreaterThanOrEqual(0);
-		expect(output.indexOf(exception)).toBeGreaterThanOrEqual(0);
+		expect(verifierPrompt).not.toContain("omit the candidate from artifact findings");
+		expect(output).not.toContain("stop the review");
+		expect(output).toContain(
+			"Return exactly one verdict for each candidate, including a no-safe-default candidate whose execution model stays unestablished (PLAUSIBLE, as above).",
+		);
+		expect(output).toContain("Do not hedge between two verdicts.");
 	});
 
 	test("REFUTED when the dispatch model closes the interleaving window", () => {
@@ -1049,18 +1116,19 @@ describe("no-safe-default-verdict: concurrency/race verdicts are earned from the
 describe("primary Phase 2 no-safe-default exception contract", () => {
 	const phase2 = extractSection(skillMd, "### Phase 2: Candidate Verification", "### Phase 3:");
 
-	test("gates unresolved execution models before the mandatory verdict and transitions to diagnostic Phase 3", () => {
+	test("traces the execution model before the mandatory verdict and keeps an unestablished one as PLAUSIBLE", () => {
 		const gate = phase2.indexOf("Before the mandatory **VERDICT** step");
 		const verdict = phase2.indexOf("\n   **VERDICT** —");
 
 		expect(gate).toBeGreaterThanOrEqual(0);
 		expect(verdict).toBeGreaterThan(gate);
-		expect(phase2).toContain("no-safe-default candidate's execution model remains unestablished");
-		expect(phase2).toContain("emit no verdict or enriched finding card");
-		expect(phase2).toContain("Preserve the candidate and missing execution-model evidence in `findings_report`");
-		expect(phase2).toContain("set the review artifact status to `INCONCLUSIVE`");
-		expect(phase2).toContain("transition to Phase 3 findings synthesis");
-		expect(phase2).toContain("Candidates that pass this gate retain exactly one CONFIRMED / PLAUSIBLE / REFUTED verdict");
+		expect(phase2).not.toContain("emit no verdict or enriched finding card");
+		expect(phase2).not.toContain("set the review artifact status to `INCONCLUSIVE`");
+		expect(phase2).toContain("\"I did not trace it\" is never a basis for PLAUSIBLE.");
+		expect(phase2).toContain("record PLAUSIBLE, name the exact runtime fact that would settle it, and keep the finding with its priority and assessment");
+		expect(phase2).toContain("Never omit it, and never mark the review `INCONCLUSIVE` for this reason.");
+		expect(phase2).toContain("Every candidate receives exactly one CONFIRMED / PLAUSIBLE / REFUTED verdict");
+		expect(codeReviewerAgent).toContain("it never makes the review `INCONCLUSIVE`");
 	});
 });
 

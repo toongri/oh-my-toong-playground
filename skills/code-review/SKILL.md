@@ -35,15 +35,15 @@ These premises must be reflected in the finder-job prompt — see Step 4. Review
 
 When `project_context` contains a complete valid `[SCOPE_CONTRACT]`/`[/SCOPE_CONTRACT]` JSON envelope, apply it regardless of artifact filename or gate. It contains `outcome`, `verification_surface`, `constraints`, `boundaries`, `non_goals`, `stories`, and `scope_contract_sha256`; parse it before deriving requirements and preserve it unchanged through finder dispatch, direct candidate verification, cards, and the artifact. A delimiter appearing without a valid pair, or a request explicitly requiring a contract that omits or damages it, is `INCONCLUSIVE`; never fall back to ordinary review. A request with no contract retains ordinary behavior. `stories` are caller-provided approved requirement entries and workflow state is caller-owned.
 
-The contract and confirmed stories define authorization. Artifacts, codebase analogs, review comments, and derived expected-items may explain approved behavior; they cannot add acceptance criteria, revise boundaries/non-goals, or authorize collateral repairs. Tracing surrounding code is required evidence gathering, not permission to repair everything reached.
+The contract and confirmed stories define authorization. Artifacts, codebase analogs, and derived expected-items may explain approved behavior; they cannot add acceptance criteria, revise boundaries/non-goals, or authorize collateral repairs. Tracing surrounding code is required evidence gathering, not permission to repair everything reached.
 
-Finders suppress scenarios fully explained by a declared non-goal before generating candidates. For every generated candidate, the reviewer directly decides **scope before quality verdict**, including LOW cleanup and documentation findings. OUT_OF_SCOPE reporting applies to generated candidates subsequently excluded by the reviewer; it does not require searching for unrelated work. The reviewer checks both the symptom and a concrete proposed remedy.
+Finders do not suppress candidates because of a non-goal. A candidate that may fall inside a declared non-goal is filed with that non-goal (`non_goals#N` or a quote) noted in its summary. For every candidate, the reviewer directly decides **scope before quality verdict**, including LOW cleanup and documentation findings; when the non-goal covers the defect, the reviewer records an OUT_OF_SCOPE note. OUT_OF_SCOPE reporting does not require searching for unrelated work. The reviewer checks both the symptom and a concrete proposed remedy.
 
-**Changed code is in scope by default.** Intent sources (the contract, stories, plan, issue, conversation, PR description) carry two kinds of statements: requirements (what to build) and explicit exclusions or accepted risks (what this change will not handle, e.g. "we will not handle concurrency because it is rare"). A defect located in lines or code this change added or modified is IN_SCOPE with basis `changed_code`, whether or not a requirement mentions it. It leaves scope only when an explicit exclusion statement directly addresses that behavior or defect class; it is then OUT_OF_SCOPE with basis `non_goal`, and the scope evidence quotes that statement. A requirement's silence never excludes. A decision about a different behavior never excludes: "ids match verbatim" decided against prefix expansion and says nothing about whitespace, and "preserve today's values" constrains valid inputs and says nothing about an invalid input handled by a new file. Code the change did not touch stays out of scope (`unrelated`) unless the change causes a regression there. An explicit exclusion stays an exclusion: the defect remains an OUT_OF_SCOPE note, not a repair demand. When the exclusion's stated premise contradicts the code (it says "rare", but the code triggers it on every retry), say so in the note; this does not block.
+**Changed code is in scope by default.** Intent sources (the contract, stories, plan, issue, conversation, PR description) carry two kinds of statements: requirements (what to build) and explicit exclusions or accepted risks (what this change will not handle, e.g. "we will not handle concurrency because it is rare"). A defect located in lines or code this change added or modified is IN_SCOPE with basis `changed_code`, whether or not a requirement mentions it. It leaves scope only when an explicit exclusion statement directly addresses that behavior or defect class; it is then OUT_OF_SCOPE with basis `non_goal`, and the scope evidence quotes that statement. A requirement's silence never excludes. A decision about a different behavior never excludes: "ids match verbatim" decided against prefix expansion and says nothing about whitespace, and "preserve today's values" constrains valid inputs and says nothing about an invalid input handled by a new file. A defect in code the change did not touch is out of scope (`unrelated`) unless it prevents an approved requirement from working (IN_SCOPE, basis `requirement`) or this change worsens it (IN_SCOPE, basis `regression`); its remedy is then the smallest local fix. An explicit exclusion stays an exclusion: the defect remains an OUT_OF_SCOPE note, not a repair demand. When the exclusion's stated premise contradicts the code (it says "rare", but the code triggers it on every retry), say so in the note; this does not block.
 
-**Remedy boundary.** A repair confined to code this change added or modified is authorized by default. Do not narrow the remedy to the reported site: when the same defect pattern exists in sibling changed code (the same missing check at another new boundary, the same normalization missing on the sibling path), list every sibling site in the finding's remedy. A real CSV defect can authorize a local CSV correction without authorizing a generic export framework. A pre-existing legacy billing defect remains unrelated even when severe. A change-introduced regression may authorize minimal restoration/rollback of the prior behavior; it never authorizes enhancement of an excluded subsystem. If restoring an approved invariant needs new excluded behavior or a new capability outside the change, return UNKNOWN for a user scope decision instead of expanding the specification.
+**Remedy boundary.** A repair confined to code this change added or modified is authorized by default. Do not narrow the remedy to the reported site: when the same defect pattern exists in sibling changed code (the same missing check at another new boundary, the same normalization missing on the sibling path), list every sibling site in the finding's remedy. A real CSV defect can authorize a local CSV correction without authorizing a generic export framework. A pre-existing legacy billing defect stays unrelated unless it blocks an approved requirement or the change worsens it. A change-introduced regression may authorize minimal restoration/rollback of the prior behavior; it never authorizes enhancement of an excluded subsystem. If restoring an approved invariant needs new excluded behavior or a new capability outside the change, return UNKNOWN for a user scope decision instead of expanding the specification. UNKNOWN is only for that case or for a product requirement that is itself unclear; when a smaller remedy inside the change exists, judge IN_SCOPE with that remedy.
 
-**A scope reason never produces REFUTED.** REFUTED is a quality verdict only: the candidate is not a defect, and its audit entry cites the code fact (`file:line`) that disproves it. A plan, requirement, decision, or exclusion is not a code fact. A real defect judged out of scope stays CONFIRMED or PLAUSIBLE with scope OUT_OF_SCOPE, and appears in `findings.md` and the artifact as a visible nonblocking note.
+**A scope reason never produces REFUTED.** REFUTED is a quality verdict only: the candidate is not a defect, and its audit entry cites the evidence that disproves it. For a code defect, that is the code fact (`file:line`). For a requirement-gap, it is the satisfying line, or the quoted intent text that shows the requirement was never stated. A plan, requirement, decision, or exclusion that excludes a defect is a scope reason, not evidence. A real defect judged out of scope stays CONFIRMED or PLAUSIBLE with scope OUT_OF_SCOPE, and appears in `findings.md` and the artifact as a visible nonblocking note.
 
 Each finding must carry reviewer-authored fields:
 
@@ -76,7 +76,7 @@ The reviewer directly verifies candidates in every mode, including reviews with 
 
 **NOT your role:**
 - Modifying any source files
-- Running a general raw `git diff` command (the Step 3 candidate-scoped integrity exception is the only text-inspection carve-out)
+- Running a general raw `git diff` command (the Step 3 candidate-scoped integrity exception and the Phase 2 candidate-file diff read are the only text-inspection carve-outs)
 
 ### Context Budget
 
@@ -92,8 +92,9 @@ The reviewer directly verifies candidates in every mode, including reviews with 
 - chunk-reviewer results (candidate findings)
 - Phase 2 inline judgment output (reasoning, verdicts, enriched findings for every candidate)
 - Code reading via Read/Grep for Phase 2 inline candidate judgment
+- A candidate file's own diff (`git diff <range> -- <file>`), read in bounded parts in Phase 2 to establish which lines this change added or modified
 
-The orchestrator never inspects, loads, or displays diff text as general raw-diff review input. The candidate-scoped diff inspection exception in Step 3 is for integrity judgment only: for each candidate derived file, stream its complete candidate-scoped diff to the prescribed out-of-band digest/byte-count sink and compare only bounded integrity evidence with authored source/generator evidence. Its diff result is not forwarded to a finder prompt, candidate aggregation, or general orchestrator context. This exception does not permit project tests, builds, linters, formatters, migrations, or other project execution, and it does not relax the ban on general raw diff text. The separate prescribed binary `git diff --no-ext-diff --binary ...` stdout byte stream flows directly to SHA-256 outside model context for `diffFingerprint` and an out-of-band byte-count sink; stderr is excluded and a nonzero exit aborts. Finders read the review diff only through the diff cursor (`diff-cursor.ts`), never by running `git diff` themselves.
+The orchestrator never loads the whole review diff as general raw-diff review input. In Phase 2 it may read one candidate file's own diff, in bounded parts, to establish which lines this change added or modified. The candidate-scoped diff inspection exception in Step 3 is for integrity judgment only: for each candidate derived file, stream its complete candidate-scoped diff to the prescribed out-of-band digest/byte-count sink and compare only bounded integrity evidence with authored source/generator evidence. Its diff result is not forwarded to a finder prompt, candidate aggregation, or general orchestrator context. This exception does not permit project tests, builds, linters, formatters, migrations, or other project execution, and it does not relax the ban on general raw diff text. The separate prescribed binary `git diff --no-ext-diff --binary ...` stdout byte stream flows directly to SHA-256 outside model context for `diffFingerprint` and an out-of-band byte-count sink; stderr is excluded and a nonzero exit aborts. Finders read the review diff only through the diff cursor (`diff-cursor.ts`), never by running `git diff` themselves.
 
 ## Step 0: Input Parsing
 
@@ -106,6 +107,8 @@ Determine range and setup for subsequent steps:
 | `pr <number or URL>` | Fetch and check out PR ref into the worktree (see below) | `origin/<baseRefName>...pr-<number>` |
 | `<base> <target>` | Verify HEAD is `<target>` via `git rev-parse --abbrev-ref HEAD`; verify clean tree via `git status --porcelain -uno`. Abort if mismatch or dirty. | `<base>...<target>` |
 | (none) | Detect default branch (`origin/main` or `origin/master`). Verify HEAD is the target branch via `git rev-parse --abbrev-ref HEAD`; verify clean tree via `git status --porcelain -uno`. Abort if mismatch or dirty. | `<default>...HEAD` |
+
+**Review base commit.** When the dispatch's `project_context` contains a line `Review base commit: <sha> — …`, use `<sha>...HEAD` as the range instead of the default branch. Verify clean tree as above, and verify `<sha>` like any other endpoint (below). With no such line, use the table.
 
 ### PR Mode: Worktree Checkout (per Premise 1)
 
@@ -176,14 +179,14 @@ Early Exit runs before intent acquisition on purpose — an empty diff exits imm
 
 ### Acquisition order
 
-1. **PR/branch artifacts** — PR title, description, labels, commit history, code review comments and threads
+1. **PR/branch artifacts** — PR title, description, labels, commit history. PR comments and review threads are not intent sources: the review is independent of them.
 2. **Linked references (recursive)** — every link found in the artifacts above, followed transitively until the trail ends
 3. **Codebase signals** — CLAUDE.md, README, ADRs, related history in changed paths
 4. **User interview** — only for what the artifacts cannot reveal
 
 ### Acquire all reachable references
 
-PR descriptions, commits, and comments routinely link to richer context (issue trackers, design docs, chat threads). **Follow every link recursively** — a linked ticket may itself link to a doc which links to a discussion thread; keep following until the trail ends.
+PR descriptions and commits routinely link to richer context (issue trackers, design docs, chat threads). **Follow every link recursively** — a linked ticket may itself link to a doc which links to a discussion thread; keep following until the trail ends.
 
 Do not name specific tools. Use whatever fetch capability the environment provides for each link type. If a link cannot be fetched directly (no credential, no MCP for that platform, network unreachable), do not skip it — mark it for the user interview step.
 
@@ -191,7 +194,7 @@ Sources to consult per input mode:
 
 | Input mode | Sources |
 |------------|---------|
-| PR | `gh pr view --json title,body,labels,comments,reviews`, `gh pr view --comments`, linked issues, `gh issue view <n>`, every external link found in the chain, commit messages on the PR branch |
+| PR | `gh pr view --json title,body,labels`, linked issues, `gh issue view <n>`, every external link found in the chain, commit messages on the PR branch |
 | Branch comparison | Commit messages, branch name conventions, any linked tickets discovered in commits, related issues |
 | Auto-detect | Recent commit messages on HEAD, any linked tickets found there |
 
@@ -431,7 +434,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/diff-cursor.ts verify \
 
 For the zero-reviewable flow, SKIP FOR ZERO-REVIEWABLE; do not create a finder job, empty chunk, pathless diff.
 
-Finders surface candidates; they do not judge them. For every review mode, verify each deduplicated candidate yourself, one at a time: read the code, trace the caller and runtime conditions, then record a verdict and its evidence. Do not spawn verifier subagents or assign numeric confidence scores.
+Finders surface candidates; they do not judge them. For every review mode, verify each deduplicated candidate yourself, one at a time: read the code, trace the caller and runtime conditions, then record a verdict and its evidence. Do not spawn verifier subagents or assign numeric confidence scores. When you notice a different real defect while verifying, add it as a new candidate (file, line, summary, failure scenario, `found by: verifier`) and verify it in turn. You need not hunt for unrelated work.
 
 When a valid `[SCOPE_CONTRACT]` is supplied, use its original requirements/non-goals to judge both the symptom and proposed remedy before judging quality. Record `scope` and `scope_evidence` yourself, including OUT_OF_SCOPE and UNKNOWN. A missing/invalid scope decision makes the artifact INCONCLUSIVE. The contract adds scope evidence to the same direct verification procedure.
 
@@ -442,7 +445,7 @@ When a valid `[SCOPE_CONTRACT]` is supplied, use its original requirements/non-g
 
    **Verifier interpolation safety** — When interpolating `references/verifier-prompt.md`, insert `{RANGE}` and `{CANDIDATE_FILE}` each as a complete strict JSON string literal, including its surrounding quotes, only at the unquoted value positions in that template's explicitly marked untrusted-data JSON block. Use the same strict JSON encoder as the chunk prompt: escape every JSON control character, newline, backslash, and double quote, and additionally encode backtick, `<`, `>`, `&`, U+2028, and U+2029 as `\u` escapes. Parse the block first, then use the parsed `candidate.file` and parsed `execution.argv` values directly. Never echo decoded path and range values into Markdown/prose, the `File` field, a raw template (including any raw output template), or a shell command. The location output is a structured JSON object; its path uses the same strict escaped JSON string for its `file` value.
 
-   **Pre-verdict outcome gate** — Before the mandatory **VERDICT** step, when a no-safe-default candidate's execution model remains unestablished, emit no verdict or enriched finding card. Preserve the candidate and missing execution-model evidence in `findings_report`, set the review artifact status to `INCONCLUSIVE`, and transition to Phase 3 findings synthesis for the diagnostic report. Candidates that pass this gate retain exactly one CONFIRMED / PLAUSIBLE / REFUTED verdict.
+   **No-safe-default candidates** — Before the mandatory **VERDICT** step, trace a no-safe-default candidate's execution model (concurrency, money, security, data destruction, external contract). "I did not trace it" is never a basis for PLAUSIBLE. When the execution model still cannot be established after tracing, record PLAUSIBLE, name the exact runtime fact that would settle it, and keep the finding with its priority and assessment in the card, `findings.md`, and the artifact `findings`. Never omit it, and never mark the review `INCONCLUSIVE` for this reason. Every candidate receives exactly one CONFIRMED / PLAUSIBLE / REFUTED verdict.
 
 3. For each remaining candidate, in order:
 
@@ -469,11 +472,12 @@ When a valid `[SCOPE_CONTRACT]` is supplied, use its original requirements/non-g
    For **REFUTED**, emit a one-line note:
 
    ```
-   VERDICT: REFUTED — <one line quoting the line/guard/invariant that proves it is not a bug>
-   CODE EVIDENCE: {"file": <strict escaped JSON string>, "line": <line>} — <the quoted line/guard/invariant>
+   VERDICT: REFUTED — <one line naming the evidence that proves it is not a defect>
+   CODE EVIDENCE: {"file": <strict escaped JSON string>, "line": <line>} — <the quoted line/guard/invariant, or the satisfying line>
+   INTENT EVIDENCE: <requirement-gap only, in place of CODE EVIDENCE: the quoted intent text that shows the requirement was never stated>
    ```
 
-   A REFUTED entry without `CODE EVIDENCE`, or one whose reason is a plan, requirement, decision, or exclusion instead of code, is invalid. Re-judge it as CONFIRMED or PLAUSIBLE and record that reason as its scope.
+   A REFUTED entry with neither `CODE EVIDENCE` nor, for a requirement-gap, `INTENT EVIDENCE` is invalid. One whose reason is a plan, requirement, decision, or exclusion that excludes the defect is also invalid: that is a scope reason. Re-judge it as CONFIRMED or PLAUSIBLE and record that reason as its scope.
 
 4. **Uncertainty** — when the mechanism is real but its trigger remains uncertain, record PLAUSIBLE and state the missing evidence. Preserve unresolved scope as UNKNOWN. If verification cannot be completed, report INCONCLUSIVE with the unverified candidates identified; never report an unverified review as clean.
 
@@ -485,28 +489,28 @@ This is a **report**. You surface verified findings, ranked by what matters most
 
 For the zero-reviewable flow, record all changed paths under Out of Scope. Phase 3 writes `findings.md` under the same invocation directory and same invocation ID; the completion-gate "findings_report" points to that same invocation ID and `findings.md` path, with `"findings": []`.
 
-**Scope-contract synthesis:** Preserve your recorded `scope` and `scope_evidence` in its full card and artifact tuple. Do not relabel scope. Only merge candidates whose scope decision and authorized remedy agree; preserve all evidence. Report OUT_OF_SCOPE separately as a nonblocking observation, visible in `findings.md` and in the artifact findings, and UNKNOWN separately as an unresolved scope decision. A directly verified `IN_SCOPE` finding that stays `PLAUSIBLE` does not make the review `INCONCLUSIVE`: publish `status: "COMPLETE"` with the finding, its priority and its assessment, and the caller routes it (LOW is a note; HIGH or MEDIUM needs adjudication). Do not authorize speculative repair. Keep both OUT_OF_SCOPE/UNKNOWN observations in the artifact with IN_SCOPE results; the caller decides repair, adjudication, completion, budget, and approval. Valid scope-contract reviews retain every verified finding, including LOW; ordinary reviews retain the top-15 cap. The pre-existing rule below cannot promote unrelated old code merely because it is nearby; require change-caused regression evidence and a bounded restoration remedy.
+**Scope-contract synthesis:** Preserve your recorded `scope` and `scope_evidence` in its full card and artifact tuple. Do not relabel scope. Only merge candidates whose scope decision and authorized remedy agree; preserve all evidence. Report OUT_OF_SCOPE separately as a nonblocking observation, visible in `findings.md` and in the artifact findings, and UNKNOWN separately as an unresolved scope decision. A directly verified `IN_SCOPE` finding that stays `PLAUSIBLE` does not make the review `INCONCLUSIVE`: publish `status: "COMPLETE"` with the finding, its priority and its assessment, and the caller routes it (LOW is a note; HIGH or MEDIUM needs adjudication). Do not authorize speculative repair. Keep both OUT_OF_SCOPE/UNKNOWN observations in the artifact with IN_SCOPE results; the caller decides repair, adjudication, completion, budget, and approval. Valid scope-contract reviews retain every verified finding, including LOW; ordinary reviews retain the top-15 cap. The pre-existing rule below cannot promote unrelated old code merely because it is nearby; a defect in untouched code enters scope only when it blocks an approved requirement or this change worsens it, and its remedy is the smallest local fix.
 
 1. **Merge** verified findings that describe the same defect (same root cause, across chunks) — combine their evidence and note the corroborating angles. (Near-duplicates within a chunk were already deduped before verification.)
-2. **Class** each finding by the angle that found it — the angle→class mapping is 1:1: the **correctness** angle → **correctness** (the change behaves wrong), the **regression** angle → **regression** (previously-working behavior the change breaks), the **cleanup** angle → **cleanup** (behaves correctly but is low quality), the **requirement** angle → **requirement-gap** (an AC or stated requirement is absent — the behavior is missing, not wrong). A finding corroborated by multiple angles takes the class of the angle whose lens names its defect mechanism.
-3. **Impact** each finding: read its full card (failure scenario + blast radius) and assign the harm grade independently of confidence and priority. Impact is about the harm if the scenario occurs; do not use occurrence rarity, patch size/touched lines, maintenance exposure, or the finding angle as a proxy for harm. A severe, irreparable harm remains severe even when occurrence is unknown or the cheapest remedy is expensive:
+2. **Class** each finding by the defect's nature, not by the angle that found it: **correctness** (the change behaves wrong), **regression** (previously-working behavior the change breaks), **cleanup** (behaves correctly but is low quality), **requirement-gap** (an AC or stated requirement is absent — the behavior is missing, not wrong), or a short free-text class when none of these fits. `found by` records the angle(s) that surfaced it; a regression found by the correctness angle is still class regression.
+3. **Impact** each finding: read its full card (failure scenario + blast radius) and assign the harm grade independently of confidence and priority. Impact is about the harm if the scenario occurs. Weigh occurrence rarity, patch size/touched lines, and maintenance exposure in priority, not in impact; the finding angle does not measure harm. A severe, irreparable harm remains severe even when occurrence is unknown or the cheapest remedy is expensive:
    - **HIGH** — realistic unacceptable harm such as data loss/corruption, money, auth/permissions failure, a working feature regression, required user-reaching behavior missing, user-facing crash, or unrecoverable damage.
    - **MEDIUM** — observable but recoverable harm, conditional wrong behavior, performance degradation, or a regression-detection gap.
    - **LOW** — subjective cosmetics, unclear benefit, or report-only quality observations whose harm is not user-impacting.
 
-   Do not manufacture occurrence or exposure numbers. For occurrence, use competing requests for the same resource; batching and retries do not prove a globally concurrent user count. For maintenance exposure, use read/change frequency, not request count. Unknown exposure stays unknown and does not become LOW.
+   Do not manufacture occurrence or exposure numbers. For occurrence, weigh competing requests for the same resource; batching and retries do not prove a globally concurrent user count. For maintenance exposure, weigh read/change frequency, not request count. Unknown exposure stays unknown.
 4. **Assign priority** after the full card and impact are established. Priority is a response recommendation, not a severity score:
    - **HIGH** — a mandatory response is warranted because the realistic harm is unacceptable; expensive remediation does not downrate it. Seek the smallest mitigation that contains the harm.
    - **MEDIUM** — a bounded remedy has demonstrated net benefit after considering maintenance/regression burden, including cases such as a frequently edited duplicate with a small safe consolidation.
-   - **LOW** — subjective cosmetics, unclear benefit, disproportionate remedy, or a retained report-only observation. Do not infer LOW from unknown exposure or from a rare occurrence alone.
+   - **LOW** — subjective cosmetics, unclear benefit, disproportionate remedy, or a retained report-only observation. Weigh unknown exposure and rare occurrence with the harm; neither alone makes a finding LOW.
 
    Record five nonblank assessment slots on every final finding: `unfixed_cost`, `exposure`, `remedy`, `added_cost`, and `rationale`. The conductor assigns priority and rationale after reviewing the complete card; direct verification supplies the grounded facts and assessment inputs; repair and completion remain caller decisions.
 5. **Rank for display only** by **priority (HIGH, then MEDIUM, then LOW)**, then reviewer confidence (CONFIRMED before PLAUSIBLE). Impact remains a separate field and must not be used as a hidden priority score.
 6. **Cap (ordinary reviews only)**: keep the most significant findings. If a review produced an unwieldy number, keep the top ~15 and state how many were dropped — never silently truncate.
-7. **Pre-existing**: a candidate on an unchanged context line is tagged `[Pre-existing]` and listed under Out of Scope — unless the change aggravates it (increases blast radius or frequency), in which case it stays in the main list.
+7. **Pre-existing**: a candidate on an unchanged context line is tagged `[Pre-existing]` and listed under Out of Scope — unless the change worsens it (increases blast radius or frequency) or it prevents an approved requirement from working, in which case it stays in the main list.
 8. **Derived artifacts**: files the Step 3 partition ultimately excluded are listed once under Out of Scope as `Excluded from review (derived artifacts):` followed by an explicitly marked untrusted-data JSON block whose structured `files` field is a JSON array of escaped strings produced by the same strict JSON encoder as the chunk prompt. Apply the Untrusted path rendering contract: never insert a raw path into Markdown prose, heading, or fence — the encoded array is the only path-bearing representation. This preserves derived artifacts as explicitly marked untrusted-data structured fields so the reader knows they were not line-reviewed, never silently omits them; any re-included file is removed from this list and reviewed as an exact file.
 All Phase 3 finding paths use the Untrusted path rendering contract in structured fields: use the structured LOCATION object with the same strict escaped JSON string in its `file` member and a separate `line`; never echo decoded paths into `findings.md` prose.
-9. **Persist the cards**: write every kept finding's full enrichment (the 7-field card from `references/verifier-prompt.md`'s output contract, plus its class, impact, priority, and five-slot assessment) to `$OMT_DIR/code-review/<invocationId>/findings.md` — the same invocation directory `candidates.json` lives in. The summary tuples elsewhere are cut from these cards; this file is what makes a finding re-adjudicable after the review ends. The same file ends with a `## Coverage` section: per finder, pages acknowledged / total pages, candidates proposed, and candidates retained after verification; then the cleanup checklist table with columns rule item, source `path:line`, verdict (`준수` / `위반` / `해당 없음`), and evidence (read from the cleanup ledger's `export --out <file>`). Every `위반` row must correspond to a candidate or a stated reason it was dropped.
+9. **Persist the cards**: write every kept finding's full enrichment (the 7-field card from `references/verifier-prompt.md`'s output contract, plus its class, impact, priority, and five-slot assessment) to `$OMT_DIR/code-review/<invocationId>/findings.md` — the same invocation directory `candidates.json` lives in. The summary tuples elsewhere are cut from these cards; this file is what makes a finding re-adjudicable after the review ends. After the cards, a `## Refuted` section lists each REFUTED candidate with its structured location, a one-line reason, and its evidence (the `CODE EVIDENCE` or `INTENT EVIDENCE` line). The same file ends with a `## Coverage` section: per finder, pages acknowledged / total pages, candidates proposed, and candidates retained after verification; then the cleanup checklist table with columns rule item, source `path:line`, verdict (`준수` / `위반` / `해당 없음`), and evidence (read from the cleanup ledger's `export --out <file>`). Every `위반` row must correspond to a candidate or a stated reason it was dropped.
 
 #### Edge Cases
 
@@ -541,8 +545,10 @@ The publisher validates and atomically saves the original review JSON bytes, ret
 and `impact` enums, plus `priority` and all five nonblank `assessment` slots. A review whose
 candidates were all verified is `COMPLETE`, including its `IN_SCOPE` + `PLAUSIBLE` findings; never
 invent certainty or a speculative repair. `INCONCLUSIVE` is for a review that could not be
-completed (unverified candidates, a missing or damaged scope contract). An `INCONCLUSIVE` artifact
-may omit only the `priority`/`assessment` fields when verification or scope is unresolved. If the
+completed (unverified candidates, a missing or damaged scope contract). A no-safe-default finding
+whose execution model could not be established is a verified PLAUSIBLE finding, not a reason for
+`INCONCLUSIVE`. An `INCONCLUSIVE` artifact still lists its verified findings, classified like a
+`COMPLETE` one, and may omit only the `priority`/`assessment` fields when verification or scope is unresolved. If the
 `verdict` or `impact` enum is unavailable, do not invent it: keep the unresolved narrative in
 `findings_report` and omit that incomplete tuple from diagnostic `findings`. The publisher still receives the
 original JSON and returns only its `{path,sha256}` receipt; it does not assign priority, repair
@@ -558,14 +564,8 @@ This exact JSON is the input to `submit-review`; any caller may read or validate
 
 For a valid scope-contract artifact, additionally include the original `scope_contract_sha256` at top level and every finding's reviewer-authored `scope` and `scope_evidence` as defined above. These are required even for LOW findings and OUT_OF_SCOPE/UNKNOWN observations. Incomplete direct verification writes `status: "INCONCLUSIVE"` with the verified original hash; if no trustworthy hash exists, publish the hashless diagnostic as supplied. Never invent a hash or reconstruct one from mutable state to make it valid.
 
-Calibration examples are hypothetical. A rare admin race (1–2 requests/week) with recoverable
-stale state across a 2,500-line lock surface may be **LOW/no fix** when no bounded net-benefit
-remedy is demonstrated; do not use the explanation
-`현행 규칙에는 수정 비용으로 수리를 면제하는 경로가 없습니다` to excuse repair of a severe
-irreparable harm. A frequently edited duplicate with an existing helper and a removable 12-line
-copy may be **MEDIUM/fix-check** when consolidation demonstrates net benefit after
-maintenance/regression burden. A short deadline, seniority, “all bugs must be fixed,” or sunk
-cost never changes impact or priority by itself.
+A short deadline, seniority, “all bugs must be fixed,” or sunk cost never changes impact or
+priority by itself.
 
 Emit the ranked findings directly: each finding carries its verdict (CONFIRMED / PLAUSIBLE), class (correctness / regression / cleanup / requirement-gap), separate impact, final priority, and five nonblank assessment slots (`unfixed_cost`, `exposure`, `remedy`, `added_cost`, `rationale`). Represent its path as a strict escaped JSON string in a structured field (the `location.file` value), with its `line` separate, plus enriched evidence (current code, what's wrong, failure scenario, fix, blast radius — the enrichment shape from `references/verifier-prompt.md`, produced directly by the reviewer for each candidate). Apply the Untrusted path rendering contract in `findings.md` and in terminal text; do not render a raw path or inline path-and-line prose. Pre-existing findings go under Out of Scope. This findings text is also the handoff contract consumed by any caller that dispatches a code-reviewer agent that runs this skill — do not invent a different format.
 
