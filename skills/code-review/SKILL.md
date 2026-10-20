@@ -198,7 +198,7 @@ Sources to consult per input mode:
 | Branch comparison | Commit messages, branch name conventions, any linked tickets discovered in commits, related issues |
 | Auto-detect | Recent commit messages on HEAD, any linked tickets found there |
 
-- **Explicit decision rules** — when an intent source (plan, spec, issue, PR description) states explicit decision rules (for example plan ADR items `### D-N: <title>` with a `Decision` field, or rule sentences in an issue), copy them verbatim into `{REQUIREMENTS}` as a `Decision rules:` block alongside the acceptance criteria. These are rules the frozen intent source already states, not new acceptance criteria, so copying them is not the addition that scope-contract mode forbids; never paraphrase and never author a rule the source does not state.
+- **Explicit decision rules** — when an intent source (plan, spec, issue, PR description) states explicit decision rules (for example plan ADR items `### D-N: <title>` with a `Decision` field, or rule sentences in an issue), copy them verbatim into `{REQUIREMENTS}` as a `Decision rules:` block alongside the acceptance criteria. Each rule carries the full `Decision` field, plus `| Owns: … | Must NOT own: …` when the item has them. These are rules the frozen intent source already states, not new acceptance criteria, so copying them is not the addition that scope-contract mode forbids; never paraphrase and never author a rule the source does not state.
 
 ### User interview — only for what artifacts cannot reveal
 
@@ -562,7 +562,7 @@ The ordinary CodeReviewArtifact schema is fixed:
 
 This exact JSON is the input to `submit-review`; any caller may read or validate the resulting transport receipt according to its own policy.
 
-For a valid scope-contract artifact, additionally include the original `scope_contract_sha256` at top level and every finding's reviewer-authored `scope` and `scope_evidence` as defined above. These are required even for LOW findings and OUT_OF_SCOPE/UNKNOWN observations. Incomplete direct verification writes `status: "INCONCLUSIVE"` with the verified original hash; if no trustworthy hash exists, publish the hashless diagnostic as supplied. Never invent a hash or reconstruct one from mutable state to make it valid.
+For a valid scope-contract artifact, additionally include the original `scope_contract_sha256` at top level and every finding's reviewer-authored `scope` and `scope_evidence` as defined above. These are required even for LOW findings and OUT_OF_SCOPE/UNKNOWN observations. The top-level hash is required only for `COMPLETE`; an `INCONCLUSIVE` artifact may lack it. Incomplete direct verification writes `status: "INCONCLUSIVE"` with the verified original hash; if no trustworthy hash exists, publish the hashless diagnostic as supplied. Never invent a hash or reconstruct one from mutable state to make it valid.
 
 A short deadline, seniority, “all bugs must be fixed,” or sunk cost never changes impact or
 priority by itself.

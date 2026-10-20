@@ -30,10 +30,10 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 - Correctness bugs — whether changed code behaves correctly end-to-end against the surrounding system
 - Dependencies, callers, callees, interfaces, configurations, and runtime context across file boundaries
 - Classifies each finding candidate as CONFIRMED / PLAUSIBLE / REFUTED
-- Assigns each verified finding a class (`correctness`/`regression`/`cleanup`/`requirement-gap`, 1:1 with the angles) and an impact (`HIGH`/`MEDIUM`/`LOW`). Impact describes pure harm if the scenario occurs; it must not proxy for the class or angle, occurrence likelihood, exposure, patch size, or maintenance cost.
+- Assigns each verified finding a class (`correctness`/`regression`/`cleanup`/`requirement-gap`, or free text; chosen by the defect's nature, with the finding angles recorded separately as `found by`) and an impact (`HIGH`/`MEDIUM`/`LOW`). Impact describes pure harm if the scenario occurs; it must not proxy for the class or angle, occurrence likelihood, exposure, patch size, or maintenance cost.
 - Assigns final priority (`HIGH`/`MEDIUM`/`LOW`) by weighing actual occurrence, exposure, and harm against the minimum remedy's permanent complexity, maintenance burden, and regression risk. Implementation difficulty or effort alone must not lower priority.
 - Every `COMPLETE` finding requires five nonblank `assessment` fields: `unfixed_cost`, `exposure`, `remedy`, `added_cost`, and `rationale`. The reviewer directly verifies every candidate without numeric confidence scores or verifier subagents.
-- Persists the full 7-field cards to `$OMT_DIR/code-review/<sid>/findings.md` — the basis for later re-adjudication
+- Persists the full 7-field cards to `$OMT_DIR/code-review/<sid>/findings.md` — the basis for later re-adjudication. The file also has a `## Refuted` section listing each refuted candidate with its location, a one-line reason, and its evidence
 - At higher effort levels, may also include simplification, reuse, and efficiency findings
 
 **Non-negotiable premises**:

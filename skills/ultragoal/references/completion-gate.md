@@ -44,7 +44,7 @@ A code-reviewer may legitimately remain in flight for 2–3 hours. Elapsed time 
 
 ### Scope admission before repair
 
-Finders suppress scenarios fully explained by declared non-goals before candidate generation. For every generated candidate, the code reviewer directly records **scope first, validity second** against the frozen contract, evaluating the failure/cost AND the proposed remedy. OUT_OF_SCOPE records preserve generated candidates excluded during verification; they do not require a search for unrelated work:
+Finders do not suppress a candidate because of a declared non-goal; they file it noting `non_goals#N` in the summary, and the reviewer decides scope. For every generated candidate, the code reviewer directly records **scope first, validity second** against the frozen contract, evaluating the failure/cost AND the proposed remedy. OUT_OF_SCOPE records preserve generated candidates excluded during verification; they do not require a search for unrelated work:
 
 | Scope | Required evidence | Orchestrator action |
 |---|---|---|

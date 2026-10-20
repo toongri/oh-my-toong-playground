@@ -148,7 +148,7 @@ The final review retains the four finder angles: correctness, regression, cleanu
 
 The final `code-reviewer` receives exactly the serialized review context and the caller-owned opaque artifact destination. The generic code-review publisher stores the original CodeReviewArtifact JSON unchanged and returns only the transport receipt `{path, sha256}`. The publisher does not know ultragoal and does not assign priority, scope, repair, completion, budget, or approval policy. The parent orchestrator must explicitly invoke the `get-review-result` CLI to obtain the original result; it must not read the receipt and apply subjective policy itself.
 
-The consumer decides scope first. `OUT_OF_SCOPE` is retained as a non-blocking NOTE; `UNKNOWN` blocks without repair. If `PLAUSIBLE` verification remains unresolved, or scope admission is incomplete, consume the reviewer's `INCONCLUSIVE` artifact status as-is and route to `REQUEST_CHANGES` without recording or rewriting reviewer status and without speculative repair.
+The consumer decides scope first. `OUT_OF_SCOPE` is retained as a non-blocking NOTE; `UNKNOWN` is used only when the only remedy needs excluded behavior or the requirement itself is unclear, and is resolved from evidence first. A verified `PLAUSIBLE` finding stays in the `COMPLETE` artifact. If the review did not finish, or scope admission is incomplete, consume the reviewer's `INCONCLUSIVE` artifact status as-is (it still lists its classified findings) and route to `REQUEST_CHANGES` without recording or rewriting reviewer status.
 
 Routing for confirmed (`CONFIRMED`) IN_SCOPE findings:
 

@@ -292,7 +292,7 @@ describe("정적 리뷰와 Test value 책임 경계 계약", () => {
 	});
 });
 
-describe("finder prompts use the diff cursor and state only their own lens", () => {
+describe("finder prompts use the diff cursor and start from their own angle", () => {
 	const template = readFileSync(TEMPLATE_MD, "utf-8");
 	const prompts = Object.fromEntries(
 		["correctness", "regression", "cleanup", "requirement", "default"].map((m) => [

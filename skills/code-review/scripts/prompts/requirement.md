@@ -36,7 +36,7 @@ Skip AC mapping entirely. Instead, infer what this change was trying to do from 
 
 #### When acceptance criteria or explicit decision rules are present (AC-mapping path)
 
-Work through each acceptance criterion and each explicit decision rule in `## Requirements/Plan` one at a time (per-AC mapping). A decision rule is a stated rule such as an entry of a `Decision rules:` block (`[D-N] <title> — <rule>`) or a rule sentence the intent source gives. Treat it exactly like an AC, and check every branch the rule names: a rule such as "invalid payload → output is null: nothing written or invalidated" is met only if the code both returns the null/skip value and performs no write or invalidation.
+Work through each acceptance criterion and each explicit decision rule in `## Requirements/Plan` one at a time (per-AC mapping). A decision rule is a stated rule such as an entry of a `Decision rules:` block (`[D-N] <title> — <rule>`, plus `| Owns: … | Must NOT own: …` when present) or a rule sentence the intent source gives. Treat it exactly like an AC, and check every branch the rule names: a rule such as "invalid payload → output is null: nothing written or invalidated" is met only if the code both returns the null/skip value and performs no write or invalidation.
 
 1. **Identify the criterion** — quote or paraphrase the AC or decision rule precisely as stated (for a rule, keep its `D-N` label).
 2. **Locate relevant diff hunks** — find the changed lines, added/removed logic, or new tests that would satisfy this criterion. Use Read/Grep/Glob on the working directory to confirm what the post-change code actually does.
