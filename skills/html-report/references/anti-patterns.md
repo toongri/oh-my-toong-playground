@@ -23,7 +23,7 @@ This file holds the full table of [section 11 (Anti-patterns)](../SKILL.md#11-an
 | Legend floating among nodes | Collides with nodes | Bottom strip or HTML list beside the figure |
 | Arrow label with no mask or halo over a line | The line runs through the text | Surface-colored mask or `paint-order: stroke` halo |
 | Vertical `writing-mode` text | Unreadable | Horizontal labels beside vertical segments |
-| Shadows; radius above 10px | Template look | 1px borders; 6 to 10px radius |
+| Shadows; radius above 10px | Template look | 1px borders; 6 to 10px radius (pills excepted) |
 | Accent on every important node | No focal point | Accent on 1 to 2 elements per figure |
 | Numbered markers on things that are not a sequence | Implies an order that does not exist | Numbers only for real sequences |
 | Copying an automatic layout (Mermaid-style spacing) | Generic routing, no editorial choice | Lay out by hand on a grid |

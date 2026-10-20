@@ -372,7 +372,7 @@ bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh "<문서.html>" --source
 jq '.summary' "$OUT/lint.json"
 ```
 
-Look at every frame (light and dark 1280px, light and dark 400px, `-fig*.png`, and `-fig*-end.png` for a scrolling figure) as `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` §14 lists them. Fix the HTML, and **re-run lint with `--receipt` after every edit of the HTML or the document** — the receipt is written only on 0 errors and binds the exact HTML bytes. Start a new round folder (a new capture) only after a layout, style, or SVG fix, as §14 directs; after a text-only fix re-run lint only. Stop under §14's stop condition. A remaining `warn` is read and either fixed or named. If you change the Markdown document, update the HTML to match, then capture and lint again.
+Look at every frame (light and dark 1280px, light and dark 400px, `-fig*.png`, and `-fig*-end.png` for a scrolling figure) as `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` §14 lists them. Fix the HTML, and **re-run lint with `--receipt` after every edit of the HTML or the document** — the receipt is written only on 0 errors and binds the exact HTML bytes. Follow §14 to choose the next check (a new round or a lint-only rerun) and to decide when to stop. A remaining `warn` is read and either fixed or named. If you change the Markdown document, update the HTML to match, then capture and lint again.
 
 After the figure loop, **run the verification the machine cannot do — technical-writing.**
 

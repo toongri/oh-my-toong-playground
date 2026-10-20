@@ -741,7 +741,7 @@ export function renderQaReport(
 		}
 	}
 	assertRenderable(validateNarrative(view, narrative, readEvidence, { content: strictVisualEvidence }), strictVisualEvidence);
-	const title = `QA 보고서 — ${view.target || view.phase}`;
+	const title = `${view.target || view.phase} QA 보고서`;
 	const evidenceContext: EvidenceRenderContext = { embeddedBytes: 0, renderedPaths: new Set(), strictVisualEvidence };
 	const section = (html: string): string => `<section>${html}</section>`;
 	const body = [
@@ -785,7 +785,7 @@ ${body}
 
 // One page, no <script>, no external reference (not even the Google Fonts link
 // html-report allows), readable in either theme from 400px to 1280px. Tokens,
-// type scale and component shapes follow skills/html-report/SKILL.md sections 3 to 6.
+// type scale and component shapes follow skills/html-report/SKILL.md and skills/html-report/references/components.md.
 // The font stack lists IBM Plex Sans KR first and falls back to the system Korean faces.
 const STYLE = `
 /* Layout: one reading column; the diagram, tables and screenshots break out wider and scroll on their own at phone width. */

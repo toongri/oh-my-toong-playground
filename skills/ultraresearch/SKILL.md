@@ -234,16 +234,17 @@ Every claim in `SYNTHESIS.md` carries a provenance label at its origin: `[from-c
 
 ## REPORT.md and REPORT.html — the deliverable
 
-`$SESSION_DIR/REPORT.md` is the SSOT deliverable. `$SESSION_DIR/REPORT.html` is its high-expressiveness rendering: the same claims and the same citations, presented with MORE visual structure than markdown can carry — never less. Author `REPORT.html` by hand, following `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` (its output contract, page anatomy for a research report, SVG diagram recipes, and fidelity rules), and run its self-critique loop (section 14) before the final response. Run the commands from `$SESSION_DIR`:
+`$SESSION_DIR/REPORT.md` is the SSOT deliverable. `$SESSION_DIR/REPORT.html` is its high-expressiveness rendering: the same claims and the same citations, presented with MORE visual structure than markdown can carry — never less. Author `REPORT.html` by hand, following `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` (its output contract, page anatomy for a research report, SVG diagram recipes, and fidelity rules), and run its self-critique loop (section 14) before the final response. Run these commands:
 
 ```bash
+cd "$SESSION_DIR"
 OUT="$SESSION_DIR/.visual-check/round-1"
 bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh "$SESSION_DIR/REPORT.html" "$OUT"
-bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh REPORT.html --source <the research workspace dir or SYNTHESIS.md> --strict > "$OUT/lint.json"
+bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh REPORT.html --source SYNTHESIS.md --strict > "$OUT/lint.json"
 jq '.summary' "$OUT/lint.json"
 ```
 
-Look at every frame, fix REPORT.html (never the claims or citations it carries from REPORT.md), then follow `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` §14 to choose the next check (a new capture round only after a layout, style, or SVG fix; lint only after a text-only fix) and to decide when to stop. The loop ends at 0 errors (`--strict` exits 2 while any error remains); a remaining warn is read and either fixed or written, with the reason it stays, to `$OUT/warnings.md` (the final chat response stays the coverage table plus the REPORT.md path).
+Later rounds use `round-2`, `round-3`, … and `$OUT` names the latest round. Look at every frame, fix REPORT.html (never the claims or citations it carries from REPORT.md), then follow `${CLAUDE_SKILL_DIR}/../html-report/SKILL.md` §14 to choose the next check (a new round or a lint-only rerun) and to decide when to stop. The loop ends at 0 errors (`--strict` exits 2 while any error remains); a remaining warn is read and either fixed or written, with the reason it stays, to `warnings.md` in the latest round directory, `$OUT/warnings.md` (the final chat response stays the coverage table plus the REPORT.md path).
 
 There is no rendered-document (e.g. PDF) output. The ultraresearch content rules below (reader, required content, section order, evidence gates, output path) stay in force; html-report owns the visual and format rules. The render holds two floors:
 

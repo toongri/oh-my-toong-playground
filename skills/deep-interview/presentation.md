@@ -143,7 +143,7 @@ html-report section 13.3. The resulting `author-first-person` lint warnings are 
 other lint warning is fixed or named in the report. Writing dates stay off the page.
 
 Self-critique loop (html-report section 14, mandatory): run capture and lint, look at every frame,
-fix, and repeat in a new directory until lint reports 0 errors and the frame checklist passes.
+fix, then follow html-report section 14 to choose the next check (a new round or a lint-only rerun) and to decide when to stop. Submit with the receipt from the latest round directory (`$OUT`). The latest round directory holds the current receipt.
 
 ```bash
 OUT=$OMT_DIR/deep-interview/{slug}.visual-check/round-1
@@ -151,7 +151,7 @@ bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh $OMT_DIR/deep-intervi
 bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh $OMT_DIR/deep-interview/{slug}.presentation.html --source $OMT_DIR/deep-interview/{slug}.md --strict --receipt "$OUT/receipt.json" > "$OUT/lint.json"
 ```
 
-Then run `deep-interview-state.ts submit-presentation --spec-path <spec>.md --html-path <presentation>.html --receipt "$OUT/receipt.json"`.
+Then set `OUT` to the latest round directory and run `deep-interview-state.ts submit-presentation --spec-path <spec>.md --html-path <presentation>.html --receipt "$OUT/receipt.json"`.
 `lint.sh` writes the receipt only when the run has 0 errors, so a receipt file proves one clean strict lint of exact HTML bytes.
 The submission refuses unless the receipt matches the current HTML bytes, its `--source` is this spec, and it covers all three runs (1280 light, 1280 dark, 400 light).
 It also refuses unless the HTML holds at least as many `<figure>` elements containing an `<svg` as the spec has Mermaid fences in `## Diagrams` and `## Boundary Map` (the refusal states both counts).

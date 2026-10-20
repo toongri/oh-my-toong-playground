@@ -45,7 +45,11 @@ zero active children.
 
 Human-facing reports (qa, explain-diff, deep-interview, prometheus, ultraresearch,
 review-report, create-slides) are authored as one self-contained HTML file with inline
-SVG diagrams, following the shared `html-report` skill. No external renderer is
+SVG diagrams, following the shared `html-report` skill. Its capture + lint loop runs fully
+for deep-interview, prometheus and explain-diff (which gate submission on the lint receipt) and
+for ultraresearch and review-report (no receipt); qa fixes only its `bigPictureSvg` figure (the
+rest of its page is renderer-owned) and create-slides follows only the diagram rules (section 7),
+with no loop. No external renderer is
 provisioned: `mmdc` and `chrome-headless-shell` are no longer installed by `make sync`.
 The `html-report` scripts (`capture.sh`, `lint.sh`) use the `agent-browser` CLI
 (a headless Chrome driver) and `jq`.

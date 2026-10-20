@@ -103,7 +103,7 @@ no-invention Fidelity Bounds still hold.
   bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh $OMT_DIR/plans/presentation/{name}.html "$OUT"
   bash ${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh $OMT_DIR/plans/presentation/{name}.html --source $OMT_DIR/plans/{name}.md --strict --receipt "$OUT/receipt.json" > "$OUT/lint.json"
   ```
-  Look at every captured frame, fix, and repeat into a new round directory until `lint.sh` reports 0 errors and the frame checklist of html-report section 14 passes. Then submit the HTML. `lint.sh` writes the receipt only on a run with 0 errors. The submission refuses unless the receipt matches the current HTML bytes and was linted with `--source` this plan, so re-run `lint.sh` after every HTML edit. Repeat the loop and the submission after every plan or HTML revision:
+  Look at every captured frame and fix. Then follow html-report section 14 to choose the next check (a new round or a lint-only rerun) and to decide when to stop. Set `OUT` to the latest round directory and submit the HTML with the receipt from there. `lint.sh` writes the receipt only on a run with 0 errors. The submission refuses unless the receipt matches the current HTML bytes and was linted with `--source` this plan, so re-run `lint.sh` after every HTML edit. Repeat the loop and the submission after every plan or HTML revision:
   ```bash
   bun ${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts set --phase S5 --submit-presentation "$OMT_DIR/plans/presentation/{name}.html" --receipt "$OUT/receipt.json"
   ```

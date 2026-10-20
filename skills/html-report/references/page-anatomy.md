@@ -24,7 +24,7 @@ decided, or what the reader must do. Then the detail follows. The skeletons belo
 **Design document**
 
 1. Masthead and one-paragraph summary of the design.
-2. Goal and principles (one stat tile only if a number motivates the design).
+2. Goal and principles (write a motivating number in a sentence, not a stat tile).
 3. The main map: architecture or state machine, optionally with a scenario selector ([section 10](../SKILL.md#10-interaction-patterns)).
 4. Decision tables, one per gate or rule.
 5. Rationale callouts for choices a reviewer would question.

@@ -61,6 +61,15 @@ export function mismatches(a: Tokens, b: Tokens): string[] {
   return [...a].filter(([k, v]) => b.has(k) && b.get(k) !== v).map(([k, v]) => `${k}: ${v} != ${b.get(k)}`);
 }
 
+export function missing(a: Tokens, b: Tokens): string[] {
+  return [...a.keys()].filter((k) => !b.has(k));
+}
+
+const checkCopy = (name: string, label: string, a: Tokens, b: Tokens): void => {
+  expect(missing(a, b).map((k) => `${name} ${label}: SKILL.md 의 토큰 ${k} 가 사본에 없다`)).toEqual([]);
+  expect(mismatches(a, b)).toEqual([]);
+};
+
 describe('html-report 디자인 토큰 사본 일치', () => {
   test('SKILL.md 의 두 다크 블록이 같다', () => {
     expect([...base.darkAttr]).toEqual([...base.darkMedia]);
@@ -68,18 +77,23 @@ describe('html-report 디자인 토큰 사본 일치', () => {
 
   for (const [name, copy] of Object.entries(copies)) {
     test(`${name} 라이트 값이 SKILL.md 와 같다`, () => {
-      expect(mismatches(base.light, copy.light)).toEqual([]);
+      checkCopy(name, '라이트', base.light, copy.light);
     });
     test(`${name} 다크(media) 값이 SKILL.md 와 같다`, () => {
-      expect(mismatches(base.darkMedia, copy.darkMedia)).toEqual([]);
+      checkCopy(name, '다크(media)', base.darkMedia, copy.darkMedia);
     });
     test(`${name} 다크(data-theme) 값이 SKILL.md 와 같다`, () => {
-      expect(mismatches(base.darkMedia, copy.darkAttr)).toEqual([]);
+      checkCopy(name, '다크(data-theme)', base.darkMedia, copy.darkAttr);
     });
   }
 
   test('드리프트를 감지한다', () => {
     const css = read('references/diagram-classes.css').replace('--accent: #3340C9', '--accent: #3340C8');
     expect(mismatches(base.light, parseTokenBlocks(css).light)).toEqual(['--accent: #3340c9 != #3340c8']);
+  });
+
+  test('사본에서 지워진 토큰을 감지한다', () => {
+    const css = read('references/diagram-classes.css').replace(/^\s*--accent:[^;]*;\n/m, '');
+    expect(missing(base.light, parseTokenBlocks(css).light)).toEqual(['--accent']);
   });
 });

@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Errors on scroll</title>
+<style>body { margin: 0 } div { height: 3000px }</style></head>
+<body><div>Tall page; throws one error on its first scroll, in dark configurations only.</div>
+<script>
+var thrown = false;
+addEventListener('scroll', function () { if (scrollY > 0 && !thrown && matchMedia('(prefers-color-scheme: dark)').matches) { thrown = true; setTimeout(function () { throw new Error('scroll-boom'); }, 0); } });
+</script></body></html>
