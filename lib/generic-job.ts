@@ -786,13 +786,27 @@ export function gcStaleJobs(jobsDir: string, config: JobConfig): void {
 			if (Number.isNaN(createdAtMs)) continue;
 
 			const age = Date.now() - createdAtMs;
-			if (age > GC_MAX_AGE_MS) {
+			// A member stalled by an external cause waits for the user to retry it on its ledger.
+			if (age > GC_MAX_AGE_MS && !hasExternallyStalledMember(path.join(candidatePath, config.entityDirName))) {
 				fs.rmSync(candidatePath, { recursive: true, force: true });
 			}
 		}
 	} catch {
 		// GC is best-effort — never block cmdStart
 	}
+}
+
+function hasExternallyStalledMember(entitiesDir: string): boolean {
+	let entries: string[];
+	try {
+		entries = fs.readdirSync(entitiesDir);
+	} catch {
+		return false;
+	}
+	return entries.some((entry) => {
+		const status = readJsonIfExists(path.join(entitiesDir, entry, "status.json"));
+		return isRecord(status) && status.state === "stalled" && isExternalStallCause(status.stall_cause_kind);
+	});
 }
 
 // ---------------------------------------------------------------------------
@@ -2495,7 +2509,18 @@ export type CollectBudgetMeta = {
 	coverageGated?: boolean;
 	/** Latest coverage progress (a page acknowledged or a ledger finished) of any member, epoch ms. */
 	lastProgressAt?: number | null;
+	/**
+	 * job.json `coverage.wallCapAnchorAt`: when resume-member last retried a member stalled by an
+	 * external cause (ISO). The wall cap counts from it when it is later than createdAt.
+	 */
+	wallCapAnchorAt?: unknown;
 };
+
+/** Start of a coverage-gated job's wall cap, epoch ms: createdAt, or wallCapAnchorAt when later. */
+function wallCapStartMs(meta: CollectBudgetMeta, createdAt: number): number {
+	const anchor = Date.parse(String(meta.wallCapAnchorAt ?? ""));
+	return Number.isFinite(anchor) ? Math.max(createdAt, anchor) : createdAt;
+}
 
 /**
  * Absolute wall-time cap for a coverage-gated job, counted from job creation. 6 hours is three
@@ -2519,11 +2544,12 @@ export function resolveCollectNextAction(meta: CollectBudgetMeta, now: number): 
 	const elapsedSec = Math.round((now - createdAt) / 1000);
 	let deadlineSec = timeoutSec;
 	if (meta.coverageGated) {
+		const capStart = wallCapStartMs(meta, createdAt);
 		const anchor =
-			typeof meta.lastProgressAt === "number" ? Math.max(createdAt, meta.lastProgressAt) : createdAt;
+			typeof meta.lastProgressAt === "number" ? Math.max(capStart, meta.lastProgressAt) : capStart;
 		deadlineSec = Math.min(
 			Math.round((anchor - createdAt) / 1000) + timeoutSec,
-			COVERAGE_JOB_WALL_CAP_SEC,
+			Math.round((capStart - createdAt) / 1000) + COVERAGE_JOB_WALL_CAP_SEC,
 		);
 	}
 	return {
@@ -2543,8 +2569,10 @@ export function coverageWallCapBudget(meta: CollectBudgetMeta, now: number): Col
 	const createdAt = Date.parse(String(meta.createdAt ?? ""));
 	if (!Number.isFinite(createdAt)) return null;
 	const elapsedSec = Math.round((now - createdAt) / 1000);
-	if (elapsedSec < COVERAGE_JOB_WALL_CAP_SEC) return null;
-	return { nextAction: "stop_and_degrade", elapsedSec, deadlineSec: COVERAGE_JOB_WALL_CAP_SEC };
+	const deadlineSec =
+		Math.round((wallCapStartMs(meta, createdAt) - createdAt) / 1000) + COVERAGE_JOB_WALL_CAP_SEC;
+	if (elapsedSec < deadlineSec) return null;
+	return { nextAction: "stop_and_degrade", elapsedSec, deadlineSec };
 }
 
 const WALL_CAP_HOURS = COVERAGE_JOB_WALL_CAP_SEC / 3600;
@@ -2584,6 +2612,7 @@ export function readCollectBudgetMeta(
 			createdAt: meta?.createdAt,
 			timeoutSec: settings?.timeoutSec,
 			coverageGated,
+			wallCapAnchorAt: isRecord(meta?.coverage) ? meta.coverage.wallCapAnchorAt : undefined,
 			lastProgressAt:
 				coverageGated && coverage
 					? readLastCoverageProgressAt(path.join(jobDir, config.entityDirName), coverage)
@@ -2701,6 +2730,77 @@ const EXTERNAL_FAILURE_STATES: Record<string, string> = {
 	missing_cli: "the agent CLI binary was not found",
 	non_retryable: "non-retryable failure",
 };
+
+/**
+ * Why a coverage-gated member stalled, recorded as status.json `stall_cause_kind`:
+ * - quota: the agent CLI reported a usage limit, quota or rate limit.
+ * - auth: the agent CLI reported an authentication failure.
+ * - missing_cli: the agent CLI binary was not found.
+ * - no_progress: resumes stopped acknowledging coverage and the remedy did not help.
+ * - other: any other stall (an unrecognized turn failure, no session to resume, an unreadable ledger).
+ * quota, auth and missing_cli are external: no resume fixes them; the user waits them out or fixes
+ * them, then retries the member with --retry-stalled.
+ */
+export type StallCauseKind = "quota" | "auth" | "missing_cli" | "no_progress" | "other";
+
+export function isExternalStallCause(kind: unknown): boolean {
+	return kind === "quota" || kind === "auth" || kind === "missing_cli";
+}
+
+/** status.json keys that describe a stall cause; they exist only while the member is stalled. */
+const STALL_CAUSE_FIELDS = ["stall_cause_kind", "stall_detail", "stall_reset_text"] as const;
+const STALL_DETAIL_MAX_CHARS = 600;
+const QUOTA_TEXT = /usage limit|usage_limit|quota|rate.?limit|\b429\b|too many requests/i;
+const AUTH_TEXT = /unauthorized|\b401\b|not logged in|log ?in again|token (expired|invalid)/i;
+/** "try again at Sep 20th, 2026 10:17 PM" — human text without a timezone, for display only. */
+const RESET_TEXT = /try again at [^\n]*?(?=\.\s|\.$|$)/i;
+
+/**
+ * The stall-cause fields for a member that stalls with `reason`. A `no_progress` stall stays
+ * no_progress: its turns ended without failing, so a quota or auth line in error.txt is a
+ * transient retry the CLI logged, not the cause. On the `other` path (a failed turn, no session,
+ * an unreadable ledger) the cause comes from the turn state, then from the recorded text
+ * (status.json message and the whole error.txt), where a quota or auth line wins.
+ * `stall_detail` is the matching line verbatim, or the stall reason when no external cause
+ * shows; `stall_reset_text` is set only when a quota line names when to try again.
+ */
+function stallCauseFields(
+	memberDir: string,
+	status: Record<string, unknown>,
+	reason: string,
+	fallback: "no_progress" | "other",
+): Record<string, string> {
+	let errorText = "";
+	try {
+		errorText = fs.readFileSync(path.join(memberDir, "error.txt"), "utf8");
+	} catch {
+		/* absent → no recorded stderr */
+	}
+	const lines = `${typeof status.message === "string" ? status.message : ""}\n${errorText}`
+		.split("\n")
+		.map((l) => l.trim())
+		.filter(Boolean);
+	let kind: StallCauseKind = fallback;
+	let detail = reason;
+	let resetText: string | undefined;
+	const quotaLine = lines.find((l) => QUOTA_TEXT.test(l));
+	const authLine = lines.find((l) => AUTH_TEXT.test(l));
+	if (status.state === "missing_cli") kind = "missing_cli";
+	else if (fallback === "no_progress") kind = "no_progress";
+	else if (quotaLine) {
+		kind = "quota";
+		detail = quotaLine;
+		resetText = lines.map((l) => RESET_TEXT.exec(l)?.[0]).find((t) => t !== undefined);
+	} else if (authLine) {
+		kind = "auth";
+		detail = authLine;
+	}
+	return {
+		stall_cause_kind: kind,
+		stall_detail: detail.slice(0, STALL_DETAIL_MAX_CHARS),
+		...(resetText ? { stall_reset_text: resetText.slice(0, STALL_DETAIL_MAX_CHARS) } : {}),
+	};
+}
 
 export type CoverageProgress = {
 	pagesAcked: number;
@@ -2878,13 +2978,14 @@ export function applyCoverageResumePolicy(
 	}
 
 	let record = readCoverageResumeRecord(recordPath);
-	const stall = (reason: string): never => {
+	const stall = (reason: string, fallback: "no_progress" | "other" = "other"): never => {
 		atomicWriteJson(recordPath, record);
 		atomicWriteJson(statusPath, {
 			...status,
 			state: "stalled",
 			message: reason,
 			stalledAt: new Date().toISOString(),
+			...stallCauseFields(memberDir, status, reason, fallback),
 		});
 		throw new Error(
 			`member stalled: ${reason}. Auto-resume stopped; the coverage ledger is kept. Report this to the user; once the cause is fixed, rerun resume-member with --retry-stalled.`,
@@ -2921,10 +3022,11 @@ export function applyCoverageResumePolicy(
 	let remedy: string | null = null;
 	if (record.stalledResumes >= COVERAGE_STALL_LIMIT) {
 		const at = `no coverage progress for ${record.stalledResumes} consecutive resumes at ${progress.pagesAcked}/${progress.pagesTotal} pages`;
-		if (record.resplitUsed) stall(`${at}; resplitting the issued page did not help`);
+		if (record.resplitUsed) stall(`${at}; resplitting the issued page did not help`, "no_progress");
 		if (record.plainRemedyUsed) {
 			stall(
 				`${at}; ${progress.issuedPage ? `page ${progress.issuedPage.id} cannot be split further and ` : ""}a plain resume from the ledger did not help`,
+				"no_progress",
 			);
 		}
 		let splitRefusal: string | null = null;
@@ -2980,8 +3082,27 @@ export async function cmdResumeMember(
 	const coverageGated = isCoverageGatedJob(jobDir);
 	if (coverageGated && !opts.coverage)
 		throw new Error("coverage-gated job: resume-member needs coverage hooks");
-	// The wall cap binds every resume, --retry-stalled included: collect reports stop_and_degrade
-	// past it anyway, so a turn dispatched here could never be waited on.
+	// The wall cap binds every resume: collect reports stop_and_degrade past it anyway, so a turn
+	// dispatched here could never be waited on. One exception: --retry-stalled on a member stalled
+	// by an external cause (quota, auth, missing CLI) restarts the cap from now, since the wait for
+	// the user to restore that cause was spent outside the review.
+	if (
+		coverageGated &&
+		opts.retryStalled === true &&
+		status.state === "stalled" &&
+		isExternalStallCause(status.stall_cause_kind)
+	) {
+		const jobPath = path.join(jobDir, "job.json");
+		const jobMeta: unknown = JSON.parse(fs.readFileSync(jobPath, "utf8"));
+		if (!isRecord(jobMeta)) throw new Error(`cannot restart the wall cap: invalid ${jobPath}`);
+		atomicWriteJson(jobPath, {
+			...jobMeta,
+			coverage: {
+				...(isRecord(jobMeta.coverage) ? jobMeta.coverage : {}),
+				wallCapAnchorAt: new Date().toISOString(),
+			},
+		});
+	}
 	const wallCap = coverageWallCapBudget(readCollectBudgetMeta(jobDir, config), Date.now());
 	if (wallCap)
 		throw new Error(
@@ -3068,11 +3189,14 @@ export async function cmdResumeMember(
 		// resume turn observable to collect's poll loop again, the same as the initial dispatch.
 		// Preserves sessionID/command/workerEnv/resume_count(+1) — everything the cap-reservation
 		// write above already set, except state/queuedAt.
-		atomicWriteJson(statusPath, {
+		const queuedStatus: Record<string, unknown> = {
 			...reservedStatus,
 			state: "queued",
 			queuedAt: new Date().toISOString(),
-		});
+		};
+		// A queued member is no longer stalled, so no stall cause describes it.
+		for (const key of STALL_CAUSE_FIELDS) delete queuedStatus[key];
+		atomicWriteJson(statusPath, queuedStatus);
 
 		const workerArgs = [
 			opts.workerPath,

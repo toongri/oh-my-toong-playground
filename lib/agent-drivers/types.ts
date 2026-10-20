@@ -22,6 +22,7 @@ export interface ParseResult {
 	text: string; // concatenated agent_message/text events only (NDJSON noise stripped)
 	rawEvents: unknown[]; // for events-turn-N.jsonl audit log
 	usage?: Record<string, number>; // token counts from turn.completed; undefined when no turn.completed seen
+	errorMessage?: string; // error text the CLI reported in the stream (codex: turn.failed error.message, else the last error event); undefined when none
 }
 
 export interface InitialCommandOpts {

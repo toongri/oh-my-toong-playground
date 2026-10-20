@@ -504,12 +504,18 @@ Notes:
     status.json message); so does a turn that failed outside the member (missing CLI,
     non_retryable, with the recorded detail) or a missing session id. A stalled member is never
     done: tell the user, and rerun with --retry-stalled only after the cause is fixed.
+    A stalled member's status.json also records stall_cause_kind (quota, auth, missing_cli,
+    no_progress or other), stall_detail (the verbatim line that shows the cause, or the stall
+    reason) and, when a quota message names it, stall_reset_text (its "try again at ..." text,
+    display only). quota, auth and missing_cli are external causes; GC keeps such a job.
     --retry-stalled on a stalled member starts a fresh initial turn on the same ledger (the old
     session is not reused); on any other member it is a plain resume.
-    Past the ${COVERAGE_JOB_WALL_CAP_SEC / 3600}-hour wall cap, resume-member refuses every resume, --retry-stalled included.
+    Past the ${COVERAGE_JOB_WALL_CAP_SEC / 3600}-hour wall cap, resume-member refuses every resume except --retry-stalled on a member stalled by an external cause;
+    that retry restarts the wall cap from the retry (job.json coverage.wallCapAnchorAt).
   - collect counts the job deadline (settings timeout) from the latest page any member acknowledged,
     so a member still making progress through resumed turns is not cut; heartbeats and resumes
-    without progress do not extend it, and it never passes ${COVERAGE_JOB_WALL_CAP_SEC / 3600} hours after job start;
+    without progress do not extend it, and it never passes ${COVERAGE_JOB_WALL_CAP_SEC / 3600} hours after job start (or after the latest
+    external-cause --retry-stalled);
     past that wall cap every collect return (awaiting_resume and done included) carries stop_and_degrade
   - reap kills orphaned job process groups (SIGTERM then SIGKILL); all its output goes to
     stderr — stdout is always empty, since a SessionStart hook calls it and must not vary

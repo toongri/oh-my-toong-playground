@@ -28,6 +28,7 @@ import {
 	type RunOneTurnOpts,
 } from "./worker-utils.ts";
 import type { AgentDriver, ParseResult, CliType } from "./agent-drivers/types.ts";
+import { codexDriver } from "./agent-drivers/codex.ts";
 import type { AcquireWorkerSlotOptions } from "./worker-slots.ts";
 import { requestWorkerCancellation } from "./worker-cancellation.ts";
 
@@ -1241,6 +1242,46 @@ describe("executeOneTurn state/message/workerEnv regression", () => {
 		expect(status.state).toBe("timed_out");
 		expect(status.message).toBe("Timed out after 600s");
 		expect(status.exitCode).toBe(null);
+	});
+
+	test("codex 사용량 한도 실패는 non_retryable과 함께 CLI가 보고한 오류 문구를 status.message에 남긴다", async () => {
+		const memberDir = join(tmpDir, "codex-usage-limit");
+		mkdirSync(memberDir, { recursive: true });
+		const stdout = readFileSync(
+			join(import.meta.dir, "agent-drivers", "__fixtures__", "codex-usage-limit.ndjson"),
+			"utf8",
+		);
+		await runOneTurn(
+			makeOneTurnOpts(memberDir, {
+				driverFactory: () => codexDriver,
+				runOnceFn: makeFlexibleMockRunOnce(stdout, { state: "error", message: null, exitCode: 1 }),
+			}),
+		);
+		const status = JSON.parse(readFileSync(join(memberDir, "status.json"), "utf8"));
+		expect(status.state).toBe("non_retryable");
+		expect(status.message).toContain("You've hit your usage limit.");
+		expect(status.message).toContain("try again at Sep 20th, 2026 10:17 PM");
+	});
+
+	test("done 턴은 드라이버 오류 문구가 있어도 message를 바꾸지 않는다", async () => {
+		const memberDir = join(tmpDir, "done-with-error-event");
+		mkdirSync(memberDir, { recursive: true });
+		const mockDriver = makeOneTurnMockDriver({
+			sessionID: "s1",
+			terminal: "stop",
+			text: "ok",
+			rawEvents: [],
+			errorMessage: "Reconnecting... 1/5",
+		});
+		await runOneTurn(
+			makeOneTurnOpts(memberDir, {
+				driverFactory: () => mockDriver,
+				runOnceFn: makeFlexibleMockRunOnce("ok", { state: "done", message: null, exitCode: 0 }),
+			}),
+		);
+		const status = JSON.parse(readFileSync(join(memberDir, "status.json"), "utf8"));
+		expect(status.state).toBe("done");
+		expect(status.message).toBeNull();
 	});
 
 	// T1-2: missing_cli state preserved when driver returns non-null parsed result and exitCode===null

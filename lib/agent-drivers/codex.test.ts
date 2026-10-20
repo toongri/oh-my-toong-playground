@@ -49,6 +49,28 @@ describe("codex AgentDriver", () => {
 		expect(result!.terminal).toBe("error");
 	});
 
+	test("`parseStdout` - turn.failed의 error.message를 errorMessage로 보존한다", () => {
+		const result = codexDriver.parseStdout(readFixture("codex-turn-failed.ndjson"));
+		expect(result!.errorMessage).toBe("context length exceeded");
+	});
+
+	test("`parseStdout` - 사용량 한도 실패는 error로 분류하고 한도 문구를 그대로 보존한다", () => {
+		const result = codexDriver.parseStdout(readFixture("codex-usage-limit.ndjson"));
+		expect(result!.terminal).toBe("error");
+		expect(result!.sessionID).toBe("01a0acf2-d8bb-70a0-bcc7-045fb6fb7d3d");
+		expect(result!.errorMessage).toBe(
+			"You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 20th, 2026 10:17 PM.",
+		);
+	});
+
+	test("`parseStdout` - turn.failed 없이 error 이벤트만 있어도 그 문구를 보존하고, 오류가 없으면 errorMessage가 없다", () => {
+		const onlyError = codexDriver.parseStdout(
+			'{"type":"thread.started","thread_id":"t-1"}\n{"type":"error","message":"stream error: 429 Too Many Requests"}\n',
+		);
+		expect(onlyError!.errorMessage).toBe("stream error: 429 Too Many Requests");
+		expect(codexDriver.parseStdout(readFixture("codex-trivial.ndjson"))!.errorMessage).toBeUndefined();
+	});
+
 	// F1: usage extraction
 	test("`parseStdout` - turn.completed의 usage가 ParseResult.usage로 반환됨", () => {
 		const stdout = readFixture("codex-trivial.ndjson");

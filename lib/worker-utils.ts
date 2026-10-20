@@ -801,7 +801,10 @@ async function executeOneTurn(
 
 	// Completion gate runs before the terminal write, so no reader ever sees `done` for work the
 	// gate rejects.
-	let message = runResult.message ?? null;
+	// A turn that did not end done keeps the error text the CLI reported in its stream (a quota
+	// or auth failure exits non-zero with no process-level message), so the stall reason has it.
+	let message =
+		runResult.message ?? (state !== "done" ? (parsed?.errorMessage ?? null) : null);
 	let gateDetail: Record<string, unknown> | undefined;
 	if (state === "done" && opts.completionGate) {
 		const gate = evaluateCompletionGate(opts.completionGate);

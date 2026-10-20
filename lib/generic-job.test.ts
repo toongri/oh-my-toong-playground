@@ -39,6 +39,7 @@ import {
 	resolveCollectWaitMs,
 	resolveCollectNextAction,
 	readCollectBudgetMeta,
+	coverageWallCapBudget,
 	cmdResumeMember,
 	COVERAGE_STALL_LIMIT,
 	COVERAGE_JOB_WALL_CAP_SEC,
@@ -1468,6 +1469,37 @@ describe("gcStaleJobs", () => {
 
 		expect(fs.existsSync(staleCouncilDir)).toBe(false);
 		expect(fs.existsSync(staleChunkDir)).toBe(true);
+	});
+
+	test("외부 원인(quota·auth·missing_cli)으로 stalled된 멤버가 있는 잡은 1시간이 지나도 지우지 않는다", () => {
+		const jobsDir = path.join(tmpDir, "jobs");
+		const twoHoursAgo = new Date(Date.now() - 2 * 3_600_000).toISOString();
+		function writeJobWith(id: string, memberStatus: Record<string, unknown> | null): string {
+			const dir = path.join(jobsDir, id);
+			fs.mkdirSync(path.join(dir, "members", "correctness"), { recursive: true });
+			fs.writeFileSync(path.join(dir, "job.json"), JSON.stringify({ id, createdAt: twoHoursAgo }));
+			if (memberStatus)
+				fs.writeFileSync(
+					path.join(dir, "members", "correctness", "status.json"),
+					JSON.stringify({ member: "correctness", ...memberStatus }),
+				);
+			return dir;
+		}
+		const quota = writeJobWith("chunk-review-quota", { state: "stalled", stall_cause_kind: "quota" });
+		const auth = writeJobWith("chunk-review-auth", { state: "stalled", stall_cause_kind: "auth" });
+		const missing = writeJobWith("chunk-review-missing", { state: "stalled", stall_cause_kind: "missing_cli" });
+		const noProgress = writeJobWith("chunk-review-noprogress", { state: "stalled", stall_cause_kind: "no_progress" });
+		const done = writeJobWith("chunk-review-done", { state: "done" });
+		const empty = writeJobWith("chunk-review-empty", null);
+
+		gcStaleJobs(jobsDir, chunkReviewConfig);
+
+		expect(fs.existsSync(quota)).toBe(true);
+		expect(fs.existsSync(auth)).toBe(true);
+		expect(fs.existsSync(missing)).toBe(true);
+		expect(fs.existsSync(noProgress)).toBe(false);
+		expect(fs.existsSync(done)).toBe(false);
+		expect(fs.existsSync(empty)).toBe(false);
 	});
 
 	test("path traversal guard prevents deletion outside jobsDir", () => {
@@ -5799,6 +5831,91 @@ describe("cmdResumeMember — coverage-gated 재개 정책", () => {
 		const status = readStatus();
 		expect(status.state).toBe("stalled");
 		expect(String(status.message)).toContain("401 Unauthorized");
+		expect(status.stall_cause_kind).toBe("auth");
+		expect(status.stall_detail).toBe("ERROR: unexpected status 401 Unauthorized");
+		expect("stall_reset_text" in status).toBe(false);
+	});
+
+	const QUOTA_TEXT =
+		"You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 20th, 2026 10:17 PM.";
+
+	test("사용량 한도로 실패한 턴은 stall_cause_kind quota와 재시도 시각 문구를 남기고 stalled가 된다", async () => {
+		writeJob(true);
+		writeStatus({ state: "non_retryable", message: QUOTA_TEXT });
+		const { hooks } = makeHooks(base);
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+		const status = readStatus();
+		expect(status.state).toBe("stalled");
+		expect(status.stall_cause_kind).toBe("quota");
+		expect(status.stall_detail).toBe(QUOTA_TEXT);
+		expect(status.stall_reset_text).toBe("try again at Sep 20th, 2026 10:17 PM");
+		// The existing reason field keeps its meaning.
+		expect(String(status.message)).toStartWith("non-retryable failure: ");
+	});
+
+	test("세션 ID가 없어도 사용량 한도 문구가 error.txt에 있으면 quota로 분류한다", async () => {
+		writeJob(true);
+		writeStatus({ state: "error", sessionID: null, message: null });
+		fs.writeFileSync(
+			path.join(memberDir, "error.txt"),
+			`Reading prompt from stdin...\nERROR: ${QUOTA_TEXT}\nshutting down\n`,
+		);
+		const { hooks } = makeHooks(base);
+		await expect(resume(hooks)).rejects.toThrow("no session to resume");
+		const status = readStatus();
+		expect(status.stall_cause_kind).toBe("quota");
+		expect(status.stall_detail).toBe(`ERROR: ${QUOTA_TEXT}`);
+		expect(status.stall_reset_text).toBe("try again at Sep 20th, 2026 10:17 PM");
+	});
+
+	test("missing_cli는 상태로 분류하고, 알 수 없는 실패·세션 없음은 other로 남긴다", async () => {
+		writeJob(true);
+		writeStatus({ state: "missing_cli", message: "spawn codex ENOENT" });
+		const { hooks } = makeHooks(base);
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+		expect(readStatus()).toMatchObject({
+			stall_cause_kind: "missing_cli",
+			stall_detail: "the agent CLI binary was not found: spawn codex ENOENT",
+		});
+
+		writeStatus({ state: "non_retryable", message: "context length exceeded" });
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+		expect(readStatus().stall_cause_kind).toBe("other");
+
+		writeStatus({ state: "error", sessionID: null, message: "Output drain timed out" });
+		await expect(resume(hooks)).rejects.toThrow("no session to resume");
+		expect(readStatus().stall_cause_kind).toBe("other");
+		expect("stall_reset_text" in readStatus()).toBe(false);
+	});
+
+	test("진행 없는 재개로 멈춘 멤버는 stall_cause_kind no_progress이고 재시도 시각 문구가 없다", async () => {
+		writeJob(true);
+		writeStatus({ state: "awaiting_resume" });
+		recordCoverageResumeBaseline(memberDir, mark(0));
+		const { hooks } = makeHooks(base);
+		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+		const status = readStatus();
+		expect(status.stall_cause_kind).toBe("no_progress");
+		expect(status.stall_detail).toBe(status.message);
+		expect("stall_reset_text" in status).toBe(false);
+	});
+
+	test("진행 없음으로 멈춘 멤버는 error.txt에 일시적 429 재시도 줄이 있어도 no_progress로 남는다", async () => {
+		writeJob(true);
+		writeStatus({ state: "awaiting_resume" });
+		recordCoverageResumeBaseline(memberDir, mark(0));
+		fs.writeFileSync(
+			path.join(memberDir, "error.txt"),
+			"WARN: stream error: 429 Too Many Requests (rate limit reached); retrying 1/5, try again at 10:17 PM.\n",
+		);
+		const { hooks } = makeHooks(base);
+		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+		const status = readStatus();
+		expect(status.stall_cause_kind).toBe("no_progress");
+		expect(status.stall_detail).toBe(status.message);
+		expect("stall_reset_text" in status).toBe(false);
 	});
 
 	/** spawnFn stub recording the worker argv of every dispatch. */
@@ -6006,6 +6123,134 @@ describe("cmdResumeMember — coverage-gated 재개 정책", () => {
 			).rejects.toThrow("job exceeded its 6h wall cap");
 			expect(calls).toEqual([]);
 			expect(readStatus().state).toBe("stalled");
+		});
+
+		/** A file-backed ledger per member: readProgress reads it, nothing in resume-member writes it. */
+		function writeLedgers(pagesAcked: Record<string, number>) {
+			for (const [member, acked] of Object.entries(pagesAcked)) {
+				const dir = path.join(tmpDir, "lr", "ledgers", member);
+				fs.mkdirSync(dir, { recursive: true });
+				fs.writeFileSync(path.join(dir, "ledger.json"), JSON.stringify({ pagesAcked: acked, pagesTotal: 40 }));
+			}
+		}
+		const ledgerBytes = (member: string) =>
+			fs.readFileSync(path.join(tmpDir, "lr", "ledgers", member, "ledger.json"), "utf8");
+		const ledgerHooks: CoverageHooks = {
+			readProgress: (member) => ({ ...base, ...JSON.parse(ledgerBytes(member)) }),
+			resplit: () => ({ ok: false, message: "unused" }),
+		};
+		function writeOldCoverageJob(ageSec: number) {
+			fs.mkdirSync(memberDir, { recursive: true });
+			fs.writeFileSync(
+				path.join(jobDir, "job.json"),
+				JSON.stringify({
+					id: "chunk-review-x",
+					createdAt: new Date(Date.now() - ageSec * 1000).toISOString(),
+					settings: { timeoutSec: 60, coverageGated: true },
+					coverage: { ledgerRoot: path.join(tmpDir, "lr"), planDir: path.join(tmpDir, "lr", "plan"), planSha: "sha-1" },
+					members: [{ name: "correctness" }, { name: "regression" }],
+				}),
+			);
+		}
+		const readJobJson = () => JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
+
+		test("외부 원인(quota)으로 멈춘 멤버의 --retry-stalled는 상한을 넘긴 잡에서도 같은 원장으로 재개하고 상한을 재시도 시각부터 다시 센다", async () => {
+			writeOldCoverageJob(7 * 3600);
+			writeLedgers({ correctness: 12, regression: 40 });
+			writeStatus({
+				state: "stalled",
+				message: "non-retryable failure: usage limit",
+				stall_cause_kind: "quota",
+				stall_detail: "You've hit your usage limit.",
+				stall_reset_text: "try again at Sep 20th, 2026 10:17 PM",
+			});
+			const doneDir = path.join(jobDir, "members", "regression");
+			fs.mkdirSync(doneDir, { recursive: true });
+			fs.writeFileSync(
+				path.join(doneDir, "status.json"),
+				JSON.stringify({ member: "regression", state: "done", sessionID: "sess-2", command: "opencode --format json" }),
+			);
+			const doneStatusBefore = fs.readFileSync(path.join(doneDir, "status.json"), "utf8");
+			const correctnessLedgerBefore = ledgerBytes("correctness");
+			const regressionLedgerBefore = ledgerBytes("regression");
+			expect(coverageWallCapBudget(readCollectBudgetMeta(jobDir, config), Date.now())).not.toBeNull();
+
+			const { calls, spawnFn } = recordingSpawn();
+			const before = Date.now();
+			await cmdResumeMember(jobDir, "correctness", "continue", config, {
+				driverFactory: () => driver,
+				coverage: ledgerHooks,
+				retryStalled: true,
+				workerPath: "/fake/worker.ts",
+				spawnFn,
+			});
+
+			expect(calls.length).toBe(1);
+			expect(calls[0]).not.toContain("--session");
+			const coverage = readJobJson().coverage;
+			expect(coverage).toMatchObject({ ledgerRoot: path.join(tmpDir, "lr"), planSha: "sha-1" });
+			const anchorAt = Date.parse(coverage.wallCapAnchorAt);
+			expect(anchorAt).toBeGreaterThanOrEqual(before);
+			expect(anchorAt).toBeLessThanOrEqual(Date.now());
+			// The cap counts from the retry now.
+			expect(coverageWallCapBudget(readCollectBudgetMeta(jobDir, config), Date.now())).toBeNull();
+			// Done members and every ledger stay as they were; the stalled member keeps its acknowledged pages.
+			expect(fs.readFileSync(path.join(doneDir, "status.json"), "utf8")).toBe(doneStatusBefore);
+			expect(ledgerBytes("regression")).toBe(regressionLedgerBefore);
+			expect(ledgerBytes("correctness")).toBe(correctnessLedgerBefore);
+			expect(ledgerHooks.readProgress("correctness").pagesAcked).toBe(12);
+			// The queued member no longer claims a stall cause.
+			const queued = readStatus();
+			expect(queued.state).toBe("queued");
+			expect("stall_cause_kind" in queued).toBe(false);
+			expect("stall_detail" in queued).toBe(false);
+			expect("stall_reset_text" in queued).toBe(false);
+		});
+
+		test("진행 없음(no_progress)으로 멈춘 멤버의 --retry-stalled는 상한을 넘긴 잡에서 여전히 거부되고 상한 기준을 바꾸지 않는다", async () => {
+			writeOldCoverageJob(7 * 3600);
+			writeLedgers({ correctness: 12 });
+			writeStatus({ state: "stalled", message: "no coverage progress", stall_cause_kind: "no_progress", stall_detail: "no coverage progress" });
+			const jobBefore = fs.readFileSync(path.join(jobDir, "job.json"), "utf8");
+			const { calls, spawnFn } = recordingSpawn();
+			await expect(
+				cmdResumeMember(jobDir, "correctness", "continue", config, {
+					driverFactory: () => driver,
+					coverage: ledgerHooks,
+					retryStalled: true,
+					workerPath: "/fake/worker.ts",
+					spawnFn,
+				}),
+			).rejects.toThrow("job exceeded its 6h wall cap");
+			expect(calls).toEqual([]);
+			expect(fs.readFileSync(path.join(jobDir, "job.json"), "utf8")).toBe(jobBefore);
+			expect(readStatus().state).toBe("stalled");
+		});
+
+		test("외부 원인 stalled라도 --retry-stalled 없는 재개는 상한 기준을 바꾸지 않는다", async () => {
+			writeOldCoverageJob(7 * 3600);
+			writeStatus({ state: "stalled", message: "usage limit", stall_cause_kind: "quota", stall_detail: "usage limit" });
+			const jobBefore = fs.readFileSync(path.join(jobDir, "job.json"), "utf8");
+			await expect(resume(ledgerHooks)).rejects.toThrow("job exceeded its 6h wall cap");
+			expect(fs.readFileSync(path.join(jobDir, "job.json"), "utf8")).toBe(jobBefore);
+		});
+
+		test("coverage-gated가 아닌 잡은 stall 필드가 있어도 job.json의 상한 기준을 쓰지 않는다", async () => {
+			fs.mkdirSync(memberDir, { recursive: true });
+			fs.writeFileSync(
+				path.join(jobDir, "job.json"),
+				JSON.stringify({
+					id: "chunk-review-x",
+					createdAt: new Date(Date.now() - 7 * 3600_000).toISOString(),
+					settings: { timeoutSec: 60 },
+					members: [{ name: "correctness" }],
+				}),
+			);
+			writeStatus({ state: "stalled", stall_cause_kind: "quota", stall_detail: "usage limit" });
+			const jobBefore = fs.readFileSync(path.join(jobDir, "job.json"), "utf8");
+			await resume(ledgerHooks, { retryStalled: true });
+			expect(fs.readFileSync(path.join(jobDir, "job.json"), "utf8")).toBe(jobBefore);
+			expect(readStatus().resume_count).toBe(1);
 		});
 
 		test("상한 전이면 평소대로 재개한다", async () => {
@@ -6216,6 +6461,48 @@ describe("collect 데드라인 — coverage-gated 잡", () => {
 				now - 2_000,
 			).nextAction,
 		).toBe("poll_again");
+	});
+
+	test("외부 원인 재시도 기준 시각(wallCapAnchorAt)이 있으면 턴 데드라인과 상한을 그 시각부터 센다", () => {
+		const anchor = created + 7 * 3600_000;
+		const wallCapAnchorAt = new Date(anchor).toISOString();
+		const meta = { createdAt, timeoutSec: 600, coverageGated: true, lastProgressAt: created + 3600_000, wallCapAnchorAt };
+		expect(resolveCollectNextAction(meta, anchor + 60_000)).toEqual({
+			nextAction: "poll_again",
+			elapsedSec: 7 * 3600 + 60,
+			deadlineSec: 7 * 3600 + 600,
+		});
+		expect(resolveCollectNextAction(meta, anchor + 600_000).nextAction).toBe("stop_and_degrade");
+		// Progress after the retry extends the turn deadline up to the restarted cap.
+		const progressing = { ...meta, lastProgressAt: anchor + COVERAGE_JOB_WALL_CAP_SEC * 1000 - 1_000 };
+		expect(resolveCollectNextAction(progressing, anchor + COVERAGE_JOB_WALL_CAP_SEC * 1000 - 2_000).nextAction).toBe(
+			"poll_again",
+		);
+		expect(resolveCollectNextAction(progressing, anchor + COVERAGE_JOB_WALL_CAP_SEC * 1000)).toEqual({
+			nextAction: "stop_and_degrade",
+			elapsedSec: 7 * 3600 + COVERAGE_JOB_WALL_CAP_SEC,
+			deadlineSec: 7 * 3600 + COVERAGE_JOB_WALL_CAP_SEC,
+		});
+		expect(coverageWallCapBudget(meta, anchor + COVERAGE_JOB_WALL_CAP_SEC * 1000 - 1_000)).toBeNull();
+		expect(coverageWallCapBudget(meta, anchor + COVERAGE_JOB_WALL_CAP_SEC * 1000)).toEqual({
+			nextAction: "stop_and_degrade",
+			elapsedSec: 7 * 3600 + COVERAGE_JOB_WALL_CAP_SEC,
+			deadlineSec: 7 * 3600 + COVERAGE_JOB_WALL_CAP_SEC,
+		});
+	});
+
+	test("wallCapAnchorAt이 생성 시각보다 이르거나 읽을 수 없으면 생성 시각을 쓰고, coverage-gated가 아니면 무시한다", () => {
+		const now = created + COVERAGE_JOB_WALL_CAP_SEC * 1000;
+		const early = { createdAt, timeoutSec: 600, coverageGated: true, wallCapAnchorAt: "2026-08-05T00:00:00.000Z" };
+		expect(coverageWallCapBudget(early, now)?.deadlineSec).toBe(COVERAGE_JOB_WALL_CAP_SEC);
+		expect(coverageWallCapBudget({ ...early, wallCapAnchorAt: "not a date" }, now)?.deadlineSec).toBe(
+			COVERAGE_JOB_WALL_CAP_SEC,
+		);
+		const plain = { createdAt, timeoutSec: 600, wallCapAnchorAt: new Date(now).toISOString() };
+		expect(resolveCollectNextAction(plain, created + 600_000)).toEqual(
+			resolveCollectNextAction({ createdAt, timeoutSec: 600 }, created + 600_000),
+		);
+		expect(coverageWallCapBudget(plain, now)).toBeNull();
 	});
 
 	test("coverage-gated가 아니면 진행 시각과 상한을 무시하고 생성 시각 + 타임아웃으로만 자른다", () => {
