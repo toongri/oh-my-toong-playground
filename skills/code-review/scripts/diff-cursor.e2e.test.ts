@@ -6,7 +6,7 @@ import os from "os";
 import path from "path";
 import { execFileSync } from "child_process";
 
-import { run, loadPlan, type Plan } from "./diff-cursor.ts";
+import { run, loadPlan, ANGLE_NOTES, type Plan } from "./diff-cursor.ts";
 import {
 	initMemberLedger,
 	memberLedgerDir,
@@ -101,6 +101,37 @@ const cli = (angle: string, ...args: string[]) => run([...args, "--ledger", ledg
 const ackOf = (out: string) => /### ACK (\S+): ([0-9a-f]{8}) ###/.exec(out)?.[2] ?? "";
 const pageIdOf = (out: string) => /\[PAGE (\S+) ·/.exec(out)?.[1] ?? "";
 
+/** One `path:L<a>-L<b>:` entry per run of at most 60 consecutive added lines of each code file. */
+function perSpan(out: string, body: (a: number) => string): string {
+	const entries: string[] = [];
+	let file = "";
+	let code = false;
+	let run: number[] = [];
+	const flush = () => {
+		for (let i = 0; i < run.length; i += 60) {
+			const s = run.slice(i, i + 60);
+			entries.push(`${file}:L${s[0]}-L${s[s.length - 1]}: ${body(s[0] ?? 0)}`);
+		}
+		run = [];
+	};
+	for (const line of out.split("\n")) {
+		const f = /^=== FILE (.+) \[(\w+)\]/.exec(line);
+		if (f) {
+			flush();
+			file = f[1] ?? "";
+			code = ["production", "schema", "migration", "config"].includes(f[2] ?? "");
+			continue;
+		}
+		const m = /^ {0,5}(\d+) \|\+/.exec(line);
+		if (!m || !code) continue;
+		const n = Number(m[1]);
+		if (run.length > 0 && n !== (run[run.length - 1] ?? 0) + 1) flush();
+		run.push(n);
+	}
+	flush();
+	return entries.join(" || ");
+}
+
 /**
  * The note each scripted finder writes: a short note on doc and test pages; on code pages its
  * angle's template (a page that holds, or one whose `candidateId` was recorded first), or the
@@ -114,9 +145,13 @@ function noteFor(angle: string, out: string, candidateId?: string): string {
 	if (kind === "doc" || kind === "test") return `관련 메커니즘 없음: ${kind} 페이지`;
 	switch (angle) {
 		case "correctness":
-			return candidateId
-				? `breaks-if: 음수 입력이 ${cite}에 들어온다; candidate: ${candidateId}`
-				: `breaks-if: 음수 입력; holds-because: ${cite}은 더하기만 한다`;
+			return (
+				perSpan(out, (a) =>
+					candidateId
+						? `breaks-if: 음수 입력이 들어온다; candidate: ${candidateId}`
+						: `breaks-if: 음수 입력; holds-because: L${a}은 더하기만 한다`,
+				) || `breaks-if: 음수 입력; ${candidateId ? `candidate: ${candidateId}` : `holds-because: ${cite} 확인함`}`
+			);
 		case "regression":
 			return `changed-contract: none: 새 함수만 추가 ${cite}; dependents: 호출부 없음; verdict: ${verdict("holds")}`;
 		case "requirement":
@@ -129,16 +164,19 @@ function noteFor(angle: string, out: string, candidateId?: string): string {
 }
 
 /**
- * Walks the angle's ledger with `done --next`, leaving `leave` pages unacknowledged.
- * `onFirstPage` runs while the first page is issued (candidates need an issued page).
+ * Walks the angle's ledger with `done --next`, leaving `leave` pages unacknowledged, and returns
+ * every page output seen. `onFirstPage` runs while the first page is issued (candidates need an
+ * issued page).
  */
-function walk(angle: string, opts: { leave?: number; onFirstPage?: (pageId: string) => string | undefined } = {}): void {
+function walk(angle: string, opts: { leave?: number; onFirstPage?: (pageId: string) => string | undefined } = {}): string[] {
+	const seen: string[] = [];
 	let out = cli(angle, "next").stdout;
 	let first = true;
 	for (;;) {
-		if (out.includes("ALL PAGES DONE")) return;
+		if (out.includes("ALL PAGES DONE")) return seen;
 		const status = JSON.parse(cli(angle, "status", "--json").stdout) as { pagesTotal: number; pagesAcked: number };
-		if (status.pagesTotal - status.pagesAcked <= (opts.leave ?? 0)) return;
+		if (status.pagesTotal - status.pagesAcked <= (opts.leave ?? 0)) return seen;
+		seen.push(out);
 		let candidateId: string | undefined;
 		if (first) {
 			candidateId = opts.onFirstPage?.(pageIdOf(out));
@@ -192,7 +230,7 @@ describe("diff-cursor E2E: 네 finder가 diff를 100% 읽는 경로", () => {
 	test("각 finder가 모든 페이지를 확인하면 verify가 0으로 끝나고 export가 각도별 후보와 체크리스트를 돌려준다", () => {
 		let violationId = "";
 		for (const angle of ANGLES) {
-			walk(angle, {
+			const seen = walk(angle, {
 				onFirstPage: (page) => {
 					const id = addCandidate(angle, page, `${angle} 후보`);
 					if (angle === "cleanup") {
@@ -204,6 +242,12 @@ describe("diff-cursor E2E: 네 finder가 diff를 100% 읽는 경로", () => {
 			});
 			const fin = cli(angle, "finish");
 			expect(fin.code).toBe(0);
+			if (angle === "correctness") {
+				const codePages = seen.filter((o) => /^PAGE \S+ {2}kind=production$/m.test(o));
+				expect(codePages.length).toBeGreaterThan(0);
+				for (const o of codePages)
+					expect(o).toContain(`--note "${ANGLE_NOTES.correctness?.template}" --next`);
+			}
 		}
 
 		const verify = run(["verify", "--plan", coverage.planDir, "--ledgers", ...ANGLES.map(ledgerOf)]);

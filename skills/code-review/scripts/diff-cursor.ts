@@ -1254,13 +1254,20 @@ export function noteCitesPage(note: string, page: string): boolean {
 }
 
 type NoteFields = ReadonlyMap<string, string>;
+/** What a code-page note is checked against. */
+interface NoteCtx {
+	page: string;
+	pageId: string;
+	/** Every candidate in this finder's ledger. */
+	candidates: readonly Candidate[];
+}
 interface AngleNote {
 	/** Field labels the note is parsed for, written `<label>:` in the note. */
 	labels: readonly string[];
 	/** Printed in the NEXT hint, in resume and in a refusal. */
 	template: string;
-	/** Problems of a parsed note; `known` holds this ledger's candidate ids. */
-	check: (f: NoteFields, known: ReadonlySet<string>, page: string) => string[];
+	/** Problems of a note on a production|schema|migration|config page. */
+	check: (note: string, c: NoteCtx) => string[];
 }
 
 /** A field counts as written only when it is non-blank and not a copied `<placeholder>`. */
@@ -1293,48 +1300,260 @@ function verdictProblems(f: NoteFields, pass: string, known: ReadonlySet<string>
 	return [`verdict: must be \`${pass}\` or \`candidate <id>\`, got: ${v}`];
 }
 
+/** An angle whose note is one set of labeled fields; `known` holds this ledger's candidate ids. */
+const fieldNote = (
+	labels: readonly string[],
+	template: string,
+	check: (f: NoteFields, known: ReadonlySet<string>) => string[],
+): AngleNote => ({
+	labels,
+	template,
+	check: (note, c) =>
+		check(parseNoteFields(note, labels), new Set(c.candidates.map((k) => k.id))),
+});
+
+// Correctness notes: one entry per span of the page's added code lines.
+
+/** A correctness entry's span covers at most this many new-file lines. */
+export const MAX_SPAN_LINES = 80;
+/** Correctness spans must cover at least this percent of each code file's added non-blank lines on the page. */
+export const MIN_SPAN_COVERAGE_PERCENT = 70;
+/** Each code file needs one correctness entry per this many added non-blank lines on the page (rounded up). */
+export const ADDED_LINES_PER_ENTRY = 60;
+/** Separates correctness entries inside one --note argument; a newline also separates them. */
+export const ENTRY_SEPARATOR = " || ";
+const ENTRY_SPLIT_RE = /\s*\|\|\s*|\n+/;
+/** `[path:]L<a>-L<b>: <fields>`; `-L<b>` may be left out for a one-line span. */
+const SPAN_RE = /^(?:(\S+?):)?L(\d+)(?:\s*-\s*L?(\d+))?\s*:\s*([\s\S]*)$/;
+const FILE_BANNER_RE = /^=== FILE (.+) \[(\w+)\](?: \(continued\))? ===$/;
+const CORRECTNESS_LABELS = ["breaks-if", "holds-because", "candidate"];
+
+/** One file's lines as a page shows them, by new-file line number. */
+interface PageFile {
+	path: string;
+	/** production|schema|migration|config */
+	code: boolean;
+	shown: number[];
+	/** Added lines, blank ones included. */
+	added: number[];
+	addedNonBlank: Set<number>;
+}
+
+function pageFiles(page: string): PageFile[] {
+	const files: PageFile[] = [];
+	let cur: PageFile | undefined;
+	for (const line of page.split("\n")) {
+		const f = FILE_BANNER_RE.exec(line);
+		if (f) {
+			cur = {
+				path: f[1] ?? "",
+				code: [...DEEP_KINDS].some((k) => k === f[2]),
+				shown: [],
+				added: [],
+				addedNonBlank: new Set(),
+			};
+			files.push(cur);
+			continue;
+		}
+		const m = BODY_LINE_RE.exec(line);
+		if (!cur || !m || !/^\s*\d+$/.test(m[1] ?? "")) continue;
+		const n = Number(m[1]);
+		const text = m[2] ?? "";
+		cur.shown.push(n);
+		if (!text.startsWith("+")) continue;
+		cur.added.push(n);
+		if (text.slice(1).trim() !== "") cur.addedNonBlank.add(n);
+	}
+	return files;
+}
+
+/** Maximal runs of consecutive numbers, ascending, as [first, last]. */
+function runsOf(nums: Iterable<number>): [number, number][] {
+	const out: [number, number][] = [];
+	for (const n of [...nums].sort((a, b) => a - b)) {
+		const last = out[out.length - 1];
+		if (last && n === last[1] + 1) last[1] = n;
+		else if (!last || n > last[1]) out.push([n, n]);
+	}
+	return out;
+}
+
+const fmtRange = ([a, b]: [number, number]) => (a === b ? `L${a}` : `L${a}-L${b}`);
+const listRanges = (r: [number, number][]) =>
+	r.slice(0, 12).map(fmtRange).join(", ") + (r.length > 12 ? ", …" : "");
+
+/** Candidate ids that are recorded for this page (or the page it was re-split from). */
+function pageCandidateRefs(value: string, c: NoteCtx, where: string): string[] {
+	const out = candidateRefs(value, new Set(c.candidates.map((k) => k.id)), where);
+	for (const id of value.match(/\bc\d+\b/g) ?? []) {
+		const k = c.candidates.find((x) => x.id === id);
+		if (k && k.pageId !== c.pageId && !c.pageId.startsWith(`${k.pageId}.`))
+			out.push(
+				`${where} ${id} was recorded for page ${k.pageId}; record a candidate for this page (candidate add --page ${c.pageId}) and name its id`,
+			);
+	}
+	return out;
+}
+
+/** The fields of one correctness entry; `cites` judges the holds-because citation. */
+function correctnessFields(
+	f: NoteFields,
+	c: NoteCtx,
+	at: string,
+	cites: (holds: string) => boolean,
+	citeRule: string,
+): string[] {
+	const out = missing(f, ["breaks-if"]).map((p) => at + p);
+	const holds = f.get("holds-because") ?? "";
+	const cand = f.get("candidate") ?? "";
+	if (blank(holds) && blank(cand)) out.push(`${at}missing holds-because: or candidate:`);
+	if (!blank(holds) && !cites(holds)) out.push(`${at}holds-because: must cite ${citeRule}`);
+	if (!blank(cand)) out.push(...pageCandidateRefs(cand, c, `${at}candidate:`));
+	return out;
+}
+
+const citesWithin = (holds: string, a: number, b: number) =>
+	[...holds.matchAll(LINE_CITE_RE)].some((m) => {
+		const n = Number(m[1] ?? m[3]);
+		return n >= a && n <= b;
+	});
+
+function correctnessProblems(note: string, c: NoteCtx): string[] {
+	const files = pageFiles(c.page);
+	// A page whose code files show no added line (deletions, a sliced line) takes one span-less entry.
+	if (!files.some((f) => f.code && f.addedNonBlank.size > 0))
+		return correctnessFields(
+			parseNoteFields(note, CORRECTNESS_LABELS),
+			c,
+			"",
+			(holds) => noteCitesPage(holds, c.page),
+			"a line (L120) or an identifier (`name`) from this page",
+		);
+
+	const problems: string[] = [];
+	const codeFiles = files.filter((f) => f.code && f.shown.length > 0);
+	const spans = new Map<string, [number, number][]>();
+	note
+		.split(ENTRY_SPLIT_RE)
+		.map((e) => e.trim())
+		.filter((e) => e !== "")
+		.forEach((entry, i) => {
+			const m = SPAN_RE.exec(entry);
+			if (!m) {
+				problems.push(`entry ${i + 1} does not start with L<a>-L<b>: (${clip(entry, 40)})`);
+				return;
+			}
+			const a = Number(m[2]);
+			const b = m[3] === undefined ? a : Number(m[3]);
+			const label = `${m[1] === undefined ? "" : `${m[1]}:`}${fmtRange([a, b])}`;
+			const file =
+				m[1] !== undefined
+					? files.find((f) => f.path === m[1])
+					: codeFiles.length === 1
+						? codeFiles[0]
+						: undefined;
+			if (!file) {
+				problems.push(
+					m[1] !== undefined
+						? `${label}: ${m[1]} is not a file on this page`
+						: `${label} needs a file label: this page shows ${codeFiles.length} code files (${codeFiles.map((f) => f.path).join(", ")}); write <path>:L<a>-L<b>`,
+				);
+				return;
+			}
+			if (b < a) {
+				problems.push(`${label}: the span ends before it starts`);
+				return;
+			}
+			if (b - a + 1 > MAX_SPAN_LINES) {
+				problems.push(
+					`${label}: a span covers at most ${MAX_SPAN_LINES} lines, this one ${b - a + 1}; split it`,
+				);
+				return;
+			}
+			const shown = runsOf(file.shown);
+			if (!shown.some(([x, y]) => a >= x && b <= y)) {
+				problems.push(
+					`${label}: not inside one run of lines this page shows for ${file.path} (shown: ${listRanges(shown)})`,
+				);
+				return;
+			}
+			if (![...file.addedNonBlank].some((n) => n >= a && n <= b)) {
+				problems.push(`${label}: covers no added line of ${file.path}`);
+				return;
+			}
+			spans.set(file.path, [...(spans.get(file.path) ?? []), [a, b]]);
+			problems.push(
+				...correctnessFields(
+					parseNoteFields(m[4] ?? "", CORRECTNESS_LABELS),
+					c,
+					`${label}: `,
+					(holds) => citesWithin(holds, a, b),
+					`a line inside ${fmtRange([a, b])} (e.g. L${a})`,
+				),
+			);
+		});
+
+	for (const [p, list] of spans) {
+		let prev: [number, number] | undefined;
+		for (const s of [...list].sort((x, y) => x[0] - y[0])) {
+			if (prev && s[0] <= prev[1])
+				problems.push(`${p}: spans ${fmtRange(prev)} and ${fmtRange(s)} overlap`);
+			if (!prev || s[1] > prev[1]) prev = s;
+		}
+	}
+
+	for (const f of files) {
+		const total = f.addedNonBlank.size;
+		if (!f.code || total === 0) continue;
+		const mine = spans.get(f.path) ?? [];
+		const inSpan = (n: number) => mine.some(([a, b]) => n >= a && n <= b);
+		const covered = [...f.addedNonBlank].filter(inSpan).length;
+		if (covered * 100 < total * MIN_SPAN_COVERAGE_PERCENT) {
+			const gaps = runsOf(f.added.filter((n) => !inSpan(n))).filter(([a, b]) =>
+				[...f.addedNonBlank].some((n) => n >= a && n <= b),
+			);
+			problems.push(
+				`${f.path}: spans cover ${covered} of ${total} added lines (${Math.floor((covered * 100) / total)}%), need ${MIN_SPAN_COVERAGE_PERCENT}%; uncovered: ${listRanges(gaps)}`,
+			);
+		}
+		const need = Math.ceil(total / ADDED_LINES_PER_ENTRY);
+		if (mine.length < need)
+			problems.push(
+				`${f.path}: ${mine.length} entries for ${total} added lines; write at least ${need} (one per ${ADDED_LINES_PER_ENTRY} added lines)`,
+			);
+	}
+	return problems;
+}
+
 /**
  * Structured notes for code pages (production|schema|migration|config), per finder angle.
  * An angle not listed here keeps the citation-only rule.
  */
 export const ANGLE_NOTES: Readonly<Record<string, AngleNote>> = {
 	correctness: {
-		labels: ["breaks-if", "holds-because", "candidate"],
-		template:
-			"breaks-if: <concrete input, state or timing that could make this code wrong>; holds-because: <why it does not, citing L<n> or an identifier from this page> | candidate: <id>",
-		check: (f, known, page) => {
-			const out = missing(f, ["breaks-if"]);
-			const holds = f.get("holds-because") ?? "";
-			const cand = f.get("candidate") ?? "";
-			if (blank(holds) && blank(cand)) out.push("missing holds-because: or candidate:");
-			if (!blank(holds) && !noteCitesPage(holds, page))
-				out.push("holds-because: must cite a line (L120) or an identifier (`name`) from this page");
-			if (!blank(cand)) out.push(...candidateRefs(cand, known, "candidate:"));
-			return out;
-		},
+		labels: CORRECTNESS_LABELS,
+		template: `L<a>-L<b>: breaks-if: <input, state or timing that could make L<a>-L<b> wrong>; holds-because: <why not, citing a line inside L<a>-L<b>> | candidate: <id added for this page>${ENTRY_SEPARATOR}L<c>-L<d>: ... (one entry per span of at most ${MAX_SPAN_LINES} lines, spans not overlapping, covering ${MIN_SPAN_COVERAGE_PERCENT}% of each code file's added lines; write path:L<a>-L<b> when the page shows 2+ code files)`,
+		check: correctnessProblems,
 	},
-	regression: {
-		labels: ["changed-contract", "dependents", "verdict"],
-		template:
-			"changed-contract: <prior behavior or caller-visible contract this page changes, or none: <why>>; dependents: <callers/consumers checked>; verdict: holds | candidate <id>",
-		check: (f, known) => [
+	regression: fieldNote(
+		["changed-contract", "dependents", "verdict"],
+		"changed-contract: <prior behavior or caller-visible contract this page changes, or none: <why>>; dependents: <callers/consumers checked>; verdict: holds | candidate <id>",
+		(f, known) => [
 			...missing(f, ["changed-contract", "dependents"]),
 			...noneNeedsWhy(f, "changed-contract"),
 			...verdictProblems(f, "holds", known),
 		],
-	},
-	requirement: {
-		labels: ["maps", "branches", "verdict"],
-		template:
-			"maps: <AC / decision-rule ids this page bears on, or none>; branches: <each branch the mapped rule names: met or not>; verdict: met | candidate <id>",
-		check: (f, known) => [...missing(f, ["maps", "branches"]), ...verdictProblems(f, "met", known)],
-	},
-	cleanup: {
-		labels: ["rules", "quality"],
-		template:
-			"rules: <checklist item ids this page bears on, or none>; quality: <issue found, or none: <why>>",
-		check: (f) => [...missing(f, ["rules", "quality"]), ...noneNeedsWhy(f, "quality")],
-	},
+	),
+	requirement: fieldNote(
+		["maps", "branches", "verdict"],
+		"maps: <AC / decision-rule ids this page bears on, or none>; branches: <each branch the mapped rule names: met or not>; verdict: met | candidate <id>",
+		(f, known) => [...missing(f, ["maps", "branches"]), ...verdictProblems(f, "met", known)],
+	),
+	cleanup: fieldNote(
+		["rules", "quality"],
+		"rules: <checklist item ids this page bears on, or none>; quality: <issue found, or none: <why>>",
+		(f) => [...missing(f, ["rules", "quality"]), ...noneNeedsWhy(f, "quality")],
+	),
 };
 
 const angleNote = (angle: string): AngleNote | undefined =>
@@ -1447,13 +1666,7 @@ function cmdDone(v: Values, env: NodeJS.ProcessEnv, id: string | undefined): Out
 		if (DEEP_KINDS.has(meta.kind)) {
 			const page = pageText(ctx, id);
 			const rule = angleNote(l.angle);
-			const problems = rule
-				? rule.check(
-						parseNoteFields(note, rule.labels),
-						new Set(l.candidates.map((c) => c.id)),
-						page,
-					)
-				: [];
+			const problems = rule ? rule.check(note, { page, pageId: id, candidates: l.candidates }) : [];
 			if (rule && problems.length > 0)
 				throw refuse(
 					`note for ${meta.kind} page ${id} does not fit the ${l.angle} note: ${problems.join("; ")}\n${NOTE_IS_A_CHECK}\nTemplate: ${rule.template}`,

@@ -178,12 +178,53 @@ function citeOf(out: string): string {
 	return /^FILES ON THIS PAGE:\n {2}(\S+)/m.exec(out)?.[1] ?? "";
 }
 
+const CODE_KINDS = ["production", "schema", "migration", "config"];
+
+/** Spans of at most 60 consecutive added lines per code file on the page, in page order. */
+function spanEntries(out: string): { path: string; a: number; b: number }[] {
+	const spans: { path: string; a: number; b: number }[] = [];
+	let file = "";
+	let code = false;
+	let run: number[] = [];
+	const flush = () => {
+		for (let i = 0; i < run.length; i += 60) {
+			const s = run.slice(i, i + 60);
+			spans.push({ path: file, a: s[0] ?? 0, b: s[s.length - 1] ?? 0 });
+		}
+		run = [];
+	};
+	for (const line of out.split("\n")) {
+		const f = /^=== FILE (.+) \[(\w+)\]/.exec(line);
+		if (f) {
+			flush();
+			file = f[1] ?? "";
+			code = CODE_KINDS.includes(f[2] ?? "");
+			continue;
+		}
+		const m = /^ {0,5}(\d+) \|\+/.exec(line);
+		if (!m || !code) continue;
+		const n = Number(m[1]);
+		if (run.length > 0 && n !== (run[run.length - 1] ?? 0) + 1) flush();
+		run.push(n);
+	}
+	flush();
+	return spans;
+}
+
+/** A correctness note with one `path:L<a>-L<b>:` entry per span of the page's added code lines. */
+const perSpan = (out: string, body: (a: number, b: number) => string) =>
+	spanEntries(out)
+		.map((e) => `${e.path}:L${e.a}-L${e.b}: ${body(e.a, e.b)}`)
+		.join(" || ");
+
 /** A note that passes the page's angle template (a scripted finder that holds every page). */
 function noteFor(out: string): string {
 	const cite = citeOf(out);
 	switch (angleOf(out)) {
 		case "correctness":
-			return `breaks-if: 음수 입력; holds-because: ${cite} 확인함`;
+			return spanEntries(out).length === 0
+				? `breaks-if: 음수 입력; holds-because: ${cite} 확인함`
+				: perSpan(out, (a) => `breaks-if: 음수 입력; holds-because: L${a} 확인함`);
 		case "regression":
 			return `changed-contract: none: 새 코드 ${cite}; dependents: 호출부 없음; verdict: holds`;
 		case "requirement":
@@ -796,25 +837,25 @@ describe("각도별 코드 페이지 메모 템플릿", () => {
 
 	interface Case {
 		angle: string;
-		/** A citing note that lacks the listed labels. */
-		missing: (cite: string) => string;
+		/** A citing note that lacks the listed labels; `out` is the page output. */
+		missing: (cite: string, out: string) => string;
 		missingLabels: string[];
 		/** Other refused notes: [note, text the refusal must name]. */
-		refused: ((cite: string) => [string, string])[];
+		refused: ((cite: string, out: string) => [string, string])[];
 		/** A complete note that holds through a recorded candidate id, when the angle has one. */
-		viaCandidate?: (cite: string, id: string) => string;
+		viaCandidate?: (cite: string, id: string, out: string) => string;
 	}
 	const CASES: Case[] = [
 		{
 			angle: "correctness",
-			missing: (c) => `breaks-if: 음수 입력이 ${c}에 들어온다`,
+			missing: (_, o) => perSpan(o, () => "breaks-if: 음수 입력이 들어온다"),
 			missingLabels: ["holds-because:", "candidate:"],
 			refused: [
-				(c) => [`holds-because: ${c} 확인함`, "breaks-if:"],
-				(c) => [`breaks-if: 음수 입력 ${c}; candidate: c999`, "c999"],
-				(c) => [`breaks-if: 음수 입력 ${c}; holds-because: 괜찮아 보임`, "holds-because: must cite"],
+				(_, o) => [perSpan(o, (a) => `holds-because: L${a} 확인함`), "breaks-if:"],
+				(_, o) => [perSpan(o, () => "breaks-if: 음수 입력; candidate: c999"), "c999"],
+				(_, o) => [perSpan(o, () => "breaks-if: 음수 입력; holds-because: 괜찮아 보임"), "holds-because: must cite"],
 			],
-			viaCandidate: (c, id) => `breaks-if: 음수 입력 ${c}; candidate: ${id}`,
+			viaCandidate: (_, id, o) => perSpan(o, () => `breaks-if: 음수 입력; candidate: ${id}`),
 		},
 		{
 			angle: "regression",
@@ -856,14 +897,14 @@ describe("각도별 코드 페이지 메모 템플릿", () => {
 			expect(cli(ledger, "resume").stdout).toContain(template);
 			const cite = citeOf(out);
 
-			const miss = doneWith(ledger, out, k.missing(cite));
+			const miss = doneWith(ledger, out, k.missing(cite, out));
 			expect(miss.code).toBe(1);
 			for (const label of k.missingLabels) expect(miss.stderr).toContain(label);
 			expect(miss.stderr).toContain("not a summary");
 			expect(miss.stderr).toContain(`Template: ${template}`);
 			expect(doneWith(ledger, out, template).code).toBe(1);
 			for (const make of k.refused) {
-				const [note, named] = make(cite);
+				const [note, named] = make(cite, out);
 				const r = doneWith(ledger, out, note);
 				expect(r.code).toBe(1);
 				expect(r.stderr).toContain(named);
@@ -871,7 +912,7 @@ describe("각도별 코드 페이지 메모 템플릿", () => {
 
 			if (k.viaCandidate) {
 				expect(addCandidate(ledger, pageIdOf(out)).code).toBe(0);
-				expect(doneWith(ledger, out, k.viaCandidate(cite, "c001")).code).toBe(0);
+				expect(doneWith(ledger, out, k.viaCandidate(cite, "c001", out)).code).toBe(0);
 			} else expect(doneWith(ledger, out, noteFor(out)).code).toBe(0);
 			const second = cli(ledger, "next").stdout;
 			expect(doneWith(ledger, second, noteFor(second)).code).toBe(0);
@@ -900,6 +941,154 @@ describe("각도별 코드 페이지 메모 템플릿", () => {
 			expect(vague.stderr).toContain("must cite");
 			expect(doneWith(ledger, out, `${citeOf(out)} 확인함`).code).toBe(0);
 		}
+	});
+});
+
+describe("correctness 메모는 span별 항목으로 페이지의 코드 파일을 덮는다", () => {
+	// src/many.ts gains 11 hunks of 30 added lines: hunk k adds L(70k+41)-L(70k+70)
+	// (330 added lines, ~17KB, one default-size page); src/small.ts is a new 2-line file.
+	let bigPlan: string;
+	const added = (k: number) => `L${70 * k + 41}-L${70 * k + 70}`;
+	const entry = (k: number) =>
+		`src/many.ts:${added(k)}: breaks-if: 음수 입력; holds-because: L${70 * k + 45}에서 0으로 막는다`;
+	const small = "src/small.ts:L1-L2: breaks-if: 빈 문자열; holds-because: L1이 기본값을 둔다";
+	const covering = [...Array.from({ length: 8 }, (_, k) => entry(k)), small];
+
+	beforeAll(() => {
+		const repo = path.join(fx.tmp, "many-repo");
+		fs.mkdirSync(repo);
+		git(repo, "init", "-q", "-b", "main");
+		const base = Array.from({ length: 440 }, (_, i) => `export const keep${i} = ${i};`);
+		write(repo, "src/many.ts", base.join("\n") + "\n");
+		git(repo, "add", "-A");
+		git(repo, "commit", "-q", "-m", "base");
+		const from = git(repo, "rev-parse", "HEAD").trim();
+		const head: string[] = [];
+		base.forEach((l, i) => {
+			head.push(l);
+			const k = (i + 1) / 40 - 1;
+			if ((i + 1) % 40 === 0 && k < 11)
+				for (let j = 0; j < 30; j++) head.push(`export const added${k}_${j} = keep${i} + ${j};`);
+		});
+		write(repo, "src/many.ts", head.join("\n") + "\n");
+		write(repo, "src/small.ts", 'export const label = "";\nexport const size = label.length;\n');
+		git(repo, "add", "-A");
+		git(repo, "commit", "-q", "-m", "head");
+		const to = git(repo, "rev-parse", "HEAD").trim();
+		bigPlan = path.join(fx.tmp, "many-plan");
+		const r = run([
+			"plan",
+			"--repo",
+			repo,
+			"--range",
+			`${from}...${to}`,
+			"--files",
+			JSON.stringify(["src/many.ts", "src/small.ts"]),
+			"--out",
+			bigPlan,
+		]);
+		if (r.code !== 0) throw new Error(r.stderr);
+	});
+
+	/** A fresh correctness ledger on the big plan, with its only page issued. */
+	function bigPage(): { ledger: string; out: string } {
+		const ledger = path.join(fx.tmp, "ledgers", `many-${++ledgerSeq}`);
+		expect(run(["init", "--plan", bigPlan, "--angle", "correctness", "--ledger", ledger]).code).toBe(0);
+		const out = cli(ledger, "next").stdout;
+		expect(kindOf(out)).toBe("production");
+		expect((out.match(/^@@ /gm) ?? []).length).toBe(12);
+		expect((out.match(/^ {0,5}\d+ \|\+/gm) ?? []).length).toBeGreaterThanOrEqual(300);
+		return { ledger, out };
+	}
+	const done = (ledger: string, out: string, note: string) =>
+		cli(ledger, "done", pageIdOf(out), "--ack", ackOf(out), "--note", note);
+
+	test("hunk가 많은 페이지에 breaks-if 하나만 쓴 메모는 거부되고 덮지 않은 span을 이름으로 알려 준다", () => {
+		const { ledger, out } = bigPage();
+		const r = done(ledger, out, `${entry(0)} || ${small}`);
+		expect(r.code).toBe(1);
+		expect(r.stderr).toContain("src/many.ts");
+		expect(r.stderr).toContain("uncovered");
+		expect(r.stderr).toContain(added(1));
+		expect(r.stderr).toContain(added(10));
+	});
+
+	test("span마다 breaks-if를 쓰고 추가된 줄의 70% 이상을 덮은 메모는 통과한다", () => {
+		const { ledger, out } = bigPage();
+		expect(done(ledger, out, covering.join(" || ")).code).toBe(0);
+		const { ledger: l2, out: o2 } = bigPage();
+		expect(done(l2, o2, covering.join("\n")).code).toBe(0);
+	});
+
+	test("코드 파일이 둘 이상인 페이지에서 파일 경로 없는 span은 거부된다", () => {
+		const { ledger, out } = bigPage();
+		const r = done(ledger, out, [...covering, small.replace("src/small.ts:", "")].join(" || "));
+		expect(r.code).toBe(1);
+		expect(r.stderr).toContain("file label");
+	});
+
+	test("겹치는 span과 80줄보다 긴 span은 거부된다", () => {
+		const { ledger, out } = bigPage();
+		const overlap = done(
+			ledger,
+			out,
+			[...covering, "src/many.ts:L60-L73: breaks-if: 경계; holds-because: L61이 막는다"].join(" || "),
+		);
+		expect(overlap.code).toBe(1);
+		expect(overlap.stderr).toContain("overlap");
+		const long = done(
+			ledger,
+			out,
+			[...covering, "src/many.ts:L600-L700: breaks-if: 경계; holds-because: L601이 막는다"].join(" || "),
+		);
+		expect(long.code).toBe(1);
+		expect(long.stderr).toContain("at most 80 lines");
+	});
+
+	test("holds-because가 자기 span 밖의 줄을 인용하면 거부된다", () => {
+		const { ledger, out } = bigPage();
+		const outside = covering.map((e, i) => (i === 0 ? e.replace("L45에서", "L120에서") : e));
+		const r = done(ledger, out, outside.join(" || "));
+		expect(r.code).toBe(1);
+		expect(r.stderr).toContain(`${added(0)}: holds-because: must cite a line inside`);
+	});
+
+	test("다른 페이지에 기록한 후보 id는 거부되고 이 페이지에 기록한 후보 id는 통과한다", () => {
+		const ledger = newLedger("correctness");
+		/** Acknowledges pages until one shows added code lines to span. */
+		const toSpanPage = (out: string) => {
+			let cur = out;
+			while (spanEntries(cur).length === 0)
+				cur = cli(ledger, "done", pageIdOf(cur), "--ack", ackOf(cur), "--note", noteFor(cur), "--next").stdout;
+			return cur;
+		};
+		const first = toSpanPage(cli(ledger, "next").stdout);
+		const add = (page: string, summary: string) =>
+			cli(
+				ledger,
+				"candidate",
+				"add",
+				"--page",
+				page,
+				"--file",
+				"src/app.ts",
+				"--line",
+				"3",
+				"--summary",
+				summary,
+				"--failure-scenario",
+				"음수 입력에서 합계가 틀린다",
+			).stdout;
+		expect(add(pageIdOf(first), "첫 페이지 후보")).toContain("c001 recorded");
+		const second = toSpanPage(
+			cli(ledger, "done", pageIdOf(first), "--ack", ackOf(first), "--note", noteFor(first), "--next").stdout,
+		);
+		expect(CODE_KINDS).toContain(kindOf(second));
+		const viaOther = done(ledger, second, perSpan(second, () => "breaks-if: 음수 입력; candidate: c001"));
+		expect(viaOther.code).toBe(1);
+		expect(viaOther.stderr).toContain(`c001 was recorded for page ${pageIdOf(first)}`);
+		expect(add(pageIdOf(second), "둘째 페이지 후보")).toContain("c002 recorded");
+		expect(done(ledger, second, perSpan(second, () => "breaks-if: 음수 입력; candidate: c002")).code).toBe(0);
 	});
 });
 
