@@ -2456,11 +2456,12 @@ function planDecisionRules(planPath: string): string {
 		while (end < lines.length && !ANY_HEADING.test(lines[end])) end++;
 		const body = lines.slice(i + 1, end);
 		const start = body.findIndex((l) => DECISION_FIELD.test(l));
+		const first = start === -1 ? null : DECISION_FIELD.exec(body[start]);
 		let decision: string[];
-		if (start === -1) {
+		if (first === null) {
 			decision = body;
 		} else {
-			decision = [DECISION_FIELD.exec(body[start])![1]];
+			decision = [first[1]];
 			for (let k = start + 1; k < body.length; k++) {
 				if (body[k].trim() === "" || body[k].trim() === "---" || FIELD_LABEL.test(body[k])) break;
 				decision.push(body[k]);
