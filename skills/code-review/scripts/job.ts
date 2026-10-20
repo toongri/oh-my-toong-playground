@@ -485,38 +485,12 @@ Usage:
 Notes:
   - start returns immediately and runs reviewers in parallel via detached Node workers
   - poll status with repeated short calls to update TODO/plan UIs in host agents
-  - --ledger-root <dir> is required: start refuses without it. Run diff-cursor.ts plan --out <dir>/plan
-    first; start records coverage {ledgerRoot, planDir, planSha} and settings.coverageGated in job.json.
-    A member whose plan.json planSha no longer matches job.json ends error, never done.
-    Each member walks the diff through its ledger at <dir>/ledgers/<member>. A turn that ends
-    before the ledger is finished becomes awaiting_resume (status.json coverage: pagesAcked,
-    pagesTotal, finished:false), never done.
-  - resume-member is run by the conductor: after collect returns awaiting_resume, resume each
-    awaiting_resume member, then collect again. Nothing resumes automatically.
-    A job.json without coverage (created before --ledger-root was required): at most 3 resumes
-    per member; error/non_retryable are not resumable.
-    With --ledger-root: no resume cap while pagesAcked grows between resumes (a checklist item
-    added or given a final verdict, and a finished ledger, count as progress too); timed_out and
-    error turns resume from the ledger. When 3 turns in a row end without progress (the initial
-    turn counts), that 3rd resume-member applies one remedy: it re-splits the issued page to half
-    its size (min 4096 bytes), or else spends one plain resume.
-    The next resume-member without progress marks the member stalled (exit 1, reason in
-    status.json message); so does a turn that failed outside the member (missing CLI,
-    non_retryable, with the recorded detail) or a missing session id. A stalled member is never
-    done: tell the user, and rerun with --retry-stalled only after the cause is fixed.
-    A stalled member's status.json also records stall_cause_kind (quota, auth, missing_cli,
-    no_progress or other), stall_detail (the verbatim line that shows the cause, or the stall
-    reason) and, when a quota message names it, stall_reset_text (its "try again at ..." text,
-    display only). quota, auth and missing_cli are external causes; GC keeps such a job.
-    --retry-stalled on a stalled member starts a fresh initial turn on the same ledger (the old
-    session is not reused); on any other member it is a plain resume.
-    Past the ${COVERAGE_JOB_WALL_CAP_SEC / 3600}-hour wall cap, resume-member refuses every resume except --retry-stalled on a member stalled by an external cause;
-    that retry restarts the wall cap from the retry (job.json coverage.wallCapAnchorAt).
-  - collect counts the job deadline (settings timeout) from the latest page any member acknowledged,
-    so a member still making progress through resumed turns is not cut; heartbeats and resumes
-    without progress do not extend it, and it never passes ${COVERAGE_JOB_WALL_CAP_SEC / 3600} hours after job start (or after the latest
-    external-cause --retry-stalled);
-    past that wall cap every collect return (awaiting_resume and done included) carries stop_and_degrade
+  - start requires --ledger-root <dir>: run diff-cursor.ts plan --out <dir>/plan first. Each member
+    walks the diff through its ledger; a turn that ends before the ledger is finished is awaiting_resume.
+  - the conductor runs resume-member after collect returns awaiting_resume; nothing resumes
+    automatically. A member that stops making progress, or fails for a cause outside it, ends stalled;
+    rerun with --retry-stalled once the cause is fixed. collect and resume-member stop at a
+    ${COVERAGE_JOB_WALL_CAP_SEC / 3600}-hour wall cap. Resume policy and stall causes: code-review SKILL.md Step 4.
   - reap kills orphaned job process groups (SIGTERM then SIGKILL); all its output goes to
     stderr — stdout is always empty, since a SessionStart hook calls it and must not vary
   - doctor reports orphan counts on stdout without killing anything (diagnostic only)

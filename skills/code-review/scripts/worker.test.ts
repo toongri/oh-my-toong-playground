@@ -19,6 +19,7 @@ import {
 	type JobCoverage,
 } from "./worker.ts";
 import { run as runDiffCursor, loadPlan } from "./diff-cursor.ts";
+import { readCollectBudgetMeta, resolveCollectNextAction, type JobConfig } from "@lib/generic-job";
 
 const TEMPLATE_PATH = path.join(import.meta.dirname, "chunk-reviewer-prompt.md");
 const WORKER_PATH = path.join(import.meta.dirname, "worker.ts");
@@ -59,23 +60,12 @@ const ALL_CONDITIONAL_SENTINELS = [
 describe("filterPromptSections", () => {
 	const fixture = buildFixturePrompt();
 
-	it("필터링은 같은 조건부 섹션 4개(project_context, requirements, non_goal, commit_history)를 남긴다", () => {
+	it("필터링은 공통 섹션과 조건부 섹션 4개(project_context, requirements, non_goal, commit_history)를 남긴다", () => {
 		const filtered = filterPromptSections(fixture);
 		for (const sentinel of ALL_CONDITIONAL_SENTINELS) expect(filtered).toContain(sentinel);
 		expect(filtered).toContain("FILE_LIST_SENTINEL");
-		expect(filtered).toContain("## Diff Coverage Protocol");
-	});
-
-	it("Project Context 섹션이 전달된다 (도달 가능성 판단에 필요한 제약·경계)", () => {
-		const filtered = filterPromptSections(fixture);
-		expect(filtered).toContain("PROJECT_CONTEXT_SENTINEL");
-	});
-
-	it("모든 앵글에 목표와 비목표, 제약·경계 컨텍스트를 전달한다", () => {
-		const filtered = filterPromptSections(fixture);
 		expect(filtered).toContain("WHAT_WAS_IMPLEMENTED_SENTINEL");
-		expect(filtered).toContain("PROJECT_CONTEXT_SENTINEL");
-		expect(filtered).toContain("NON_GOAL_SENTINEL");
+		expect(filtered).toContain("## Diff Coverage Protocol");
 	});
 
 	it("필터링 후 최종 출력에 섹션 경계 마커가 하나도 남지 않는다", () => {
@@ -225,7 +215,7 @@ describe("filterPromptSections", () => {
 describe("main() 배선: prompt.txt가 필터링되어 reviewContent로 전달된다", () => {
 	let tmpRoot: string;
 
-	// A coverage job: without a ledger the worker refuses a prompt that still holds {CURSOR}.
+	// A coverage job: the worker refuses a job without a cursor ledger.
 	function makeJobDir(): string {
 		tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "chunk-worker-wiring-test-"));
 		const jobDir = path.join(tmpRoot, "jobs", "chunk-review-wiring-test");
@@ -292,6 +282,12 @@ describe("main() 배선: --session/--prompt는 resumeOneTurn 경로(assembled-pr
 		tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "chunk-worker-resume-test-"));
 		const jobDir = path.join(tmpRoot, "jobs", "chunk-review-resume-test");
 		fs.mkdirSync(path.join(jobDir, "members", "opencode"), { recursive: true });
+		const coverage = makeCoverageFixture(tmpRoot);
+		initMemberLedger(coverage, "opencode");
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "chunk-review-resume-test", settings: { coverageGated: true }, coverage }),
+		);
 		return jobDir;
 	}
 
@@ -326,7 +322,8 @@ describe("main() 배선: --session/--prompt는 resumeOneTurn 경로(assembled-pr
 			const jobDir = makeJobDir();
 			stubDir = makeOpencodeStub();
 
-			execFileSync(
+			// spawnSync: the resumed turn ends awaiting_resume (ledger not walked), so the worker exits 1.
+			spawnSync(
 				process.execPath,
 				[
 					WORKER_PATH,
@@ -361,7 +358,7 @@ describe("main() 배선: --session/--prompt는 resumeOneTurn 경로(assembled-pr
 			expect(argv).toContain("--session sess-existing");
 
 			const status = JSON.parse(fs.readFileSync(path.join(memberDir, "status.json"), "utf8"));
-			expect(status.state).toBe("done");
+			expect(status.state).toBe("awaiting_resume");
 			expect(status.sessionID).toBe("sess-123");
 		},
 		20000,
@@ -436,7 +433,7 @@ describe("worker.ts 종료 경로 — reapOwnProcessGroup 연결", () => {
 				const jobDir = path.join(tmpDir, "job");
 				const memberDir = path.join(jobDir, "members", "leaker");
 				fs.mkdirSync(memberDir, { recursive: true });
-				// A coverage job: without a ledger the worker refuses a prompt that still holds {CURSOR}.
+				// A coverage job: the worker refuses a job without a cursor ledger.
 				fs.writeFileSync(
 					path.join(jobDir, "job.json"),
 					JSON.stringify({ id: "job", settings: { coverageGated: true }, coverage: makeCoverageFixture(tmpDir) }),
@@ -548,6 +545,15 @@ function makeCoverageFixture(root: string): JobCoverage {
 	return { ledgerRoot, planDir, planSha: loadPlan(planDir).planSha };
 }
 
+const JOB_CONFIG: JobConfig = {
+	entitySingular: "member",
+	entityPlural: "members",
+	entityDirName: "members",
+	jobPrefix: "chunk-review-",
+	uiLabel: "[Chunk Review]",
+	configTopLevelKey: "chunk-review",
+};
+
 const ackOf = (out: string) => /### ACK (\S+): ([0-9a-f]{8}) ###/.exec(out)?.[2] ?? "";
 const pageIdOf = (out: string) => /\[PAGE (\S+) ·/.exec(out)?.[1] ?? "";
 
@@ -644,6 +650,28 @@ describe("diff cursor coverage helpers", () => {
 		raw.checklist = [item("r001", null), item("r002", "위반"), item("r003", "해당 없음"), item("r004", "준수")];
 		fs.writeFileSync(ledgerFile, JSON.stringify(raw));
 		expect(readCoverageProgress(ledger)).toMatchObject({ checklistItems: 4, checklistVerdicts: 3 });
+	});
+
+	it("마지막 페이지 ack 뒤 체크리스트 판정만 남긴 cleanup 멤버는 판정 시각부터 collect 데드라인이 늘어난다", () => {
+		setup();
+		initMemberLedger(coverage, "cleanup");
+		const ledger = memberLedgerDir(coverage, "cleanup");
+		const ledgerFile = path.join(ledger, "ledger.json");
+		const raw = JSON.parse(fs.readFileSync(ledgerFile, "utf8"));
+		for (const id of raw.order) raw.pages[id] = { state: "done", doneAt: "2026-10-20T00:05:00.000Z", note: "n", ack: "a" };
+		raw.checklist = [
+			{ id: "r001", source: "CLAUDE.md", rule: "r", verdict: "준수", evidence: [], updatedAt: "2026-10-20T00:20:00.000Z" },
+		];
+		fs.writeFileSync(ledgerFile, JSON.stringify(raw));
+		const jobDir = path.join(root ?? "", "job");
+		fs.mkdirSync(path.join(jobDir, "members", "cleanup"), { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ createdAt: "2026-10-20T00:00:00.000Z", settings: { timeoutSec: 600, coverageGated: true }, coverage }),
+		);
+		const meta = readCollectBudgetMeta(jobDir, JOB_CONFIG, coverageHooks(coverage));
+		expect(meta.lastProgressAt).toBe(Date.parse("2026-10-20T00:20:00.000Z"));
+		expect(resolveCollectNextAction(meta, Date.parse("2026-10-20T00:25:00.000Z")).nextAction).toBe("poll_again");
 	});
 
 	it("job.json planSha가 plan.json과 다르면 init·게이트·재개 진행 조회 모두 이유와 함께 거부한다", () => {
@@ -765,8 +793,8 @@ describe("main() 배선: coverage job", () => {
 	);
 });
 
-// Guards in main(): a turn never runs with an unresolved {CURSOR} or against a plan that changed.
-describe("main() 가드: {CURSOR} 미치환·planSha 불일치", () => {
+// Guards in main(): a turn never runs without a cursor ledger or against a plan that changed.
+describe("main() 가드: coverage 없음·planSha 불일치", () => {
 	let root: string;
 
 	afterEach(() => {
@@ -795,15 +823,15 @@ describe("main() 가드: {CURSOR} 미치환·planSha 불일치", () => {
 	}
 
 	it(
-		"coverage 없는 job에서 조립된 프롬프트에 {CURSOR}가 남으면 턴을 돌리지 않고 error로 끝난다",
+		"job.json에 coverage가 없으면 턴을 돌리지 않고 error로 끝난다",
 		() => {
-			root = fs.mkdtempSync(path.join(os.tmpdir(), "worker-guard-cursor-"));
+			root = fs.mkdtempSync(path.join(os.tmpdir(), "worker-guard-coverage-"));
 			const r = runGuardedWorker({ settings: {} });
 			expect(r.exitCode).toBe(1);
 			expect(r.ran).toBe(false);
 			expect(r.assembledWritten).toBe(false);
 			expect(r.status.state).toBe("error");
-			expect(r.status.message).toContain("{CURSOR}");
+			expect(r.status.message).toContain("no coverage");
 			expect(r.status.message).toContain("--ledger-root");
 		},
 		30000,

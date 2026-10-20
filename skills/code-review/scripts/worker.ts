@@ -8,7 +8,6 @@ import { exitWithError, parseArgs, logRootForJobsDir } from "@lib/job-utils";
 import { getOmtDir } from "@lib/omt-dir";
 import {
 	splitCommand,
-	assemblePrompt,
 	atomicWriteJson,
 	runOneTurn,
 	resumeOneTurn,
@@ -216,19 +215,24 @@ export function readCoverageProgress(ledgerDir: string): CoverageProgress {
 	const currentPage = typeof status.currentPage === "string" ? status.currentPage : null;
 
 	const ledger = JSON.parse(fs.readFileSync(path.join(ledgerDir, "ledger.json"), "utf8"));
+	const checklist: { verdict?: unknown; updatedAt?: unknown }[] = Array.isArray(ledger?.checklist)
+		? ledger.checklist
+		: [];
+	const checklistItems = checklist.length;
+	const checklistVerdicts = checklist.filter((item) => typeof item?.verdict === "string").length;
+
+	// The same progress the resume policy counts: a page acknowledged, a checklist item added or
+	// given a verdict, the ledger finished.
 	let lastProgressAt: number | null = null;
 	const progressStamps = [
 		...Object.values<{ doneAt?: unknown }>(ledger?.pages ?? {}).map((page) => page?.doneAt),
+		...checklist.map((item) => item?.updatedAt),
 		ledger?.finishedAt,
 	];
 	for (const stamp of progressStamps) {
 		const at = typeof stamp === "string" ? Date.parse(stamp) : NaN;
 		if (Number.isFinite(at) && (lastProgressAt === null || at > lastProgressAt)) lastProgressAt = at;
 	}
-
-	const checklist: { verdict?: unknown }[] = Array.isArray(ledger?.checklist) ? ledger.checklist : [];
-	const checklistItems = checklist.length;
-	const checklistVerdicts = checklist.filter((item) => typeof item?.verdict === "string").length;
 
 	let issuedPage: CoverageProgress["issuedPage"] = null;
 	if (currentPage !== null) {
@@ -303,30 +307,6 @@ export const COVERAGE_RESUME_INSTRUCTION = `Your previous turn ended before your
 
 const CURSOR_PLACEHOLDER = "{CURSOR}";
 
-/**
- * The stdin prompt a turn would send, assembled the way runOnce assembles it (role file + review
- * content when promptsDir is given, then the literal substitutions).
- */
-function assembleTurnPrompt(turn: {
-	prompt: string;
-	member: string;
-	reviewContent?: string;
-	promptsDir?: string;
-	substitutions?: Record<string, string>;
-}): string {
-	let text = turn.promptsDir
-		? assemblePrompt({
-				promptsDir: turn.promptsDir,
-				entityName: turn.member,
-				rawPrompt: turn.prompt,
-				reviewContent: turn.reviewContent,
-			}).assembled
-		: turn.prompt;
-	for (const [placeholder, value] of Object.entries(turn.substitutions ?? {}))
-		text = text.split(placeholder).join(value);
-	return text;
-}
-
 async function main() {
 	const options = parseArgs(process.argv);
 	const jobDir = options["job-dir"];
@@ -360,27 +340,39 @@ async function main() {
 
 	logInfo(`worker start: member=${member} command=${command} timeout=${timeoutSec}`);
 
-	const coverage = readJobCoverage(jobDir);
-	const ledgerDir = coverage ? memberLedgerDir(coverage, member) : null;
-	if (ledgerDir) {
-		// OMT_LEDGER_WORKER stops the session-ledger PreCompact hook from spawning a summarizer
-		// inside the finder; the cursor ledger already carries the finder's state.
-		workerEnv.OMT_LEDGER_WORKER = "1";
-		workerEnv[LEDGER_ENV] = ledgerDir;
-	}
-
 	const membersRoot = path.join(jobDir, "members");
 	const memberDir = path.join(membersRoot, member);
+
+	/** Ends the member as error without running a turn. */
+	const failTurn: (message: string) => never = (message) => {
+		logError(message);
+		atomicWriteJson(path.join(memberDir, "status.json"), {
+			member,
+			state: "error",
+			message,
+			finishedAt: new Date().toISOString(),
+			command,
+		});
+		logEnd();
+		process.exit(1);
+	};
+
+	// The finder prompts read the diff only through the cursor ledger: without one a finder could
+	// end done without reading the diff.
+	const coverage = readJobCoverage(jobDir);
+	if (!coverage)
+		failTurn("turn not run: job.json has no coverage (diff cursor ledger); start the job with job.ts start --ledger-root <dir>");
+	const ledgerDir = memberLedgerDir(coverage, member);
+	// OMT_LEDGER_WORKER stops the session-ledger PreCompact hook from spawning a summarizer
+	// inside the finder; the cursor ledger already carries the finder's state.
+	workerEnv.OMT_LEDGER_WORKER = "1";
+	workerEnv[LEDGER_ENV] = ledgerDir;
 
 	const promptPath = path.join(jobDir, "prompt.txt");
 	const rawPromptContent = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, "utf8") : "";
 	const promptContent = filterPromptSections(rawPromptContent);
-
-	const EXECUTION_INSTRUCTION = coverage
-		? COVERAGE_EXECUTION_INSTRUCTION
-		: "Execute the diff command from REVIEW CONTENT. Review ONLY the files listed in Review Scope. Produce your full analysis following system instructions.";
-	const promptSubstitutions = ledgerDir ? { [CURSOR_PLACEHOLDER]: cursorCommand(ledgerDir) } : undefined;
-	const completionGate = coverage ? coverageCompletionGate(coverage, member) : undefined;
+	const promptSubstitutions = { [CURSOR_PLACEHOLDER]: cursorCommand(ledgerDir) };
+	const completionGate = coverageCompletionGate(coverage, member);
 
 	const tokens = splitCommand(command);
 	if (!tokens || tokens.length === 0) {
@@ -413,88 +405,48 @@ async function main() {
 	const resumePrompt = options.prompt;
 	const isResume =
 		typeof session === "string" && session !== "" && typeof resumePrompt === "string" && resumePrompt !== "";
-	const resumeTurnPrompt =
-		coverage && typeof resumePrompt === "string"
-			? `${COVERAGE_RESUME_INSTRUCTION}\n\nConductor note: ${resumePrompt}`
-			: resumePrompt;
 
-	// The finder prompts read the diff only through `{CURSOR}`. A literal one left in the prompt
-	// (a job started without --ledger-root) would let the finder end `done` without reading it.
-	const turnPrompt = isResume
-		? assembleTurnPrompt({ prompt: String(resumeTurnPrompt), member, substitutions: promptSubstitutions })
-		: assembleTurnPrompt({
-				prompt: EXECUTION_INSTRUCTION,
-				member,
-				reviewContent: promptContent,
-				promptsDir: PROMPTS_DIR,
-				substitutions: promptSubstitutions,
-			});
-	if (turnPrompt.includes(CURSOR_PLACEHOLDER)) {
-		const message = `turn not run: the prompt still contains a literal ${CURSOR_PLACEHOLDER} because this job has no diff cursor ledger (job.json has no coverage); start the job with job.ts start --ledger-root <dir>`;
-		logError(message);
-		atomicWriteJson(path.join(memberDir, "status.json"), {
-			member,
-			state: "error",
-			message,
-			finishedAt: new Date().toISOString(),
-			command,
-		});
-		logEnd();
-		process.exit(1);
-	}
-
-	if (coverage && ledgerDir && !isResume) {
+	if (!isResume) {
 		try {
 			logInfo(initMemberLedger(coverage, member).trim());
 			recordCoverageResumeBaseline(memberDir, readCoverageProgress(ledgerDir));
 		} catch (error: unknown) {
-			const message = `coverage ledger init failed: ${error instanceof Error ? error.message : String(error)}`;
-			logError(message);
-			atomicWriteJson(path.join(memberDir, "status.json"), {
-				member,
-				state: "error",
-				message,
-				finishedAt: new Date().toISOString(),
-				command,
-			});
-			logEnd();
-			process.exit(1);
+			failTurn(`coverage ledger init failed: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 
 	// runOneTurn/resumeOneTurn own the machine-wide slot for the complete turn.
 	// Keeping acquisition at that shared boundary ensures every worker family is
 	// capped and code-review does not double-acquire the same slot.
-	const turnPromise =
-		isResume && typeof session === "string" && typeof resumePrompt === "string"
-			? resumeOneTurn(session, {
-					program,
-					args,
-					prompt: String(resumeTurnPrompt),
-					member,
-					memberDir,
-					command,
-					timeoutSec,
-					workerEnv,
-					cliType,
-					promptSubstitutions,
-					completionGate,
-				})
-			: runOneTurn({
-					program,
-					args,
-					prompt: EXECUTION_INSTRUCTION,
-					reviewContent: promptContent,
-					member,
-					memberDir,
-					command,
-					timeoutSec,
-					workerEnv,
-					cliType,
-					promptsDir: PROMPTS_DIR,
-					promptSubstitutions,
-					completionGate,
-				});
+	const turnPromise = isResume
+		? resumeOneTurn(session, {
+				program,
+				args,
+				prompt: `${COVERAGE_RESUME_INSTRUCTION}\n\nConductor note: ${resumePrompt}`,
+				member,
+				memberDir,
+				command,
+				timeoutSec,
+				workerEnv,
+				cliType,
+				promptSubstitutions,
+				completionGate,
+			})
+		: runOneTurn({
+				program,
+				args,
+				prompt: COVERAGE_EXECUTION_INSTRUCTION,
+				reviewContent: promptContent,
+				member,
+				memberDir,
+				command,
+				timeoutSec,
+				workerEnv,
+				cliType,
+				promptsDir: PROMPTS_DIR,
+				promptSubstitutions,
+				completionGate,
+			});
 	const result: OneTurnResult = await turnPromise;
 
 	logInfo(`worker done: member=${member} state=${result.state} exitCode=${result.exitCode}`);

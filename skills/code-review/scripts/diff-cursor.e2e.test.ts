@@ -4,7 +4,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { execFileSync } from "child_process";
+import { execFileSync, type spawn } from "child_process";
 
 import { run, loadPlan, type Plan } from "./diff-cursor.ts";
 import {
@@ -274,7 +274,10 @@ describe("diff-cursor E2E: 한 페이지 모자란 finder", () => {
 		const jobDir = path.join(tmp, "job");
 		const memberDir = path.join(jobDir, "members", SHORT);
 		fs.mkdirSync(memberDir, { recursive: true });
-		fs.writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ id: "chunk-review-e2e", settings: { timeoutSec: 60, coverageGated: true } }));
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "chunk-review-e2e", settings: { timeoutSec: 60, coverageGated: true }, members: [{ name: SHORT }] }),
+		);
 		const statusPath = path.join(memberDir, "status.json");
 		const writeStatus = (state: string) =>
 			fs.writeFileSync(statusPath, JSON.stringify({ member: SHORT, command: "opencode", sessionID: "sess-1", state }));
@@ -302,12 +305,13 @@ describe("diff-cursor E2E: 한 페이지 모자란 finder", () => {
 			try {
 				await cmdResumeMember(jobDir, SHORT, "continue", config, {
 					driverFactory: () => driver,
-					// The finder's turn makes no progress: the real ledger gate still says unfinished.
-					resumeOneTurnFn: async () => {
+					workerPath: "/fake/worker.ts",
+					// The dispatched finder turn makes no progress: the real ledger gate still says unfinished.
+					spawnFn: ((() => {
 						expect(coverageCompletionGate(coverage, SHORT)().complete).toBe(false);
 						writeStatus("awaiting_resume");
-						return { state: "awaiting_resume", sessionID: "sess-1", text: "", exitCode: 0 };
-					},
+						return { unref: () => {} };
+					}) as unknown as typeof spawn),
 					coverage: coverageHooks(coverage),
 				});
 			} catch (e) {

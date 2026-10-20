@@ -3161,6 +3161,21 @@ describe("resume-member CLI 배선 — detached spawn 계약", () => {
 		jobDir = path.join(tmpDir, "job1");
 		memberDir = path.join(jobDir, "members", "opencode");
 		fs.mkdirSync(memberDir, { recursive: true });
+		// A coverage job (the worker refuses one without a ledger) whose member ledger is not walked.
+		const ledgerRoot = makeLedgerRoot(tmpDir);
+		const planDir = path.join(ledgerRoot, "plan");
+		const planSha = JSON.parse(fs.readFileSync(path.join(planDir, "plan.json"), "utf8")).planSha;
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({
+				id: "chunk-review-job1",
+				settings: { coverageGated: true },
+				coverage: { ledgerRoot, planDir, planSha },
+				members: [{ name: "opencode" }],
+			}),
+		);
+		const init = runDiffCursor(["init", "--plan", planDir, "--angle", "opencode", "--ledger", path.join(ledgerRoot, "ledgers", "opencode")]);
+		if (init.code !== 0) throw new Error(init.stderr);
 		fs.writeFileSync(
 			path.join(memberDir, "status.json"),
 			JSON.stringify(
@@ -3207,7 +3222,11 @@ describe("resume-member CLI 배선 — detached spawn 계약", () => {
 		// returned. A caller blocking in-process on the turn could never return here, so
 		// getting the ack back at all is the evidence that dispatch is non-blocking.
 		const result = dispatchResume();
-		expect(JSON.parse(result.toString())).toEqual({ state: "dispatched", member: "opencode" });
+		expect(JSON.parse(result.toString())).toMatchObject({
+			state: "dispatched",
+			member: "opencode",
+			coverage: { kind: "resume", pagesAcked: 0 },
+		});
 
 		// Queued pre-transition: cmdCollect's "awaiting_resume already ended its own turn"
 		// early-return must not still apply to this freshly-dispatched resume. The detached
@@ -3227,18 +3246,19 @@ describe("resume-member CLI 배선 — detached spawn 계약", () => {
 		) {
 			await new Promise((resolve) => setTimeout(resolve, 200));
 		}
-		expect(readStatus().state).toBe("done");
+		// The turn ended without walking the ledger, so the completion gate parks it.
+		expect(readStatus().state).toBe("awaiting_resume");
 	});
 
-	test("dispatch된 워커는 스스로 done까지 진행한다", async () => {
+	test("dispatch된 워커는 스스로 턴을 끝까지 진행한다 (원장 미완이면 awaiting_resume)", async () => {
 		// Separate stub without a gate: this claim needs the worker to FINISH, which the
 		// gated stub above only does once released.
 		stubDir = makeOpencodeStub(null);
 		dispatchResume();
 
 		// Poll for the detached worker to actually finish the turn — state transitions
-		// queued → running (runOnce's own status write) → done (executeOneTurn's final
-		// write once stdout is parsed). The deadline is only a hang guard; the loop exits
+		// queued → running (runOnce's own status write) → awaiting_resume (executeOneTurn's final
+		// write once stdout is parsed and the coverage gate finds the ledger unfinished). The deadline is only a hang guard; the loop exits
 		// as soon as the worker is done.
 		const deadline = Date.now() + 45_000;
 		let finalStatus = readStatus();
@@ -3250,7 +3270,7 @@ describe("resume-member CLI 배선 — detached spawn 계약", () => {
 			finalStatus = readStatus();
 		}
 
-		expect(finalStatus.state).toBe("done");
+		expect(finalStatus.state).toBe("awaiting_resume");
 		expect(finalStatus.sessionID).toBe("sess-123");
 		expect(finalStatus.resume_count).toBe(1);
 	});
@@ -6402,19 +6422,14 @@ describe("start --ledger-root: coverage-gated job.json", () => {
 		expect(fs.existsSync(jobsDir) ? fs.readdirSync(jobsDir).filter((n) => n.startsWith("chunk-review-")) : []).toEqual([]);
 	});
 
-	test("--help는 --ledger-root, resume-member --retry-stalled와 재개 정책을 설명한다", () => {
+	test("--help는 --ledger-root, resume-member --retry-stalled를 보여주고 재개 정책은 SKILL.md로 안내한다", () => {
 		const out = execFileSync(process.execPath, [SCRIPT, "--help"], { stdio: "pipe" }).toString();
 		expect(out).toContain("--ledger-root dir");
 		expect(out).toContain("resume-member --job <jobDir> --member <name> --prompt");
 		expect(out).toContain("--retry-stalled");
-		expect(out).toContain("no resume cap while pagesAcked grows");
-		expect(out).toContain("Nothing resumes automatically");
-		expect(out).toContain("checklist");
-		expect(out).toContain("resume-member refuses every resume except --retry-stalled on a member stalled by an external cause");
-		expect(out).toContain("stall_cause_kind");
-		expect(out).toContain("restarts the wall cap");
-		expect(out).toContain("--retry-stalled on a stalled member starts a fresh initial turn");
-		expect(out).not.toContain("auth expiry");
+		expect(out).toContain("nothing resumes\n    automatically");
+		expect(out).toContain("6-hour wall cap");
+		expect(out).toContain("code-review SKILL.md Step 4");
 	});
 });
 
