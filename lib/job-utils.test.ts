@@ -250,6 +250,10 @@ describe("computeTerminalDoneCount", () => {
 		expect(computeTerminalDoneCount(counts)).toBe(8);
 	});
 
+	test("stalled 멤버도 종료 상태로 센다", () => {
+		expect(computeTerminalDoneCount({ done: 2, stalled: 1, running: 1 })).toBe(3);
+	});
+
 	test("returns 0 for empty counts", () => {
 		expect(computeTerminalDoneCount({})).toBe(0);
 	});
