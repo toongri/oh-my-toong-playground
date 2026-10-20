@@ -4,7 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import * as state from "./ultragoal-state";
 import {
-	dismissReviewFinding,
+	tryDismissReviewFinding,
 	readCodeReviewArtifact,
 	readGoalState,
 	requestComplete,
@@ -12,6 +12,8 @@ import {
 	setSingleStory,
 	setVerdict,
 } from "./ultragoal-state";
+
+const dismissReviewFinding = (sessionId: string, opts: Parameters<typeof tryDismissReviewFinding>[1]): boolean => tryDismissReviewFinding(sessionId, opts).dismissed;
 
 // ---------------------------------------------------------------------------
 // V8: code-review artifact enum-contract preservation (redesign path)

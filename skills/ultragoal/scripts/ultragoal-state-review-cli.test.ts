@@ -15,10 +15,12 @@ import {
 	readGoalState,
 	readGoalStateRaw,
 	setGoalState,
-	dismissReviewFinding,
+	tryDismissReviewFinding,
 	type CodeReviewArtifact,
 } from "./ultragoal-state.ts";
 import { submitReviewArtifact as publishReviewArtifact } from "../../code-review/scripts/submit-review.ts";
+
+const dismissReviewFinding = (sessionId: string, opts: Parameters<typeof tryDismissReviewFinding>[1]): boolean => tryDismissReviewFinding(sessionId, opts).dismissed;
 
 const SID = "review-parent";
 let dir: string;

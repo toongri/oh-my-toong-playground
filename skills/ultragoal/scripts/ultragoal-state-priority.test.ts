@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as state from "./ultragoal-state";
 
+const dismissReviewFinding = (sessionId: string, opts: Parameters<typeof state.tryDismissReviewFinding>[1]): boolean => state.tryDismissReviewFinding(sessionId, opts).dismissed;
+
 let dir: string;
 const previousOmtDir = process.env.OMT_DIR;
 const SID = "priority-routing";
@@ -207,18 +209,18 @@ describe("priority routing", () => {
 	test("IN_SCOPE BLOCK·FIX(PLAUSIBLE 포함)는 dismissal할 수 있고 NOTE는 거부한다", () => {
 		greenObjectiveLane();
 		writeReview([finding({ priority: "LOW" })]);
-		expect(state.dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" })).toBe(false);
+		expect(dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" })).toBe(false);
 		writeReview([finding({ priority: "HIGH" })]);
-		expect(state.dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" })).toBe(true);
+		expect(dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" })).toBe(true);
 		writeReview([finding({ verdict: "PLAUSIBLE", priority: "MEDIUM" })]);
-		expect(state.dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" })).toBe(true);
+		expect(dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" })).toBe(true);
 	});
 
 	test("MEDIUM(FIX) dismissal은 COMMENT resolution 없이 완료를 허용하고 근거를 남긴다", () => {
 		greenObjectiveLane();
 		writeReview([finding({ priority: "MEDIUM" })]);
 		expect(state.requestComplete(SID)).toBe(false);
-		expect(state.dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "guard above makes it unreachable" })).toBe(true);
+		expect(dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "guard above makes it unreachable" })).toBe(true);
 		expect(state.getReviewResult(SID).findings.repair).toEqual([]);
 		const prior = state.readGoalStateRaw(SID) ?? {};
 		expect(state.renderOverrideSummary(prior)).toContain("guard above makes it unreachable");

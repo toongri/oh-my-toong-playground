@@ -5,7 +5,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import * as state from "./ultragoal-state";
 import {
-	dismissReviewFinding,
+	tryDismissReviewFinding,
 	readCodeReviewArtifact,
 	readGoalState,
 	requestComplete,
@@ -13,6 +13,8 @@ import {
 	setSingleStory,
 	setVerdict,
 } from "./ultragoal-state";
+
+const dismissReviewFinding = (sessionId: string, opts: Parameters<typeof tryDismissReviewFinding>[1]): boolean => tryDismissReviewFinding(sessionId, opts).dismissed;
 
 // ---------------------------------------------------------------------------
 // 범위 우선 판정 — impact는 harm 정보이고 priority가 라우팅을 결정한다.

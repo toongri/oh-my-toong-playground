@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as state from "./ultragoal-state";
 
+const dismissReviewFinding = (sessionId: string, opts: Parameters<typeof state.tryDismissReviewFinding>[1]): boolean => state.tryDismissReviewFinding(sessionId, opts).dismissed;
+
 const SID = "scope-gate-test";
 let omtDir: string;
 const previousOmtDir = process.env.OMT_DIR;
@@ -230,7 +232,7 @@ describe("scope-evidence 부분 무효화 (C)", () => {
 			unidentifiedExclusion,
 		]);
 		expect(
-			state.dismissReviewFinding(SID, {
+			dismissReviewFinding(SID, {
 				ref: "src/valid.ts:1",
 				class: "correctness",
 				rationale: "valid finding false positive",
@@ -475,7 +477,7 @@ describe("validate-review-artifact CLI 게이트", () => {
 		expect(run.exitCode).toBe(0);
 	});
 
-	test("세부 reference 점검은 경고로만 출력하고 결과를 바꾸지 않는다", () => {
+	test("reference가 가리키는 대상은 점검하지 않고 경고도 출력하지 않는다", () => {
 		state.setGoalState(SID, { phase: "pursuing" });
 		writeReview([
 			{
@@ -494,12 +496,10 @@ describe("validate-review-artifact CLI 게이트", () => {
 		const result = state.validateReviewArtifact(SID);
 		expect(result.ok).toBe(true);
 		expect(result.problems).toEqual([]);
-		expect(result.warnings).toHaveLength(3);
+		expect("warnings" in result).toBe(false);
 		const run = runValidate();
 		expect(run.exitCode).toBe(0);
-		expect(run.stderr).toContain("does not resolve to a contract slot");
-		expect(run.stderr).toContain('reference "outcome"');
-		expect(run.stderr).toContain('reference "non_goals"');
+		expect(run.stderr).toBe("");
 	});
 });
 
@@ -611,7 +611,7 @@ describe("범위 계약과 개별 무효화가 불완전한 완료를 거부한�
 		]);
 		state.setGoalState(SID, { phase: "pursuing" });
 		expect(
-			state.dismissReviewFinding(SID, {
+			dismissReviewFinding(SID, {
 				ref: "src/a.ts:1",
 				class: "correctness",
 				rationale: "in-scope false positive",
@@ -657,7 +657,7 @@ describe("독립리뷰 회귀 방지", () => {
 			writeObjectiveArtifact();
 			writeReview([finding("IN_SCOPE", "PLAUSIBLE", impact)]);
 			expect(state.requestComplete(SID)).toBe(false);
-			expect(state.dismissReviewFinding(SID, {
+			expect(dismissReviewFinding(SID, {
 				ref: "src/a.ts:1", class: "correctness", rationale: "user disagrees",
 			})).toBe(true);
 			expect(state.requestComplete(SID)).toBe(true);
@@ -669,7 +669,7 @@ describe("독립리뷰 회귀 방지", () => {
 		writeObjectiveArtifact();
 		writeReview([finding("IN_SCOPE", "PLAUSIBLE", "LOW")]);
 		const before = readFileSync(state.resolveStatePath(SID), "utf8");
-		expect(state.dismissReviewFinding(SID, {
+		expect(dismissReviewFinding(SID, {
 			ref: "src/a.ts:1", class: "correctness", rationale: "user disagrees",
 		})).toBe(false);
 		expect(readFileSync(state.resolveStatePath(SID), "utf8")).toBe(before);

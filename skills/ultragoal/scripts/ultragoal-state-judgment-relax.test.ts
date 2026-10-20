@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import * as state from "./ultragoal-state";
 
+const dismissReviewFinding = (sessionId: string, opts: Parameters<typeof state.tryDismissReviewFinding>[1]): boolean => state.tryDismissReviewFinding(sessionId, opts).dismissed;
+
 let dir: string;
 const previousOmtDir = process.env.OMT_DIR;
 const SID = "judgment-relax";
@@ -74,7 +76,7 @@ describe("INCONCLUSIVE artifact keeps its findings", () => {
 			scope_contract_sha256: state.scopeContractSha256(state.readGoalState(SID)!),
 			findings: [finding({ ref: "block" })],
 		});
-		expect(state.dismissReviewFinding(SID, { ref: "block", class: "correctness", rationale: "false positive" })).toBe(true);
+		expect(dismissReviewFinding(SID, { ref: "block", class: "correctness", rationale: "false positive" })).toBe(true);
 		const result = state.getReviewResult(SID);
 		expect(result.verdict).toBe("REQUEST_CHANGES");
 		expect(result.findings.repair).toEqual([]);
@@ -94,7 +96,7 @@ describe("INCONCLUSIVE artifact keeps its findings", () => {
 	test("a hashless INCONCLUSIVE artifact cannot be used to dismiss findings", () => {
 		pursuing();
 		writeArtifact({ status: "INCONCLUSIVE", findings: [finding({ ref: "block" })] });
-		expect(state.dismissReviewFinding(SID, { ref: "block", class: "correctness", rationale: "x" })).toBe(false);
+		expect(dismissReviewFinding(SID, { ref: "block", class: "correctness", rationale: "x" })).toBe(false);
 	});
 
 	test("COMPLETE still requires the hash; a malformed hash is invalid for both statuses", () => {

@@ -8,10 +8,6 @@
  * State file path: ${OMT_DIR}/ultragoal-state-${sessionId}.json
  * Session ID: resolved from env OMT_SESSION_ID, falling back to CODEX_THREAD_ID (Codex), via resolveSessionIdOrThrow(); hard-fails when neither is set or unsafe.
  *
- * Structural mirror of prometheus-state.ts: session-keyed JSON, merge-write
- * preserving prior fields, `started_at` seeded once and never re-seeded,
- * null-on-malformed reads.
- *
  * The single load-bearing invariant: the state layer can never be made to
  * false-complete. Each gate is STRUCTURAL — enforced by which subcommand can
  * write what, not by vigilance:
@@ -349,11 +345,9 @@ function readPrior(sessionId: string): Partial<GoalState> {
 }
 
 /**
- * Merge `next` over the prior on-disk state, seeding `started_at` once and
- * supplying field defaults on first write. Persists and returns the result.
- *
- * ADR-7 (strict no-create): refuses and exits non-zero when the state file is
- * absent. The PreToolUse seed is the ONLY creator of state files.
+ * Merge `next` over the prior on-disk state, seeding `started_at` once and supplying
+ * field defaults on first write. Refuses when the state file is absent: the PreToolUse
+ * seed is the only creator of state files.
  */
 function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
 	// Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
@@ -547,13 +541,9 @@ export function readGoalStateRaw(sessionId: string): GoalState | null {
 }
 
 /**
- * Returns the active goal state augmented with a computed `pristine` boolean,
- * or null when no active state exists.
- *
- * `pristine: true` means the state was freshly seeded and no real work has been
- * recorded yet (phase=planning, iteration=0, outcome=''). This lets the SKILL.md
- * Entry Gate distinguish this invocation's own PreToolUse seed from a real
- * in-flight pursuit seeded by a prior invocation.
+ * Returns the active goal state plus a computed `pristine` boolean (freshly seeded: no
+ * real work recorded yet), or null when no active state exists. Lets the SKILL.md Entry
+ * Gate tell this invocation's own seed from a real in-flight pursuit.
  */
 export function readGoalGet(sessionId: string): (GoalState & { pristine: boolean }) | null {
 	const state = readGoalState(sessionId);
@@ -587,28 +577,15 @@ export interface SetGoalOpts {
 }
 
 /**
- * Declaration-shape existence check for `non_goals` — the one shape this feature
- * enforces everywhere non-goals are read (metis, issue-reviewer, and deep-interview
- * gates all expect it): `- {what this pursuit will NOT do} | decider: {how to tell a
- * finding belongs here}`. This checks the SHAPE only — a `|` and a non-empty
- * `decider:` clause — never whether the decider is actually a good discriminator;
- * that judgment belongs to the prose-layer reviewers, and encoding it here would
- * turn a syntax check into an interpretation dispute.
- *
- * `setGoalState` is the only writer of `non_goals` (untrusted here only in the
- * accident sense — this is the orchestrator's own authored text, not external
- * input), so this is the single choke point. It closes two accident-axis holes at
- * once, because both are really the same hole (a value that skips the declared
- * shape):
- *   1. A line starting with "#" (e.g. a stray `## Evidence Results`) forges a fake
- *      section into the assembled reviewer prompt once `serializeReviewContext`
- *      concatenates it verbatim (no escaping) — the reviewer treats `## Evidence
- *      Results` as an already-verified section, not to be re-evaluated.
- *   2. A value beginning with `--` gets swallowed by parseArgs' shape-guessing
- *      consumption and stored as the literal string `'true'` — non-blank, so the
- *      backfill path never fires, and `'true'` rides the payload as a fake declaration.
- *
- * Blank-only values (the `(none provided)` backfill path) pass through untouched.
+ * Declaration-shape check for `non_goals`: `- {what this pursuit will NOT do} | decider:
+ * {how to tell a finding belongs here}`. Checks the SHAPE only (a `|` and a non-empty
+ * `decider:`); whether the decider discriminates well is prose-layer judgment.
+ * `setGoalState` is the only writer, so this is the single choke point. It stops:
+ *   1. a line starting with "#" forging a section into the reviewer prompt, which
+ *      `serializeReviewContext` concatenates unescaped;
+ *   2. a value beginning with `--` being swallowed by parseArgs and stored as the
+ *      literal 'true', which is non-blank and would skip the backfill path.
+ * Blank-only values (the `(none provided)` backfill) pass through untouched.
  */
 const NON_GOAL_LINE_PATTERN = /^-\s+\S.*\|\s*decider:\s*\S.*$/;
 
@@ -630,18 +607,11 @@ function validateNonGoals(value: string): void {
 }
 
 /**
- * Orchestrator-authority set. Accepts ONLY planning|pursuing — it can never
- * write phase=complete (that is request-complete-only) and never writes
- * objective_verdict. On phase=planning, three stale-state resets fire so a new
- * objective never inherits a prior objective's state:
- *   - objective_verdict is reset to 'absent' so a stale APPROVE cannot survive a
- *     re-plan;
- *   - completion_evidence_paths is reset to [] on EVERY planning transition —
- *     evidence is only ever valid from the current pursuit's completion audit
- *     (recorded fresh during the pursuing phase), never carried across planning;
- *   - iteration is reset to 0 ONLY for a FRESH goal (no active prior). A re-plan
- *     loop-back of the SAME active goal preserves iteration — budget accumulates
- *     across re-plans.
+ * Orchestrator-authority set. Accepts only planning|pursuing; it never writes
+ * phase=complete or objective_verdict. On phase=planning a new objective must not
+ * inherit the prior one's state: objective_verdict resets to 'absent',
+ * completion_evidence_paths resets to [], and iteration resets to 0 only for a fresh
+ * goal (a re-plan of the same active goal keeps it, so budget accumulates).
  */
 export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 	// Runtime-validated narrowing: opts.phase is `string` in the type until this guard
@@ -880,26 +850,11 @@ export function resumePursuit(sessionId: string, reason: string): void {
 }
 
 /**
- * User-only escape hatch: forcibly completes a stuck ultragoal from ANY
- * non-terminal-complete phase (planning/pursuing/renewal-required/budget_limited/blocked),
- * bypassing every gate `requestComplete` enforces — no verdict check, no
- * per-story artifact check, no code-review lane, no completion-evidence check.
- * That bypass is the entire point of this command; it exists only because the
- * user, not the loop, is deciding the pursuit is done.
- *
- * Deliberately mirrors `resumePursuit`'s strict raw read/validate/write path —
- * no seeding, no generic merge-write. The terminal write itself still goes
- * through the same validated, locked `mergeWriteLocked` helper `requestComplete`
- * uses (never a raw fs write), so the atomic-lock and schema-default guarantees
- * hold even though the gate checks above it are skipped.
- *
- * Refuses only when:
- *   - `reason` is missing or whitespace-only (same required-justification
- *     posture as the steering mutations' `--evidence`/`--rationale`);
- *   - no ultragoal state exists for this session, or
- *   - the state is already `phase: "complete"` (no-op would hide that the
- *     caller thinks something is still stuck; be explicit instead).
- * All refusals: throws, state unchanged.
+ * User-only escape hatch: completes a stuck ultragoal from any non-complete phase,
+ * bypassing every gate `requestComplete` enforces. The terminal write still goes
+ * through the locked `mergeWriteLocked`, so lock and schema defaults hold.
+ * Refuses (throws, state unchanged) on a missing/whitespace-only `reason`, no state,
+ * or an already-complete state.
  */
 export function forceComplete(sessionId: string, reason: string): void {
 	if (reason.trim() === "") {
@@ -924,16 +879,11 @@ export function forceComplete(sessionId: string, reason: string): void {
 }
 
 /**
- * Orchestrator-usable human-gate pause: marks the live pursuit as awaiting a
- * user decision the loop cannot make itself (a wrong plan/requirement, or an
- * unsafe boundary). Sets `awaiting_user=true` while STAYING in `pursuing`/`active`
- * — this is a temporary yield, not `set-blocked` (terminal) nor completion. The
- * Stop hook then allows the turn to end without counting no-progress. The flag is
- * ephemeral: the next steering/progress write (mergeWriteLocked defaults it to
- * false) or force-complete clears it, so the pause never outlives the resume.
- *
- * Refuses unless the pursuit is live (`active` and `phase=pursuing`) — pausing a
- * non-pursuing state is meaningless and would wedge nothing useful.
+ * Human-gate pause: marks the live pursuit as awaiting a user decision the loop cannot
+ * make (a wrong plan/requirement, an unsafe boundary). Stays in `pursuing`/`active`;
+ * the Stop hook then lets the turn end without counting no-progress. Ephemeral: the
+ * next steering/progress write (mergeWriteLocked defaults it to false) or the
+ * user-only escape hatch clears it. Refuses unless the pursuit is live.
  */
 export function setAwaitingUser(sessionId: string): void {
 	const stateFilePath = resolveStatePath(sessionId);
@@ -981,12 +931,9 @@ function validateStoryFields(s: Story, label: string): void {
 }
 
 /**
- * Enforces the two-field steering justification required by every mid-flight
- * story mutation (add-story/revise-story/retire-story). `evidence` is what was
- * observed that forces the change; `rationale` is why this change is the right
- * response. Both are forcing functions, not data collection — no default value
- * is supplied anywhere, and an omitted or whitespace-only value is a hard
- * refusal (same `.trim() === ""` idiom used elsewhere in this file).
+ * Enforces the steering justification every mid-flight story mutation requires:
+ * `evidence` (what was observed) and `rationale` (why this change). No default; an
+ * omitted or whitespace-only value is a hard refusal.
  */
 function requireSteeringReason(label: string, evidence: string, rationale: string): void {
 	if (evidence.trim() === "") {
@@ -1002,15 +949,9 @@ function requireSteeringReason(label: string, evidence: string, rationale: strin
 }
 
 /**
- * Validates and persists a story set. Full-replace semantics: every story starts
- * `unconfirmed`. Refuses when:
- *   - phase !== 'planning'
- *   - outcome is empty
- *   - array is empty
- *   - any story lacks >=1 AC
- *   - any story lacks verification_surface
- *   - duplicate ids within the set
- * All refusals: throws (exit 1 at CLI boundary), state file unchanged.
+ * Validates and persists a story set (full replace; every story starts `unconfirmed`).
+ * Refuses outside planning, on empty outcome/array, a story lacking >=1 AC or
+ * verification_surface, or duplicate ids. Refusals throw; state is unchanged.
  */
 export function setStories(sessionId: string, stories: Story[]): void {
 	const prior = readPrior(sessionId);
@@ -1044,12 +985,9 @@ export function setStories(sessionId: string, stories: Story[]): void {
 }
 
 /**
- * Reorders the stored story array to `orderedIds` — array order only, no status or
- * field changes. Mirrors set-stories' phase guard (planning-only): once pursuing has
- * begun, sequential dispatch order is frozen — re-plan first (set --phase planning) to
- * reorder. Refuses unless `orderedIds` is an EXACT permutation of the current story ids
- * (same set, same length, no duplicates) — a partial or padded list would silently drop
- * or duplicate a story in the sequential dispatch order.
+ * Reorders the stored story array only (no status or field changes). Planning-only:
+ * once pursuing begins, dispatch order is frozen. `orderedIds` must be an exact
+ * permutation of the current ids, or a story would be silently dropped or duplicated.
  */
 export function reorderStories(sessionId: string, orderedIds: string[]): void {
 	const prior = readPrior(sessionId);
@@ -1085,14 +1023,9 @@ export function reorderStories(sessionId: string, orderedIds: string[]): void {
 }
 
 /**
- * Appends one new story. The incoming status must be `unconfirmed` (or absent — it is
- * forced to `unconfirmed` regardless). No mutation may produce `confirmed` (D-9).
- * Validates same per-story schema as setStories (>=1 AC, verification_surface, unique id).
- * Allowed in both `planning` and `pursuing` phases.
- * `evidence`/`rationale` are the steering justification (ADR D-4) — required, no default;
- * recorded onto the new story as `steering_evidence`/`steering_rationale`.
- * Refuses on: missing/blank evidence or rationale, out-of-enum status, `confirmed` status,
- * duplicate id, schema violation. All refusals: throws, state unchanged.
+ * Appends one new story, forced to `unconfirmed` (no mutation may produce `confirmed`).
+ * Allowed in planning and pursuing. `evidence`/`rationale` are required and recorded
+ * as `steering_evidence`/`steering_rationale`. Refusals throw; state is unchanged.
  */
 export function addStory(sessionId: string, story: Story, evidence: string, rationale: string): void {
 	requireSteeringReason("add-story", evidence, rationale);
@@ -1134,14 +1067,11 @@ export function addStory(sessionId: string, story: Story, evidence: string, rati
 }
 
 /**
- * Patches the content fields of an existing story (text/AC/surface).
- * ALWAYS resets status to `unconfirmed` — a changed story must be re-confirmed.
- * No mutation may produce `confirmed` or any value outside the enum (D-9).
- * `evidence`/`rationale` are the steering justification (ADR D-4) — required, no default;
- * recorded onto the patched story as `steering_evidence`/`steering_rationale`.
- * Refuses on: missing/blank evidence or rationale, retired story (no resurrect-via-revise),
- * unknown id, out-of-enum status in the patch, `confirmed` in the patch.
- * All refusals: throws, state unchanged.
+ * Patches the content fields of an existing story (text/AC/surface) and ALWAYS resets
+ * status to `unconfirmed` (a changed story must be re-confirmed). `evidence`/`rationale`
+ * are required and recorded as steering provenance. Refuses a retired story (no
+ * resurrect-via-revise), an unknown id, or an out-of-enum/`confirmed` status in the patch.
+ * Refusals throw; state is unchanged.
  */
 export function reviseStory(
 	sessionId: string,
@@ -1200,17 +1130,10 @@ export function reviseStory(
 }
 
 /**
- * Sets a story's status to `retired`. Anti-dodge fence (D-9):
- *   - `unconfirmed` story → retirable in any phase
- *   - `confirmed` story → retirable ONLY while `phase=planning`
- *     (retiring confirmed mid-pursuit would bypass the T4 verdict gate)
- * `evidence`/`rationale` are the steering justification (ADR D-4) — required, no default;
- * recorded onto the retired story as `steering_evidence`/`steering_rationale`. Checked
- * BEFORE the anti-dodge fence below, but supplying both never bypasses that fence — it
- * only gates whether the fence is even reached.
- * Refuses on: missing/blank evidence or rationale, unknown id, already retired (no-op
- *   would hide bugs — be explicit), confirmed+pursuing combination.
- * All refusals: throws, state unchanged.
+ * Sets a story's status to `retired`. Anti-dodge fence: a `confirmed` story is
+ * retirable only while `phase=planning` (retiring it mid-pursuit would bypass the
+ * verdict gate); supplying evidence/rationale never bypasses that. Refuses an unknown
+ * or already-retired id. Refusals throw; state is unchanged.
  */
 export function retireStory(sessionId: string, storyId: string, evidence: string, rationale: string): void {
 	requireSteeringReason("retire-story", evidence, rationale);
@@ -1245,19 +1168,10 @@ export function retireStory(sessionId: string, storyId: string, evidence: string
 
 /**
  * Splits one story into >=2 replacements in a single atomic write: the parent is
- * retired IN PLACE and the replacements are inserted directly after it, preserving
- * sequential dispatch order. The split is recorded machine-readably — the retired
- * parent gets `split_into: [child ids]`, each replacement gets `split_from: parent id` —
- * so a split is distinguishable in state from an unrelated retire + adds.
- *
- * Composes the existing invariants rather than inventing new ones:
- *   - steering justification required (ADR D-4, same as add/revise/retire)
- *   - parent fences mirror retire-story: unknown id refused, already-retired refused,
- *     confirmed parent splittable ONLY while `phase=planning` (D-9 anti-dodge fence)
- *   - replacements validated like add-story: schema, no `confirmed` status (D-9),
- *     ids unique among themselves AND against every existing story, status forced
- *     to `unconfirmed`
- * All refusals: throws, state unchanged.
+ * retired in place, replacements are inserted right after it, and the split is recorded
+ * via `split_into` / `split_from`. Same fences as retire-story (confirmed parent only in
+ * planning) and add-story (no `confirmed` status, ids unique, status forced to
+ * `unconfirmed`); steering evidence/rationale required. Refusals throw; state is unchanged.
  */
 export function splitStory(
 	sessionId: string,
@@ -1822,7 +1736,7 @@ function isCompletionEligibleCodeReview(
 	currentScopeContractSha: string,
 	currentState: Partial<GoalState>,
 ): boolean {
-	if (reviewed.artifact.status !== "COMPLETE" || reviewed.artifact.scope_contract_sha256 !== currentScopeContractSha) return false;
+	if (reviewed.artifact.scope_contract_sha256 !== currentScopeContractSha) return false;
 	// Invalid scope evidence degrades to a blocking UNKNOWN in the reducer (never
 	// completion-eligible), so no whole-artifact reject is needed here.
 	const result = reviewResultFromArtifact(reviewed.raw, reviewed.artifact, currentState, dismissed);
@@ -1838,13 +1752,6 @@ function isCurrentCommentResolutionValid(result: ReviewResult, state: Partial<Go
 		try { return statSync(path).isFile() && sha256(readFileSync(path, "utf8")) === resolution.evidence_sha256[path]; } catch { return false; }
 	});
 }
-
-const SCOPE_SLOTS = ["outcome", "verification_surface", "constraints", "boundaries", "non_goals"];
-const ALLOWED_BASIS_BY_SCOPE: Record<ReviewScope, string[]> = {
-	IN_SCOPE: ["requirement", "regression", "changed_code"],
-	OUT_OF_SCOPE: ["non_goal", "unrelated"],
-	UNKNOWN: ["uncertain"],
-};
 
 /**
  * Declared exclusions of a non_goals slot, in order: each `- {statement} | decider: {test}`
@@ -1871,28 +1778,17 @@ function collapseWhitespace(text: string): string {
 
 /**
  * Returns null when the finding's scope evidence passes the gate, or an actionable
- * message when it does not. The gate checks process facts, never the reviewer's
- * scope judgment:
- * - `basis`, `reference` and `rationale` are present and non-blank, and `basis` is
- *   allowed for the scope (ALLOWED_BASIS_BY_SCOPE). The schema gate
- *   (isCodeReviewArtifact) enforces these, so a finding that fails them never
- *   reaches here; the matrix line below restates the consistency rule.
- * - an OUT_OF_SCOPE + non_goal exclusion carries `scope_evidence.non_goal`, exactly
- *   equal (===) to one declared non_goals statement. This keeps a defect from being
- *   dropped by stretching intent. Whether that statement covers the defect is the
- *   reviewer's judgment and is not checked.
- * What `reference` points at (a contract slot, a story id, free text) is also the
- * reviewer's call: scopeEvidenceAdvisories reports those pointer details as
- * warnings in `validate-review-artifact` without changing the outcome.
+ * message when it does not. Presence and basis-by-scope are schema-enforced
+ * (isCodeReviewArtifact); the one check left here is that an OUT_OF_SCOPE + non_goal
+ * exclusion cites one declared non_goals statement exactly (===), so a defect cannot
+ * be dropped by stretching intent. Whether the statement covers the defect is the
+ * reviewer's judgment and is not checked.
  */
 function scopeEvidenceProblem(
 	finding: CodeReviewFinding,
 	state: Partial<GoalState>,
 ): string | null {
-	const { basis } = finding.scope_evidence;
-	if (!ALLOWED_BASIS_BY_SCOPE[finding.scope].includes(basis))
-		return `basis "${basis}" is not valid for scope ${finding.scope}; use one of: ${ALLOWED_BASIS_BY_SCOPE[finding.scope].join(", ")}`;
-	if (finding.scope !== "OUT_OF_SCOPE" || basis !== "non_goal") return null;
+	if (finding.scope !== "OUT_OF_SCOPE" || finding.scope_evidence.basis !== "non_goal") return null;
 	const statements = declaredNonGoals(state.non_goals ?? "").map(({ statement }) => statement);
 	const cited = finding.scope_evidence.non_goal;
 	if (cited !== undefined && cited !== "" && statements.includes(cited)) return null;
@@ -1900,64 +1796,25 @@ function scopeEvidenceProblem(
 }
 
 /**
- * Advisory pointer checks for `validate-review-artifact`: whether `reference`
- * resolves to a contract slot or confirmed story, whether an exclusion cites the
- * usual slot (non_goal → "non_goals", unrelated → "outcome"), and whether the cited
- * slot is empty. They are printed as warnings and never change routing or the
- * validation outcome.
- */
-function scopeEvidenceAdvisories(
-	finding: CodeReviewFinding,
-	state: Partial<GoalState>,
-): string[] {
-	const { basis, reference } = finding.scope_evidence;
-	const slotValues: Record<string, string | undefined> = {
-		outcome: state.outcome,
-		verification_surface: state.verification_surface,
-		constraints: state.constraints,
-		boundaries: state.boundaries,
-		non_goals: state.non_goals,
-	};
-	const storyIds = (state.stories ?? []).filter((s) => s.status === "confirmed").map((s) => s.id);
-	const warnings: string[] = [];
-	if (!SCOPE_SLOTS.includes(reference) && !storyIds.includes(reference))
-		warnings.push(
-			`reference "${reference}" does not resolve to a contract slot (${SCOPE_SLOTS.join(", ")})${storyIds.length ? `, or a confirmed story id (${storyIds.join(", ")})` : ""}`,
-		);
-	if (finding.scope === "OUT_OF_SCOPE") {
-		if (basis === "non_goal" && reference !== "non_goals")
-			warnings.push(`OUT_OF_SCOPE + non_goal is expected to reference "non_goals" (the non-goal it is excluded by), not "${reference}"`);
-		if (basis === "unrelated" && reference !== "outcome")
-			warnings.push(`OUT_OF_SCOPE + unrelated is expected to reference "outcome" (compared against the approved outcome), not "${reference}"`);
-		if (SCOPE_SLOTS.includes(reference) && (slotValues[reference] ?? "").trim() === "")
-			warnings.push(`OUT_OF_SCOPE reference "${reference}" points at an empty contract slot`);
-	}
-	return warnings;
-}
-
-/**
  * Pre-publish check backing the `validate-review-artifact` CLI: `problems` lists
  * each gate failure (stale contract hash, scopeEvidenceProblem) with an actionable
- * message, and `ok` is true only when there are none. `warnings` lists the advisory
- * pointer checks (scopeEvidenceAdvisories); they never affect `ok`.
+ * message, and `ok` is true only when there are none.
  */
-export function validateReviewArtifact(sessionId: string): { ok: boolean; problems: string[]; warnings: string[] } {
+export function validateReviewArtifact(sessionId: string): { ok: boolean; problems: string[] } {
 	const state = readGoalStateRaw(sessionId);
-	if (!state) return { ok: false, problems: ["no goal state for this session"], warnings: [] };
+	if (!state) return { ok: false, problems: ["no goal state for this session"] };
 	const reviewed = readCodeReviewArtifactRaw(sessionId);
 	if (!reviewed)
-		return { ok: false, problems: ["no valid code-review artifact (missing or schema-invalid)"], warnings: [] };
+		return { ok: false, problems: ["no valid code-review artifact (missing or schema-invalid)"] };
 	const problems: string[] = [];
-	const warnings: string[] = [];
 	if (reviewed.artifact.scope_contract_sha256 !== undefined && reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(state))
 		problems.push("scope_contract_sha256 is stale — re-copy the current [SCOPE_CONTRACT] hash and re-publish");
 	reviewed.artifact.findings.forEach((f, i) => {
 		const label = `finding[${i}]${f.ref ? ` (${f.ref})` : ""}`;
 		const problem = scopeEvidenceProblem(f, state);
 		if (problem !== null) problems.push(`${label}: ${problem}`);
-		for (const warning of scopeEvidenceAdvisories(f, state)) warnings.push(`${label}: ${warning}`);
 	});
-	return { ok: problems.length === 0, problems, warnings };
+	return { ok: problems.length === 0, problems };
 }
 
 /**
@@ -2261,14 +2118,6 @@ export function tryDismissReviewFinding(
 	} catch (error) {
 		return refuse(`state could not be read or written: ${String(error)}`);
 	}
-}
-
-/** Boolean form of tryDismissReviewFinding: true when the dismissal is recorded (or already was). */
-export function dismissReviewFinding(
-	sessionId: string,
-	opts: { ref: string; class: ReviewFindingClass; rationale: string },
-): boolean {
-	return tryDismissReviewFinding(sessionId, opts).dismissed;
 }
 
 /**
@@ -3201,10 +3050,6 @@ function main(): void {
 			process.stdout.write(JSON.stringify(getReviewResult(sessionId)) + "\n");
 		} else if (subcommand === "validate-review-artifact") {
 			const result = validateReviewArtifact(sessionId);
-			if (result.warnings.length > 0) {
-				process.stderr.write("validate-review-artifact: advisory — these pointer details do not change the outcome:\n");
-				for (const w of result.warnings) process.stderr.write(`  - ${w}\n`);
-			}
 			if (result.ok) {
 				process.stdout.write("valid: review artifact scope evidence matches the current contract\n");
 			} else {
