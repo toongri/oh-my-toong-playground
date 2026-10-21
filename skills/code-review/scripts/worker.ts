@@ -13,25 +13,27 @@ import {
 	resumeOneTurn,
 	reapOwnProcessGroup,
 	type OneTurnResult,
+	type CompletionGateResult,
 } from "@lib/worker-utils";
-import { detectCliType } from "@lib/generic-job";
+import {
+	detectCliType,
+	recordCoverageResumeBaseline,
+	type CoverageHooks,
+	type CoverageProgress,
+} from "@lib/generic-job";
 import type { CliType } from "@lib/agent-drivers/types";
+import { run as runDiffCursor, loadPlan, LEDGER_ENV } from "./diff-cursor";
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, "prompts");
+export const DIFF_CURSOR_PATH = path.resolve(import.meta.dirname, "diff-cursor.ts");
 
 /**
- * Per-angle allowlist of the conditional sections in chunk-reviewer-prompt.md
- * (spec: orchestrate-review-4angle-redesign.md §2.3). The 4 common sections — Review
- * Premises, Review Scope, What Was Implemented, Diff Command — carry no marker and
- * always pass through; `project_context` is shared by every angle so finders can judge
- * whether a candidate is reachable in the reviewed system.
+ * Conditional sections of chunk-reviewer-prompt.md that every finder receives. The 4 common
+ * sections — Review Premises, Review Scope, What Was Implemented, Diff Coverage Protocol —
+ * carry no marker and always pass through. Only `field_reference` (a documentation table that
+ * would repeat every placeholder value) is stripped.
  */
-const ANGLE_SECTION_ALLOWLIST: Record<string, string[]> = {
-	correctness: ["project_context", "non_goal"],
-	regression: ["project_context", "non_goal", "commit_history"],
-	cleanup: ["project_context", "non_goal"],
-	requirement: ["project_context", "requirements", "non_goal", "commit_history"],
-};
+const KEPT_SECTIONS = ["project_context", "requirements", "non_goal", "commit_history"];
 
 /**
  * Both markers are anchored to start (`^`) and end (`$`) of their own line (`m` flag) since a
@@ -80,27 +82,15 @@ function hasBalancedMarkers(promptContent: string): boolean {
 }
 
 /**
- * Strip the conditional sections a given angle's allowlist doesn't cover, then remove every
- * section marker from what remains — a marker left in the final prompt is noise the finder
- * could misread as an instruction.
- *
- * Unknown member (an angle name absent from ANGLE_SECTION_ALLOWLIST): fails OPEN, passing
- * every section through rather than killing the job, logged via logError so the drift is
- * visible in this job's own worker log.
+ * Strip the conditional sections outside KEPT_SECTIONS, then remove every section marker from
+ * what remains — a marker left in the final prompt is noise the finder could misread as an
+ * instruction.
  */
-export function filterPromptSections(promptContent: string, member: string): string {
+export function filterPromptSections(promptContent: string): string {
 	// Forged marker count (open/close != 1 for some name) → skip filtering entirely rather than risk truncating on the fake boundary.
 	if (!hasBalancedMarkers(promptContent)) return promptContent;
-
-	const allowlist = ANGLE_SECTION_ALLOWLIST[member];
-	if (!allowlist) {
-		logError(
-			`filterPromptSections: unknown member "${member}" — passing all sections through unfiltered`,
-		);
-		return promptContent.replace(SECTION_MARKER_RE, (_match, _name: string, body: string) => body);
-	}
 	return promptContent.replace(SECTION_MARKER_RE, (_match, name: string, body: string) =>
-		allowlist.includes(name) ? body : "",
+		KEPT_SECTIONS.includes(name) ? body : "",
 	);
 }
 
@@ -133,6 +123,189 @@ export function buildWorkerEnv(rawArgs: string[]): Record<string, string> {
 
 	return workerEnv;
 }
+
+// ---------------------------------------------------------------------------
+// Diff cursor coverage (job.json `coverage`, written by `job.ts start --ledger-root`)
+// ---------------------------------------------------------------------------
+
+export interface JobCoverage {
+	ledgerRoot: string;
+	planDir: string;
+	planSha: string;
+}
+
+/** job.json `coverage`, or null for a job started without --ledger-root. */
+export function readJobCoverage(jobDir: string): JobCoverage | null {
+	let meta: unknown;
+	try {
+		meta = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
+	} catch {
+		return null;
+	}
+	if (typeof meta !== "object" || meta === null || !("coverage" in meta)) return null;
+	const c: unknown = meta.coverage;
+	if (typeof c !== "object" || c === null) return null;
+	if (!("ledgerRoot" in c) || !("planDir" in c) || !("planSha" in c)) return null;
+	const { ledgerRoot, planDir, planSha } = c;
+	if (typeof ledgerRoot !== "string" || typeof planDir !== "string" || typeof planSha !== "string")
+		return null;
+	return { ledgerRoot, planDir, planSha };
+}
+
+export function memberLedgerDir(coverage: JobCoverage, member: string): string {
+	return path.join(coverage.ledgerRoot, "ledgers", member);
+}
+
+/** Double-quoted shell word: `\`, `"`, `$` and backtick are escaped, so any path stays one literal argument. */
+function shellQuote(value: string): string {
+	return `"${value.replace(/[\\"$`]/g, "\\$&")}"`;
+}
+
+/**
+ * The copy-ready command prefix that replaces `{CURSOR}` in the finder prompt. Absolute bun and
+ * script paths, so the finder's PATH does not matter.
+ */
+export function cursorCommand(ledgerDir: string): string {
+	return `${shellQuote(process.execPath)} ${shellQuote(DIFF_CURSOR_PATH)} --ledger ${shellQuote(ledgerDir)}`;
+}
+
+/** Runs one cursor command in-process against a ledger; throws on a non-zero exit. */
+function runCursor(ledgerDir: string, args: string[]): string {
+	const r = runDiffCursor([...args, "--ledger", ledgerDir]);
+	if (r.code !== 0) throw new Error(`diff-cursor ${args[0]} exited ${r.code}: ${r.stderr.trim()}`);
+	return r.stdout;
+}
+
+/** Throws when `<planDir>/plan.json` no longer carries the planSha job.json recorded at start. */
+function assertPlanUnchanged(coverage: JobCoverage): void {
+	const current = loadPlan(coverage.planDir).planSha;
+	if (current !== coverage.planSha)
+		throw new Error(
+			`plan changed since job start: job.json planSha ${coverage.planSha}, ${path.join(coverage.planDir, "plan.json")} planSha ${current}; start a new job for the new plan`,
+		);
+}
+
+/** Creates the member's ledger (idempotent), refusing a plan that changed since job start. */
+export function initMemberLedger(coverage: JobCoverage, member: string): string {
+	assertPlanUnchanged(coverage);
+	return runCursor(memberLedgerDir(coverage, member), [
+		"init",
+		"--plan",
+		coverage.planDir,
+		"--angle",
+		member,
+	]);
+}
+
+function numberField(record: Record<string, unknown>, key: string): number {
+	const v = record[key];
+	if (typeof v !== "number") throw new Error(`diff-cursor status: ${key} is not a number`);
+	return v;
+}
+
+/** Coverage counts (pages, checklist) plus the issued-but-not-done page and its size, read from the member's ledger. */
+export function readCoverageProgress(ledgerDir: string): CoverageProgress {
+	const statusJson: unknown = JSON.parse(runCursor(ledgerDir, ["status", "--json"]));
+	if (typeof statusJson !== "object" || statusJson === null || Array.isArray(statusJson))
+		throw new Error("diff-cursor status: not a JSON object");
+	const status: Record<string, unknown> = { ...statusJson };
+	const pagesAcked = numberField(status, "pagesAcked");
+	const pagesTotal = numberField(status, "pagesTotal");
+	const finished = status.finished === true;
+	const currentPage = typeof status.currentPage === "string" ? status.currentPage : null;
+
+	const ledger = JSON.parse(fs.readFileSync(path.join(ledgerDir, "ledger.json"), "utf8"));
+	const checklist: { verdict?: unknown; updatedAt?: unknown }[] = Array.isArray(ledger?.checklist)
+		? ledger.checklist
+		: [];
+	const checklistItems = checklist.length;
+	const checklistVerdicts = checklist.filter((item) => typeof item?.verdict === "string").length;
+
+	// The same progress the resume policy counts: a page acknowledged, a checklist item added or
+	// given a verdict, the ledger finished.
+	let lastProgressAt: number | null = null;
+	const progressStamps = [
+		...Object.values<{ doneAt?: unknown }>(ledger?.pages ?? {}).map((page) => page?.doneAt),
+		...checklist.map((item) => item?.updatedAt),
+		ledger?.finishedAt,
+	];
+	for (const stamp of progressStamps) {
+		const at = typeof stamp === "string" ? Date.parse(stamp) : NaN;
+		if (Number.isFinite(at) && (lastProgressAt === null || at > lastProgressAt)) lastProgressAt = at;
+	}
+
+	let issuedPage: CoverageProgress["issuedPage"] = null;
+	if (currentPage !== null) {
+		if (ledger?.pages?.[currentPage]?.state === "issued") {
+			const extraBytes = ledger.extraPages?.[currentPage]?.bytes;
+			const bytes =
+				typeof extraBytes === "number"
+					? extraBytes
+					: loadPlan(String(ledger.planDir)).pages.find((p) => p.id === currentPage)?.bytes;
+			if (typeof bytes === "number") issuedPage = { id: currentPage, bytes };
+		}
+	}
+	return { pagesAcked, pagesTotal, checklistItems, checklistVerdicts, finished, issuedPage, lastProgressAt };
+}
+
+/**
+ * A turn is complete only when the member's ledger is finished (100% of pages, finish run). A plan
+ * that changed since job start can never complete: the gate reports it fatal, so the turn is error.
+ */
+export function coverageCompletionGate(coverage: JobCoverage, member: string): () => CompletionGateResult {
+	return () => {
+		try {
+			assertPlanUnchanged(coverage);
+		} catch (error: unknown) {
+			return { complete: false, fatal: true, message: error instanceof Error ? error.message : String(error) };
+		}
+		const p = readCoverageProgress(memberLedgerDir(coverage, member));
+		const detail = { pagesAcked: p.pagesAcked, pagesTotal: p.pagesTotal, finished: p.finished };
+		if (p.finished) return { complete: true, detail };
+		return {
+			complete: false,
+			detail,
+			message: `coverage incomplete: ${p.pagesAcked}/${p.pagesTotal} pages acknowledged, ledger not finished; resume the member to continue from the ledger`,
+		};
+	};
+}
+
+/** Cursor probes for lib/generic-job's coverage-gated resume policy. */
+export function coverageHooks(coverage: JobCoverage): CoverageHooks {
+	return {
+		// A changed plan throws here, so the resume policy stalls the member with that reason.
+		readProgress: (member) => {
+			assertPlanUnchanged(coverage);
+			return readCoverageProgress(memberLedgerDir(coverage, member));
+		},
+		resplit: (member, pageId, pageBytes) => {
+			const r = runDiffCursor([
+				"resplit",
+				pageId,
+				"--page-bytes",
+				String(pageBytes),
+				"--ledger",
+				memberLedgerDir(coverage, member),
+			]);
+			return { ok: r.code === 0, message: r.code === 0 ? r.stdout : r.stderr };
+		},
+	};
+}
+
+const CURSOR_WALK_STEPS = [
+	"Read the diff ONLY through the diff cursor. Never read it any other way: no git diff, git show or git log -p, and no opening of the plan's patch or page files.",
+	"Never set max_output_tokens or yield_time_ms on the shell tool, and never lower its output limit in any other way: a page that is cut short fails its ack.",
+	"1. Run `{CURSOR} resume` to see where the walk stands.",
+	'2. Run `{CURSOR} next` to get the current page. After you review it, run `{CURSOR} done <pageId> --ack <code> --note "<note>" --next`, which prints the next page. Repeat until the cursor prints ALL PAGES DONE. Record each candidate with `{CURSOR} candidate add ...` as soon as you find it.',
+	"3. Run `{CURSOR} finish`. If it refuses, do what it lists and run it again.",
+	"4. Your final message restates the candidates that `{CURSOR} export` prints.",
+].join("\n");
+
+export const COVERAGE_EXECUTION_INSTRUCTION = `${CURSOR_WALK_STEPS}\nReview ONLY the files listed in Review Scope. Produce your full analysis following system instructions.`;
+
+export const COVERAGE_RESUME_INSTRUCTION = `Your previous turn ended before your diff cursor ledger was finished. Continue the walk from the ledger.\n${CURSOR_WALK_STEPS}`;
+
+const CURSOR_PLACEHOLDER = "{CURSOR}";
 
 async function main() {
 	const options = parseArgs(process.argv);
@@ -170,12 +343,36 @@ async function main() {
 	const membersRoot = path.join(jobDir, "members");
 	const memberDir = path.join(membersRoot, member);
 
+	/** Ends the member as error without running a turn. */
+	const failTurn: (message: string) => never = (message) => {
+		logError(message);
+		atomicWriteJson(path.join(memberDir, "status.json"), {
+			member,
+			state: "error",
+			message,
+			finishedAt: new Date().toISOString(),
+			command,
+		});
+		logEnd();
+		process.exit(1);
+	};
+
+	// The finder prompts read the diff only through the cursor ledger: without one a finder could
+	// end done without reading the diff.
+	const coverage = readJobCoverage(jobDir);
+	if (!coverage)
+		failTurn("turn not run: job.json has no coverage (diff cursor ledger); start the job with job.ts start --ledger-root <dir>");
+	const ledgerDir = memberLedgerDir(coverage, member);
+	// OMT_LEDGER_WORKER stops the session-ledger PreCompact hook from spawning a summarizer
+	// inside the finder; the cursor ledger already carries the finder's state.
+	workerEnv.OMT_LEDGER_WORKER = "1";
+	workerEnv[LEDGER_ENV] = ledgerDir;
+
 	const promptPath = path.join(jobDir, "prompt.txt");
 	const rawPromptContent = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, "utf8") : "";
-	const promptContent = filterPromptSections(rawPromptContent, member);
-
-	const EXECUTION_INSTRUCTION =
-		"Execute the diff command from REVIEW CONTENT. Review ONLY the files listed in Review Scope. Produce your full analysis following system instructions.";
+	const promptContent = filterPromptSections(rawPromptContent);
+	const promptSubstitutions = { [CURSOR_PLACEHOLDER]: cursorCommand(ledgerDir) };
+	const completionGate = coverageCompletionGate(coverage, member);
 
 	const tokens = splitCommand(command);
 	if (!tokens || tokens.length === 0) {
@@ -206,36 +403,50 @@ async function main() {
 	// cmdResumeMember's own comment in lib/generic-job.ts).
 	const session = options.session;
 	const resumePrompt = options.prompt;
+	const isResume =
+		typeof session === "string" && session !== "" && typeof resumePrompt === "string" && resumePrompt !== "";
+
+	if (!isResume) {
+		try {
+			logInfo(initMemberLedger(coverage, member).trim());
+			recordCoverageResumeBaseline(memberDir, readCoverageProgress(ledgerDir));
+		} catch (error: unknown) {
+			failTurn(`coverage ledger init failed: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
 
 	// runOneTurn/resumeOneTurn own the machine-wide slot for the complete turn.
 	// Keeping acquisition at that shared boundary ensures every worker family is
 	// capped and code-review does not double-acquire the same slot.
-	const turnPromise =
-		typeof session === "string" && session !== "" && typeof resumePrompt === "string" && resumePrompt !== ""
-			? resumeOneTurn(session, {
-					program,
-					args,
-					prompt: resumePrompt,
-					member,
-					memberDir,
-					command,
-					timeoutSec,
-					workerEnv,
-					cliType,
-				})
-			: runOneTurn({
-					program,
-					args,
-					prompt: EXECUTION_INSTRUCTION,
-					reviewContent: promptContent,
-					member,
-					memberDir,
-					command,
-					timeoutSec,
-					workerEnv,
-					cliType,
-					promptsDir: PROMPTS_DIR,
-				});
+	const turnPromise = isResume
+		? resumeOneTurn(session, {
+				program,
+				args,
+				prompt: `${COVERAGE_RESUME_INSTRUCTION}\n\nConductor note: ${resumePrompt}`,
+				member,
+				memberDir,
+				command,
+				timeoutSec,
+				workerEnv,
+				cliType,
+				promptSubstitutions,
+				completionGate,
+			})
+		: runOneTurn({
+				program,
+				args,
+				prompt: COVERAGE_EXECUTION_INSTRUCTION,
+				reviewContent: promptContent,
+				member,
+				memberDir,
+				command,
+				timeoutSec,
+				workerEnv,
+				cliType,
+				promptsDir: PROMPTS_DIR,
+				promptSubstitutions,
+				completionGate,
+			});
 	const result: OneTurnResult = await turnPromise;
 
 	logInfo(`worker done: member=${member} state=${result.state} exitCode=${result.exitCode}`);

@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as state from "./ultragoal-state";
 
+const dismissReviewFinding = (sessionId: string, opts: Parameters<typeof state.tryDismissReviewFinding>[1]): boolean => state.tryDismissReviewFinding(sessionId, opts).dismissed;
+
 let dir: string;
 const previousOmtDir = process.env.OMT_DIR;
 const SID = "priority-routing";
@@ -107,22 +109,45 @@ describe("priority routing", () => {
 		expect(state.readCodeReviewArtifact(SID)).toBeNull();
 	});
 
-	test("INCONCLUSIVE는 빈 action group의 REQUEST_CHANGES이다", () => {
-		greenObjectiveLane();
-		writeReview([finding({ priority: undefined, assessment: undefined })], "INCONCLUSIVE");
-		expect(state.getReviewResult(SID)).toMatchObject({ verdict: "REQUEST_CHANGES", findings: { repair: [], adjudicate: [], notes: [] } });
+	test("class는 비어 있지 않은 문자열이면 되고 assessment의 추가 키는 무시한다", () => {
+		writeReview([finding({ class: "style" })]);
+		expect(state.readCodeReviewArtifact(SID)).not.toBeNull();
+		writeReview([finding({ assessment: assessment({ severity_note: "extra" }) })]);
+		expect(state.readCodeReviewArtifact(SID)).not.toBeNull();
+		for (const cls of ["", "  ", undefined, 7]) {
+			writeReview([finding({ class: cls })]);
+			expect(state.readCodeReviewArtifact(SID)).toBeNull();
+		}
 	});
 
-	test("미확정 IN_SCOPE PLAUSIBLE은 수리 없이 adjudication evidence를 남긴다", () => {
+	test("INCONCLUSIVE는 finding을 분류해 담고 verdict는 REQUEST_CHANGES로 유지한다", () => {
+		greenObjectiveLane();
+		writeReview([finding({ priority: undefined, assessment: undefined })], "INCONCLUSIVE");
+		expect(state.getReviewResult(SID)).toMatchObject({ verdict: "REQUEST_CHANGES", reason: "inconclusive review", findings: { repair: [], adjudicate: [], notes: [expect.objectContaining({ ref: "src/a.ts:1" })] } });
+	});
+
+	test("미확정 IN_SCOPE PLAUSIBLE HIGH는 CONFIRMED처럼 repair로 라우팅된다", () => {
 		greenObjectiveLane();
 		writeReview([finding({ verdict: "PLAUSIBLE", priority: "HIGH" })]);
-		expect(state.getReviewResult(SID)).toMatchObject({ verdict: "REQUEST_CHANGES", findings: { repair: [], adjudicate: [finding({ verdict: "PLAUSIBLE", priority: "HIGH" })], notes: [] } });
+		expect(state.getReviewResult(SID)).toMatchObject({ verdict: "REQUEST_CHANGES", findings: { repair: [finding({ verdict: "PLAUSIBLE", priority: "HIGH" })], adjudicate: [], notes: [] } });
 	});
 
 	test("UNKNOWN은 추측 수리가 아닌 adjudication evidence로 남는다", () => {
 		greenObjectiveLane();
 		writeReview([finding({ scope: "UNKNOWN", priority: "HIGH", scope_evidence: { basis: "uncertain", reference: "outcome", rationale: "scope unresolved" } })]);
 		expect(state.getReviewResult(SID)).toMatchObject({ verdict: "REQUEST_CHANGES", findings: { repair: [], adjudicate: [finding({ scope: "UNKNOWN", priority: "HIGH", scope_evidence: { basis: "uncertain", reference: "outcome", rationale: "scope unresolved" } })], notes: [] } });
+	});
+
+	test("PLAUSIBLE MEDIUM도 CONFIRMED MEDIUM과 같은 COMMENT 해소 경로로 완료된다", () => {
+		greenObjectiveLane();
+		writeReview([finding({ verdict: "PLAUSIBLE", priority: "MEDIUM" })]);
+		const medium = state.getReviewResult(SID);
+		expect(medium).toMatchObject({ verdict: "COMMENT", findings: { adjudicate: [] } });
+		expect(medium.findings.repair).toHaveLength(1);
+		expect(state.requestComplete(SID)).toBe(false);
+		writeFileSync(join(dir, "fix.md"), "fixed");
+		state.recordCommentResolution(SID, medium.artifact_sha256, [join(dir, "fix.md")]);
+		expect(state.requestComplete(SID)).toBe(true);
 	});
 
 	test("MEDIUM 수리는 COMMENT와 현재 hash-bound evidence가 필요하고 LOW-only는 필요 없다", () => {
@@ -181,12 +206,50 @@ describe("priority routing", () => {
 		expect(state.requestComplete(SID)).toBe(false);
 	});
 
-	test("확정된 IN_SCOPE HIGH만 dismissal할 수 있다", () => {
+	test("IN_SCOPE BLOCK·FIX(PLAUSIBLE 포함)는 dismissal할 수 있고 NOTE는 거부한다", () => {
+		greenObjectiveLane();
+		writeReview([finding({ priority: "LOW" })]);
+		expect(dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" })).toBe(false);
+		writeReview([finding({ priority: "HIGH" })]);
+		expect(dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" })).toBe(true);
+		writeReview([finding({ verdict: "PLAUSIBLE", priority: "MEDIUM" })]);
+		expect(dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" })).toBe(true);
+	});
+
+	test("MEDIUM(FIX) dismissal은 COMMENT resolution 없이 완료를 허용하고 근거를 남긴다", () => {
 		greenObjectiveLane();
 		writeReview([finding({ priority: "MEDIUM" })]);
-		expect(state.dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" })).toBe(false);
-		writeReview([finding({ priority: "HIGH" })]);
-		expect(state.dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" })).toBe(true);
+		expect(state.requestComplete(SID)).toBe(false);
+		expect(dismissReviewFinding(SID, { ref: "src/a.ts:1", class: "correctness", rationale: "guard above makes it unreachable" })).toBe(true);
+		expect(state.getReviewResult(SID).findings.repair).toEqual([]);
+		const prior = state.readGoalStateRaw(SID) ?? {};
+		expect(state.renderOverrideSummary(prior)).toContain("guard above makes it unreachable");
+		expect(state.requestComplete(SID)).toBe(true);
+	});
+
+	test("dismissal 거부 사유는 실패한 조건을 이름으로 밝힌다", () => {
+		const refusal = (opts: { ref: string; class: string; rationale: string }) => {
+			const result = state.tryDismissReviewFinding(SID, opts);
+			return result.dismissed ? "" : result.refusal;
+		};
+		const ok = { ref: "src/a.ts:1", class: "correctness", rationale: "not a defect" };
+		greenObjectiveLane();
+		writeReview([finding({ priority: "LOW" })]);
+		expect(refusal({ ...ok, rationale: "  " })).toContain("--rationale");
+		expect(refusal({ ...ok, ref: "" })).toContain("--ref");
+		expect(refusal({ ...ok, class: "" })).toContain("--class");
+		expect(refusal(ok)).toContain("NOTE");
+		expect(refusal({ ...ok, ref: "src/none.ts:1" })).toContain("no correctness finding at src/none.ts:1");
+		writeReview([finding({ scope: "UNKNOWN", scope_evidence: { basis: "uncertain", reference: "outcome", rationale: "unsure" } })]);
+		expect(refusal(ok)).toContain("UNKNOWN");
+		writeReview([finding(), finding()]);
+		expect(refusal(ok)).toContain("2 dismissible");
+		writeFileSync(artifactPath(), JSON.stringify({ status: "COMPLETE", scope_contract_sha256: "0".repeat(64), findings: [finding()], reviewer: "r", at: "now" }));
+		expect(refusal(ok)).toContain("scope contract");
+		rmSync(artifactPath());
+		expect(refusal(ok)).toContain("no valid code-review artifact");
+		state.setBlocked(SID, "stuck");
+		expect(refusal(ok)).toContain("pursuing");
 	});
 
 	test("HIGH와 INCONCLUSIVE만 dispatch되고 COMMENT와 APPROVE는 renewal 후에도 dispatch되지 않는다", () => {

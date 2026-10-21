@@ -148,7 +148,7 @@ flowchart TD
 
 최종 `code-reviewer`에는 직렬화된 리뷰 컨텍스트와 caller가 소유한 opaque artifact destination만 전달합니다. generic code-review publisher는 원본 CodeReviewArtifact JSON을 그대로 저장하고 `{path, sha256}` transport receipt만 반환합니다. publisher는 ultragoal을 알지 못하며 priority, scope, 수리, 완료, 예산 또는 승인 정책을 결정하지 않습니다. parent orchestrator는 receipt를 직접 해석하지 않고 `get-review-result` CLI를 명시적으로 호출해 원본 결과를 가져온 뒤 아래 consumer 정책을 적용합니다.
 
-Consumer는 먼저 scope를 판정합니다. `OUT_OF_SCOPE`는 비차단 NOTE로 남기고, `UNKNOWN`은 수리 없이 차단합니다. `PLAUSIBLE` 검증이 해소되지 않거나 scope 판정이 미완료이면 reviewer artifact의 `INCONCLUSIVE` 상태를 그대로 소비하고, consumer가 이를 기록하거나 덮어쓰지 않은 채 `REQUEST_CHANGES`로 라우팅합니다.
+Consumer는 먼저 scope를 판정합니다. `OUT_OF_SCOPE`는 비차단 NOTE로 남기고, `UNKNOWN`은 유일한 수리가 제외된 동작을 요구하거나 요구사항 자체가 불명확할 때만 쓰며, 증거로 먼저 해소합니다. 검증된 `PLAUSIBLE` finding은 `COMPLETE` artifact에 그대로 남습니다. 리뷰가 끝나지 못했거나 scope 판정이 미완료이면 reviewer artifact의 `INCONCLUSIVE` 상태를 그대로 소비하고, 분류된 finding 목록을 유지한 채 consumer가 이를 기록하거나 덮어쓰지 않고 `REQUEST_CHANGES`로 라우팅합니다.
 
 확정된(`CONFIRMED`) IN_SCOPE finding의 라우팅은 다음과 같습니다.
 

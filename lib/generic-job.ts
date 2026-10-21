@@ -786,13 +786,27 @@ export function gcStaleJobs(jobsDir: string, config: JobConfig): void {
 			if (Number.isNaN(createdAtMs)) continue;
 
 			const age = Date.now() - createdAtMs;
-			if (age > GC_MAX_AGE_MS) {
+			// A member stalled by an external cause waits for the user to retry it on its ledger.
+			if (age > GC_MAX_AGE_MS && !hasExternallyStalledMember(path.join(candidatePath, config.entityDirName))) {
 				fs.rmSync(candidatePath, { recursive: true, force: true });
 			}
 		}
 	} catch {
 		// GC is best-effort — never block cmdStart
 	}
+}
+
+function hasExternallyStalledMember(entitiesDir: string): boolean {
+	let entries: string[];
+	try {
+		entries = fs.readdirSync(entitiesDir);
+	} catch {
+		return false;
+	}
+	return entries.some((entry) => {
+		const status = readJsonIfExists(path.join(entitiesDir, entry, "status.json"));
+		return isRecord(status) && status.state === "stalled" && isExternalStallCause(status.stall_cause_kind);
+	});
 }
 
 // ---------------------------------------------------------------------------
@@ -1239,6 +1253,7 @@ export async function computeStatus(
 		transient_error: 0,
 		permanent_error: 0,
 		awaiting_resume: 0,
+		stalled: 0,
 	};
 	for (const r of members) {
 		const state = String(r.state || "unknown");
@@ -1370,6 +1385,7 @@ export function buildUiPayload(
 		"empty_output",
 		"transient_error",
 		"permanent_error",
+		"stalled",
 	]);
 	const dispatchStatus = asCodexStepStatus(
 		isDone ? "completed" : queued > 0 ? "in_progress" : "completed",
@@ -2475,6 +2491,32 @@ export type CollectBudget = {
 	deadlineSec: number | null;
 };
 
+export type CollectBudgetMeta = {
+	createdAt?: unknown;
+	timeoutSec?: unknown;
+	/** job.json `settings.coverageGated`. */
+	coverageGated?: boolean;
+	/** Latest coverage progress of any member (CoverageProgress.lastProgressAt), epoch ms. */
+	lastProgressAt?: number | null;
+	/** job.json `coverage.wallCapAnchorAt`: the latest external-cause --retry-stalled (ISO). */
+	wallCapAnchorAt?: unknown;
+};
+
+/**
+ * Wall-time cap for a coverage-gated job. 6 hours is three full turns at code-review's 2-hour
+ * per-turn timeout: a large diff still walks to the end, and a finder that keeps a trickle of
+ * progress cannot hold the conductor past the point where the review is still useful.
+ */
+export const COVERAGE_JOB_WALL_CAP_SEC = 6 * 60 * 60;
+const WALL_CAP_HOURS = COVERAGE_JOB_WALL_CAP_SEC / 3600;
+
+/** The wall cap counts from createdAt, or from wallCapAnchorAt when later. */
+function wallCapOf(meta: CollectBudgetMeta, createdAt: number): { startMs: number; deadlineSec: number } {
+	const anchor = Date.parse(String(meta.wallCapAnchorAt ?? ""));
+	const startMs = Number.isFinite(anchor) ? Math.max(createdAt, anchor) : createdAt;
+	return { startMs, deadlineSec: Math.round((startMs - createdAt) / 1000) + COVERAGE_JOB_WALL_CAP_SEC };
+}
+
 /**
  * The poll budget belongs to the script, not to a call counter in a prompt.
  *
@@ -2485,16 +2527,24 @@ export type CollectBudget = {
  *
  * Absent metadata means keep polling: members carry their own timeouts and end
  * up terminal on their own, so "no deadline recorded" must never read as "give up".
+ *
+ * Coverage-gated jobs: one per-turn timeout counts from the latest coverage progress, so a member
+ * still making progress through resumed turns is not cut; turn activity without progress
+ * (requeue, heartbeat) does not extend it, and the wall cap bounds it. Other jobs: creation + timeout.
  */
-export function resolveCollectNextAction(
-	meta: { createdAt?: unknown; timeoutSec?: unknown },
-	now: number,
-): CollectBudget {
+export function resolveCollectNextAction(meta: CollectBudgetMeta, now: number): CollectBudget {
 	const createdAt = Date.parse(String(meta.createdAt ?? ""));
-	const deadlineSec = Number(meta.timeoutSec);
-	if (!Number.isFinite(createdAt) || !Number.isFinite(deadlineSec) || deadlineSec <= 0)
+	const timeoutSec = Number(meta.timeoutSec);
+	if (!Number.isFinite(createdAt) || !Number.isFinite(timeoutSec) || timeoutSec <= 0)
 		return { nextAction: "poll_again", elapsedSec: null, deadlineSec: null };
 	const elapsedSec = Math.round((now - createdAt) / 1000);
+	let deadlineSec = timeoutSec;
+	if (meta.coverageGated) {
+		const cap = wallCapOf(meta, createdAt);
+		const anchor =
+			typeof meta.lastProgressAt === "number" ? Math.max(cap.startMs, meta.lastProgressAt) : cap.startMs;
+		deadlineSec = Math.min(Math.round((anchor - createdAt) / 1000) + timeoutSec, cap.deadlineSec);
+	}
 	return {
 		nextAction: elapsedSec >= deadlineSec ? "stop_and_degrade" : "poll_again",
 		elapsedSec,
@@ -2502,38 +2552,151 @@ export function resolveCollectNextAction(
 	};
 }
 
-function readCollectBudgetMeta(jobDir: string): { createdAt?: unknown; timeoutSec?: unknown } {
+/**
+ * The budget of a coverage-gated job past its wall cap, else null. The cap binds collect on every
+ * return path and refuses resume-member, so no resume loop outlives it.
+ */
+export function coverageWallCapBudget(meta: CollectBudgetMeta, now: number): CollectBudget | null {
+	if (!meta.coverageGated) return null;
+	const createdAt = Date.parse(String(meta.createdAt ?? ""));
+	if (!Number.isFinite(createdAt)) return null;
+	const elapsedSec = Math.round((now - createdAt) / 1000);
+	const { deadlineSec } = wallCapOf(meta, createdAt);
+	return elapsedSec < deadlineSec ? null : { nextAction: "stop_and_degrade", elapsedSec, deadlineSec };
+}
+
+/** Latest coverage progress across every member's ledger, or null when none is recorded. */
+function readLastCoverageProgressAt(entitiesDir: string, hooks: CoverageHooks): number | null {
+	let latest: number | null = null;
+	let entries: string[];
 	try {
-		const meta = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
-		return {
-			createdAt: meta?.createdAt,
-			timeoutSec: isRecord(meta?.settings) ? meta.settings.timeoutSec : undefined,
-		};
+		entries = fs.readdirSync(entitiesDir);
 	} catch {
-		return {};
+		return null;
 	}
+	for (const entry of entries) {
+		let at: number | null;
+		try {
+			at = hooks.readProgress(entry).lastProgressAt;
+		} catch {
+			continue; // ledger not created yet: no progress from this member
+		}
+		if (at !== null && (latest === null || at > latest)) latest = at;
+	}
+	return latest;
+}
+
+/** The budget fields of a parsed job.json; lastProgressAt is left to readCollectBudgetMeta. */
+function budgetMetaOf(jobMeta: unknown): CollectBudgetMeta {
+	if (!isRecord(jobMeta)) return {};
+	const settings = isRecord(jobMeta.settings) ? jobMeta.settings : undefined;
+	return {
+		createdAt: jobMeta.createdAt,
+		timeoutSec: settings?.timeoutSec,
+		coverageGated: settings?.coverageGated === true,
+		wallCapAnchorAt: isRecord(jobMeta.coverage) ? jobMeta.coverage.wallCapAnchorAt : undefined,
+	};
+}
+
+/** `coverage` is required to read progress: without it a coverage-gated job gets no extension. */
+export function readCollectBudgetMeta(
+	jobDir: string,
+	config: JobConfig,
+	coverage?: CoverageHooks,
+): CollectBudgetMeta {
+	const meta = budgetMetaOf(readJsonIfExists(path.join(jobDir, "job.json")));
+	return {
+		...meta,
+		lastProgressAt:
+			meta.coverageGated && coverage
+				? readLastCoverageProgressAt(path.join(jobDir, config.entityDirName), coverage)
+				: null,
+	};
+}
+
+/** job.json `coverage.ledgerRoot` of a coverage-gated job, else null. */
+function coverageLedgerRoot(jobMeta: unknown): string | null {
+	if (!budgetMetaOf(jobMeta).coverageGated || !isRecord(jobMeta) || !isRecord(jobMeta.coverage)) return null;
+	const root = jobMeta.coverage.ledgerRoot;
+	return typeof root === "string" && root !== "" ? root : null;
+}
+
+const ledgerBackupDir = (jobDir: string) => path.join(jobDir, "ledger-backup");
+
+/**
+ * Ledgers live in the OS temp dir (the codex finder sandbox can write only there), so a
+ * multi-day wait for an external cause can lose them; the job dir is kept for such a job
+ * (gcStaleJobs). Copies the ledger root (plan + ledgers) there, replacing an older backup only
+ * once the new copy is complete.
+ */
+function backupLedgerRoot(jobDir: string, config: JobConfig): void {
+	const ledgerRoot = coverageLedgerRoot(readJsonIfExists(path.join(jobDir, "job.json")));
+	if (!ledgerRoot || !fs.existsSync(ledgerRoot)) return;
+	if (!hasExternallyStalledMember(path.join(jobDir, config.entityDirName))) return;
+	const backup = ledgerBackupDir(jobDir);
+	const tmp = `${backup}.tmp-${process.pid}`;
+	try {
+		fs.rmSync(tmp, { recursive: true, force: true });
+		fs.cpSync(ledgerRoot, tmp, { recursive: true });
+		fs.rmSync(backup, { recursive: true, force: true });
+		fs.renameSync(tmp, backup);
+	} catch (error: unknown) {
+		process.stderr.write(
+			`ledger backup failed (${error instanceof Error ? error.message : String(error)}); the ledger root stays only at ${ledgerRoot}\n`,
+		);
+	}
+}
+
+/** Restores a ledger root that is gone (OS temp cleanup) from the job dir's backup. */
+function restoreLedgerRoot(jobDir: string, ledgerRoot: string): void {
+	const backup = ledgerBackupDir(jobDir);
+	if (fs.existsSync(ledgerRoot) || !fs.existsSync(backup)) return;
+	const tmp = `${ledgerRoot}.restore-${process.pid}`;
+	fs.rmSync(tmp, { recursive: true, force: true });
+	fs.mkdirSync(path.dirname(ledgerRoot), { recursive: true });
+	fs.cpSync(backup, tmp, { recursive: true });
+	fs.renameSync(tmp, ledgerRoot);
 }
 
 export async function cmdCollect(
 	options: Record<string, unknown>,
 	jobDir: string,
 	config: JobConfig,
+	coverage?: CoverageHooks,
 ): Promise<void> {
 	const timeoutMs = resolveCollectWaitMs(options["timeout-ms"]);
 
 	const start = Date.now();
 	while (true) {
 		const status = await computeStatus(jobDir, config);
+		const wallCap = coverageWallCapBudget(readCollectBudgetMeta(jobDir, config), Date.now());
 		// awaiting_resume already ended its own turn — further polling cannot change it.
 		if (status.overallState === "done" || status.overallState === "awaiting_resume") {
+			backupLedgerRoot(jobDir, config);
 			const manifest = buildManifest(jobDir, config);
 			process.stdout.write(
-				`${JSON.stringify({ overallState: status.overallState, ...manifest }, null, 2)}\n`,
+				`${JSON.stringify(
+					{
+						overallState: status.overallState,
+						...manifest,
+						...(wallCap
+							? {
+									...wallCap,
+									note: `The job exceeded its ${WALL_CAP_HOURS}h wall cap (${wallCap.elapsedSec}s since job start). Resume no member; apply the degradation path with the coverage collected so far.`,
+								}
+							: {}),
+					},
+					null,
+					2,
+				)}\n`,
 			);
 			return;
 		}
-		if (Date.now() - start >= timeoutMs) {
-			const budget = resolveCollectNextAction(readCollectBudgetMeta(jobDir), Date.now());
+		// Past the wall cap the answer is final: return it now instead of waiting out the poll.
+		if (wallCap || Date.now() - start >= timeoutMs) {
+			const budget =
+				wallCap ??
+				resolveCollectNextAction(readCollectBudgetMeta(jobDir, config, coverage), Date.now());
 			process.stdout.write(
 				`${JSON.stringify(
 					{
@@ -2572,12 +2735,314 @@ export type ResumeMemberOpts = {
 	 * in-process, so a caller blocked on this call (e.g. a Bash tool invocation with its own
 	 * timeout) returns immediately rather than for the turn's full duration. Absent (legacy
 	 * callers that never pass it), the turn still runs in-process synchronously via resumeFn,
-	 * unchanged.
+	 * unchanged. A coverage-gated job requires it.
 	 */
 	workerPath?: string;
 	/** Test-only: override the detached spawn call itself. */
 	spawnFn?: typeof spawn;
+	/** Required for a coverage-gated job (job.json `settings.coverageGated`): see applyCoverageResumePolicy. */
+	coverage?: CoverageHooks;
+	/**
+	 * Retry a `stalled` member after the user fixed its cause: a fresh initial turn on the same
+	 * ledger. On a member that is not stalled it is a plain resume.
+	 */
+	retryStalled?: boolean;
 };
+
+// ---------------------------------------------------------------------------
+// Coverage-gated resume policy
+// ---------------------------------------------------------------------------
+
+/** Consecutive resumes without coverage progress that trigger a remedy. */
+export const COVERAGE_STALL_LIMIT = 3;
+/** Smallest page budget a remedy re-split asks for. */
+export const RESPLIT_MIN_PAGE_BYTES = 4096;
+/** Turn states caused outside the member's work: resuming cannot fix them. */
+const EXTERNAL_FAILURE_STATES: Record<string, string> = {
+	missing_cli: "the agent CLI binary was not found",
+	non_retryable: "non-retryable failure",
+};
+
+/**
+ * status.json `stall_cause_kind`. quota, auth and missing_cli are external: no resume fixes them;
+ * the user waits them out or fixes them, then retries the member with --retry-stalled.
+ * no_progress: resumes stopped making progress and the remedy did not help. other: anything else.
+ */
+export type StallCauseKind = "quota" | "auth" | "missing_cli" | "no_progress" | "other";
+
+export function isExternalStallCause(kind: unknown): boolean {
+	return kind === "quota" || kind === "auth" || kind === "missing_cli";
+}
+
+/** status.json keys that describe a stall cause; they exist only while the member is stalled. */
+const STALL_CAUSE_FIELDS = ["stall_cause_kind", "stall_detail", "stall_reset_text"] as const;
+const STALL_DETAIL_MAX_CHARS = 600;
+const QUOTA_TEXT = /usage limit|usage_limit|quota|rate.?limit|\b429\b|too many requests/i;
+const AUTH_TEXT = /unauthorized|\b401\b|not logged in|log ?in again|token (expired|invalid)/i;
+/** "try again at Sep 20th, 2026 10:17 PM" — human text without a timezone, for display only. */
+const RESET_TEXT = /try again at [^\n]*?(?=\.\s|\.$|$)/i;
+
+type StallCause = { kind: StallCauseKind; line?: string; resetText?: string };
+
+/**
+ * The cause a failed turn's recorded text shows: the turn state first, then a quota or auth line
+ * in status.json message or anywhere in error.txt. Only for a turn that failed: a no-progress
+ * stall's turns did not fail, so a quota line there is a transient retry the CLI logged.
+ */
+function failedTurnCause(memberDir: string, status: Record<string, unknown>): StallCause {
+	if (status.state === "missing_cli") return { kind: "missing_cli" };
+	let errorText = "";
+	try {
+		errorText = fs.readFileSync(path.join(memberDir, "error.txt"), "utf8");
+	} catch {
+		/* absent → no recorded stderr */
+	}
+	const lines = `${typeof status.message === "string" ? status.message : ""}\n${errorText}`
+		.split("\n")
+		.map((l) => l.trim())
+		.filter(Boolean);
+	const quotaLine = lines.find((l) => QUOTA_TEXT.test(l));
+	if (quotaLine) {
+		const resetText = lines.map((l) => RESET_TEXT.exec(l)?.[0]).find((t) => t !== undefined);
+		return { kind: "quota", line: quotaLine, ...(resetText ? { resetText } : {}) };
+	}
+	const authLine = lines.find((l) => AUTH_TEXT.test(l));
+	return authLine ? { kind: "auth", line: authLine } : { kind: "other" };
+}
+
+export type CoverageProgress = {
+	pagesAcked: number;
+	pagesTotal: number;
+	/** Checklist items the member recorded (the cleanup finder's rules checklist). */
+	checklistItems: number;
+	/** Checklist items that carry a final verdict (준수, 위반 or 해당 없음). */
+	checklistVerdicts: number;
+	finished: boolean;
+	/** The page issued to the member and not acknowledged yet, or null when there is none. */
+	issuedPage: { id: string; bytes: number } | null;
+	/**
+	 * Latest progress the resume policy counts (a page acknowledged, a checklist item added or
+	 * given a verdict, the ledger finished), epoch ms; null when there is none.
+	 */
+	lastProgressAt: number | null;
+};
+
+export type CoverageHooks = {
+	readProgress: (member: string) => CoverageProgress;
+	/** Re-cut a page that is not done into pages of at most `pageBytes`. */
+	resplit: (member: string, pageId: string, pageBytes: number) => { ok: boolean; message: string };
+};
+
+/** The coverage counters whose increase counts as progress between two resumes. */
+type CoverageProgressMark = {
+	pagesAcked: number;
+	checklistItems: number;
+	checklistVerdicts: number;
+	finished: boolean;
+};
+
+/** Per-member bookkeeping in `<memberDir>/coverage-resume.json`. */
+type CoverageResumeRecord = {
+	/** The mark at the previous resume or at the start of the initial turn; null when neither was recorded. */
+	lastProgress: CoverageProgressMark | null;
+	/** Consecutive resumes after which the mark had not advanced. */
+	stalledResumes: number;
+	plainRemedyUsed: boolean;
+	resplitUsed: boolean;
+};
+
+const FRESH_COVERAGE_RECORD: CoverageResumeRecord = {
+	lastProgress: null,
+	stalledResumes: 0,
+	plainRemedyUsed: false,
+	resplitUsed: false,
+};
+
+function progressMark(progress: CoverageProgress): CoverageProgressMark {
+	return {
+		pagesAcked: progress.pagesAcked,
+		checklistItems: progress.checklistItems,
+		checklistVerdicts: progress.checklistVerdicts,
+		finished: progress.finished,
+	};
+}
+
+function progressAdvanced(last: CoverageProgressMark | null, now: CoverageProgressMark): boolean {
+	return (
+		last === null ||
+		now.pagesAcked > last.pagesAcked ||
+		now.checklistItems > last.checklistItems ||
+		now.checklistVerdicts > last.checklistVerdicts ||
+		(now.finished && !last.finished)
+	);
+}
+
+function readProgressMark(raw: unknown): CoverageProgressMark | null {
+	if (!isRecord(raw)) return null;
+	const { pagesAcked, checklistItems, checklistVerdicts, finished } = raw;
+	if (
+		typeof pagesAcked !== "number" ||
+		typeof checklistItems !== "number" ||
+		typeof checklistVerdicts !== "number" ||
+		typeof finished !== "boolean"
+	)
+		return null;
+	return { pagesAcked, checklistItems, checklistVerdicts, finished };
+}
+
+export type CoverageResumeOutcome =
+	| {
+			kind: "resume";
+			pagesAcked: number;
+			pagesTotal: number;
+			stalledResumes: number;
+			remedy: string | null;
+	  }
+	/** --retry-stalled on a stalled member: a new initial turn against the same ledger. */
+	| { kind: "fresh_turn"; reason: string };
+
+const coverageResumeRecordPath = (memberDir: string) => path.join(memberDir, "coverage-resume.json");
+
+/**
+ * Records the mark at the start of a member's initial turn, so the first resume already judges
+ * that turn and COVERAGE_STALL_LIMIT counts every turn without progress.
+ */
+export function recordCoverageResumeBaseline(memberDir: string, progress: CoverageProgress): void {
+	const record: CoverageResumeRecord = { ...FRESH_COVERAGE_RECORD, lastProgress: progressMark(progress) };
+	atomicWriteJson(coverageResumeRecordPath(memberDir), record);
+}
+
+function readCoverageResumeRecord(recordPath: string): CoverageResumeRecord {
+	const raw = readJsonIfExists(recordPath);
+	if (!isRecord(raw)) return { ...FRESH_COVERAGE_RECORD };
+	return {
+		lastProgress: readProgressMark(raw.lastProgress),
+		stalledResumes: typeof raw.stalledResumes === "number" ? raw.stalledResumes : 0,
+		plainRemedyUsed: raw.plainRemedyUsed === true,
+		resplitUsed: raw.resplitUsed === true,
+	};
+}
+
+/**
+ * Progress-based resume policy for coverage-gated members. Returns the outcome when the resume
+ * may proceed; otherwise marks the member `stalled` with a readable reason and throws. A stalled
+ * member is never `done` and its ledger stays as it was.
+ *
+ * - Progress since the previous resume → resume, no cap; every counter and remedy flag resets.
+ * - COVERAGE_STALL_LIMIT consecutive resumes without progress → one remedy: re-split the issued
+ *   page to half its size (min RESPLIT_MIN_PAGE_BYTES), or, when it cannot be split, one plain
+ *   resume. The next resume without progress → stalled.
+ * - A turn that failed outside the member's work, or no session to resume → stalled at once.
+ * - retryStalled on a `stalled` member → counters restart and the member gets a fresh initial
+ *   turn on the same ledger, never its old session.
+ */
+export function applyCoverageResumePolicy(
+	memberDir: string,
+	name: string,
+	status: Record<string, unknown>,
+	hooks: CoverageHooks,
+	retryStalled: boolean,
+): CoverageResumeOutcome {
+	const statusPath = path.join(memberDir, "status.json");
+	const recordPath = coverageResumeRecordPath(memberDir);
+	const state = String(status.state ?? "");
+
+	if (state === "stalled") {
+		if (!retryStalled)
+			throw new Error(
+				`member stalled: ${String(status.message ?? "no reason recorded")}. Auto-resume stopped; once the cause is fixed, rerun resume-member with --retry-stalled.`,
+			);
+		// The fresh turn's worker initializes the ledger idempotently and records the new baseline.
+		atomicWriteJson(recordPath, FRESH_COVERAGE_RECORD);
+		return {
+			kind: "fresh_turn",
+			reason: `retry of a stalled member (${String(status.message ?? "no reason recorded")})`,
+		};
+	}
+
+	let record = readCoverageResumeRecord(recordPath);
+	const stall = (reason: string, cause: StallCause): never => {
+		atomicWriteJson(recordPath, record);
+		atomicWriteJson(statusPath, {
+			...status,
+			state: "stalled",
+			message: reason,
+			stalledAt: new Date().toISOString(),
+			stall_cause_kind: cause.kind,
+			stall_detail: (cause.line ?? reason).slice(0, STALL_DETAIL_MAX_CHARS),
+			...(cause.resetText ? { stall_reset_text: cause.resetText.slice(0, STALL_DETAIL_MAX_CHARS) } : {}),
+		});
+		throw new Error(
+			`member stalled: ${reason}. Auto-resume stopped; the coverage ledger is kept. Report this to the user; once the cause is fixed, rerun resume-member with --retry-stalled.`,
+		);
+	};
+
+	const external = EXTERNAL_FAILURE_STATES[state];
+	if (external) {
+		const cause = failedTurnCause(memberDir, status);
+		const detail = cause.line ?? (typeof status.message === "string" ? status.message : "");
+		stall(`${external}: ${detail || "no detail recorded"}`, cause);
+	}
+	if (!status.sessionID) {
+		stall(
+			`no session to resume (last state ${state || "unknown"}${typeof status.message === "string" && status.message ? `: ${status.message}` : ""})`,
+			failedTurnCause(memberDir, status),
+		);
+	}
+
+	let progress: CoverageProgress;
+	try {
+		progress = hooks.readProgress(name);
+	} catch (error: unknown) {
+		return stall(
+			`coverage ledger unreadable: ${error instanceof Error ? error.message : String(error)}`,
+			failedTurnCause(memberDir, status),
+		);
+	}
+
+	const mark = progressMark(progress);
+	record = progressAdvanced(record.lastProgress, mark)
+		? { ...FRESH_COVERAGE_RECORD, lastProgress: mark }
+		: { ...record, stalledResumes: record.stalledResumes + 1 };
+
+	let remedy: string | null = null;
+	if (record.stalledResumes >= COVERAGE_STALL_LIMIT) {
+		const at = `no coverage progress for ${record.stalledResumes} consecutive resumes at ${progress.pagesAcked}/${progress.pagesTotal} pages`;
+		if (record.resplitUsed)
+			stall(`${at}; resplitting the issued page did not help`, { kind: "no_progress" });
+		if (record.plainRemedyUsed) {
+			stall(
+				`${at}; ${progress.issuedPage ? `page ${progress.issuedPage.id} cannot be split further and ` : ""}a plain resume from the ledger did not help`,
+				{ kind: "no_progress" },
+			);
+		}
+		let splitRefusal: string | null = null;
+		if (progress.issuedPage) {
+			const pageBytes = Math.max(
+				RESPLIT_MIN_PAGE_BYTES,
+				Math.floor(progress.issuedPage.bytes / 2),
+			);
+			const result = hooks.resplit(name, progress.issuedPage.id, pageBytes);
+			if (result.ok) {
+				record = { ...record, resplitUsed: true };
+				remedy = `resplit ${progress.issuedPage.id} to ${pageBytes} bytes`;
+			} else splitRefusal = result.message.trim() || "refused";
+		}
+		if (remedy === null) {
+			record = { ...record, plainRemedyUsed: true };
+			remedy = `plain resume from the ledger${progress.issuedPage ? ` (page ${progress.issuedPage.id} cannot be split further: ${splitRefusal})` : ""}`;
+		}
+	}
+
+	atomicWriteJson(recordPath, record);
+	return {
+		kind: "resume",
+		pagesAcked: progress.pagesAcked,
+		pagesTotal: progress.pagesTotal,
+		stalledResumes: record.stalledResumes,
+		remedy,
+	};
+}
 
 export async function cmdResumeMember(
 	jobDir: string,
@@ -2600,13 +3065,46 @@ export async function cmdResumeMember(
 		throw new Error("member canceled; a new job is required");
 	}
 
+	const jobPath = path.join(jobDir, "job.json");
+	let jobMeta = readJsonIfExists(jobPath);
+	// Coverage-gated jobs judge session, state and cap in applyCoverageResumePolicy below.
+	const coverageGated = budgetMetaOf(jobMeta).coverageGated === true;
+	if (coverageGated && (!opts.coverage || !opts.workerPath))
+		throw new Error("coverage-gated job: resume-member needs coverage hooks and workerPath");
+	// The wall cap binds every resume, except --retry-stalled on a member stalled by an external
+	// cause: the wait for the user to fix that cause was spent outside the review, so the cap
+	// restarts from now, and a ledger root lost to OS temp cleanup comes back from the backup.
+	if (
+		coverageGated &&
+		opts.retryStalled === true &&
+		status.state === "stalled" &&
+		isExternalStallCause(status.stall_cause_kind) &&
+		isRecord(jobMeta)
+	) {
+		const ledgerRoot = coverageLedgerRoot(jobMeta);
+		if (ledgerRoot) restoreLedgerRoot(jobDir, ledgerRoot);
+		jobMeta = {
+			...jobMeta,
+			coverage: {
+				...(isRecord(jobMeta.coverage) ? jobMeta.coverage : {}),
+				wallCapAnchorAt: new Date().toISOString(),
+			},
+		};
+		atomicWriteJson(jobPath, jobMeta);
+	}
+	const wallCap = coverageWallCapBudget(budgetMetaOf(jobMeta), Date.now());
+	if (wallCap)
+		throw new Error(
+			`job exceeded its ${WALL_CAP_HOURS}h wall cap (${wallCap.elapsedSec}s since job start); resume refused. Apply the degradation path with the coverage collected so far.`,
+		);
+
 	// Check sessionID
 	const sessionID = status.sessionID;
-	if (!sessionID) throw new Error("no resumable session");
+	if (!sessionID && !coverageGated) throw new Error("no resumable session");
 
 	// State check
 	const state = String(status.state ?? "");
-	if (state === "error" || state === "non_retryable") {
+	if (!coverageGated && (state === "error" || state === "non_retryable")) {
 		throw new Error(`member in non-resumable state: ${state}`);
 	}
 
@@ -2642,23 +3140,20 @@ export async function cmdResumeMember(
 	// effectively sequential, so the cap holds in practice. executeOneTurn preserves
 	// resume_count via read-then-write (line 449 of worker-utils.ts).
 	const resumeCount = typeof status.resume_count === "number" ? status.resume_count : 0;
-	if (resumeCount >= 3) throw new Error("resume cap exceeded (3/3)");
+	const coverageOutcome =
+		coverageGated && opts.coverage
+			? applyCoverageResumePolicy(memberDir, name, status, opts.coverage, opts.retryStalled === true)
+			: null;
+	if (!coverageGated && resumeCount >= 3) throw new Error("resume cap exceeded (3/3)");
 	const reservedStatus = { ...status, resume_count: resumeCount + 1 };
 	atomicWriteJson(statusPath, reservedStatus);
 	const [origProgram, ...origArgs] = tokens;
 
 	// P2-1: read timeoutSec from job.json instead of hardcoding
 	let timeoutSec = 300;
-	try {
-		const jobMeta: Record<string, unknown> = JSON.parse(
-			fs.readFileSync(path.join(jobDir, "job.json"), "utf8"),
-		);
-		const settings = isRecord(jobMeta.settings) ? jobMeta.settings : undefined;
-		if (settings && typeof settings.timeoutSec === "number" && settings.timeoutSec >= 0) {
-			timeoutSec = settings.timeoutSec;
-		}
-	} catch {
-		/* keep default 300 */
+	const settings = isRecord(jobMeta) && isRecord(jobMeta.settings) ? jobMeta.settings : undefined;
+	if (settings && typeof settings.timeoutSec === "number" && settings.timeoutSec >= 0) {
+		timeoutSec = settings.timeoutSec;
 	}
 
 	// Note: promptsDir and fallbackFile are intentionally not forwarded here (spawn path below
@@ -2673,11 +3168,14 @@ export async function cmdResumeMember(
 		// resume turn observable to collect's poll loop again, the same as the initial dispatch.
 		// Preserves sessionID/command/workerEnv/resume_count(+1) — everything the cap-reservation
 		// write above already set, except state/queuedAt.
-		atomicWriteJson(statusPath, {
+		const queuedStatus: Record<string, unknown> = {
 			...reservedStatus,
 			state: "queued",
 			queuedAt: new Date().toISOString(),
-		});
+		};
+		// A queued member is no longer stalled, so no stall cause describes it.
+		for (const key of STALL_CAUSE_FIELDS) delete queuedStatus[key];
+		atomicWriteJson(statusPath, queuedStatus);
 
 		const workerArgs = [
 			opts.workerPath,
@@ -2687,10 +3185,8 @@ export async function cmdResumeMember(
 			name,
 			"--command",
 			cmdStr,
-			"--session",
-			String(sessionID),
-			"--prompt",
-			prompt,
+			// Without --session/--prompt the worker runs an initial turn (ledger init, full prompt).
+			...(coverageOutcome?.kind === "fresh_turn" ? [] : ["--session", String(sessionID), "--prompt", prompt]),
 		];
 		for (const [key, value] of Object.entries(storedWorkerEnv)) {
 			workerArgs.push("--env", `${key}=${value}`);
@@ -2718,7 +3214,9 @@ export async function cmdResumeMember(
 		}
 		child.unref();
 
-		process.stdout.write(`${JSON.stringify({ state: "dispatched", member: name })}\n`);
+		process.stdout.write(
+			`${JSON.stringify({ state: "dispatched", member: name, ...(coverageOutcome ? { coverage: coverageOutcome } : {}) })}\n`,
+		);
 		return;
 	}
 

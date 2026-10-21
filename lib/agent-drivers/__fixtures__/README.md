@@ -17,6 +17,7 @@ Provenance for each fixture file. All content traces to PoC captures in `/tmp/po
 - `codex-trivial.ndjson` — `/tmp/poc-spike/codex-stdin-stdout.txt` (PoC capture, 2026-05-16; note: codex-130-stdout.txt was 0 bytes, codex-stdin-stdout.txt has the required thread.started/item.completed/turn.completed shape)
 - `codex-turn-completed-with-sentinel.ndjson` — derived from `codex-trivial.ndjson`; `item.text` in the `agent_message` item.completed event appended with `\n\n## Verdict\nAPPROVE\n`; thread_id and turn.completed preserved
 - `codex-turn-failed.ndjson` — synthesized (2026-05-17); `thread.started` + `turn.started` + `turn.failed` event with context_length_exceeded error
+- `codex-usage-limit.ndjson` — synthesized (2026-10-20) in the `codex exec --json` event shapes (`error` + `turn.failed`); the message text is verbatim from a Codex rollout log `task_complete.error` (2026-09-17, `codex_error_info: usage_limit_exceeded`). No `codex exec --json` stdout capture of a quota failure existed in past job directories.
 
 ## Sentinel samples (`sentinel/`)
 

@@ -132,13 +132,13 @@ describe("ported from goal: Completion Gate detail lives in references/completio
 describe("code-review dispatch payload contract: exactly two items, first dispatch and re-dispatch alike", () => {
 	test("dispatch payload contract detail is absent from SKILL.md body", () => {
 		expect(skillMd).not.toContain(
-			"carries exactly two things:** the `serialize-review-context` 5-slot JSON verbatim and the session-derived artifact path",
+			"carries two things and one optional third field:** the `serialize-review-context` 5-slot JSON verbatim and the session-derived artifact path",
 		);
 	});
 
 	test("dispatch payload contract detail is present in references/completion-gate.md", () => {
 		expect(completionGateMd).toContain(
-			"carries exactly two things:** the `serialize-review-context` 5-slot JSON verbatim and the session-derived artifact path",
+			"carries two things and one optional third field:** the `serialize-review-context` 5-slot JSON verbatim and the session-derived artifact path",
 		);
 	});
 
@@ -158,7 +158,7 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 	test("the dispatch-prompt contract paragraph sits after the last code-review-lane bullet and before the artifact schema block", () => {
 		const codeReviewLaneIntro =
 			"**Code-review lane (starts at the final story";
-		const contractParagraphLead = "The code-reviewer dispatch prompt carries exactly two things:**";
+		const contractParagraphLead = "The code-reviewer dispatch prompt carries two things and one optional third field:**";
 		const artifactSchemaHeader =
 			"The original `CodeReviewArtifact` consumed and scope-validated by `ultragoal-state.ts get-review-result`:";
 
@@ -186,7 +186,7 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 	});
 
 	test("범위 계약이 재수정 경로보다 앞에 있고 재리뷰에도 유지된다", () => {
-		const contract = completionGateMd.indexOf("carries exactly two things:**");
+		const contract = completionGateMd.indexOf("carries two things and one optional third field:**");
 		const repairs = completionGateMd.indexOf("- **REQUEST_CHANGES result**");
 		expect(contract).toBeGreaterThan(-1);
 		expect(repairs).toBeGreaterThan(contract);
@@ -238,7 +238,8 @@ describe("ported from goal (regression): required phrases survive somewhere in b
 	});
 
 	test("INCONCLUSIVE status routing survives in the union", () => {
-		expect(combined).toMatch(/`INCONCLUSIVE`[^\n]*no speculative repair/);
+		expect(combined).toMatch(/`INCONCLUSIVE`[^\n]*inconclusive review/);
+		expect(combined).not.toContain("No speculative repair");
 		expect(combined).toContain("UNKNOWN / invalid / inconclusive review");
 	});
 });
@@ -395,7 +396,7 @@ describe("review dispatch budget runtime contract", () => {
 
 	test("완료 전에 모든 범위 안 개선을 수정하고 범위 밖 지적은 제외한다", () => {
 		expect(completionGateMd).toContain("HIGH => `REQUEST_CHANGES`");
-		expect(completionGateMd).toContain("LOW => `COMMENT` notes only");
+		expect(completionGateMd).toContain("LOW => `COMMENT` that never blocks and never triggers a fresh review");
 		expect(completionGateMd).toContain("OUT_OF_SCOPE");
 		expect(completionGateMd).toContain("`UNKNOWN`");
 	});
@@ -887,10 +888,19 @@ describe("deterministic ultragoal review routing contract", () => {
 		expect(completionGateMd).toContain("`UNKNOWN` => `REQUEST_CHANGES`");
 	});
 
+	test("changed_code admission and quoted non-goal exclusion are documented", () => {
+		expect(completionGateMd).toContain('"basis": "requirement|regression|changed_code|non_goal|unrelated|uncertain"');
+		expect(completionGateMd).toContain("IN_SCOPE⇒requirement/regression/changed_code");
+		expect(completionGateMd).toContain("| `IN_SCOPE` / `changed_code` |");
+		expect(completionGateMd).toContain("that directly addresses this defect's behavior or class");
+		expect(completionGateMd).toContain("A real defect excluded by scope is never recorded as REFUTED");
+		expect(completionGateMd).toContain("`OUT_OF_SCOPE` => `NOTE`");
+	});
+
 	test("comment and approve do not trigger a code-review re-review", () => {
 		expect(completionGateMd).toContain("`COMMENT` and `APPROVE` never trigger a code-review re-review");
 		expect(completionGateMd).toContain(
-			"any `IN_SCOPE` + `CONFIRMED` finding with `priority=HIGH`",
+			"any `IN_SCOPE` finding (`CONFIRMED` or `PLAUSIBLE`) with `priority=HIGH`",
 		);
 	});
 
@@ -947,26 +957,43 @@ describe("disambiguation clause: OMT goal skill vs Codex native goal tools", () 
 });
 
 // ---------------------------------------------------------------------------
-// no-safe-default-terminal: the completion gate already forbids speculative
-// fixes on an uncertain finding; the gap is adherence under momentum pressure.
-// For a no-safe-default domain, an uncertain finding Oracle cannot collapse
-// routes to a MANDATORY user scope decision (handle vs accept-as-non-goal),
-// and autonomous speculative handling is explicitly not a sanctioned outcome.
-// (must FAIL before the completion-gate.md edit -- RED)
+// no-safe-default: an uncertain finding names the runtime fact that would settle
+// it; a repair local to code this pursuit changed is allowed (reason recorded),
+// and the user decides only when the remedy needs excluded behavior or the
+// product requirement itself is unclear.
 // ---------------------------------------------------------------------------
 
-describe("no-safe-default-terminal: an uncertain no-safe-default finding escalates to the user, never autonomous handling", () => {
+describe("no-safe-default: an uncertain finding allows a local repair and escalates to the user only for scope or requirement", () => {
 	test("the rationalization table names the stuck-block speculative-fix trap", () => {
 		expect(completionGateMd).toContain("Stuck on the block, so I'll just add the lock/guard/handling");
 	});
 
-	test("autonomous handling of an uncertain no-safe-default risk is explicitly not sanctioned", () => {
+	test("an uncertain no-safe-default finding allows a local repair and no longer forbids it outright", () => {
 		expect(completionGateMd).toContain(
-			"autonomous handling of an uncertain no-safe-default risk is not a sanctioned outcome",
+			"A repair local to code this pursuit added or modified is allowed",
 		);
+		expect(completionGateMd).not.toContain("not a sanctioned outcome");
+		expect(completionGateMd).not.toContain("No speculative repair");
 	});
 
 	test("an accepted risk is recorded as a non-goal, not implemented", () => {
 		expect(completionGateMd).toContain("accept the risk and record it as a non-goal");
+	});
+});
+
+describe("external stall: the user reopens this session within the retention window", () => {
+	test("completion-gate tells the user to reopen this session and resume within 7 days", () => {
+		expect(completionGateMd).toContain("claude --resume");
+		expect(completionGateMd).toContain("codex resume");
+		expect(completionGateMd).toContain("within 7 days");
+		expect(completionGateMd).not.toContain("OS temp directory");
+	});
+
+	test("SKILL.md await-user row and bullet carry the reopen note", () => {
+		expect(skillMd.match(/reopen this session/g)?.length).toBeGreaterThanOrEqual(2);
+	});
+
+	test("validate-review-artifact has no advisory warnings in the prose", () => {
+		expect(completionGateMd).not.toContain("advisory warnings");
 	});
 });

@@ -46,6 +46,7 @@ import {
 	cmdStop as _cmdStop,
 	cmdClean as _cmdClean,
 	cmdCollect as _cmdCollect,
+	COVERAGE_JOB_WALL_CAP_SEC,
 	buildManifest as _buildManifest,
 	cmdResumeMember as _cmdResumeMember,
 	reapOrphanJobs,
@@ -54,6 +55,8 @@ import {
 } from "@lib/generic-job";
 
 export { cmdResumeMember } from "@lib/generic-job";
+import { loadPlan } from "./diff-cursor";
+import { coverageHooks, readJobCoverage } from "./worker";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -99,6 +102,7 @@ const CHUNK_REVIEW_BOOLEAN_FLAGS = new Set([
 	"stdin",
 	"blocking",
 	"force",
+	"retry-stalled",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -277,7 +281,13 @@ function logMemberDurations(jobDir: string): void {
 async function cmdCollect(options: Record<string, unknown>, jobDir: string): Promise<void> {
 	initLoggerFromJobDir(jobDir);
 	logInfo(`collect: ${path.resolve(jobDir)}`);
-	await _cmdCollect(options, jobDir, CHUNK_REVIEW_JOB_CONFIG);
+	const coverage = readJobCoverage(path.resolve(jobDir));
+	await _cmdCollect(
+		options,
+		jobDir,
+		CHUNK_REVIEW_JOB_CONFIG,
+		coverage ? coverageHooks(coverage) : undefined,
+	);
 	logMemberDurations(jobDir);
 }
 
@@ -461,11 +471,12 @@ function printHelp(): void {
 	process.stdout.write(`Chunk Review (job mode)
 
 Usage:
-  job.ts start [--config path] [--chairman auto|claude|codex|...] [--jobs-dir path] [--json] "question"
-  job.ts start --stdin
+  job.ts start --ledger-root dir [--config path] [--chairman auto|claude|codex|...] [--jobs-dir path] [--json] "question"
+  job.ts start --ledger-root dir --stdin
   job.ts status [--json|--text|--checklist] [--verbose] <jobDir>
   job.ts collect [--timeout-ms N] <jobDir>
   job.ts results [--json|--manifest] <jobDir>
+  job.ts resume-member --job <jobDir> --member <name> --prompt "text" [--retry-stalled]
   job.ts stop <jobDir>
   job.ts clean <jobDir>
   job.ts reap [--jobs-dir path] [--grace-ms N]
@@ -474,6 +485,12 @@ Usage:
 Notes:
   - start returns immediately and runs reviewers in parallel via detached Node workers
   - poll status with repeated short calls to update TODO/plan UIs in host agents
+  - start requires --ledger-root <dir>: run diff-cursor.ts plan --out <dir>/plan first. Each member
+    walks the diff through its ledger; a turn that ends before the ledger is finished is awaiting_resume.
+  - the conductor runs resume-member after collect returns awaiting_resume; nothing resumes
+    automatically. A member that stops making progress, or fails for a cause outside it, ends stalled;
+    rerun with --retry-stalled once the cause is fixed. collect and resume-member stop at a
+    ${COVERAGE_JOB_WALL_CAP_SEC / 3600}-hour wall cap. Resume policy and stall causes: code-review SKILL.md Step 4.
   - reap kills orphaned job process groups (SIGTERM then SIGKILL); all its output goes to
     stderr — stdout is always empty, since a SessionStart hook calls it and must not vary
   - doctor reports orphan counts on stdout without killing anything (diagnostic only)
@@ -910,10 +927,37 @@ function cmdDoctor(options: Record<string, unknown>): void {
 	}
 }
 
+/**
+ * `--ledger-root <dir>` (required) → the job's coverage record. The plan must already exist at
+ * `<dir>/plan/plan.json` (diff-cursor.ts plan); its planSha is recorded so readers never guess.
+ * The finder prompts read the diff only through the cursor, so a job without a ledger could end
+ * `done` without reading the diff.
+ */
+function resolveStartCoverage(
+	options: Record<string, unknown>,
+): { ledgerRoot: string; planDir: string; planSha: string } {
+	const raw = options["ledger-root"];
+	if (raw === undefined || raw === null)
+		exitWithError(
+			"start: --ledger-root is required: run the conductor's plan step first (diff-cursor.ts plan --out <dir>/plan, code-review SKILL.md), then pass --ledger-root <dir>. Finders read the diff only through the cursor ledger under <dir>.",
+		);
+	if (typeof raw !== "string" || raw === "") exitWithError("start: --ledger-root needs a directory");
+	const ledgerRoot = path.resolve(raw);
+	const planDir = path.join(ledgerRoot, "plan");
+	try {
+		return { ledgerRoot, planDir, planSha: loadPlan(planDir).planSha };
+	} catch (error: unknown) {
+		exitWithError(
+			`start: --ledger-root: cannot read ${path.join(planDir, "plan.json")} (${error instanceof Error ? error.message : String(error)}); run diff-cursor.ts plan --out ${planDir} first`,
+		);
+	}
+}
+
 async function cmdStart(options: Record<string, unknown>, prompt: string): Promise<void> {
 	const configPath =
 		optionalString(options.config) || process.env.CHUNK_REVIEW_CONFIG || resolveDefaultConfigFile();
 	const jobsDir = resolveJobsDir(options);
+	const coverage = resolveStartCoverage(options);
 
 	ensureDir(jobsDir);
 	const identityResult = readChunkReviewIdentity(options);
@@ -1067,7 +1111,9 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 				timeoutSec: timeoutSec || null,
 				denySkills,
 				denySubagents,
+				coverageGated: true,
 			},
+			coverage,
 			...(identity ? { identity } : {}),
 			state: identity ? "initializing" : undefined,
 			...(identity
@@ -1268,9 +1314,12 @@ async function main(): Promise<void> {
 		if (!nameArg) exitWithError("--member required");
 		const promptArg = optionalString(options.prompt);
 		if (!promptArg) exitWithError("--prompt required");
+		const coverage = readJobCoverage(path.resolve(jobDirArg));
 		try {
 			await _cmdResumeMember(jobDirArg, nameArg, promptArg, CHUNK_REVIEW_JOB_CONFIG, {
 				workerPath: WORKER_PATH,
+				...(coverage ? { coverage: coverageHooks(coverage) } : {}),
+				retryStalled: options["retry-stalled"] === true,
 			});
 		} catch (e: unknown) {
 			exitWithError(e instanceof Error ? e.message : String(e));

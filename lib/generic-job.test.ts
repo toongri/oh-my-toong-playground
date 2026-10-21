@@ -38,7 +38,16 @@ import {
 	COLLECT_MAX_WAIT_MS,
 	resolveCollectWaitMs,
 	resolveCollectNextAction,
+	readCollectBudgetMeta,
+	coverageWallCapBudget,
 	cmdResumeMember,
+	COVERAGE_STALL_LIMIT,
+	COVERAGE_JOB_WALL_CAP_SEC,
+	recordCoverageResumeBaseline,
+	type CoverageHooks,
+	type CoverageProgress,
+	type CollectBudget,
+	type CollectBudgetMeta,
 	assertMembersOrExit,
 	assertDenyEnforceable,
 	assertDenyShape,
@@ -1464,6 +1473,37 @@ describe("gcStaleJobs", () => {
 		expect(fs.existsSync(staleChunkDir)).toBe(true);
 	});
 
+	test("외부 원인(quota·auth·missing_cli)으로 stalled된 멤버가 있는 잡은 1시간이 지나도 지우지 않는다", () => {
+		const jobsDir = path.join(tmpDir, "jobs");
+		const twoHoursAgo = new Date(Date.now() - 2 * 3_600_000).toISOString();
+		function writeJobWith(id: string, memberStatus: Record<string, unknown> | null): string {
+			const dir = path.join(jobsDir, id);
+			fs.mkdirSync(path.join(dir, "members", "correctness"), { recursive: true });
+			fs.writeFileSync(path.join(dir, "job.json"), JSON.stringify({ id, createdAt: twoHoursAgo }));
+			if (memberStatus)
+				fs.writeFileSync(
+					path.join(dir, "members", "correctness", "status.json"),
+					JSON.stringify({ member: "correctness", ...memberStatus }),
+				);
+			return dir;
+		}
+		const quota = writeJobWith("chunk-review-quota", { state: "stalled", stall_cause_kind: "quota" });
+		const auth = writeJobWith("chunk-review-auth", { state: "stalled", stall_cause_kind: "auth" });
+		const missing = writeJobWith("chunk-review-missing", { state: "stalled", stall_cause_kind: "missing_cli" });
+		const noProgress = writeJobWith("chunk-review-noprogress", { state: "stalled", stall_cause_kind: "no_progress" });
+		const done = writeJobWith("chunk-review-done", { state: "done" });
+		const empty = writeJobWith("chunk-review-empty", null);
+
+		gcStaleJobs(jobsDir, chunkReviewConfig);
+
+		expect(fs.existsSync(quota)).toBe(true);
+		expect(fs.existsSync(auth)).toBe(true);
+		expect(fs.existsSync(missing)).toBe(true);
+		expect(fs.existsSync(noProgress)).toBe(false);
+		expect(fs.existsSync(done)).toBe(false);
+		expect(fs.existsSync(empty)).toBe(false);
+	});
+
 	test("path traversal guard prevents deletion outside jobsDir", () => {
 		const jobsDir = path.join(tmpDir, "jobs");
 		fs.mkdirSync(jobsDir, { recursive: true });
@@ -1951,7 +1991,7 @@ describe("computeStatus", () => {
 		expect(result.counts.empty_output).toBe(1);
 	});
 
-	test("computeStatus totals 13 keys", async () => {
+	test("computeStatus totals 14 keys", async () => {
 		const jobDir = path.join(tmpDir, "job-12keys");
 		setupJob(
 			jobDir,
@@ -1976,13 +2016,14 @@ describe("computeStatus", () => {
 			"transient_error",
 			"permanent_error",
 			"awaiting_resume",
+			"stalled",
 		];
 		for (const key of expectedKeys) {
 			expect(key in result.counts).toBe(true);
 		}
-		// Exactly 13 keys (excluding 'total' which is added separately)
+		// Exactly 14 keys (excluding 'total' which is added separately)
 		const countKeys = Object.keys(result.counts).filter((k) => k !== "total");
-		expect(countKeys.length).toBe(13);
+		expect(countKeys.length).toBe(14);
 		expect("max_turns_exceeded" in result.counts).toBe(false);
 	});
 });
@@ -5584,5 +5625,768 @@ describe("findActiveMembers / findOrphanJobs / cmdClean — entitiesDir 읽기 �
 
 		expect(() => cmdClean({ force: true }, jobDirForce, chunkReviewConfig, jobsDir)).not.toThrow();
 		expect(fs.existsSync(jobDirForce)).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Coverage-gated jobs: progress-based resume policy and activity-anchored collect deadline
+// ---------------------------------------------------------------------------
+
+describe("cmdResumeMember — coverage-gated 재개 정책", () => {
+	let tmpDir: string;
+	let jobDir: string;
+	let memberDir: string;
+	let ledgerRoot: string;
+
+	const config = chunkReviewConfig;
+
+	const driver = {
+		cli: "opencode" as const,
+		initialCommand: () => ({ program: "opencode", args: [], env: {} }),
+		resumeCommand: () => ({ program: "opencode", args: [], env: {} }),
+		parseStdout: () => null,
+	};
+
+	/** Probe backed by a mutable progress value, recording every resplit request. */
+	function makeHooks(initial: CoverageProgress, resplitOk = true) {
+		const state = { progress: { ...initial } };
+		const resplits: { member: string; pageId: string; pageBytes: number }[] = [];
+		const hooks: CoverageHooks = {
+			readProgress: () => ({ ...state.progress }),
+			resplit: (member, pageId, pageBytes) => {
+				resplits.push({ member, pageId, pageBytes });
+				return resplitOk ? { ok: true, message: "RESPLIT" } : { ok: false, message: "already fits" };
+			},
+		};
+		return { state, resplits, hooks };
+	}
+
+	/** job.json: coverage-gated by default (with a coverage record); ageSec sets createdAt. */
+	function writeJob(opts: { coverageGated?: boolean; ageSec?: number; members?: string[] } = {}) {
+		const { coverageGated = true, ageSec, members = ["correctness"] } = opts;
+		fs.mkdirSync(memberDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({
+				id: "chunk-review-x",
+				...(ageSec === undefined ? {} : { createdAt: new Date(Date.now() - ageSec * 1000).toISOString() }),
+				settings: { timeoutSec: 60, ...(coverageGated ? { coverageGated: true } : {}) },
+				...(coverageGated
+					? { coverage: { ledgerRoot, planDir: path.join(ledgerRoot, "plan"), planSha: "sha-1" } }
+					: {}),
+				members: members.map((name) => ({ name })),
+			}),
+		);
+	}
+
+	function writeStatus(payload: Record<string, unknown>, member = "correctness") {
+		const dir = path.join(jobDir, "members", member);
+		fs.mkdirSync(dir, { recursive: true });
+		fs.writeFileSync(
+			path.join(dir, "status.json"),
+			JSON.stringify({ member, command: "opencode --format json", sessionID: "sess-1", ...payload }),
+		);
+	}
+
+	const readStatus = (): Record<string, unknown> =>
+		JSON.parse(fs.readFileSync(path.join(memberDir, "status.json"), "utf8"));
+	const readRecord = (): Record<string, unknown> =>
+		JSON.parse(fs.readFileSync(path.join(memberDir, "coverage-resume.json"), "utf8"));
+
+	/** spawnFn stub recording each dispatch's worker argv; `turn` stands in for the dispatched turn. */
+	function recordingSpawn(turn?: () => void) {
+		const calls: string[][] = [];
+		const spawnFn = ((_command: string, args: string[]) => {
+			calls.push(args);
+			turn?.();
+			return { unref: () => {} } as unknown as ReturnType<typeof spawn>;
+		}) as unknown as typeof spawn;
+		return { calls, spawnFn };
+	}
+
+	/** One conductor resume through a detached worker whose turn ends awaiting_resume again. */
+	async function resume(hooks: CoverageHooks, extra: Partial<ResumeMemberOpts> = {}) {
+		const { spawnFn } = recordingSpawn(() => writeStatus({ ...readStatus(), state: "awaiting_resume" }));
+		await cmdResumeMember(jobDir, "correctness", "continue", config, {
+			driverFactory: () => driver,
+			workerPath: "/fake/worker.ts",
+			spawnFn,
+			coverage: hooks,
+			...extra,
+		});
+	}
+
+	/** Captures what cmdResumeMember / cmdCollect print. */
+	async function captureStdout(fn: () => Promise<void>): Promise<Record<string, unknown>> {
+		const out: string[] = [];
+		const origWrite = process.stdout.write.bind(process.stdout);
+		process.stdout.write = ((chunk: string) => {
+			out.push(String(chunk));
+			return true;
+		}) as typeof process.stdout.write;
+		try {
+			await fn();
+		} finally {
+			process.stdout.write = origWrite;
+		}
+		return JSON.parse(out.join(""));
+	}
+
+	beforeEach(() => {
+		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "coverage-resume-test-"));
+		jobDir = path.join(tmpDir, "chunk-review-x");
+		memberDir = path.join(jobDir, "members", "correctness");
+		ledgerRoot = path.join(tmpDir, "lr");
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	const base: CoverageProgress = {
+		pagesAcked: 0,
+		pagesTotal: 40,
+		checklistItems: 0,
+		checklistVerdicts: 0,
+		finished: false,
+		issuedPage: null,
+		lastProgressAt: null,
+	};
+
+	/** The progress mark the worker records when a member's initial turn starts. */
+	const mark = (pagesAcked: number) => ({ ...base, pagesAcked });
+
+	/** A coverage-gated job whose member is awaiting_resume, its baseline recorded at `baseline`. */
+	function parked(baseline: CoverageProgress | null = mark(0), status: Record<string, unknown> = {}) {
+		writeJob();
+		if (baseline) recordCoverageResumeBaseline(memberDir, baseline);
+		writeStatus({ state: "awaiting_resume", resume_count: 0, ...status });
+	}
+
+	test("진행이 늘어나는 동안에는 3회를 넘어 계속 재개한다", async () => {
+		parked(null);
+		const { state, hooks } = makeHooks(base);
+		for (let i = 1; i <= 6; i++) {
+			state.progress.pagesAcked = i * 5;
+			await resume(hooks);
+		}
+		expect(readStatus().resume_count).toBe(6);
+		expect(readStatus().state).toBe("awaiting_resume");
+	});
+
+	test("진행 없는 재개가 3회 연속이면 발급된 페이지를 절반 크기로 재분할한 뒤 재개한다", async () => {
+		parked(mark(7));
+		const { hooks, resplits } = makeHooks({ ...base, pagesAcked: 7, issuedPage: { id: "p0008", bytes: 24000 } });
+		// Every resume sees no progress since the baseline; the third one applies the remedy.
+		for (let i = 0; i < COVERAGE_STALL_LIMIT - 1; i++) await resume(hooks);
+		expect(resplits).toEqual([]);
+		await resume(hooks);
+		expect(resplits).toEqual([{ member: "correctness", pageId: "p0008", pageBytes: 12000 }]);
+		expect(readStatus().state).toBe("awaiting_resume");
+	});
+
+	test("기준선은 job 시작 시점이라 첫 턴이 진행했으면 첫 재개는 진행으로 센다", async () => {
+		parked(mark(0));
+		const { state, hooks, resplits } = makeHooks(base);
+		state.progress.pagesAcked = 4; // the initial turn acknowledged 4 pages
+		await resume(hooks);
+		for (let i = 0; i < COVERAGE_STALL_LIMIT - 1; i++) await resume(hooks);
+		expect(resplits).toEqual([]);
+		expect(readRecord()).toEqual({
+			lastProgress: { pagesAcked: 4, checklistItems: 0, checklistVerdicts: 0, finished: false },
+			stalledResumes: COVERAGE_STALL_LIMIT - 1,
+			plainRemedyUsed: false,
+			resplitUsed: false,
+		});
+	});
+
+	test("재분할 크기는 4096바이트 아래로 내려가지 않는다", async () => {
+		parked();
+		const { hooks, resplits } = makeHooks({ ...base, issuedPage: { id: "p0001.1", bytes: 6000 } });
+		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		expect(resplits[0]?.pageBytes).toBe(4096);
+	});
+
+	test("재분할할 수 없으면 평범한 재개를 한 번 쓰고, 그래도 진행이 없으면 stalled로 멈춘다", async () => {
+		parked(mark(2));
+		const { hooks, resplits } = makeHooks({ ...base, pagesAcked: 2, issuedPage: { id: "p0003", bytes: 3000 } }, false);
+		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		expect(resplits.length).toBe(1);
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+		const status = readStatus();
+		expect(status.state).toBe("stalled");
+		expect(String(status.message)).toContain("2/40 pages");
+		expect(String(status.message)).toContain("cannot be split further");
+		// Auto-resume stays stopped.
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+	});
+
+	test("발급된 페이지가 없으면 평범한 재개 한 번 후 no_progress로 멈추고, error.txt의 일시적 429 줄은 원인이 아니다", async () => {
+		parked();
+		fs.writeFileSync(
+			path.join(memberDir, "error.txt"),
+			"WARN: stream error: 429 Too Many Requests (rate limit reached); retrying 1/5, try again at 10:17 PM.\n",
+		);
+		const { hooks, resplits } = makeHooks(base);
+		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		await expect(resume(hooks)).rejects.toThrow("plain resume from the ledger did not help");
+		expect(resplits).toEqual([]);
+		const status = readStatus();
+		expect(status.state).toBe("stalled");
+		expect(status.stall_cause_kind).toBe("no_progress");
+		expect(status.stall_detail).toBe(status.message);
+		expect("stall_reset_text" in status).toBe(false);
+	});
+
+	test("외부 원인 실패(non_retryable)는 재개 없이 바로 stalled가 되고 이유를 남긴다", async () => {
+		writeJob();
+		writeStatus({ state: "non_retryable", message: null });
+		fs.writeFileSync(path.join(memberDir, "error.txt"), "ERROR: unexpected status 401 Unauthorized\n");
+		const { hooks } = makeHooks(base);
+		const { calls, spawnFn } = recordingSpawn();
+		await expect(resume(hooks, { spawnFn })).rejects.toThrow("member stalled");
+		expect(calls).toEqual([]);
+		const status = readStatus();
+		expect(status.state).toBe("stalled");
+		expect(status.message).toBe("non-retryable failure: ERROR: unexpected status 401 Unauthorized");
+		expect(status.stall_cause_kind).toBe("auth");
+		expect(status.stall_detail).toBe("ERROR: unexpected status 401 Unauthorized");
+		expect("stall_reset_text" in status).toBe(false);
+	});
+
+	const QUOTA_TEXT =
+		"You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 20th, 2026 10:17 PM.";
+
+	test("사용량 한도로 실패한 턴은 stall_cause_kind quota와 재시도 시각 문구를 남기고 stalled가 된다", async () => {
+		writeJob();
+		writeStatus({ state: "non_retryable", message: QUOTA_TEXT });
+		const { hooks } = makeHooks(base);
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+		const status = readStatus();
+		expect(status.state).toBe("stalled");
+		expect(status.stall_cause_kind).toBe("quota");
+		expect(status.stall_detail).toBe(QUOTA_TEXT);
+		expect(status.stall_reset_text).toBe("try again at Sep 20th, 2026 10:17 PM");
+		expect(status.message).toBe(`non-retryable failure: ${QUOTA_TEXT}`);
+	});
+
+	test("세션 ID가 없어도 사용량 한도 문구가 error.txt에 있으면 quota로 분류한다", async () => {
+		writeJob();
+		writeStatus({ state: "error", sessionID: null, message: null });
+		fs.writeFileSync(
+			path.join(memberDir, "error.txt"),
+			`Reading prompt from stdin...\nERROR: ${QUOTA_TEXT}\nshutting down\n`,
+		);
+		const { hooks } = makeHooks(base);
+		await expect(resume(hooks)).rejects.toThrow("no session to resume");
+		const status = readStatus();
+		expect(status.stall_cause_kind).toBe("quota");
+		expect(status.stall_detail).toBe(`ERROR: ${QUOTA_TEXT}`);
+		expect(status.stall_reset_text).toBe("try again at Sep 20th, 2026 10:17 PM");
+	});
+
+	test("missing_cli는 상태로 분류하고, 알 수 없는 실패·세션 없음은 other로 stalled가 된다", async () => {
+		writeJob();
+		writeStatus({ state: "missing_cli", message: "spawn codex ENOENT" });
+		const { hooks } = makeHooks(base);
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+		expect(readStatus()).toMatchObject({
+			stall_cause_kind: "missing_cli",
+			stall_detail: "the agent CLI binary was not found: spawn codex ENOENT",
+		});
+
+		writeStatus({ state: "non_retryable", message: "context length exceeded" });
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+		expect(readStatus().stall_cause_kind).toBe("other");
+
+		writeStatus({ state: "error", sessionID: null, message: "Output drain timed out" });
+		await expect(resume(hooks)).rejects.toThrow("no session to resume");
+		expect(readStatus()).toMatchObject({ state: "stalled", stall_cause_kind: "other" });
+		expect("stall_reset_text" in readStatus()).toBe(false);
+	});
+
+	test.each([
+		["codex exited 1", "non-retryable failure: codex exited 1"],
+		[null, "non-retryable failure: no detail recorded"],
+	])("quota·auth 줄이 없는 non_retryable은 기록된 원인만 적는다 (message %p)", async (message, expected) => {
+		writeJob();
+		writeStatus({ state: "non_retryable", message });
+		fs.writeFileSync(path.join(memberDir, "error.txt"), "ERROR: stream disconnected before completion\n");
+		const { hooks } = makeHooks(base);
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+		expect(readStatus().message).toBe(expected);
+	});
+
+	test("stalled 멤버의 --retry-stalled는 세션 ID가 있어도 같은 원장에 새 초기 턴을 띄우고 카운터를 초기화한다", async () => {
+		writeJob();
+		writeStatus({
+			state: "missing_cli",
+			message: "spawn codex ENOENT",
+			workerEnv: { OMT_DIFF_CURSOR_LEDGER: "/l/ledgers/correctness" },
+		});
+		const { hooks } = makeHooks({ ...base, pagesAcked: 3 });
+		await expect(resume(hooks)).rejects.toThrow("binary was not found");
+		expect(readStatus()).toMatchObject({ state: "stalled", sessionID: "sess-1" });
+
+		const { calls, spawnFn } = recordingSpawn();
+		const out = await captureStdout(() =>
+			cmdResumeMember(jobDir, "correctness", "continue", config, {
+				driverFactory: () => driver,
+				coverage: hooks,
+				retryStalled: true,
+				workerPath: "/fake/worker.ts",
+				spawnFn,
+			}),
+		);
+		// The stalled session is not reused: no --session/--prompt, so the worker runs an initial turn.
+		expect(calls).toEqual([
+			[
+				"/fake/worker.ts",
+				"--job-dir",
+				jobDir,
+				"--member",
+				"correctness",
+				"--command",
+				"opencode --format json",
+				"--env",
+				"OMT_DIFF_CURSOR_LEDGER=/l/ledgers/correctness",
+				"--timeout",
+				"60",
+			],
+		]);
+		expect((out.coverage as Record<string, unknown>).kind).toBe("fresh_turn");
+		expect(readStatus().state).toBe("queued");
+		// The fresh turn's worker records the new baseline.
+		expect(readRecord()).toEqual({ lastProgress: null, stalledResumes: 0, plainRemedyUsed: false, resplitUsed: false });
+	});
+
+	test("재분할은 한 번만: 진행 없는 3회 → 재분할 1회 → 다음 재개도 진행이 없으면 stalled", async () => {
+		parked(mark(7));
+		const { hooks, resplits } = makeHooks({ ...base, pagesAcked: 7, issuedPage: { id: "p0008", bytes: 24000 } });
+		// Resumes 1-3 judge the initial turn and the next two turns: no progress in any of them.
+		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		expect(resplits.length).toBe(1);
+		expect(readRecord()).toMatchObject({ stalledResumes: 3, resplitUsed: true, plainRemedyUsed: false });
+		// Resume 4 judges the turn that ran after the resplit: still no progress → stalled, no second resplit.
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+		expect(resplits.length).toBe(1);
+		expect(readStatus().state).toBe("stalled");
+		expect(String(readStatus().message)).toContain("7/40 pages");
+		expect(String(readStatus().message)).toContain("resplitting the issued page did not help");
+		expect(readStatus().resume_count).toBe(3);
+	});
+
+	test("진행이 오면 재분할 사용 표시까지 모두 초기화되어 다음 정체에 다시 재분할할 수 있다", async () => {
+		parked(mark(7));
+		const { state, hooks, resplits } = makeHooks({ ...base, pagesAcked: 7, issuedPage: { id: "p0008", bytes: 24000 } });
+		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		expect(resplits.length).toBe(1);
+		state.progress = { ...state.progress, pagesAcked: 8, issuedPage: { id: "p0009", bytes: 24000 } };
+		await resume(hooks);
+		expect(readRecord()).toEqual({
+			lastProgress: { pagesAcked: 8, checklistItems: 0, checklistVerdicts: 0, finished: false },
+			stalledResumes: 0,
+			plainRemedyUsed: false,
+			resplitUsed: false,
+		});
+		for (let i = 0; i < COVERAGE_STALL_LIMIT; i++) await resume(hooks);
+		expect(resplits.map((r) => r.pageId)).toEqual(["p0008", "p0009"]);
+		await expect(resume(hooks)).rejects.toThrow("member stalled");
+	});
+
+	test("cleanup 체크리스트 작업(항목 추가·최종 판정·finish)은 진행으로 센다", async () => {
+		parked({ ...base, pagesAcked: 40 });
+		const { state, hooks, resplits } = makeHooks({ ...base, pagesAcked: 40 });
+		// Each turn after the walk adds checklist items, then gives them verdicts: never a stall.
+		for (let i = 1; i <= COVERAGE_STALL_LIMIT + 1; i++) {
+			state.progress.checklistItems = i * 2;
+			await resume(hooks);
+		}
+		for (let i = 1; i <= COVERAGE_STALL_LIMIT + 1; i++) {
+			state.progress.checklistVerdicts = i;
+			await resume(hooks);
+		}
+		expect(readRecord()).toMatchObject({ stalledResumes: 0 });
+		// Two turns without checklist change, then finishedAt is set: progress resets the count.
+		await resume(hooks);
+		await resume(hooks);
+		expect(readRecord()).toMatchObject({ stalledResumes: 2 });
+		state.progress.finished = true;
+		await resume(hooks);
+		expect(readRecord()).toMatchObject({ stalledResumes: 0, lastProgress: { finished: true } });
+		expect(resplits).toEqual([]);
+		expect(readStatus().state).toBe("awaiting_resume");
+	});
+
+	test("체크리스트 판정 수가 그대로면(항목 내용만 바뀜) 진행이 아니다", async () => {
+		const progress = { ...base, pagesAcked: 40, checklistItems: 3, checklistVerdicts: 1 };
+		parked(progress);
+		await resume(makeHooks(progress).hooks);
+		expect(readRecord()).toMatchObject({ stalledResumes: 1 });
+	});
+
+	test("stalled가 아닌 멤버의 --retry-stalled는 평범한 재개로 다뤄 카운터를 초기화하지 않는다", async () => {
+		parked();
+		const { hooks } = makeHooks(base);
+		await resume(hooks);
+		await resume(hooks, { retryStalled: true });
+		expect(readRecord()).toMatchObject({ stalledResumes: 2, lastProgress: { pagesAcked: 0 } });
+		expect(readStatus().state).toBe("awaiting_resume");
+	});
+
+	test("stalled가 아닌 non_retryable 멤버의 --retry-stalled는 외부 원인 검사를 건너뛰지 않는다", async () => {
+		writeJob();
+		writeStatus({ state: "non_retryable", message: "turn failed" });
+		const { calls, spawnFn } = recordingSpawn();
+		await expect(resume(makeHooks(base).hooks, { retryStalled: true, spawnFn })).rejects.toThrow("member stalled");
+		expect(calls).toEqual([]);
+		expect(readStatus().state).toBe("stalled");
+		expect(readStatus().resume_count ?? 0).toBe(0);
+	});
+
+	describe("6시간 벽시계 상한", () => {
+		/** A file-backed ledger per member: readProgress reads it, nothing in resume-member writes it. */
+		function writeLedgers(pagesAcked: Record<string, number>) {
+			for (const [member, acked] of Object.entries(pagesAcked)) {
+				const dir = path.join(ledgerRoot, "ledgers", member);
+				fs.mkdirSync(dir, { recursive: true });
+				fs.writeFileSync(path.join(dir, "ledger.json"), JSON.stringify({ pagesAcked: acked, pagesTotal: 40 }));
+			}
+		}
+		const ledgerBytes = (member: string) =>
+			fs.readFileSync(path.join(ledgerRoot, "ledgers", member, "ledger.json"), "utf8");
+		const ledgerHooks: CoverageHooks = {
+			readProgress: (member) => ({ ...base, ...JSON.parse(ledgerBytes(member)) }),
+			resplit: () => ({ ok: false, message: "unused" }),
+		};
+		const readJobJson = () => JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
+		const stalledByQuota = {
+			state: "stalled",
+			message: "non-retryable failure: usage limit",
+			stall_cause_kind: "quota",
+			stall_detail: "You've hit your usage limit.",
+			stall_reset_text: "try again at Sep 20th, 2026 10:17 PM",
+		};
+		const collectOnce = () => captureStdout(() => cmdCollect({ "timeout-ms": 1 }, jobDir, config));
+		/** --retry-stalled of correctness through a recording detached spawn. */
+		async function retryStalled() {
+			const rec = recordingSpawn();
+			await cmdResumeMember(jobDir, "correctness", "continue", config, {
+				driverFactory: () => driver,
+				coverage: ledgerHooks,
+				retryStalled: true,
+				workerPath: "/fake/worker.ts",
+				spawnFn: rec.spawnFn,
+			});
+			return rec.calls;
+		}
+
+		test("상한을 넘긴 잡의 resume-member는 디스패치하지 않고 거부하며 상태를 바꾸지 않는다", async () => {
+			writeJob({ ageSec: COVERAGE_JOB_WALL_CAP_SEC + 60 });
+			recordCoverageResumeBaseline(memberDir, mark(0));
+			writeStatus({ state: "awaiting_resume", resume_count: 1 });
+			const { state, hooks } = makeHooks(base);
+			state.progress.pagesAcked = 5; // progress does not lift the cap
+			const { calls, spawnFn } = recordingSpawn();
+			await expect(resume(hooks, { spawnFn })).rejects.toThrow("job exceeded its 6h wall cap");
+			expect(calls).toEqual([]);
+			expect(readStatus()).toMatchObject({ state: "awaiting_resume", resume_count: 1 });
+			expect(readRecord()).toMatchObject({ lastProgress: { pagesAcked: 0 }, stalledResumes: 0 });
+		});
+
+		test("진행 없음·세션 없음으로 멈춘 멤버의 --retry-stalled는 상한을 넘긴 잡에서 거부되고 상한 기준을 바꾸지 않는다", async () => {
+			writeJob({ ageSec: 7 * 3600 });
+			writeLedgers({ correctness: 12 });
+			const jobBefore = fs.readFileSync(path.join(jobDir, "job.json"), "utf8");
+			for (const stalled of [
+				{ state: "stalled", message: "no session to resume" },
+				{ state: "stalled", message: "no coverage progress", stall_cause_kind: "no_progress", stall_detail: "no coverage progress" },
+			]) {
+				writeStatus(stalled);
+				await expect(retryStalled()).rejects.toThrow("job exceeded its 6h wall cap");
+				expect(fs.readFileSync(path.join(jobDir, "job.json"), "utf8")).toBe(jobBefore);
+				expect(readStatus().state).toBe("stalled");
+			}
+		});
+
+		test("외부 원인(quota)으로 멈춘 멤버의 --retry-stalled는 상한을 넘긴 잡에서도 같은 원장으로 재개하고 상한을 재시도 시각부터 다시 센다", async () => {
+			writeJob({ ageSec: 7 * 3600, members: ["correctness", "regression"] });
+			writeLedgers({ correctness: 12, regression: 40 });
+			writeStatus(stalledByQuota);
+			writeStatus({ state: "done", sessionID: "sess-2" }, "regression");
+			const doneStatusPath = path.join(jobDir, "members", "regression", "status.json");
+			const doneStatusBefore = fs.readFileSync(doneStatusPath, "utf8");
+			const ledgersBefore = { correctness: ledgerBytes("correctness"), regression: ledgerBytes("regression") };
+			expect(coverageWallCapBudget(readCollectBudgetMeta(jobDir, config), Date.now())).not.toBeNull();
+
+			const before = Date.now();
+			const calls = await retryStalled();
+
+			expect(calls.length).toBe(1);
+			expect(calls[0]).not.toContain("--session");
+			const coverage = readJobJson().coverage;
+			expect(coverage).toMatchObject({ ledgerRoot, planSha: "sha-1" });
+			const anchorAt = Date.parse(coverage.wallCapAnchorAt);
+			expect(anchorAt).toBeGreaterThanOrEqual(before);
+			expect(anchorAt).toBeLessThanOrEqual(Date.now());
+			// The cap counts from the retry now.
+			expect(coverageWallCapBudget(readCollectBudgetMeta(jobDir, config), Date.now())).toBeNull();
+			// Done members and every ledger stay as they were; the stalled member keeps its acknowledged pages.
+			expect(fs.readFileSync(doneStatusPath, "utf8")).toBe(doneStatusBefore);
+			expect({ correctness: ledgerBytes("correctness"), regression: ledgerBytes("regression") }).toEqual(ledgersBefore);
+			expect(ledgerHooks.readProgress("correctness").pagesAcked).toBe(12);
+			// The queued member no longer claims a stall cause.
+			const queued = readStatus();
+			expect(queued.state).toBe("queued");
+			for (const key of ["stall_cause_kind", "stall_detail", "stall_reset_text"]) expect(key in queued).toBe(false);
+		});
+
+		test("외부 원인 stalled 멤버가 있으면 collect가 원장 루트를 job 디렉터리에 백업하고, 원장 루트가 사라지면 --retry-stalled가 복원한다", async () => {
+			writeJob({ ageSec: 60, members: ["correctness", "regression"] });
+			writeLedgers({ correctness: 12, regression: 40 });
+			const planFile = path.join(ledgerRoot, "plan", "plan.json");
+			fs.mkdirSync(path.dirname(planFile), { recursive: true });
+			fs.writeFileSync(planFile, JSON.stringify({ planSha: "sha-1" }));
+			writeStatus(stalledByQuota);
+			writeStatus({ state: "done", sessionID: "sess-2" }, "regression");
+			const ledgersBefore = { correctness: ledgerBytes("correctness"), regression: ledgerBytes("regression") };
+
+			expect((await collectOnce()).overallState).toBe("done");
+			expect(fs.existsSync(path.join(jobDir, "ledger-backup", "ledgers", "regression", "ledger.json"))).toBe(true);
+
+			// OS temp cleanup removes the ledger root during the wait for the quota reset.
+			fs.rmSync(ledgerRoot, { recursive: true, force: true });
+			expect((await retryStalled()).length).toBe(1);
+			expect({ correctness: ledgerBytes("correctness"), regression: ledgerBytes("regression") }).toEqual(ledgersBefore);
+			expect(ledgerHooks.readProgress("correctness").pagesAcked).toBe(12);
+			expect(fs.readFileSync(planFile, "utf8")).toBe(JSON.stringify({ planSha: "sha-1" }));
+		});
+
+		test("coverage-gated가 아닌 잡은 stall 필드가 있어도 원장 백업·상한 기준을 쓰지 않는다", async () => {
+			writeJob({ coverageGated: false, ageSec: 7 * 3600 });
+			writeLedgers({ correctness: 12 });
+			writeStatus({ state: "stalled", stall_cause_kind: "quota", stall_detail: "usage limit" });
+			await collectOnce();
+			expect(fs.existsSync(path.join(jobDir, "ledger-backup"))).toBe(false);
+			await resume(ledgerHooks, { retryStalled: true });
+			expect(readJobJson().coverage).toBeUndefined();
+			expect(readStatus().resume_count).toBe(1);
+		});
+
+		test("외부 원인 stalled라도 --retry-stalled 없는 재개는 상한 기준을 바꾸지 않는다", async () => {
+			writeJob({ ageSec: 7 * 3600 });
+			writeStatus({ state: "stalled", message: "usage limit", stall_cause_kind: "quota", stall_detail: "usage limit" });
+			const jobBefore = fs.readFileSync(path.join(jobDir, "job.json"), "utf8");
+			await expect(resume(ledgerHooks)).rejects.toThrow("job exceeded its 6h wall cap");
+			expect(fs.readFileSync(path.join(jobDir, "job.json"), "utf8")).toBe(jobBefore);
+		});
+
+		test("상한 전이면 평소대로 재개한다", async () => {
+			writeJob({ ageSec: COVERAGE_JOB_WALL_CAP_SEC - 600 });
+			writeStatus({ state: "awaiting_resume" });
+			await resume(makeHooks(base).hooks);
+			expect(readStatus().resume_count).toBe(1);
+		});
+
+		test("상한을 넘긴 잡의 collect는 awaiting_resume·done 조기 반환에도 stop_and_degrade를 보고한다", async () => {
+			writeJob({ ageSec: COVERAGE_JOB_WALL_CAP_SEC + 60 });
+			writeStatus({ state: "awaiting_resume" });
+			const parkedOut = await collectOnce();
+			expect(parkedOut.overallState).toBe("awaiting_resume");
+			expect(parkedOut.nextAction).toBe("stop_and_degrade");
+			expect(parkedOut.deadlineSec).toBe(COVERAGE_JOB_WALL_CAP_SEC);
+			expect(Number(parkedOut.elapsedSec)).toBeGreaterThanOrEqual(COVERAGE_JOB_WALL_CAP_SEC + 60);
+			expect(String(parkedOut.note)).toContain("6h wall cap");
+			expect(Array.isArray(parkedOut.members)).toBe(true);
+
+			writeStatus({ state: "done" });
+			const done = await collectOnce();
+			expect(done.overallState).toBe("done");
+			expect(done.nextAction).toBe("stop_and_degrade");
+
+			writeStatus({ state: "running" });
+			const running = await collectOnce();
+			expect(running.overallState).toBe("running");
+			expect(running.nextAction).toBe("stop_and_degrade");
+		});
+
+		test("상한 전이거나 coverage-gated가 아니면 조기 반환 출력은 그대로다", async () => {
+			writeJob({ ageSec: COVERAGE_JOB_WALL_CAP_SEC - 600 });
+			writeStatus({ state: "awaiting_resume" });
+			expect((await collectOnce()).nextAction).toBeUndefined();
+
+			writeJob({ coverageGated: false, ageSec: COVERAGE_JOB_WALL_CAP_SEC + 60 });
+			expect((await collectOnce()).nextAction).toBeUndefined();
+		});
+	});
+
+	test("크래시(error)·timed_out 턴은 coverage-gated 잡에서 원장에서 재개한다", async () => {
+		writeJob();
+		writeStatus({ state: "error" });
+		const { hooks } = makeHooks(base);
+		await resume(hooks);
+		writeStatus({ ...readStatus(), state: "timed_out" });
+		await resume(hooks);
+		expect(readStatus().resume_count).toBe(2);
+	});
+
+	test("coverage-gated 잡은 coverage 훅이나 workerPath가 없으면 거부하고 턴을 in-process로 돌리지 않는다", async () => {
+		parked();
+		let ran = false;
+		const inProcess: Partial<ResumeMemberOpts> = {
+			driverFactory: () => driver,
+			resumeOneTurnFn: async () => {
+				ran = true;
+				return { state: "done", sessionID: "s", text: "", exitCode: 0 };
+			},
+		};
+		await expect(cmdResumeMember(jobDir, "correctness", "continue", config, inProcess)).rejects.toThrow(
+			"needs coverage hooks",
+		);
+		await expect(
+			cmdResumeMember(jobDir, "correctness", "continue", config, { ...inProcess, coverage: makeHooks(base).hooks }),
+		).rejects.toThrow("workerPath");
+		expect(ran).toBe(false);
+		expect(readStatus()).toMatchObject({ state: "awaiting_resume", resume_count: 0 });
+		expect(readRecord()).toMatchObject({ stalledResumes: 0 });
+	});
+
+	test("coverage-gated가 아닌 잡은 훅을 넘겨도 기존 3회 상한과 error 거부를 유지한다", async () => {
+		writeJob({ coverageGated: false });
+		writeStatus({ state: "awaiting_resume", resume_count: 3 });
+		const { hooks } = makeHooks(base);
+		await expect(resume(hooks)).rejects.toThrow("resume cap exceeded (3/3)");
+		writeStatus({ state: "error", resume_count: 0 });
+		await expect(resume(hooks)).rejects.toThrow("member in non-resumable state: error");
+	});
+});
+
+describe("collect 데드라인 — coverage-gated 잡", () => {
+	const createdAt = "2026-08-06T00:00:00.000Z";
+	const created = Date.parse(createdAt);
+	const at = (sec: number) => created + sec * 1000;
+	const CAP = COVERAGE_JOB_WALL_CAP_SEC;
+
+	const cases: [string, CollectBudgetMeta, number, CollectBudget][] = [
+		[
+			"최근 진행이 있으면 생성 시각 기준 데드라인이 지나도 계속 폴한다",
+			{ coverageGated: true, lastProgressAt: at(1700) },
+			at(1750),
+			{ nextAction: "poll_again", elapsedSec: 1750, deadlineSec: 2300 },
+		],
+		[
+			"마지막 진행 뒤 한 턴 타임아웃이 지나면 stop_and_degrade",
+			{ coverageGated: true, lastProgressAt: at(1150) },
+			at(1750),
+			{ nextAction: "stop_and_degrade", elapsedSec: 1750, deadlineSec: 1750 },
+		],
+		[
+			"진행이 계속돼도 job 생성부터 상한이 지나면 stop_and_degrade",
+			{ coverageGated: true, lastProgressAt: at(CAP - 1) },
+			at(CAP),
+			{ nextAction: "stop_and_degrade", elapsedSec: CAP, deadlineSec: CAP },
+		],
+		[
+			"상한 직전에는 계속 폴한다",
+			{ coverageGated: true, lastProgressAt: at(CAP - 1) },
+			at(CAP - 2),
+			{ nextAction: "poll_again", elapsedSec: CAP - 2, deadlineSec: CAP },
+		],
+		[
+			"coverage-gated가 아니면 진행 시각을 무시하고 생성 시각 + 타임아웃으로 자른다",
+			{ coverageGated: false, lastProgressAt: at(1700) },
+			at(1750),
+			{ nextAction: "stop_and_degrade", elapsedSec: 1750, deadlineSec: 600 },
+		],
+		[
+			"coverage-gated가 아니면 상한도 없다",
+			{ timeoutSec: CAP * 2 },
+			at(CAP + 60),
+			{ nextAction: "poll_again", elapsedSec: CAP + 60, deadlineSec: CAP * 2 },
+		],
+	];
+	test.each(cases)("%s", (_name, meta, now, expected) => {
+		expect(resolveCollectNextAction({ createdAt, timeoutSec: 600, ...meta }, now)).toEqual(expected);
+	});
+
+	test("외부 원인 재시도 기준 시각(wallCapAnchorAt)이 있으면 턴 데드라인과 상한을 그 시각부터 센다", () => {
+		const anchor = created + 7 * 3600_000;
+		const wallCapAnchorAt = new Date(anchor).toISOString();
+		const meta = { createdAt, timeoutSec: 600, coverageGated: true, lastProgressAt: created + 3600_000, wallCapAnchorAt };
+		expect(resolveCollectNextAction(meta, anchor + 60_000)).toEqual({
+			nextAction: "poll_again",
+			elapsedSec: 7 * 3600 + 60,
+			deadlineSec: 7 * 3600 + 600,
+		});
+		expect(resolveCollectNextAction(meta, anchor + 600_000).nextAction).toBe("stop_and_degrade");
+		// Progress after the retry extends the turn deadline up to the restarted cap.
+		const progressing = { ...meta, lastProgressAt: anchor + CAP * 1000 - 1_000 };
+		expect(resolveCollectNextAction(progressing, anchor + CAP * 1000 - 2_000).nextAction).toBe("poll_again");
+		const capped: CollectBudget = { nextAction: "stop_and_degrade", elapsedSec: 7 * 3600 + CAP, deadlineSec: 7 * 3600 + CAP };
+		expect(resolveCollectNextAction(progressing, anchor + CAP * 1000)).toEqual(capped);
+		expect(coverageWallCapBudget(meta, anchor + CAP * 1000 - 1_000)).toBeNull();
+		expect(coverageWallCapBudget(meta, anchor + CAP * 1000)).toEqual(capped);
+	});
+
+	test("wallCapAnchorAt이 생성 시각보다 이르거나 읽을 수 없으면 생성 시각을 쓰고, coverage-gated가 아니면 무시한다", () => {
+		const now = created + CAP * 1000;
+		const early = { createdAt, timeoutSec: 600, coverageGated: true, wallCapAnchorAt: "2026-08-05T00:00:00.000Z" };
+		expect(coverageWallCapBudget(early, now)?.deadlineSec).toBe(CAP);
+		expect(coverageWallCapBudget({ ...early, wallCapAnchorAt: "not a date" }, now)?.deadlineSec).toBe(CAP);
+		const plain = { createdAt, timeoutSec: 600, wallCapAnchorAt: new Date(now).toISOString() };
+		expect(resolveCollectNextAction(plain, created + 600_000)).toEqual(
+			resolveCollectNextAction({ createdAt, timeoutSec: 600 }, created + 600_000),
+		);
+		expect(coverageWallCapBudget(plain, now)).toBeNull();
+	});
+
+	test("readCollectBudgetMeta는 원장 진행 시각만 읽고, 진행 없는 하트비트·재큐잉은 데드라인을 늘리지 않는다", () => {
+		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "collect-meta-test-"));
+		try {
+			const config = chunkReviewConfig;
+			for (const m of ["a", "b", "c"]) fs.mkdirSync(path.join(tmp, "members", m), { recursive: true });
+			fs.writeFileSync(
+				path.join(tmp, "job.json"),
+				JSON.stringify({ createdAt, settings: { timeoutSec: 600, coverageGated: true } }),
+			);
+			// A hung finder: fresh heartbeat and a just-requeued resume, but no page acknowledged since 00:10.
+			fs.writeFileSync(
+				path.join(tmp, "members", "a", "status.json"),
+				JSON.stringify({ state: "running", queuedAt: "2026-08-06T00:50:00.000Z", lastHeartbeat: "2026-08-06T00:55:00.000Z" }),
+			);
+			const progressAt: Record<string, number | null> = {
+				a: Date.parse("2026-08-06T00:10:00.000Z"),
+				b: Date.parse("2026-08-06T00:20:00.000Z"),
+			};
+			const hooks: CoverageHooks = {
+				readProgress: (member) => {
+					if (!(member in progressAt)) throw new Error(`no ledger for ${member}`);
+					return { pagesAcked: 1, pagesTotal: 9, checklistItems: 0, checklistVerdicts: 0, finished: false, issuedPage: null, lastProgressAt: progressAt[member] };
+				},
+				resplit: () => ({ ok: false, message: "unused" }),
+			};
+			const meta = readCollectBudgetMeta(tmp, config, hooks);
+			expect(meta.coverageGated).toBe(true);
+			expect(meta.lastProgressAt).toBe(Date.parse("2026-08-06T00:20:00.000Z"));
+			// The hung finder's heartbeat at 00:55 does not keep the job alive past 00:20 + 600s.
+			expect(resolveCollectNextAction(meta, Date.parse("2026-08-06T00:56:00.000Z")).nextAction).toBe(
+				"stop_and_degrade",
+			);
+
+			// Progress (a page acknowledged at 00:50) does extend it.
+			progressAt.a = Date.parse("2026-08-06T00:50:00.000Z");
+			const extended = readCollectBudgetMeta(tmp, config, hooks);
+			expect(extended.lastProgressAt).toBe(progressAt.a);
+			expect(resolveCollectNextAction(extended, Date.parse("2026-08-06T00:56:00.000Z")).nextAction).toBe(
+				"poll_again",
+			);
+
+			// No hooks → no progress signal → deadline from creation.
+			expect(readCollectBudgetMeta(tmp, config).lastProgressAt).toBe(null);
+			fs.writeFileSync(path.join(tmp, "job.json"), JSON.stringify({ createdAt, settings: { timeoutSec: 600 } }));
+			expect(readCollectBudgetMeta(tmp, config, hooks).lastProgressAt).toBe(null);
+		} finally {
+			fs.rmSync(tmp, { recursive: true, force: true });
+		}
 	});
 });

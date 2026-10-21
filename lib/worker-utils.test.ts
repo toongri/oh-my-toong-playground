@@ -28,6 +28,7 @@ import {
 	type RunOneTurnOpts,
 } from "./worker-utils.ts";
 import type { AgentDriver, ParseResult, CliType } from "./agent-drivers/types.ts";
+import { codexDriver } from "./agent-drivers/codex.ts";
 import type { AcquireWorkerSlotOptions } from "./worker-slots.ts";
 import { requestWorkerCancellation } from "./worker-cancellation.ts";
 
@@ -1243,6 +1244,46 @@ describe("executeOneTurn state/message/workerEnv regression", () => {
 		expect(status.exitCode).toBe(null);
 	});
 
+	test("codex 사용량 한도 실패는 non_retryable과 함께 CLI가 보고한 오류 문구를 status.message에 남긴다", async () => {
+		const memberDir = join(tmpDir, "codex-usage-limit");
+		mkdirSync(memberDir, { recursive: true });
+		const stdout = readFileSync(
+			join(import.meta.dir, "agent-drivers", "__fixtures__", "codex-usage-limit.ndjson"),
+			"utf8",
+		);
+		await runOneTurn(
+			makeOneTurnOpts(memberDir, {
+				driverFactory: () => codexDriver,
+				runOnceFn: makeFlexibleMockRunOnce(stdout, { state: "error", message: null, exitCode: 1 }),
+			}),
+		);
+		const status = JSON.parse(readFileSync(join(memberDir, "status.json"), "utf8"));
+		expect(status.state).toBe("non_retryable");
+		expect(status.message).toContain("You've hit your usage limit.");
+		expect(status.message).toContain("try again at Sep 20th, 2026 10:17 PM");
+	});
+
+	test("done 턴은 드라이버 오류 문구가 있어도 message를 바꾸지 않는다", async () => {
+		const memberDir = join(tmpDir, "done-with-error-event");
+		mkdirSync(memberDir, { recursive: true });
+		const mockDriver = makeOneTurnMockDriver({
+			sessionID: "s1",
+			terminal: "stop",
+			text: "ok",
+			rawEvents: [],
+			errorMessage: "Reconnecting... 1/5",
+		});
+		await runOneTurn(
+			makeOneTurnOpts(memberDir, {
+				driverFactory: () => mockDriver,
+				runOnceFn: makeFlexibleMockRunOnce("ok", { state: "done", message: null, exitCode: 0 }),
+			}),
+		);
+		const status = JSON.parse(readFileSync(join(memberDir, "status.json"), "utf8"));
+		expect(status.state).toBe("done");
+		expect(status.message).toBeNull();
+	});
+
 	// T1-2: missing_cli state preserved when driver returns non-null parsed result and exitCode===null
 	test("missing_cli state preserved in status.json when exitCode is null", async () => {
 		const memberDir = join(tmpDir, "missing-cli");
@@ -2156,5 +2197,214 @@ describe("runOnce detached descendant lifecycle", () => {
 			}
 			rmSync(fixtureDir, { recursive: true, force: true });
 		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// completionGate — a turn that would be `done` stays resumable while the gate says incomplete
+// ---------------------------------------------------------------------------
+
+describe("executeOneTurn completionGate", () => {
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = mkdtempSync(join(tmpdir(), "completion-gate-"));
+	});
+
+	afterEach(() => {
+		rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	const doneParse: ParseResult = { sessionID: "s1", terminal: "stop", text: "final", rawEvents: [] };
+	const doneRun = { state: "done", exitCode: 0, message: null, finishedAt: "2026-01-01T00:00:00.000Z" };
+
+	test("게이트가 미완료를 보고하면 done 대신 awaiting_resume과 진행 상세를 기록한다", async () => {
+		const memberDir = join(tmpDir, "incomplete");
+		mkdirSync(memberDir, { recursive: true });
+		const result = await runOneTurn(
+			makeOneTurnOpts(memberDir, {
+				driverFactory: () => makeOneTurnMockDriver(doneParse),
+				runOnceFn: makeFlexibleMockRunOnce("raw", doneRun),
+				completionGate: () => ({
+					complete: false,
+					detail: { pagesAcked: 3, pagesTotal: 10, finished: false },
+					message: "coverage incomplete: 3/10",
+				}),
+			}),
+		);
+		expect(result.state).toBe("awaiting_resume");
+		const status = JSON.parse(readFileSync(join(memberDir, "status.json"), "utf8"));
+		expect(status.state).toBe("awaiting_resume");
+		expect(status.coverage).toEqual({ pagesAcked: 3, pagesTotal: 10, finished: false });
+		expect(status.message).toBe("coverage incomplete: 3/10");
+		expect(status.sessionID).toBe("s1");
+	});
+
+	test("게이트가 fatal 미완료를 보고하면 done도 awaiting_resume도 아닌 error로 기록한다", async () => {
+		const memberDir = join(tmpDir, "fatal");
+		mkdirSync(memberDir, { recursive: true });
+		const result = await runOneTurn(
+			makeOneTurnOpts(memberDir, {
+				driverFactory: () => makeOneTurnMockDriver(doneParse),
+				runOnceFn: makeFlexibleMockRunOnce("raw", doneRun),
+				completionGate: () => ({ complete: false, fatal: true, message: "plan changed since job start" }),
+			}),
+		);
+		expect(result.state).toBe("error");
+		const status = JSON.parse(readFileSync(join(memberDir, "status.json"), "utf8"));
+		expect(status.state).toBe("error");
+		expect(status.message).toBe("plan changed since job start");
+	});
+
+	test("게이트가 완료를 보고하면 done을 유지한다", async () => {
+		const memberDir = join(tmpDir, "complete");
+		mkdirSync(memberDir, { recursive: true });
+		const result = await runOneTurn(
+			makeOneTurnOpts(memberDir, {
+				driverFactory: () => makeOneTurnMockDriver(doneParse),
+				runOnceFn: makeFlexibleMockRunOnce("raw", doneRun),
+				completionGate: () => ({
+					complete: true,
+					detail: { pagesAcked: 10, pagesTotal: 10, finished: true },
+				}),
+			}),
+		);
+		expect(result.state).toBe("done");
+		const status = JSON.parse(readFileSync(join(memberDir, "status.json"), "utf8"));
+		expect(status.state).toBe("done");
+		expect(status.coverage).toEqual({ pagesAcked: 10, pagesTotal: 10, finished: true });
+	});
+
+	test("게이트가 예외를 던지면 미완료로 보고 awaiting_resume으로 남긴다", async () => {
+		const memberDir = join(tmpDir, "throws");
+		mkdirSync(memberDir, { recursive: true });
+		const result = await resumeOneTurn(
+			"s1",
+			makeOneTurnOpts(memberDir, {
+				driverFactory: () => makeOneTurnMockDriver(doneParse),
+				runOnceFn: makeFlexibleMockRunOnce("raw", doneRun),
+				completionGate: () => {
+					throw new Error("ledger missing");
+				},
+			}),
+		);
+		expect(result.state).toBe("awaiting_resume");
+		const status = JSON.parse(readFileSync(join(memberDir, "status.json"), "utf8"));
+		expect(status.message).toContain("ledger missing");
+	});
+
+	test("done이 아닌 턴에는 게이트를 호출하지 않는다", async () => {
+		const memberDir = join(tmpDir, "timed-out");
+		mkdirSync(memberDir, { recursive: true });
+		let calls = 0;
+		const result = await runOneTurn(
+			makeOneTurnOpts(memberDir, {
+				driverFactory: () => makeOneTurnMockDriver(doneParse),
+				runOnceFn: makeFlexibleMockRunOnce("raw", { state: "timed_out", exitCode: null }),
+				completionGate: () => {
+					calls++;
+					return { complete: false };
+				},
+			}),
+		);
+		expect(result.state).toBe("timed_out");
+		expect(calls).toBe(0);
+	});
+
+	test("게이트가 없으면 기존처럼 done이고 coverage 필드를 쓰지 않는다", async () => {
+		const memberDir = join(tmpDir, "no-gate");
+		mkdirSync(memberDir, { recursive: true });
+		const result = await runOneTurn(
+			makeOneTurnOpts(memberDir, {
+				driverFactory: () => makeOneTurnMockDriver(doneParse),
+				runOnceFn: makeFlexibleMockRunOnce("raw", doneRun),
+			}),
+		);
+		expect(result.state).toBe("done");
+		const status = JSON.parse(readFileSync(join(memberDir, "status.json"), "utf8"));
+		expect("coverage" in status).toBe(false);
+	});
+});
+
+describe("runOnce promptSubstitutions", () => {
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = mkdtempSync(join(tmpdir(), "prompt-subst-"));
+	});
+
+	afterEach(() => {
+		rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	function stdinCapturingSpawn() {
+		const captured = { stdin: "" };
+		const mockSpawn = () => {
+			const child = new EventEmitter();
+			const stdin = {
+				write: (chunk: string) => {
+					captured.stdin += chunk;
+					return true;
+				},
+				end: () => {},
+				on: () => stdin,
+			} as any;
+			(child as any).stdin = stdin;
+			(child as any).stdout = null;
+			(child as any).stderr = null;
+			(child as any).pid = 12345;
+			process.nextTick(() => {
+				child.emit("exit", 0, null);
+				process.nextTick(() => child.emit("close", 0, null));
+			});
+			return child as any;
+		};
+		return { mockSpawn, captured };
+	}
+
+	it("역할 파일·리뷰 내용·프롬프트의 자리표시자를 조립 후 모두 치환하고 assembled-prompt.txt에도 반영한다", async () => {
+		const memberDir = join(tmpDir, "member");
+		const promptsDir = join(tmpDir, "prompts");
+		mkdirSync(memberDir, { recursive: true });
+		mkdirSync(promptsDir, { recursive: true });
+		writeFileSync(join(promptsDir, "alpha.md"), "role: run {CURSOR} next");
+		const { mockSpawn, captured } = stdinCapturingSpawn();
+		await runOnce({
+			program: "/bin/sh",
+			args: [],
+			prompt: "start with {CURSOR} resume",
+			member: "alpha",
+			memberDir,
+			command: "/bin/sh",
+			timeoutSec: 10,
+			attempt: 0,
+			spawnFn: mockSpawn as any,
+			promptsDir,
+			reviewContent: "content: {CURSOR} finish",
+			promptSubstitutions: { "{CURSOR}": '"/bin/bun" "/x/diff-cursor.ts"' },
+		});
+		expect(captured.stdin).not.toContain("{CURSOR}");
+		expect(captured.stdin).toContain('role: run "/bin/bun" "/x/diff-cursor.ts" next');
+		expect(captured.stdin).toContain('content: "/bin/bun" "/x/diff-cursor.ts" finish');
+		expect(captured.stdin).toContain('start with "/bin/bun" "/x/diff-cursor.ts" resume');
+		expect(readFileSync(join(memberDir, "assembled-prompt.txt"), "utf8")).toBe(captured.stdin);
+	});
+
+	it("치환 없이 호출하면 프롬프트를 그대로 보낸다", async () => {
+		const memberDir = join(tmpDir, "member2");
+		mkdirSync(memberDir, { recursive: true });
+		const { mockSpawn, captured } = stdinCapturingSpawn();
+		await runOnce({
+			program: "/bin/sh",
+			args: [],
+			prompt: "keep {CURSOR} literal",
+			member: "beta",
+			memberDir,
+			command: "/bin/sh",
+			timeoutSec: 10,
+			attempt: 0,
+			spawnFn: mockSpawn as any,
+		});
+		expect(captured.stdin).toBe("keep {CURSOR} literal");
 	});
 });

@@ -263,6 +263,16 @@ describe("정적 리뷰와 Test value 책임 경계 계약", () => {
 		expect(requirement).toContain("implements and/or tests it");
 	});
 
+	it("`requirement maps explicit decision rules like ACs in the mapping path`", () => {
+		const requirement = readFileSync(join(MEMBER_PROMPT_DIR, "requirement.md"), "utf-8");
+		const mappingPath = requirement.slice(requirement.indexOf("#### When acceptance criteria"));
+
+		expect(mappingPath).toMatch(/decision rules?/i);
+		expect(mappingPath).toMatch(/every branch/i);
+		expect(mappingPath).toContain("implements and/or tests it");
+		expect(requirement).toMatch(/Do NOT write new acceptance criteria or decision rules/);
+	});
+
 	it("`the dispatch fallback and configuration synchronize the static-only responsibility split`", () => {
 		const dispatchFallback = readFileSync(join(MEMBER_PROMPT_DIR, "default.md"), "utf-8");
 		const config = readFileSync(CODE_REVIEW_CONFIG, "utf-8");
@@ -279,5 +289,150 @@ describe("정적 리뷰와 Test value 책임 경계 계약", () => {
 				/requirement[^\n]{0,160}(AC mapping|acceptance criteria)|(AC mapping|acceptance criteria)[^\n]{0,160}requirement/i,
 			);
 		}
+	});
+});
+
+describe("finder prompts use the diff cursor and start from their own angle", () => {
+	const template = readFileSync(TEMPLATE_MD, "utf-8");
+	const prompts = Object.fromEntries(
+		["correctness", "regression", "cleanup", "requirement", "default"].map((m) => [
+			m,
+			readFileSync(join(REPO_ROOT, "skills", "code-review", "scripts", "prompts", `${m}.md`), "utf-8"),
+		]),
+	) as Record<string, string>;
+
+	it("no prompt or template refers to the removed diff command", () => {
+		for (const [name, content] of [["template", template], ...Object.entries(prompts)]) {
+			expect(content, `${name} must not contain {DIFF_COMMAND}`).not.toContain("{DIFF_COMMAND}");
+			expect(content, `${name} must not say Obtain the diff`).not.toContain("Obtain the diff");
+		}
+	});
+
+	it("the template has the Diff Coverage Protocol with resume, ack/truncation, and output-limit ban", () => {
+		expect(template).toContain("## Diff Coverage Protocol");
+		expect(template).toContain("{CURSOR} resume");
+		expect(template).toContain("{CURSOR} next");
+		expect(template).toContain("ALL PAGES DONE");
+		expect(template).toMatch(/ack line is not visible[^\n]*truncated/);
+		expect(template).toContain("{CURSOR} view <id>");
+		expect(template).toContain("Never guess an ack code");
+		expect(template).toMatch(/Never lower tool output limits[^\n]*max_output_tokens/);
+		expect(template).toContain("{CURSOR} finish");
+		expect(template).toContain("{CURSOR} export");
+	});
+
+	it("no angle prompt tells the finder what is not its area", () => {
+		const banned = [
+			/other angles/i,
+			/other finders/i,
+			/not your area/i,
+			/Do not file correctness/i,
+			/for the correctness finder/i,
+			/review chunks/i,
+		];
+		for (const [name, content] of Object.entries(prompts)) {
+			for (const pattern of banned) {
+				expect(content, `${name}.md matches ${pattern}`).not.toMatch(pattern);
+			}
+		}
+	});
+
+	it("angle prompts start from their angle but let the finder file any real defect", () => {
+		for (const m of ["correctness", "regression", "cleanup", "requirement"]) {
+			expect(prompts[m], `${m}.md`).toContain("file any real defect you meet, whatever its class");
+			expect(prompts[m], `${m}.md`).not.toMatch(/single lens|assigned angle|through this angle/i);
+		}
+	});
+
+	it("the template tells finders to file non-goal candidates and note the non-goal, not suppress them", () => {
+		expect(template).toContain("exact non-goal `statement`");
+		expect(template).toContain("The reviewer decides scope.");
+		expect(template).not.toMatch(/suppression at generation time/i);
+	});
+
+	it("every angle prompt points at the protocol and permits only ledger writes through the cursor", () => {
+		for (const [name, content] of Object.entries(prompts)) {
+			expect(content, `${name}.md`).toContain("## Diff Coverage Protocol");
+			expect(content, `${name}.md`).toContain("{CURSOR}");
+		}
+	});
+
+	it("cleanup carries the exhaustive checklist commands and the three verdicts", () => {
+		const cleanup = prompts.cleanup;
+		expect(cleanup).toContain("{CURSOR} checklist add");
+		expect(cleanup).toContain("{CURSOR} checklist update");
+		expect(cleanup).toContain("{CURSOR} checklist list");
+		expect(cleanup).toContain("준수");
+		expect(cleanup).toContain("위반");
+		expect(cleanup).toContain("해당 없음");
+		expect(cleanup).toContain("--rule <itemId>");
+	});
+});
+
+describe("finder page notes are free prose with no citation rule", () => {
+	const template = readFileSync(TEMPLATE_MD, "utf-8");
+	const protocol = template.slice(
+		template.indexOf("## Diff Coverage Protocol"),
+		template.indexOf("<!-- section:commit_history -->"),
+	);
+	const read = (m: string) => readFileSync(join(MEMBER_PROMPT_DIR, `${m}.md`), "utf-8");
+	const STRUCTURED_LABELS = /breaks-if:|holds-because:|changed-contract:|dependents:|branches:|quality:|maps:|verdict:/;
+
+	it("the Diff Coverage Protocol states the free-prose note rule the cursor enforces", () => {
+		expect(protocol).toMatch(/free prose/i);
+		expect(protocol).toContain("check later:");
+		expect(protocol).toMatch(/non-empty note/i);
+		expect(protocol).toMatch(/do not invent/i);
+		expect(protocol).not.toMatch(/refuses[^.]*cites? no/i);
+		expect(protocol).not.toMatch(/must cite/i);
+		expect(protocol).not.toMatch(STRUCTURED_LABELS);
+		expect(protocol).not.toMatch(/do not pad notes/i);
+		expect(protocol).not.toContain('pages whose note says "check later"');
+	});
+
+	it("no member prompt says the cursor refuses uncited notes", () => {
+		for (const m of ["correctness", "regression", "requirement", "cleanup"])
+			expect(read(m)).not.toMatch(/refuses[^.]*cites? no|must cite/i);
+	});
+
+	it("the protocol reads all notes with `notes`, pages `export`, names resplit and the --flag=value form", () => {
+		expect(protocol).toContain("{CURSOR} notes");
+		expect(protocol).toContain("MORE: notes --from");
+		expect(protocol).toContain("{CURSOR} export --part N");
+		expect(protocol).toMatch(/resplit <id> --page-bytes N/);
+		expect(protocol).toMatch(/starts with `-`[^\n]*`--flag=value`/);
+		for (const angle of ["correctness", "regression", "requirement", "cleanup"])
+			expect(read(angle)).toContain("{CURSOR} notes");
+	});
+
+	it("each angle prompt carries the same free-prose note guidance and no structured labels", () => {
+		for (const angle of ["correctness", "regression", "requirement", "cleanup"]) {
+			const content = read(angle);
+			expect(content, `${angle}.md`).toMatch(/free prose/i);
+			expect(content, `${angle}.md`).toContain("check later:");
+			expect(content, `${angle}.md`).toContain("{CURSOR} candidate add");
+			expect(content, `${angle}.md`).not.toMatch(STRUCTURED_LABELS);
+			expect(content, `${angle}.md`).not.toMatch(/ \|\| /);
+		}
+		expect(read("default")).not.toMatch(STRUCTURED_LABELS);
+	});
+
+	it("correctness carries the two general lenses with no project-specific terms", () => {
+		const correctness = read("correctness");
+		const lens = (name: string) => {
+			const start = correctness.indexOf(`- **${name}**`);
+			expect(start, `correctness.md must have the lens ${name}`).toBeGreaterThan(-1);
+			const end = correctness.indexOf("\n- **", start + 1);
+			return correctness.slice(start, end === -1 ? undefined : end);
+		};
+		const external = lens("Malformed, reversed, or empty external input");
+		for (const needle of [/missing/, /malformed/, /out of range/, /wrong type/, /reversed/, /duplicated/, /empty/, /caller treats it as/])
+			expect(external).toMatch(needle);
+		const derived = lens("Derived state on change");
+		for (const needle of [/derived/, /aggregates/, /caches/, /recomputed or invalidated/, /every write path/, /conditional upsert/, /previously null/])
+			expect(derived).toMatch(needle);
+		const projectTerms =
+			/\b(oura|apple|healthkit|health ?connect|hktimezone|sleep|workout|heart ?rate|step count|algocare|invalidateMissingKeys|normalizers?)\b/i;
+		expect(correctness).not.toMatch(projectTerms);
 	});
 });

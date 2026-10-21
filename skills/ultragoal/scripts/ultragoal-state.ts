@@ -8,10 +8,6 @@
  * State file path: ${OMT_DIR}/ultragoal-state-${sessionId}.json
  * Session ID: resolved from env OMT_SESSION_ID, falling back to CODEX_THREAD_ID (Codex), via resolveSessionIdOrThrow(); hard-fails when neither is set or unsafe.
  *
- * Structural mirror of prometheus-state.ts: session-keyed JSON, merge-write
- * preserving prior fields, `started_at` seeded once and never re-seeded,
- * null-on-malformed reads.
- *
  * The single load-bearing invariant: the state layer can never be made to
  * false-complete. Each gate is STRUCTURAL — enforced by which subcommand can
  * write what, not by vigilance:
@@ -63,7 +59,7 @@
  */
 
 import { readFileSync, unlinkSync, statSync } from "node:fs";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { createHash } from "crypto";
 import { getOmtDir } from "@lib/omt-dir";
 import { withStateLock } from "@lib/persistent-mode-core/state-lock";
@@ -77,6 +73,7 @@ import {
 	ensureSeed,
 } from "@lib/state-core";
 import { renderHelp, type CliCommand } from "@lib/cli-help";
+import { linesOutsideBlocks } from "@lib/markdown-blocks";
 import { deliverableRefusalBody } from "@lib/deliverable-refusal";
 import {
 	acquireDevice,
@@ -154,9 +151,10 @@ export interface BudgetExtension {
  * dispatch renewal. Without it a dismissal keyed on `ref` alone would silently
  * suppress a genuine defect that later appears at the same location.
  *
- * `class` spans all four finding classes: blocking is decided by the
- * scope-first outcome (classifyReviewFindingOutcome), including impact. dismissReviewFinding still refuses non-BLOCK findings — the
- * lever stays a completion unblock, never general finding suppression.
+ * `class` is the finding's free-form label: whether a finding holds up completion is
+ * decided by the scope-first outcome (classifyReviewFindingOutcome). tryDismissReviewFinding
+ * refuses NOTE, UNKNOWN and OUT_OF_SCOPE findings — the lever stays a completion
+ * unblock, never general finding suppression.
  */
 export interface DismissedReviewFinding {
 	artifact_sha256: string;
@@ -245,6 +243,12 @@ export interface GoalState {
 	 * CLI branch below for why.
 	 */
 	codex_goal_objective: string;
+	/**
+	 * Full `git rev-parse HEAD` of the repo the pursuit runs in, recorded when the pursuit
+	 * first enters `pursuing`. Omitted when git could not report a HEAD; states that predate
+	 * the field also lack it. serializeReviewContext turns it into the review range line.
+	 */
+	review_base_commit?: string;
 	/** Last observed repository HEAD used by progress-fingerprint callers. */
 	last_seen_head?: string;
 	/** Digest of the last observed story set used by progress-fingerprint callers. */
@@ -341,11 +345,9 @@ function readPrior(sessionId: string): Partial<GoalState> {
 }
 
 /**
- * Merge `next` over the prior on-disk state, seeding `started_at` once and
- * supplying field defaults on first write. Persists and returns the result.
- *
- * ADR-7 (strict no-create): refuses and exits non-zero when the state file is
- * absent. The PreToolUse seed is the ONLY creator of state files.
+ * Merge `next` over the prior on-disk state, seeding `started_at` once and supplying
+ * field defaults on first write. Refuses when the state file is absent: the PreToolUse
+ * seed is the only creator of state files.
  */
 function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
 	// Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
@@ -429,6 +431,7 @@ function mergeWriteLocked(sessionId: string, stateFilePath: string, next: Partia
 		// write (there are none once phase=complete, but the pattern is uniform) would drop it.
 		forced_complete: "forced_complete" in next ? next.forced_complete : prior.forced_complete,
 		forced_reason: "forced_reason" in next ? next.forced_reason : prior.forced_reason,
+		review_base_commit: "review_base_commit" in next ? next.review_base_commit : prior.review_base_commit,
 	};
 	const state: GoalState = mergeWithHeartbeat(partial, {});
 	try {
@@ -538,13 +541,9 @@ export function readGoalStateRaw(sessionId: string): GoalState | null {
 }
 
 /**
- * Returns the active goal state augmented with a computed `pristine` boolean,
- * or null when no active state exists.
- *
- * `pristine: true` means the state was freshly seeded and no real work has been
- * recorded yet (phase=planning, iteration=0, outcome=''). This lets the SKILL.md
- * Entry Gate distinguish this invocation's own PreToolUse seed from a real
- * in-flight pursuit seeded by a prior invocation.
+ * Returns the active goal state plus a computed `pristine` boolean (freshly seeded: no
+ * real work recorded yet), or null when no active state exists. Lets the SKILL.md Entry
+ * Gate tell this invocation's own seed from a real in-flight pursuit.
  */
 export function readGoalGet(sessionId: string): (GoalState & { pristine: boolean }) | null {
 	const state = readGoalState(sessionId);
@@ -578,28 +577,15 @@ export interface SetGoalOpts {
 }
 
 /**
- * Declaration-shape existence check for `non_goals` — the one shape this feature
- * enforces everywhere non-goals are read (metis, issue-reviewer, and deep-interview
- * gates all expect it): `- {what this pursuit will NOT do} | decider: {how to tell a
- * finding belongs here}`. This checks the SHAPE only — a `|` and a non-empty
- * `decider:` clause — never whether the decider is actually a good discriminator;
- * that judgment belongs to the prose-layer reviewers, and encoding it here would
- * turn a syntax check into an interpretation dispute.
- *
- * `setGoalState` is the only writer of `non_goals` (untrusted here only in the
- * accident sense — this is the orchestrator's own authored text, not external
- * input), so this is the single choke point. It closes two accident-axis holes at
- * once, because both are really the same hole (a value that skips the declared
- * shape):
- *   1. A line starting with "#" (e.g. a stray `## Evidence Results`) forges a fake
- *      section into the assembled reviewer prompt once `serializeReviewContext`
- *      concatenates it verbatim (no escaping) — the reviewer treats `## Evidence
- *      Results` as an already-verified section, not to be re-evaluated.
- *   2. A value beginning with `--` gets swallowed by parseArgs' shape-guessing
- *      consumption and stored as the literal string `'true'` — non-blank, so the
- *      backfill path never fires, and `'true'` rides the payload as a fake declaration.
- *
- * Blank-only values (the `(none provided)` backfill path) pass through untouched.
+ * Declaration-shape check for `non_goals`: `- {what this pursuit will NOT do} | decider:
+ * {how to tell a finding belongs here}`. Checks the SHAPE only (a `|` and a non-empty
+ * `decider:`); whether the decider discriminates well is prose-layer judgment.
+ * `setGoalState` is the only writer, so this is the single choke point. It stops:
+ *   1. a line starting with "#" forging a section into the reviewer prompt, which
+ *      `serializeReviewContext` concatenates unescaped;
+ *   2. a value beginning with `--` being swallowed by parseArgs and stored as the
+ *      literal 'true', which is non-blank and would skip the backfill path.
+ * Blank-only values (the `(none provided)` backfill) pass through untouched.
  */
 const NON_GOAL_LINE_PATTERN = /^-\s+\S.*\|\s*decider:\s*\S.*$/;
 
@@ -621,18 +607,11 @@ function validateNonGoals(value: string): void {
 }
 
 /**
- * Orchestrator-authority set. Accepts ONLY planning|pursuing — it can never
- * write phase=complete (that is request-complete-only) and never writes
- * objective_verdict. On phase=planning, three stale-state resets fire so a new
- * objective never inherits a prior objective's state:
- *   - objective_verdict is reset to 'absent' so a stale APPROVE cannot survive a
- *     re-plan;
- *   - completion_evidence_paths is reset to [] on EVERY planning transition —
- *     evidence is only ever valid from the current pursuit's completion audit
- *     (recorded fresh during the pursuing phase), never carried across planning;
- *   - iteration is reset to 0 ONLY for a FRESH goal (no active prior). A re-plan
- *     loop-back of the SAME active goal preserves iteration — budget accumulates
- *     across re-plans.
+ * Orchestrator-authority set. Accepts only planning|pursuing; it never writes
+ * phase=complete or objective_verdict. On phase=planning a new objective must not
+ * inherit the prior one's state: objective_verdict resets to 'absent',
+ * completion_evidence_paths resets to [], and iteration resets to 0 only for a fresh
+ * goal (a re-plan of the same active goal keeps it, so budget accumulates).
  */
 export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 	// Runtime-validated narrowing: opts.phase is `string` in the type until this guard
@@ -768,6 +747,8 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 				// leaving ordinary merge writes' preservation behavior unchanged.
 				next.forced_complete = undefined;
 				next.forced_reason = undefined;
+				// A fresh goal reviews its own range, not the dead goal's.
+				next.review_base_commit = undefined;
 				// The review-dispatch budget is a RECORDED resource: once a pursuit exhausts it
 				// (used >= cap) it parks in `renewal-required`, whose only sanctioned exits are
 				// `approve-review-dispatch-renewal --reason` (+5, recorded) and the user-only
@@ -809,6 +790,16 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 		completion_evidence_paths: opts.completion_evidence_paths,
 		codex_goal_objective: opts.codex_goal_objective,
 	};
+	// The pursuit's review range starts where it enters `pursuing` from `planning`. Later
+	// pursuing writes and re-plan loop-backs keep the recorded base; an older state already
+	// in `pursuing` has none, so the reviewer falls back to its own range.
+	const prior = readPrior(sessionId);
+	if (prior.phase === "planning" && prior.review_base_commit === undefined) {
+		const head = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" });
+		const sha = head.status === 0 ? head.stdout.trim() : "";
+		if (/^[0-9a-f]{40,64}$/.test(sha)) next.review_base_commit = sha;
+		else console.error("set: review_base_commit omitted — `git rev-parse HEAD` failed here, so no review range is recorded");
+	}
 	mergeWrite(sessionId, next);
 }
 
@@ -861,26 +852,11 @@ export function resumePursuit(sessionId: string, reason: string): void {
 }
 
 /**
- * User-only escape hatch: forcibly completes a stuck ultragoal from ANY
- * non-terminal-complete phase (planning/pursuing/renewal-required/budget_limited/blocked),
- * bypassing every gate `requestComplete` enforces — no verdict check, no
- * per-story artifact check, no code-review lane, no completion-evidence check.
- * That bypass is the entire point of this command; it exists only because the
- * user, not the loop, is deciding the pursuit is done.
- *
- * Deliberately mirrors `resumePursuit`'s strict raw read/validate/write path —
- * no seeding, no generic merge-write. The terminal write itself still goes
- * through the same validated, locked `mergeWriteLocked` helper `requestComplete`
- * uses (never a raw fs write), so the atomic-lock and schema-default guarantees
- * hold even though the gate checks above it are skipped.
- *
- * Refuses only when:
- *   - `reason` is missing or whitespace-only (same required-justification
- *     posture as the steering mutations' `--evidence`/`--rationale`);
- *   - no ultragoal state exists for this session, or
- *   - the state is already `phase: "complete"` (no-op would hide that the
- *     caller thinks something is still stuck; be explicit instead).
- * All refusals: throws, state unchanged.
+ * User-only escape hatch: completes a stuck ultragoal from any non-complete phase,
+ * bypassing every gate `requestComplete` enforces. The terminal write still goes
+ * through the locked `mergeWriteLocked`, so lock and schema defaults hold.
+ * Refuses (throws, state unchanged) on a missing/whitespace-only `reason`, no state,
+ * or an already-complete state.
  */
 export function forceComplete(sessionId: string, reason: string): void {
 	if (reason.trim() === "") {
@@ -905,16 +881,11 @@ export function forceComplete(sessionId: string, reason: string): void {
 }
 
 /**
- * Orchestrator-usable human-gate pause: marks the live pursuit as awaiting a
- * user decision the loop cannot make itself (a wrong plan/requirement, or an
- * unsafe boundary). Sets `awaiting_user=true` while STAYING in `pursuing`/`active`
- * — this is a temporary yield, not `set-blocked` (terminal) nor completion. The
- * Stop hook then allows the turn to end without counting no-progress. The flag is
- * ephemeral: the next steering/progress write (mergeWriteLocked defaults it to
- * false) or force-complete clears it, so the pause never outlives the resume.
- *
- * Refuses unless the pursuit is live (`active` and `phase=pursuing`) — pausing a
- * non-pursuing state is meaningless and would wedge nothing useful.
+ * Human-gate pause: marks the live pursuit as awaiting a user decision the loop cannot
+ * make (a wrong plan/requirement, an unsafe boundary). Stays in `pursuing`/`active`;
+ * the Stop hook then lets the turn end without counting no-progress. Ephemeral: the
+ * next steering/progress write (mergeWriteLocked defaults it to false) or the
+ * user-only escape hatch clears it. Refuses unless the pursuit is live.
  */
 export function setAwaitingUser(sessionId: string): void {
 	const stateFilePath = resolveStatePath(sessionId);
@@ -962,12 +933,9 @@ function validateStoryFields(s: Story, label: string): void {
 }
 
 /**
- * Enforces the two-field steering justification required by every mid-flight
- * story mutation (add-story/revise-story/retire-story). `evidence` is what was
- * observed that forces the change; `rationale` is why this change is the right
- * response. Both are forcing functions, not data collection — no default value
- * is supplied anywhere, and an omitted or whitespace-only value is a hard
- * refusal (same `.trim() === ""` idiom used elsewhere in this file).
+ * Enforces the steering justification every mid-flight story mutation requires:
+ * `evidence` (what was observed) and `rationale` (why this change). No default; an
+ * omitted or whitespace-only value is a hard refusal.
  */
 function requireSteeringReason(label: string, evidence: string, rationale: string): void {
 	if (evidence.trim() === "") {
@@ -983,15 +951,9 @@ function requireSteeringReason(label: string, evidence: string, rationale: strin
 }
 
 /**
- * Validates and persists a story set. Full-replace semantics: every story starts
- * `unconfirmed`. Refuses when:
- *   - phase !== 'planning'
- *   - outcome is empty
- *   - array is empty
- *   - any story lacks >=1 AC
- *   - any story lacks verification_surface
- *   - duplicate ids within the set
- * All refusals: throws (exit 1 at CLI boundary), state file unchanged.
+ * Validates and persists a story set (full replace; every story starts `unconfirmed`).
+ * Refuses outside planning, on empty outcome/array, a story lacking >=1 AC or
+ * verification_surface, or duplicate ids. Refusals throw; state is unchanged.
  */
 export function setStories(sessionId: string, stories: Story[]): void {
 	const prior = readPrior(sessionId);
@@ -1025,12 +987,9 @@ export function setStories(sessionId: string, stories: Story[]): void {
 }
 
 /**
- * Reorders the stored story array to `orderedIds` — array order only, no status or
- * field changes. Mirrors set-stories' phase guard (planning-only): once pursuing has
- * begun, sequential dispatch order is frozen — re-plan first (set --phase planning) to
- * reorder. Refuses unless `orderedIds` is an EXACT permutation of the current story ids
- * (same set, same length, no duplicates) — a partial or padded list would silently drop
- * or duplicate a story in the sequential dispatch order.
+ * Reorders the stored story array only (no status or field changes). Planning-only:
+ * once pursuing begins, dispatch order is frozen. `orderedIds` must be an exact
+ * permutation of the current ids, or a story would be silently dropped or duplicated.
  */
 export function reorderStories(sessionId: string, orderedIds: string[]): void {
 	const prior = readPrior(sessionId);
@@ -1066,14 +1025,9 @@ export function reorderStories(sessionId: string, orderedIds: string[]): void {
 }
 
 /**
- * Appends one new story. The incoming status must be `unconfirmed` (or absent — it is
- * forced to `unconfirmed` regardless). No mutation may produce `confirmed` (D-9).
- * Validates same per-story schema as setStories (>=1 AC, verification_surface, unique id).
- * Allowed in both `planning` and `pursuing` phases.
- * `evidence`/`rationale` are the steering justification (ADR D-4) — required, no default;
- * recorded onto the new story as `steering_evidence`/`steering_rationale`.
- * Refuses on: missing/blank evidence or rationale, out-of-enum status, `confirmed` status,
- * duplicate id, schema violation. All refusals: throws, state unchanged.
+ * Appends one new story, forced to `unconfirmed` (no mutation may produce `confirmed`).
+ * Allowed in planning and pursuing. `evidence`/`rationale` are required and recorded
+ * as `steering_evidence`/`steering_rationale`. Refusals throw; state is unchanged.
  */
 export function addStory(sessionId: string, story: Story, evidence: string, rationale: string): void {
 	requireSteeringReason("add-story", evidence, rationale);
@@ -1115,14 +1069,11 @@ export function addStory(sessionId: string, story: Story, evidence: string, rati
 }
 
 /**
- * Patches the content fields of an existing story (text/AC/surface).
- * ALWAYS resets status to `unconfirmed` — a changed story must be re-confirmed.
- * No mutation may produce `confirmed` or any value outside the enum (D-9).
- * `evidence`/`rationale` are the steering justification (ADR D-4) — required, no default;
- * recorded onto the patched story as `steering_evidence`/`steering_rationale`.
- * Refuses on: missing/blank evidence or rationale, retired story (no resurrect-via-revise),
- * unknown id, out-of-enum status in the patch, `confirmed` in the patch.
- * All refusals: throws, state unchanged.
+ * Patches the content fields of an existing story (text/AC/surface) and ALWAYS resets
+ * status to `unconfirmed` (a changed story must be re-confirmed). `evidence`/`rationale`
+ * are required and recorded as steering provenance. Refuses a retired story (no
+ * resurrect-via-revise), an unknown id, or an out-of-enum/`confirmed` status in the patch.
+ * Refusals throw; state is unchanged.
  */
 export function reviseStory(
 	sessionId: string,
@@ -1181,17 +1132,10 @@ export function reviseStory(
 }
 
 /**
- * Sets a story's status to `retired`. Anti-dodge fence (D-9):
- *   - `unconfirmed` story → retirable in any phase
- *   - `confirmed` story → retirable ONLY while `phase=planning`
- *     (retiring confirmed mid-pursuit would bypass the T4 verdict gate)
- * `evidence`/`rationale` are the steering justification (ADR D-4) — required, no default;
- * recorded onto the retired story as `steering_evidence`/`steering_rationale`. Checked
- * BEFORE the anti-dodge fence below, but supplying both never bypasses that fence — it
- * only gates whether the fence is even reached.
- * Refuses on: missing/blank evidence or rationale, unknown id, already retired (no-op
- *   would hide bugs — be explicit), confirmed+pursuing combination.
- * All refusals: throws, state unchanged.
+ * Sets a story's status to `retired`. Anti-dodge fence: a `confirmed` story is
+ * retirable only while `phase=planning` (retiring it mid-pursuit would bypass the
+ * verdict gate); supplying evidence/rationale never bypasses that. Refuses an unknown
+ * or already-retired id. Refusals throw; state is unchanged.
  */
 export function retireStory(sessionId: string, storyId: string, evidence: string, rationale: string): void {
 	requireSteeringReason("retire-story", evidence, rationale);
@@ -1226,19 +1170,10 @@ export function retireStory(sessionId: string, storyId: string, evidence: string
 
 /**
  * Splits one story into >=2 replacements in a single atomic write: the parent is
- * retired IN PLACE and the replacements are inserted directly after it, preserving
- * sequential dispatch order. The split is recorded machine-readably — the retired
- * parent gets `split_into: [child ids]`, each replacement gets `split_from: parent id` —
- * so a split is distinguishable in state from an unrelated retire + adds.
- *
- * Composes the existing invariants rather than inventing new ones:
- *   - steering justification required (ADR D-4, same as add/revise/retire)
- *   - parent fences mirror retire-story: unknown id refused, already-retired refused,
- *     confirmed parent splittable ONLY while `phase=planning` (D-9 anti-dodge fence)
- *   - replacements validated like add-story: schema, no `confirmed` status (D-9),
- *     ids unique among themselves AND against every existing story, status forced
- *     to `unconfirmed`
- * All refusals: throws, state unchanged.
+ * retired in place, replacements are inserted right after it, and the split is recorded
+ * via `split_into` / `split_from`. Same fences as retire-story (confirmed parent only in
+ * planning) and add-story (no `confirmed` status, ids unique, status forced to
+ * `unconfirmed`); steering evidence/rationale required. Refusals throw; state is unchanged.
  */
 export function splitStory(
 	sessionId: string,
@@ -1436,18 +1371,25 @@ interface VerdictArtifact {
 // dismissal keying.
 // ---------------------------------------------------------------------------
 
-export type ReviewFindingClass = "correctness" | "regression" | "cleanup" | "requirement-gap";
+/**
+ * The reviewer's label for a finding (the code-review skill emits correctness,
+ * regression, cleanup or requirement-gap). Routing never branches on it, so the
+ * gate checks only that it is a non-empty string; it keys dismissals and reporting.
+ */
+export type ReviewFindingClass = string;
 export type ReviewImpact = "HIGH" | "MEDIUM" | "LOW";
 export type ReviewPriority = "HIGH" | "MEDIUM" | "LOW";
-export type ReviewFindingOutcome = "BLOCK" | "FIX" | "NOTE" | "ADJUDICATE";
+export type ReviewFindingOutcome = "BLOCK" | "FIX" | "NOTE";
 export type ReviewScope = "IN_SCOPE" | "OUT_OF_SCOPE" | "UNKNOWN";
 export type ReviewScopeBasis =
-	"requirement" | "regression" | "non_goal" | "unrelated" | "uncertain";
+	"requirement" | "regression" | "changed_code" | "non_goal" | "unrelated" | "uncertain";
 
 export interface ReviewScopeEvidence {
 	basis: ReviewScopeBasis;
 	reference: string;
 	rationale: string;
+	/** OUT_OF_SCOPE + non_goal only: one declared non-goal statement, copied exactly from the `non_goals` slot array. */
+	non_goal?: string;
 }
 
 export interface CodeReviewFinding {
@@ -1469,10 +1411,17 @@ export interface CodeReviewFinding {
 
 export interface CodeReviewArtifact {
 	status: "COMPLETE" | "INCONCLUSIVE";
-	scope_contract_sha256: string;
+	/** Required for COMPLETE. An INCONCLUSIVE artifact may omit it (damaged/missing contract); it then matches no contract. */
+	scope_contract_sha256?: string;
 	findings: CodeReviewFinding[];
 	/** Path to the findings.md card report — the full 7-field cards the summary findings were cut from. */
 	findings_report?: string;
+	/**
+	 * Present on an INCONCLUSIVE artifact whose review stopped on an external cause
+	 * (quota, auth, missing CLI). The reviewer writes the full object; this reader
+	 * requires only the two keys the caller acts on and passes the rest through.
+	 */
+	external_stall?: { invocation_id: string; cause_kind: string; [key: string]: unknown };
 	reviewer: string;
 	at: string;
 }
@@ -1494,6 +1443,8 @@ export interface ReviewResult {
 	};
 	reason?: string;
 	resolution?: ReviewResolution;
+	/** Copied from the artifact: the caller's cue to `await-user`, then re-dispatch with `resume_invocation_id`. */
+	external_stall?: CodeReviewArtifact["external_stall"];
 }
 
 function isReviewResolution(value: unknown): value is ReviewResolution {
@@ -1521,9 +1472,10 @@ function isReviewResolution(value: unknown): value is ReviewResolution {
 }
 
 /**
- * Scope admission precedes confidence and impact. Confirmed high/medium findings
- * block, confirmed low findings are repair comments, and plausible high findings
- * require adjudication. Excluded observations are report-only; unknown scope fails closed.
+ * Scope admission precedes priority. In scope, a finding blocks at HIGH, is a
+ * repair comment at MEDIUM and a note at LOW, whether CONFIRMED or PLAUSIBLE: the
+ * verdict is a visible label and does not change routing. Excluded observations
+ * are report-only; unknown scope fails closed.
  */
 export function classifyReviewFindingOutcome(finding: {
 	verdict: "CONFIRMED" | "PLAUSIBLE";
@@ -1534,7 +1486,6 @@ export function classifyReviewFindingOutcome(finding: {
 	if (finding.scope === "OUT_OF_SCOPE") return "NOTE";
 	if (finding.scope === "UNKNOWN") return "BLOCK";
 	if (finding.scope === "IN_SCOPE") {
-		if (finding.verdict === "PLAUSIBLE") return "ADJUDICATE";
 		return finding.priority === "HIGH" ? "BLOCK" : finding.priority === "MEDIUM" ? "FIX" : "NOTE";
 	}
 	return "BLOCK";
@@ -1619,10 +1570,8 @@ function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
 	// Required top-level fields
 	const VALID_STATUS = ["COMPLETE", "INCONCLUSIVE"];
 	if (!isOneOf(value["status"], VALID_STATUS)) return false;
-	if (
-		typeof value["scope_contract_sha256"] !== "string" ||
-		!/^[0-9a-f]{64}$/.test(value["scope_contract_sha256"])
-	)
+	const contractHash = value["scope_contract_sha256"];
+	if (contractHash === undefined ? value["status"] === "COMPLETE" : typeof contractHash !== "string" || !/^[0-9a-f]{64}$/.test(contractHash))
 		return false;
 	if (!Array.isArray(value["findings"])) return false;
 	const reviewer = value["reviewer"];
@@ -1632,18 +1581,24 @@ function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
 	// string when present — a non-string path is a malformed reviewer output.
 	const report = value["findings_report"];
 	if (report !== undefined && typeof report !== "string") return false;
-	// Validate each finding; any enum violation → whole artifact null.
+	const stall = value["external_stall"];
+	if (stall !== undefined && (!isRecord(stall) || typeof stall["invocation_id"] !== "string" || typeof stall["cause_kind"] !== "string")) return false;
+	// Validate each finding; any violation → whole artifact null.
 	// `impact`, `priority`, and `assessment` are REQUIRED for COMPLETE findings — a finding without one is schema-invalid exactly like
 	// an artifact without `status`: no default-to-LOW (or any) coercion, because a
 	// silently defaulted impact would let a reviewer omission decide the gate.
-	const VALID_CLASSES = ["correctness", "regression", "cleanup", "requirement-gap"];
+	// Enums are checked only where they drive routing (verdict, impact, priority,
+	// scope, basis); `class` and `assessment` are checked for presence, not wording:
+	// `class` is a non-empty string, `assessment` carries the five keys non-blank and
+	// any extra key is ignored.
 	const VALID_FINDING_VERDICTS = ["CONFIRMED", "PLAUSIBLE"];
 	const VALID_IMPACTS = ["HIGH", "MEDIUM", "LOW"];
 	const VALID_PRIORITIES = ["HIGH", "MEDIUM", "LOW"];
 	const ASSESSMENT_KEYS = ["unfixed_cost", "exposure", "remedy", "added_cost", "rationale"];
 	for (const entry of value["findings"]) {
 		if (!isRecord(entry)) return false;
-		if (!isOneOf(entry["class"], VALID_CLASSES)) return false;
+		const findingClass = entry["class"];
+		if (typeof findingClass !== "string" || findingClass.trim() === "") return false;
 		if (!isOneOf(entry["verdict"], VALID_FINDING_VERDICTS)) return false;
 		if (!isOneOf(entry["impact"], VALID_IMPACTS)) return false;
 		if (value["status"] === "COMPLETE" || entry["priority"] !== undefined) {
@@ -1651,8 +1606,7 @@ function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
 		}
 		if (value["status"] === "COMPLETE" || entry["assessment"] !== undefined) {
 			const assessment = entry["assessment"];
-			if (!isRecord(assessment) || Object.keys(assessment).length !== ASSESSMENT_KEYS.length) return false;
-			if (Object.keys(assessment).some((key) => !ASSESSMENT_KEYS.includes(key))) return false;
+			if (!isRecord(assessment)) return false;
 			if (ASSESSMENT_KEYS.some((key) => typeof assessment[key] !== "string" || assessment[key].trim() === "")) return false;
 		}
 		if (!isOneOf(entry["scope"], ["IN_SCOPE", "OUT_OF_SCOPE", "UNKNOWN"] as const)) return false;
@@ -1664,12 +1618,13 @@ function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
 		)
 			return false;
 		const basisByScope: Record<string, string[]> = {
-			IN_SCOPE: ["requirement", "regression"],
+			IN_SCOPE: ["requirement", "regression", "changed_code"],
 			OUT_OF_SCOPE: ["non_goal", "unrelated"],
 			UNKNOWN: ["uncertain"],
 		};
 		if (!isOneOf(evidence["basis"], basisByScope[String(entry["scope"])] ?? [])) return false;
 		if (evidence["rationale"].trim() === "" || evidence["reference"].trim() === "") return false;
+		if (evidence["non_goal"] !== undefined && typeof evidence["non_goal"] !== "string") return false;
 	}
 	return true;
 }
@@ -1711,10 +1666,9 @@ function emptyReviewGroups(): ReviewResult["findings"] {
 
 function reviewResultFromArtifact(raw: string, artifact: CodeReviewArtifact, state: Partial<GoalState>, dismissed: DismissedReviewFinding[] = []): ReviewResult {
 	const result: ReviewResult = { verdict: "APPROVE", artifact_sha256: sha256(raw), findings: emptyReviewGroups() };
-	if (artifact.status !== "COMPLETE") return { ...result, verdict: "REQUEST_CHANGES", reason: "inconclusive review" };
 	const degraded: string[] = [];
 	for (const original of artifact.findings) {
-		const problem = scopeEvidenceReferenceProblem(original, state);
+		const problem = scopeEvidenceProblem(original, state);
 		if (problem !== null) degraded.push(`${original.ref ?? "?"}: ${problem}`);
 		const finding = problem === null ? original : { ...original, scope: "UNKNOWN" as const };
 		if (isDismissed(finding, result.artifact_sha256, dismissed)) continue;
@@ -1723,12 +1677,13 @@ function reviewResultFromArtifact(raw: string, artifact: CodeReviewArtifact, sta
 			if (finding.scope === "IN_SCOPE") result.findings.repair.push(finding);
 			else result.findings.adjudicate.push(finding);
 		} else if (outcome === "FIX") result.findings.repair.push(finding);
-		else if (outcome === "ADJUDICATE") result.findings.adjudicate.push(finding);
 		else result.findings.notes.push(finding);
 	}
 	// Degradation is not silent: surface each invalid finding and the fix so the
 	// caller sees why it blocks (never-false-complete) instead of a mystery UNKNOWN.
 	if (degraded.length > 0) result.reason = `scope evidence degraded to blocking UNKNOWN — ${degraded.join("; ")}`;
+	// An unfinished review still lists what it found, but it can never pass the gate.
+	if (artifact.status !== "COMPLETE") return { ...result, verdict: "REQUEST_CHANGES", reason: "inconclusive review", ...(artifact.external_stall ? { external_stall: artifact.external_stall } : {}) };
 	if (result.findings.adjudicate.length > 0 || result.findings.repair.some((f) => classifyReviewFindingOutcome(f) === "BLOCK")) result.verdict = "REQUEST_CHANGES";
 	else if (result.findings.repair.length > 0 || result.findings.notes.length > 0) result.verdict = "COMMENT";
 	const resolution = state.review_resolution;
@@ -1745,7 +1700,8 @@ export function getReviewResult(sessionId: string): ReviewResult {
 	const reviewed = readCodeReviewArtifactRaw(sessionId);
 	if (!state || !state.active || state.phase !== "pursuing") return invalidReviewResult("no active pursuing parent");
 	if (!reviewed) return invalidReviewResult("missing or invalid review artifact");
-	if (reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(state)) return invalidReviewResult("stale scope contract");
+	// A hashless INCONCLUSIVE artifact claims no contract, so there is nothing to compare; a present hash must match.
+	if (reviewed.artifact.scope_contract_sha256 !== undefined && reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(state)) return invalidReviewResult("stale scope contract");
 	// A finding with invalid scope evidence no longer nulls the whole result; the
 	// reducer degrades it to a blocking UNKNOWN (effectiveReviewFinding) while valid
 	// siblings still route. A stale contract hash above stays a whole-artifact reject.
@@ -1799,78 +1755,52 @@ function isCurrentCommentResolutionValid(result: ReviewResult, state: Partial<Go
 	});
 }
 
-const SCOPE_SLOTS = ["outcome", "verification_surface", "constraints", "boundaries", "non_goals"];
-const ALLOWED_BASIS_BY_SCOPE: Record<ReviewScope, string[]> = {
-	IN_SCOPE: ["requirement", "regression"],
-	OUT_OF_SCOPE: ["non_goal", "unrelated"],
-	UNKNOWN: ["uncertain"],
-};
+/**
+ * Declared exclusions of a non_goals slot, in order: each `- {statement} | decider: {test}`
+ * line becomes `{statement, decider}` (whitespace collapsed). Feeds both the reviewer's
+ * `non_goals` slot (serializeReviewContext) and the citation check (scopeEvidenceProblem).
+ */
+function declaredNonGoals(nonGoals: string): { statement: string; decider: string }[] {
+	return nonGoals
+		.split("\n")
+		.map((line) => {
+			const body = line.replace(/^\s*-\s+/, "");
+			const at = body.search(/\|\s*decider:/);
+			return {
+				statement: collapseWhitespace(at < 0 ? body : body.slice(0, at)),
+				decider: at < 0 ? "" : collapseWhitespace(body.slice(at).replace(/^\|\s*decider:/, "")),
+			};
+		})
+		.filter(({ statement }) => statement !== "");
+}
+
+function collapseWhitespace(text: string): string {
+	return text.replace(/\s+/g, " ").trim();
+}
 
 /**
- * Returns null when the finding's scope evidence validates against the current
- * contract, or an actionable message (naming the offending value and the allowed
- * alternative) when it does not. This is the single source of truth for scope-
- * evidence validity: the boolean predicate below and the `validate-review-artifact`
- * CLI gate both call it, so a reviewer gets the fix at the CLI instead of a silent
- * rejection.
- *
- * Fine-grained basis→reference narrowing is kept ONLY for OUT_OF_SCOPE, because
- * OUT_OF_SCOPE is the nonblocking branch and its `reference` feeds the non-empty
- * slot check below — a `non_goal` exclusion must cite the `non_goals` slot it
- * claims to be excluded by, and that slot must be non-empty. IN_SCOPE `reference`
- * feeds no gate decision (routing is f(scope, verdict, priority)), so no narrowing
- * is imposed there.
+ * Returns null when the finding's scope evidence passes the gate, or an actionable
+ * message when it does not. Presence and basis-by-scope are schema-enforced
+ * (isCodeReviewArtifact); the one check left here is that an OUT_OF_SCOPE + non_goal
+ * exclusion cites one declared non_goals statement exactly (===), so a defect cannot
+ * be dropped by stretching intent. Whether the statement covers the defect is the
+ * reviewer's judgment and is not checked.
  */
-function scopeEvidenceReferenceProblem(
+function scopeEvidenceProblem(
 	finding: CodeReviewFinding,
 	state: Partial<GoalState>,
 ): string | null {
-	const { basis, reference } = finding.scope_evidence;
-	const storyIds = (state.stories ?? [])
-		.filter((s) => s.status === "confirmed")
-		.map((s) => s.id);
-	const storyHint = storyIds.length ? `, or a confirmed story id (${storyIds.join(", ")})` : "";
-
-	if (!SCOPE_SLOTS.includes(reference) && !storyIds.includes(reference))
-		return `reference "${reference}" does not resolve to a contract slot (${SCOPE_SLOTS.join(", ")})${storyHint}`;
-	if (!ALLOWED_BASIS_BY_SCOPE[finding.scope].includes(basis))
-		return `basis "${basis}" is not valid for scope ${finding.scope}; use one of: ${ALLOWED_BASIS_BY_SCOPE[finding.scope].join(", ")}`;
-
-	if (finding.scope === "OUT_OF_SCOPE") {
-		if (basis === "non_goal" && reference !== "non_goals")
-			return `OUT_OF_SCOPE + non_goal must reference "non_goals" (the non-goal it is excluded by), not "${reference}"`;
-		if (basis === "unrelated" && reference !== "outcome")
-			return `OUT_OF_SCOPE + unrelated must reference "outcome" (compared against the approved outcome), not "${reference}"`;
-		const slotValue =
-			reference === "outcome"
-				? state.outcome
-				: reference === "non_goals"
-					? state.non_goals
-					: reference === "constraints"
-						? state.constraints
-						: reference === "boundaries"
-							? state.boundaries
-							: reference === "verification_surface"
-								? state.verification_surface
-								: undefined;
-		if (slotValue === undefined || slotValue.trim() === "")
-			return `OUT_OF_SCOPE reference "${reference}" points at an empty contract slot; the excluding slot must be non-empty`;
-	}
-	return null;
-}
-
-function isScopeEvidenceReferenceValid(
-	finding: CodeReviewFinding,
-	state: Partial<GoalState>,
-): boolean {
-	return scopeEvidenceReferenceProblem(finding, state) === null;
+	if (finding.scope !== "OUT_OF_SCOPE" || finding.scope_evidence.basis !== "non_goal") return null;
+	const statements = declaredNonGoals(state.non_goals ?? "").map(({ statement }) => statement);
+	const cited = finding.scope_evidence.non_goal;
+	if (cited !== undefined && cited !== "" && statements.includes(cited)) return null;
+	return `OUT_OF_SCOPE + non_goal evidence must set scope_evidence.non_goal to one declared non_goals statement copied exactly (valid statements: ${JSON.stringify(statements)}); judge yourself whether that statement covers this defect; a requirement's silence or a decision about a different behavior is not an exclusion — a defect in code this change added or modified is IN_SCOPE + changed_code`;
 }
 
 /**
- * Pre-publish gate backing the `validate-review-artifact` CLI: reports every
- * scope-evidence problem (and a stale contract hash) with an actionable message,
- * so a reviewer catches a wrong value at the CLI rather than after a full review
- * has degraded silently. `ok` is true only when the artifact would pass the gate.
+ * Pre-publish check backing the `validate-review-artifact` CLI: `problems` lists
+ * each gate failure (stale contract hash, scopeEvidenceProblem) with an actionable
+ * message, and `ok` is true only when there are none.
  */
 export function validateReviewArtifact(sessionId: string): { ok: boolean; problems: string[] } {
 	const state = readGoalStateRaw(sessionId);
@@ -1879,43 +1809,45 @@ export function validateReviewArtifact(sessionId: string): { ok: boolean; proble
 	if (!reviewed)
 		return { ok: false, problems: ["no valid code-review artifact (missing or schema-invalid)"] };
 	const problems: string[] = [];
-	if (reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(state))
+	if (reviewed.artifact.scope_contract_sha256 !== undefined && reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(state))
 		problems.push("scope_contract_sha256 is stale — re-copy the current [SCOPE_CONTRACT] hash and re-publish");
 	reviewed.artifact.findings.forEach((f, i) => {
-		const problem = scopeEvidenceReferenceProblem(f, state);
-		if (problem !== null) problems.push(`finding[${i}]${f.ref ? ` (${f.ref})` : ""}: ${problem}`);
+		const label = `finding[${i}]${f.ref ? ` (${f.ref})` : ""}`;
+		const problem = scopeEvidenceProblem(f, state);
+		if (problem !== null) problems.push(`${label}: ${problem}`);
 	});
 	return { ok: problems.length === 0, problems };
 }
 
 /**
- * Graded degradation (partial invalidation): a finding whose scope evidence does
- * not validate against the current contract is no longer trusted at its stated
- * scope — it degrades to a blocking UNKNOWN, so a single malformed finding still
- * fails closed (never-false-complete) WITHOUT nulling the whole review result and
- * hiding its valid siblings. Valid findings pass through unchanged. Every
- * scope-evidence consumer (result reducer, completion eligibility, user dismissal)
- * routes findings through here so the degradation is uniform.
+ * Graded degradation (partial invalidation): a finding that fails
+ * scopeEvidenceProblem is no longer trusted at its stated scope — it degrades to a
+ * blocking UNKNOWN, so a single malformed finding still fails closed
+ * (never-false-complete) WITHOUT nulling the whole review result and hiding its
+ * valid siblings. Valid findings pass through unchanged. Every scope-evidence
+ * consumer (result reducer, completion eligibility, user dismissal) routes findings
+ * through here so the degradation is uniform.
  */
 function effectiveReviewFinding(
 	finding: CodeReviewFinding,
 	state: Partial<GoalState>,
 ): CodeReviewFinding {
-	return isScopeEvidenceReferenceValid(finding, state) ? finding : { ...finding, scope: "UNKNOWN" };
+	return scopeEvidenceProblem(finding, state) === null ? finding : { ...finding, scope: "UNKNOWN" };
 }
 
 /**
- * A blocking finding counts as dismissed only when the user authorized THIS finding
- * against THESE artifact bytes. A finding with no `ref` can never match and so is
- * never dismissable — the code-review artifact schema always carries one, and a
- * ref-less finding offers nothing to key an authorization to.
+ * An admitted (IN_SCOPE) finding counts as dismissed only when the user authorized
+ * THIS finding against THESE artifact bytes. A finding with no `ref` can never match
+ * and so is never dismissable — the code-review artifact schema always carries one,
+ * and a ref-less finding offers nothing to key an authorization to. UNKNOWN and
+ * OUT_OF_SCOPE findings never count as dismissed.
  */
 function isDismissed(
 	finding: CodeReviewFinding,
 	artifactSha: string,
 	dismissed: DismissedReviewFinding[],
 ): boolean {
-	if (finding.scope !== "IN_SCOPE" || finding.verdict !== "CONFIRMED") return false;
+	if (finding.scope !== "IN_SCOPE") return false;
 	if (!finding.ref) return false;
 	return dismissed.some(
 		(d) =>
@@ -2088,91 +2020,94 @@ function readDismissals(prior: Partial<GoalState>): DismissedReviewFinding[] {
 	return Array.isArray(prior.dismissed_review_findings) ? prior.dismissed_review_findings : [];
 }
 
+/** Outcome of a dismissal request; `refusal` names the condition that failed. */
+export type DismissalResult = { dismissed: true } | { dismissed: false; refusal: string };
+
 /**
- * Dismissal of ONE wrong blocking code-review finding — the only
+ * Dismissal of ONE wrong code-review finding that holds up completion — the only
  * in-band recovery from a false-positive review, which otherwise makes the objective
- * permanently uncompletable (the alternatives being to edit correct code to satisfy a
- * wrong review, or to abandon the pursuit via set-blocked).
+ * uncompletable (the alternatives being to edit correct code to satisfy a wrong
+ * review, or to abandon the pursuit via set-blocked).
  *
  * Deliberately narrow, so the lever unblocks a specific wrong call rather than
- * disabling the review lane. It refuses unless a BLOCK-outcome finding (per the
- * scope-first outcome) with this exact `ref` and `class` is present in the
- * CURRENT artifact — a dismissal cannot be issued ahead of the finding it answers —
- * and it records the artifact's byte hash, so it lapses the moment the next review
- * round writes different bytes.
+ * disabling the review lane. It refuses unless exactly one admitted (IN_SCOPE)
+ * finding with this exact `ref` and `class` holds up completion in the CURRENT
+ * artifact — outcome BLOCK or FIX (CONFIRMED or PLAUSIBLE); a NOTE
+ * needs no dismissal and UNKNOWN or OUT_OF_SCOPE cannot be cleared this way. A
+ * dismissal cannot be issued ahead of the finding it answers, and it records the
+ * artifact's byte hash, so it lapses the moment the next review round writes
+ * different bytes. Its rationale is recorded and request-complete lists it.
  *
- * Returns true when the dismissal is recorded (or already was), false on any refusal.
+ * Returns `{ dismissed: true }` when the dismissal is recorded (or already was),
+ * otherwise the refusal naming the failed condition.
  */
-export function dismissReviewFinding(
+export function tryDismissReviewFinding(
 	sessionId: string,
 	opts: { ref: string; class: ReviewFindingClass; rationale: string },
-): boolean {
+): DismissalResult {
+	const refuse = (refusal: string): DismissalResult => ({ dismissed: false, refusal });
 	// A dismissal overrides an independent reviewer; an unexplained one leaves no way to
-	// tell a refuted finding from an inconvenient one. Same trim idiom the story-steering
-	// writers use.
+	// tell a refuted finding from an inconvenient one.
 	//
 	// The typeof checks are load-bearing, not belt-and-braces: `parseArgs` represents a
 	// valueless flag (`--rationale` with nothing after it) as boolean `true`, and `str()`
 	// stringifies that to "true" — a non-empty string that would sail past a bare trim
 	// check and record "true" as the refutation for a finding nobody actually refuted.
-	if (typeof opts.rationale !== "string" || typeof opts.ref !== "string") return false;
+	if (typeof opts.rationale !== "string" || opts.rationale.trim() === "")
+		return refuse("--rationale is required (why the finding is wrong)");
 	const rationale = opts.rationale.trim();
-	if (rationale === "") return false;
-	if (opts.ref.trim() === "") return false;
-	// Runtime enum check, not just the TypeScript type: an out-of-enum class can
-	// never match a finding, and silently accepting one would record a dismissal
-	// that suppresses nothing while claiming to.
-	if (
-		opts.class !== "correctness" &&
-		opts.class !== "regression" &&
-		opts.class !== "cleanup" &&
-		opts.class !== "requirement-gap"
-	) {
-		return false;
-	}
+	if (typeof opts.ref !== "string" || opts.ref.trim() === "") return refuse("--ref is required (the finding's ref)");
+	if (typeof opts.class !== "string" || opts.class.trim() === "") return refuse("--class is required (the finding's class)");
 
 	const stateFilePath = resolveStatePath(sessionId);
 	try {
 		ensureSeed("ultragoal", sessionId);
 		return withStateLock(stateFilePath, () => {
 			const rawState = readFileOrNull(stateFilePath);
-			if (rawState === null) return false;
-			const prior = parseClaimableState(rawState);
-			if (prior === null) return false;
+			const prior = rawState === null ? null : parseClaimableState(rawState);
 			// Mirrors the renewal lever: authorization is advisory while this caller waits
 			// for the lock, so re-check the live state before recording anything.
-			if (!prior.active || prior.phase !== "pursuing") return false;
+			if (prior === null || !prior.active || prior.phase !== "pursuing")
+				return refuse(`no active pursuing goal (phase=${prior?.phase ?? "none"}); run get to see the current phase`);
 
 			const reviewed = readCodeReviewArtifactRaw(sessionId);
-			if (reviewed === null) return false;
-			if (reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(prior)) return false;
+			if (reviewed === null) return refuse("no valid code-review artifact for this session (missing or schema-invalid)");
+			if (reviewed.artifact.scope_contract_sha256 === undefined)
+				return refuse("the code-review artifact carries no scope_contract_sha256 (inconclusive review); re-review first");
+			if (reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(prior))
+				return refuse("the code-review artifact was made against a different scope contract (stale scope_contract_sha256); re-review first");
 			const artifactSha = sha256(reviewed.raw);
+			// Match on the degraded form: a finding whose scope evidence fails the gate is
+			// coerced to UNKNOWN (effectiveReviewFinding) and so never matches — its
+			// untrustworthy scope label cannot authorize a clear.
+			const sameKey = reviewed.artifact.findings
+				.map((f) => effectiveReviewFinding(f, prior))
+				.filter((f) => f.class === opts.class && f.ref === opts.ref);
+			const dismissible = sameKey.filter((f) => f.scope === "IN_SCOPE" && classifyReviewFindingOutcome(f) !== "NOTE");
 			// EXACTLY one match, not at-least-one. A dismissal is keyed by (artifact bytes,
 			// ref, class) and findings carry no identity of their own, so two DISTINCT
-			// blocking findings at the same ref and class are indistinguishable to it —
+			// dismissible findings at the same ref and class are indistinguishable to it —
 			// refuting one would silently clear the other and let a genuine defect complete,
 			// against the never-false-complete invariant. Refusing the ambiguous dismissal
-			// is the fail-closed direction: the user loses the escape hatch for that one
-			// finding, never the block on its twin. Only admitted IN_SCOPE findings
-			// match; the sole match must be CONFIRMED. PLAUSIBLE requires independent
-			// adjudication, UNKNOWN cannot be cleared by dismissal, and excluded observations
-			// need no authorization to remain outside the repair list.
-			// Match on the degraded form: a finding whose scope evidence is invalid is
-			// coerced to UNKNOWN (effectiveReviewFinding) and so never matches an
-			// IN_SCOPE dismissal — its untrustworthy scope label cannot authorize a clear.
-			const matches = reviewed.artifact.findings
-				.map((f) => effectiveReviewFinding(f, prior))
-				.filter(
-					(f) => f.scope === "IN_SCOPE" && f.class === opts.class && f.ref === opts.ref && classifyReviewFindingOutcome(f) === "BLOCK",
-				);
-			if (matches.length !== 1 || matches[0].verdict !== "CONFIRMED") return false;
+			// is the fail-closed direction.
+			if (dismissible.length > 1)
+				return refuse(`${dismissible.length} dismissible ${opts.class} findings share ref ${opts.ref}; a dismissal cannot tell them apart, so none is dismissed`);
+			if (dismissible.length === 0) {
+				if (sameKey.length === 0) return refuse(`no ${opts.class} finding at ${opts.ref} in the current code-review artifact`);
+				const scopes = [...new Set(sameKey.map((f) => f.scope))];
+				if (scopes.includes("UNKNOWN"))
+					return refuse(`the ${opts.class} finding at ${opts.ref} has scope UNKNOWN (stated or degraded); resolve its scope by adjudication or re-review, dismissal cannot clear it`);
+				if (scopes.includes("OUT_OF_SCOPE"))
+					return refuse(`the ${opts.class} finding at ${opts.ref} is OUT_OF_SCOPE, a note that does not hold up completion`);
+				return refuse(`the ${opts.class} finding at ${opts.ref} has outcome NOTE and does not hold up completion; nothing to dismiss`);
+			}
 
 			const dismissed = readDismissals(prior);
 			const already = dismissed.some(
 				(d) =>
 					d.artifact_sha256 === artifactSha && d.ref === opts.ref && d.class === opts.class,
 			);
-			if (already) return true;
+			if (already) return { dismissed: true };
 
 			mergeWriteLocked(sessionId, stateFilePath, {
 				dismissed_review_findings: [
@@ -2180,10 +2115,10 @@ export function dismissReviewFinding(
 					{ artifact_sha256: artifactSha, ref: opts.ref, class: opts.class, rationale },
 				],
 			});
-			return true;
+			return { dismissed: true };
 		});
-	} catch {
-		return false;
+	} catch (error) {
+		return refuse(`state could not be read or written: ${String(error)}`);
 	}
 }
 
@@ -2422,6 +2357,83 @@ export function requestComplete(sessionId: string, codexGoalArg?: string): boole
 	});
 }
 
+const ADR_HEADING = /^#{3,4} (D-\d+)[ \t]*[:\u2014-][ \t]*(.*?)[ \t]*$/;
+const ANY_HEADING = /^#{1,6}[ \t]/;
+// Any heading that names a decision record (`D-<n>` or `ADR-<n>`, any level, any separator).
+const DECISION_LIKE_HEADING = /^#{1,6}[ \t]+(?:D|ADR)-\d+\b/;
+const adrField = (label: string) =>
+	new RegExp(`^(?:-[ \\t]+)?(?:\\*\\*)?${label}(?:[ \\t]*\\([^)]*\\))?(?:\\*\\*)?:(?:\\*\\*)?[ \\t]*(.*)$`);
+const DECISION_FIELD = adrField("Decision");
+const OWNS_FIELD = adrField("Owns");
+const MUST_NOT_OWN_FIELD = adrField("Must NOT own");
+// Plan ADR field labels (see skills/prometheus/plan-template.md). A continuation line
+// like `Applies when: x` is Decision text, not a field, so only these end the field.
+const FIELD_LABEL =
+	/^(?:-[ \t]+)?(?:\*\*)?(?:Tier|Context|Decision Drivers|Considered Options|Decision|Rationale|Consequences|Follow-ups|Why|Invalidated alternative|Cites|Owns|Must NOT own|Edges)(?:[ \t]*\([^)]*\))?(?:\*\*)?:/;
+
+/**
+ * One ADR field's text: its first line plus every following line up to the next field
+ * label or `---` (blank lines inside the field are skipped), joined by single spaces.
+ * The caller bounds `body` at the next heading. Null when the field is absent.
+ */
+function adrFieldText(body: string[], field: RegExp): string | null {
+	const start = body.findIndex((l) => field.test(l));
+	if (start === -1) return null;
+	const parts = [field.exec(body[start])?.[1] ?? ""];
+	for (let k = start + 1; k < body.length; k++) {
+		if (body[k].trim() === "---" || FIELD_LABEL.test(body[k])) break;
+		parts.push(body[k]);
+	}
+	return parts.map((l) => l.trim()).filter((l) => l !== "").join(" ");
+}
+
+/**
+ * Explicit decision rules of the plan at `planPath`: one `[D-N] <title> — <text>`
+ * line per `### D-<n>: <title>` ADR item (`###` or `####`; `:`, em dash or `-` separator), under a `Decision rules:` header, with
+ * a trailing newline. <text> is the item's `Decision` field (its first line plus
+ * continuation lines up to the next field label or `---`, blank lines skipped, joined by single
+ * spaces), followed by ` | Owns: <text>` and ` | Must NOT own: <text>` when the item has them; an item with no `Decision` field is omitted (its body holds rationale
+ * and alternatives, which must not become binding rules). Headings inside code blocks and comments are ignored. Returns ""
+ * for a missing/unreadable plan or a plan without decision headings — the plan is an
+ * optional enrichment, so no error. When the plan has decision headings (`D-<n>` or
+ * `ADR-<n>` at any level) but none yields a rule, the block holds one plain line
+ * saying so with the plan path, so the reader opens the plan. Rules ride in the requirements slot only,
+ * never in ScopeContract, so scope_contract_sha256 is unaffected.
+ */
+function planDecisionRules(planPath: string): string {
+	if (planPath.trim() === "") return "";
+	let text: string;
+	try {
+		text = readFileSync(planPath, "utf-8");
+	} catch {
+		return "";
+	}
+	const lines = linesOutsideBlocks(text, ["code", "comment"]);
+	const entries: string[] = [];
+	let decisionHeadings = 0;
+	for (let i = 0; i < lines.length; i++) {
+		if (DECISION_LIKE_HEADING.test(lines[i])) decisionHeadings++;
+		const heading = ADR_HEADING.exec(lines[i]);
+		if (heading === null) continue;
+		let end = i + 1;
+		while (end < lines.length && !ANY_HEADING.test(lines[end])) end++;
+		const body = lines.slice(i + 1, end);
+		const rule = adrFieldText(body, DECISION_FIELD);
+		if (rule === null) continue;
+		const owns = adrFieldText(body, OWNS_FIELD);
+		const mustNotOwn = adrFieldText(body, MUST_NOT_OWN_FIELD);
+		entries.push(
+			`[${heading[1]}] ${heading[2]} — ${rule}${owns === null ? "" : ` | Owns: ${owns}`}${mustNotOwn === null ? "" : ` | Must NOT own: ${mustNotOwn}`}`,
+		);
+	}
+	if (entries.length > 0) return `Decision rules:\n${entries.join("\n")}\n`;
+	// Decision headings the parser could not read must not vanish silently: one plain
+	// line sends the requirement finder to the plan itself.
+	if (decisionHeadings > 0)
+		return `Decision rules:\nplan has ${decisionHeadings} decision headings but none in the parseable \`### D-N:\` + \`Decision:\` form; read the plan directly: ${planPath}\n`;
+	return "";
+}
+
 /**
  * Formats all confirmed stories as a requirements block:
  * one line per story — `[id] story — AC: a1; a2 — verify: surface` — with a
@@ -2433,24 +2445,27 @@ export function requestComplete(sessionId: string, codexGoalArg?: string): boole
  * requirement finder, which then falls back to inferring intent from the
  * diff/commits/tests instead of mapping against acceptance criteria).
  * An empty outcome has nothing to fall back to, so it still returns "".
+ * When the plan file (state.plan_path) carries ADR decision rules, a
+ * `Decision rules:` block follows (see planDecisionRules).
  * Feeds the code-review lane's `{REQUIREMENTS}` input (Hop B).
  */
 export function serializeRequirements(sessionId: string): string {
 	const state = readGoalState(sessionId);
 	const stories: Story[] = state?.stories ?? [];
 	const confirmed = stories.filter((s) => s.status === "confirmed");
+	const rules = planDecisionRules(state?.plan_path ?? "");
 	if (confirmed.length === 0) {
 		const outcome = state?.outcome ?? "";
 		if (outcome.trim() === "") return "";
 		const surface = state?.verification_surface ?? "";
 		const criterion = surface.trim() !== "" ? surface : outcome;
-		return `[outcome] ${outcome} — AC: ${criterion} — verify: ${criterion}\n`;
+		return `[outcome] ${outcome} — AC: ${criterion} — verify: ${criterion}\n${rules}`;
 	}
 	const lines = confirmed.map(
 		(s) =>
 			`[${s.id}] ${s.story} — AC: ${s.acceptance_criteria.join("; ")} — verify: ${s.verification_surface}`,
 	);
-	return lines.join("\n") + "\n";
+	return lines.join("\n") + "\n" + rules;
 }
 
 /**
@@ -2473,7 +2488,10 @@ export const BACKFILL_MARKER = "(none provided)";
  * NOT folded into `project_context` alongside constraints/boundaries. Those two
  * mean "surface that may be touched" / "must not regress"; `non_goals` means
  * "declared out of scope", a distinct judgment the finder step needs to keep
- * separate to decide whether a finding falls outside the declared scope.
+ * separate to decide whether a finding falls outside the declared scope. It is an
+ * array of `{statement, decider}` (`[]` when blank): a finding cites one statement
+ * from it, copied exactly. The `[SCOPE_CONTRACT]` envelope keeps the raw string
+ * and is hashed identity only.
  *
  * Throws when no active ultragoal state exists for `sessionId` — the CLI
  * dispatch lets this propagate to a non-zero exit, the same failure protocol
@@ -2484,7 +2502,7 @@ export function serializeReviewContext(sessionId: string): {
 	description: string;
 	requirements: string;
 	project_context: string;
-	non_goals: string;
+	non_goals: { statement: string; decider: string }[];
 } {
 	const state = readGoalState(sessionId);
 	if (state === null) {
@@ -2518,10 +2536,15 @@ export function serializeReviewContext(sessionId: string): {
 	const projectContext =
 		projectContextSources.length > 0 ? projectContextSources.join("\n\n") : BACKFILL_MARKER;
 
-	const non_goals = nonGoals.trim() !== "" ? nonGoals : BACKFILL_MARKER;
+	const non_goals = declaredNonGoals(nonGoals);
 
 	const contract = scopeContract(state);
-	const project_context = `${projectContext}\n\n[SCOPE_CONTRACT]\n${JSON.stringify({ ...contract, scope_contract_sha256: sha256(JSON.stringify(contract)) })}\n[/SCOPE_CONTRACT]`;
+	const baseCommit = state.review_base_commit;
+	const baseLine =
+		baseCommit === undefined
+			? ""
+			: `\n\nReview base commit: ${baseCommit} — review the range ${baseCommit}...HEAD (this pursuit's own changes).`;
+	const project_context = `${projectContext}${baseLine}\n\n[SCOPE_CONTRACT]\n${JSON.stringify({ ...contract, scope_contract_sha256: sha256(JSON.stringify(contract)) })}\n[/SCOPE_CONTRACT]`;
 	return { what_was_implemented, description, requirements, project_context, non_goals };
 }
 
@@ -3061,28 +3084,13 @@ function main(): void {
 				`renewed: review-dispatch cap is now ${result.cap} (used ${result.used}); phase=pursuing. The reason is recorded in budget_extensions and request-complete will list it for the final report. Dispatch the review again.\n`,
 			);
 		} else if (subcommand === "dismiss-review-finding") {
-			const ref = str(args["ref"]) ?? "";
-			const findingClass = str(args["class"]) ?? "";
-			const rationale = str(args["rationale"]) ?? "";
-			if (
-				findingClass !== "correctness" &&
-				findingClass !== "regression" &&
-				findingClass !== "cleanup" &&
-				findingClass !== "requirement-gap"
-			) {
-				process.stderr.write(
-					"dismiss-review-finding: --class must be one of correctness, regression, " +
-						"cleanup, requirement-gap\n",
-				);
-				process.exit(1);
-			}
-			const dismissed = dismissReviewFinding(sessionId, { ref, class: findingClass, rationale });
-			if (!dismissed) {
-				process.stderr.write(
-					"dismiss-review-finding: refused — requires an active pursuing goal, a non-empty " +
-						`--ref and --rationale, and a blocking (BLOCK-outcome) ${findingClass} finding at ` +
-						`"${ref}" in the current code-review artifact\n`,
-				);
+			// A valueless flag reads as blank, so it is refused as missing rather than recorded as "true".
+			const ref = strFlagOrBlank(args["ref"]);
+			const findingClass = strFlagOrBlank(args["class"]);
+			const rationale = strFlagOrBlank(args["rationale"]);
+			const result = tryDismissReviewFinding(sessionId, { ref, class: findingClass, rationale });
+			if (!result.dismissed) {
+				process.stderr.write(`dismiss-review-finding: refused — ${result.refusal}\n`);
 				process.exit(1);
 			}
 			process.stdout.write(

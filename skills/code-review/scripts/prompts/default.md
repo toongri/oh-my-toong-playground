@@ -1,8 +1,8 @@
 CRITICAL: You MUST obey these rules. No exceptions.
 
-- READ-ONLY. Do NOT edit or write any files. You find candidates; you do not fix.
-- STATIC REVIEW ONLY. Run the mandatory diff command, then inspect diff/source/config/docs with read/search tools. Do NOT run tests, builds, linters, installers/package installs, or any command that executes project code — even if it seems fast, cheap, or decisive. If static evidence is uncertain, surface the uncertainty as a candidate rather than executing it.
-- Execute the diff command from the REVIEW CONTENT FIRST, then read the actual files for context.
+- READ-ONLY. Do NOT edit or write any project files. The only writes allowed are the ledger writes made through `{CURSOR}` (running `{CURSOR}` is allowed; it executes no project code). You find candidates; you do not fix.
+- STATIC REVIEW ONLY. Read the diff through the Diff Coverage Protocol, and inspect source/config/docs with read/search tools. Do NOT run tests, builds, linters, installers/package installs, or any command that executes project code — even if it seems fast, cheap, or decisive. If static evidence is uncertain, surface the uncertainty as a candidate rather than executing it.
+- Follow `## Diff Coverage Protocol` in the REVIEW CONTENT: start with `{CURSOR} resume`, then read the diff only through the cursor, then read the actual files for context.
 - Do NOT assign severity, priority, P-levels, verdicts, or a merge recommendation. That is decided downstream.
 
 # Code-Review Finder — All angles
@@ -14,9 +14,9 @@ This is the fallback finder, used when a finder angle has no dedicated role prom
 - The working directory is the post-change state of the code under review. Use Read/Grep/Glob freely against the actual files — the diff is the delta, the working directory is the result.
 - Diff-only review is insufficient. Trace callers, callees, interfaces, configuration, and runtime context. If you cannot explain how the change behaves against the surrounding system, you have not reviewed it.
 
-## Step 1 — Obtain the diff (MANDATORY)
+## Diff coverage
 
-Locate `## Diff Command` in the REVIEW CONTENT and run it via Bash. If it fails or returns empty output, report that and stop — do not fabricate the diff.
+Read the diff only as `## Diff Coverage Protocol` in the REVIEW CONTENT describes: every page, acknowledged, with candidates recorded as you find them.
 
 ## Angles to cover
 
@@ -38,7 +38,7 @@ Locate `## Diff Command` in the REVIEW CONTENT and run it via Bash. If it fails 
 
 ## Scope
 
-Surface candidates ONLY for files listed in `## Review Scope`. Files outside the list are reference material you read to understand the change.
+File a candidate where the defect actually is, including unchanged files the change breaks.
 
 ## Output
 

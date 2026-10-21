@@ -43,6 +43,7 @@ import {
 	claimReviewDispatch,
 	approveReviewDispatchRenewal,
 	renderOverrideSummary,
+	validateReviewArtifact,
 	type Story,
 } from "./ultragoal-state.ts";
 
@@ -1093,7 +1094,7 @@ describe("non_goals declaration-format gate", () => {
 
 		const out = runCli("serialize-review-context");
 		const parsed = JSON.parse(out);
-		expect(parsed.non_goals).toBe(BACKFILL_MARKER);
+		expect(parsed.non_goals).toEqual([]);
 	});
 });
 
@@ -3302,7 +3303,7 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
 			status: "COMPLETE",
-			findings: [{ class: "cleanup", verdict: "PLAUSIBLE", impact: "LOW", ref: "foo.ts:3" }],
+			findings: [{ class: "cleanup", verdict: "PLAUSIBLE", impact: "MEDIUM", ref: "foo.ts:3" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
 		});
@@ -3456,11 +3457,10 @@ describe("story layer: code-review INCONCLUSIVE status (TODO 2)", () => {
 // ---------------------------------------------------------------------------
 
 describe("requirement-gap class: validator accepts and gate keys on verdict", () => {
-	// AC18: requirement-gap must be in BOTH the class union AND VALID_CLASSES.
-	// A PLAUSIBLE requirement-gap finding must NOT block completion — the gate
-	// keys only on verdict===CONFIRMED, class is informational.
-	// RED: currently VALID_CLASSES=['correctness','cleanup'] → artifact null → false (not true).
-	test("PLAUSIBLE requirement-gap finding requires adjudication", () => {
+	// `class` is free text, so requirement-gap is accepted like any non-blank class.
+	// The gate keys on scope, verdict and priority: an IN_SCOPE PLAUSIBLE
+	// MEDIUM finding routes to FIX (blocks until comment resolution); PLAUSIBLE LOW is a note.
+	test("PLAUSIBLE requirement-gap finding requires repair and comment resolution", () => {
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
@@ -3471,7 +3471,7 @@ describe("requirement-gap class: validator accepts and gate keys on verdict", ()
 					scope: "IN_SCOPE",
 					scope_evidence: { basis: "requirement", reference: "outcome", rationale: "adjudicate" },
 					verdict: "PLAUSIBLE",
-					impact: "LOW",
+					impact: "MEDIUM",
 					ref: "foo.ts:1",
 				},
 			],
@@ -3544,6 +3544,69 @@ describe("serializeRequirements (internal helper, used by serialize-review-conte
 		const out = serializeRequirements(S);
 		expect(out).toBe("");
 	});
+
+	// A plan with `### D-N:` ADR items adds a Decision rules block: Decision field
+	// text for an item that has one; an item without one is omitted. Code-block
+	// headings are ignored. The block stays out of ScopeContract.
+	test("플랜의 ADR 결정 규칙을 Decision rules 블록으로 덧붙인다", () => {
+		const planPath = join(tmpDir, "plan.md");
+		writeFileSync(
+			planPath,
+			[
+				"## ADR",
+				"",
+				"### D-5: Shapes live in schemas",
+				"**Tier: solo**",
+				"Decision: New `record-v2.ts` exports the shapes.",
+				"Why: shared contract.",
+				"",
+				"### D-6: Rule for payload-schema failure",
+				"**Tier: solo**",
+				'Decision (rule sentence, verbatim): "If any v2 row fails the schema, the document\'s v2 output is `null`:',
+				'no v2 row is written or invalidated."',
+				"Why: one bad document must not fail the sync.",
+				"",
+				"### D-7: Body only",
+				"Plain body without a decision field.",
+				"",
+				"```",
+				"### D-9: inside a code block",
+				"```",
+				"",
+			].join("\n"),
+		);
+		setGoalState(S, { phase: "planning", outcome: "ship it", plan_path: planPath });
+		const story: Story = {
+			id: "S1",
+			story: "ship the feature",
+			acceptance_criteria: ["ac1"],
+			verification_surface: "v",
+			status: "unconfirmed",
+		};
+		setStories(S, [story]);
+		confirmStory(S, "S1");
+
+		const out = serializeRequirements(S);
+		expect(out).toBe(
+			[
+				"[S1] ship the feature — AC: ac1 — verify: v",
+				"Decision rules:",
+				"[D-5] Shapes live in schemas — New `record-v2.ts` exports the shapes.",
+				'[D-6] Rule for payload-schema failure — "If any v2 row fails the schema, the document\'s v2 output is `null`: no v2 row is written or invalidated."',
+				"",
+			].join("\n"),
+		);
+		expect(JSON.parse(runCli("serialize-review-context")).project_context).not.toContain("D-6");
+	});
+
+	test("플랜 파일이 없으면 블록 없이 오류도 내지 않는다", () => {
+		setGoalState(S, {
+			phase: "planning",
+			outcome: "ship it",
+			plan_path: join(tmpDir, "missing-plan.md"),
+		});
+		expect(serializeRequirements(S)).toBe("[outcome] ship it — AC: ship it — verify: ship it\n");
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -3597,7 +3660,7 @@ describe("serialize-review-context subcommand", () => {
 		expect(parsed.description).toBe(BACKFILL_MARKER);
 		expect(parsed.project_context).toContain(BACKFILL_MARKER);
 		expect(parsed.requirements).toBe(BACKFILL_MARKER);
-		expect(parsed.non_goals).toBe(BACKFILL_MARKER);
+		expect(parsed.non_goals).toEqual([]);
 	});
 
 	// ROUND-TRIP: stdout parses to exactly the 5 contract keys, each holding
@@ -3625,20 +3688,21 @@ describe("serialize-review-context subcommand", () => {
 	// `non_goals` is a standalone slot: its value must round-trip verbatim into
 	// its own key, and must NOT get folded into project_context alongside
 	// constraints/boundaries — that composite stays a 2-source join.
-	test("`non_goals` round-trips verbatim into its own key without polluting project_context", () => {
+	test("`non_goals` is an array of {statement, decider} in declared order, without polluting project_context", () => {
 		setGoalState(S, {
 			phase: "planning",
 			constraints: "no new deps",
 			boundaries: "no billing changes",
-			non_goals: "- SENTINEL_NON_GOALS: no i18n support | decider: touches locale files",
+			non_goals: "- SENTINEL_NON_GOALS: no   i18n support | decider: touches locale files\n- skip ui | decider: any ui file",
 		});
 
 		const out = runCli("serialize-review-context");
 		const parsed = JSON.parse(out);
 
-		expect(parsed.non_goals).toBe(
-			"- SENTINEL_NON_GOALS: no i18n support | decider: touches locale files",
-		);
+		expect(parsed.non_goals).toEqual([
+			{ statement: "SENTINEL_NON_GOALS: no i18n support", decider: "touches locale files" },
+			{ statement: "skip ui", decider: "any ui file" },
+		]);
 		expect(parsed.project_context).toContain("no new deps\n\nno billing changes");
 		expect(parsed.project_context).toContain("SENTINEL_NON_GOALS");
 	});
@@ -4522,5 +4586,192 @@ describe("help subcommand", () => {
 		const r = runCliCaptured("help", { OMT_SESSION_ID: "", CODEX_THREAD_ID: "" });
 		expect(r.status).toBe(0);
 		expect(r.stdout).toContain("ultragoal-state commands:");
+	});
+});
+
+describe("non_goal exclusion exact-statement citation", () => {
+	const SID = "quote-session";
+
+	/** Returns the validate-review-artifact problems for an OUT_OF_SCOPE + non_goal finding carrying `nonGoal` (omitted when undefined) against a non_goals slot. */
+	function citeProblem(nonGoals: string, nonGoal: unknown, rationale = "why"): string[] {
+		writeFileSync(
+			resolveStatePath(SID),
+			JSON.stringify({
+				active: true, phase: "pursuing", iteration: 0, max_iterations: 10,
+				started_at: "2026-01-01T00:00:00", last_touched_at: "2026-01-01T00:00:00",
+				outcome: "ship", verification_surface: "tests", constraints: "none",
+				boundaries: "src", non_goals: nonGoals, blocked_stop: "never", plan_path: "",
+				resume_summary: "", budget_limit_notified: false, blocked_reason: "",
+				completion_evidence_paths: [], objective_verdict: "APPROVE",
+				schema_version: 1, stories: [],
+			}),
+			"utf8",
+		);
+		const state = JSON.parse(readFileSync(resolveStatePath(SID), "utf8"));
+		const evidence: Record<string, unknown> = { basis: "non_goal", reference: "non_goals", rationale };
+		if (nonGoal !== undefined) evidence["non_goal"] = nonGoal;
+		const artifact = {
+			status: "COMPLETE",
+			scope_contract_sha256: scopeContractSha256(state),
+			findings: [
+				{
+					class: "cleanup", verdict: "CONFIRMED", impact: "LOW", priority: "LOW",
+					assessment: { unfixed_cost: "c", exposure: "e", remedy: "r", added_cost: "a", rationale: "why" },
+					scope: "OUT_OF_SCOPE",
+					scope_evidence: evidence,
+					ref: "a.ts:1",
+				},
+			],
+			reviewer: "reviewer",
+			at: "2026-01-01T00:00:00",
+		};
+		writeFileSync(join(tmpDir, `ultragoal-codereview-${SID}.json`), JSON.stringify(artifact), "utf8");
+		return validateReviewArtifact(SID).problems;
+	}
+
+	const TWO = "- redesign the login screen | decider: touches login\n- skip ui | decider: any ui file";
+
+	test("a statement copied exactly passes", () => {
+		expect(citeProblem(TWO, "redesign the login screen")).toEqual([]);
+		expect(citeProblem(TWO, "skip ui")).toEqual([]);
+	});
+
+	test("a partial quote, paraphrase, different case, empty string or unlisted statement is refused", () => {
+		for (const cited of ["redesign the login", "rework the login page", "Redesign The Login Screen", "", "not declared"]) {
+			expect(citeProblem(TWO, cited)).toHaveLength(1);
+		}
+	});
+
+	test("a missing non_goal field is refused even when the rationale contains the statement", () => {
+		expect(citeProblem("- ui | decider: x", undefined, "this is a ui problem")).toHaveLength(1);
+		expect(citeProblem(TWO, undefined, "excluded: redesign the login screen")).toHaveLength(1);
+	});
+
+	test("a placeholder-looking statement matches only itself, never arbitrary text", () => {
+		expect(citeProblem("- . | decider: x", "some other text")).toHaveLength(1);
+		expect(citeProblem("- . | decider: x", "")).toHaveLength(1);
+	});
+
+	test("the refusal lists the valid statements as a JSON array", () => {
+		const problems = citeProblem(TWO, "nope");
+		expect(problems[0]).toContain(JSON.stringify(["redesign the login screen", "skip ui"]));
+	});
+
+	test("an empty non_goals slot can never be cited", () => {
+		expect(citeProblem("", "anything")).toHaveLength(1);
+	});
+
+	test("a non-string non_goal makes the artifact schema-invalid; absent is accepted", () => {
+		citeProblem(TWO, 7);
+		expect(validateReviewArtifact(SID).ok).toBe(false);
+		expect(validateReviewArtifact(SID).problems[0]).toContain("schema-invalid");
+		expect(citeProblem(TWO, "skip ui")).toEqual([]);
+	});
+
+	test("scope_contract_sha256 keeps the raw non_goals string (golden)", () => {
+		expect(
+			scopeContractSha256({
+				outcome: "ship", verification_surface: "tests", constraints: "none", boundaries: "src",
+				non_goals: "- skip ui | decider: touches ui\n- no i18n | decider: locale files", stories: [],
+			}),
+		).toBe("3c14bc30630cf78a0713f8b6c68b04c5bbf98fcf61074caa914b0f3740a08af3");
+	});
+});
+
+describe("plan decision rules keep continuation lines that look like labels", () => {
+	test("only known plan field labels end the Decision field", () => {
+		const planPath = join(tmpDir, "plan-labels.md");
+		writeFileSync(
+			planPath,
+			[
+				"## ADR",
+				"",
+				"### D-1: Scoped rule",
+				"**Tier: solo**",
+				"Decision: Retry is capped at three attempts.",
+				"Applies when: the upstream returns 503.",
+				"Note: the cap is per request.",
+				"Why: bounded latency.",
+				"",
+			].join("\n"),
+		);
+		setGoalState(S, { phase: "planning", outcome: "ship it", plan_path: planPath });
+		setStories(S, [{ id: "S1", story: "s", acceptance_criteria: ["ac1"], verification_surface: "v", status: "unconfirmed" }]);
+		confirmStory(S, "S1");
+		expect(serializeRequirements(S)).toContain(
+			"[D-1] Scoped rule — Retry is capped at three attempts. Applies when: the upstream returns 503. Note: the cap is per request.\n",
+		);
+	});
+});
+
+describe("plan decision rule formats", () => {
+	function rulesFor(planLines: string[]): string {
+		const planPath = join(tmpDir, "plan-formats.md");
+		writeFileSync(planPath, planLines.join("\n"));
+		setGoalState(S, { phase: "planning", outcome: "ship it", plan_path: planPath });
+		return serializeRequirements(S);
+	}
+
+	test.each([
+		["bold label with colon inside", "**Decision:** x rule"],
+		["bold label with colon outside", "**Decision**: x rule"],
+		["bulleted label", "- Decision: x rule"],
+		["bulleted bold label", "- **Decision:** x rule"],
+	])("Decision field accepts %s", (_name, line) => {
+		expect(rulesFor(["### D-1: T", line, ""])).toContain("[D-1] T — x rule\n");
+	});
+
+	test.each([
+		["bold with colon outside", "**Why**: because"],
+		["bold with colon inside", "**Why:** because"],
+		["bulleted", "- Why: because"],
+		["bulleted bold", "- **Rationale**: because"],
+	])("FIELD_LABEL ends the Decision field for %s", (_name, label) => {
+		const out = rulesFor(["### D-1: T", "Decision: x rule", label, ""]);
+		expect(out).toContain("[D-1] T — x rule\n");
+		expect(out).not.toContain("because");
+	});
+
+	test.each([
+		["#### with colon", "#### D-2: T2"],
+		["### with em dash", "### D-2 — T2"],
+		["### with hyphen", "### D-2 - T2"],
+		["#### with em dash", "#### D-2 — T2"],
+	])("ADR heading accepts %s", (_name, heading) => {
+		expect(rulesFor([heading, "Decision: y rule", ""])).toContain("[D-2] T2 — y rule\n");
+	});
+
+	test("an item without a Decision field is omitted, not promoted from its body", () => {
+		const out = rulesFor(["### D-1: No field", "Rationale: long story", "Alternatives: other", "", "### D-2: Has one", "Decision: kept", ""]);
+		expect(out).toContain("[D-2] Has one — kept\n");
+		expect(out).not.toContain("D-1");
+		expect(out).not.toContain("long story");
+	});
+});
+
+describe("plan decision headings the parser cannot read", () => {
+	function rulesFor(planLines: string[]): { out: string; planPath: string } {
+		const planPath = join(tmpDir, "plan-unparsed.md");
+		writeFileSync(planPath, planLines.join("\n"));
+		setGoalState(S, { phase: "planning", outcome: "ship it", plan_path: planPath });
+		return { out: serializeRequirements(S), planPath };
+	}
+
+	test("D-N headings at another level with zero parsed rules add one line telling the reader to open the plan", () => {
+		const { out, planPath } = rulesFor(["## D-1 Retry cap", "Decision: three attempts", "", "# D-2 — Backoff", "Decision: linear", ""]);
+		expect(out).toContain(
+			`Decision rules:\nplan has 2 decision headings but none in the parseable \`### D-N:\` + \`Decision:\` form; read the plan directly: ${planPath}\n`,
+		);
+	});
+
+	test("ADR-N headings and D-N headings without a Decision field count too", () => {
+		expect(rulesFor(["### ADR-1: Store", "Decision: sqlite", ""]).out).toContain("plan has 1 decision headings but none");
+		expect(rulesFor(["### D-1: No field", "Why: because", ""]).out).toContain("plan has 1 decision headings but none");
+	});
+
+	test("no notice when at least one rule parsed, when the plan has no decision headings, or when they sit in a code block", () => {
+		expect(rulesFor(["## D-1 Other level", "", "### D-2: Parsed", "Decision: kept", ""]).out).not.toContain("plan has");
+		expect(rulesFor(["## Overview", "text", ""]).out).toBe("[outcome] ship it — AC: ship it — verify: ship it\n");
+		expect(rulesFor(["```", "## D-9 inside code", "```", ""]).out).toBe("[outcome] ship it — AC: ship it — verify: ship it\n");
 	});
 });

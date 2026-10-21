@@ -15,10 +15,12 @@ import {
 	readGoalState,
 	readGoalStateRaw,
 	setGoalState,
-	dismissReviewFinding,
+	tryDismissReviewFinding,
 	type CodeReviewArtifact,
 } from "./ultragoal-state.ts";
 import { submitReviewArtifact as publishReviewArtifact } from "../../code-review/scripts/submit-review.ts";
+
+const dismissReviewFinding = (sessionId: string, opts: Parameters<typeof tryDismissReviewFinding>[1]): boolean => tryDismissReviewFinding(sessionId, opts).dismissed;
 
 const SID = "review-parent";
 let dir: string;
@@ -29,7 +31,7 @@ function seed(): void {
 		active: true, phase: "pursuing", iteration: 0, max_iterations: 10,
 		started_at: "2026-01-01T00:00:00", last_touched_at: "2026-01-01T00:00:00",
 		outcome: "ship", verification_surface: "tests", constraints: "none",
-		boundaries: "src", non_goals: "docs", blocked_stop: "never", plan_path: "",
+		boundaries: "src", non_goals: "- docs are out of scope | decider: x", blocked_stop: "never", plan_path: "",
 		resume_summary: "", budget_limit_notified: false, blocked_reason: "",
 		completion_evidence_paths: ["evidence.md"], objective_verdict: "APPROVE",
 		schema_version: 1, stories: [{ id: "S1", story: "x", acceptance_criteria: ["x"],
@@ -48,7 +50,7 @@ function writeObjective(): void {
 function finding(scope: "IN_SCOPE" | "OUT_OF_SCOPE" | "UNKNOWN", verdict: "CONFIRMED" | "PLAUSIBLE", impact: "HIGH" | "MEDIUM" | "LOW", priority: "HIGH" | "MEDIUM" | "LOW" = impact): CodeReviewArtifact["findings"][number] {
 	const basis = scope === "IN_SCOPE" ? "requirement" : scope === "OUT_OF_SCOPE" ? "non_goal" : "uncertain";
 	const reference = scope === "OUT_OF_SCOPE" ? "non_goals" : "outcome";
-	return { class: "correctness", verdict, impact, priority, assessment: { unfixed_cost: "cost", exposure: "exposure", remedy: "remedy", added_cost: "added cost", rationale: "rationale" }, scope, scope_evidence: { basis, reference, rationale: "evidence" }, ref: `${scope}-${verdict}-${priority}` };
+	return { class: "correctness", verdict, impact, priority, assessment: { unfixed_cost: "cost", exposure: "exposure", remedy: "remedy", added_cost: "added cost", rationale: "rationale" }, scope, scope_evidence: { basis, reference, rationale: scope === "OUT_OF_SCOPE" ? "docs are out of scope for this change" : "evidence", ...(scope === "OUT_OF_SCOPE" ? { non_goal: "docs are out of scope" } : {}) }, ref: `${scope}-${verdict}-${priority}` };
 }
 
 function publish(path: string, raw: string) {
@@ -71,7 +73,7 @@ describe("리뷰 제출 reducer", () => {
 	test("FIX와 NOTE 그룹을 계산하고 아티팩트 해시를 고정한다", () => {
 		const raw = JSON.stringify(artifact([
 			{ class: "correctness", verdict: "CONFIRMED", impact: "LOW", priority: "MEDIUM", assessment: { unfixed_cost: "c", exposure: "e", remedy: "r", added_cost: "a", rationale: "why" }, scope: "IN_SCOPE", scope_evidence: { basis: "requirement", reference: "outcome", rationale: "r" }, ref: "a.ts:1" },
-			{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", priority: "LOW", assessment: { unfixed_cost: "c", exposure: "e", remedy: "r", added_cost: "a", rationale: "why" }, scope: "OUT_OF_SCOPE", scope_evidence: { basis: "non_goal", reference: "non_goals", rationale: "n" }, ref: "b.ts:1" },
+			{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", priority: "LOW", assessment: { unfixed_cost: "c", exposure: "e", remedy: "r", added_cost: "a", rationale: "why" }, scope: "OUT_OF_SCOPE", scope_evidence: { basis: "non_goal", reference: "non_goals", rationale: "docs are out of scope for this change", non_goal: "docs are out of scope" }, ref: "b.ts:1" },
 		]));
 		const path = join(dir, `ultragoal-codereview-${SID}.json`);
 		const result = publish(path, raw);
@@ -129,7 +131,7 @@ describe("리뷰 제출 reducer", () => {
 			for (const verdict of ["CONFIRMED", "PLAUSIBLE"] as const)
 				for (const priority of ["HIGH", "MEDIUM", "LOW"] as const) {
 					const result = publish(join(dir, `ultragoal-codereview-${SID}.json`), JSON.stringify(artifact([finding(scope, verdict, "HIGH", priority)])));
-					const expected = scope === "UNKNOWN" || (scope === "IN_SCOPE" && (verdict === "PLAUSIBLE" || priority === "HIGH")) ? "REQUEST_CHANGES" : "COMMENT";
+					const expected = scope === "UNKNOWN" || (scope === "IN_SCOPE" && priority === "HIGH") ? "REQUEST_CHANGES" : "COMMENT";
 					expect(result.verdict).toBe(expected);
 				}
 	});

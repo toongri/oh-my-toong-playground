@@ -4,7 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import * as state from "./ultragoal-state";
 import {
-	dismissReviewFinding,
+	tryDismissReviewFinding,
 	readCodeReviewArtifact,
 	readGoalState,
 	requestComplete,
@@ -13,13 +13,15 @@ import {
 	setVerdict,
 } from "./ultragoal-state";
 
+const dismissReviewFinding = (sessionId: string, opts: Parameters<typeof tryDismissReviewFinding>[1]): boolean => tryDismissReviewFinding(sessionId, opts).dismissed;
+
 // ---------------------------------------------------------------------------
 // V8: code-review artifact enum-contract preservation (redesign path)
 //
 // Guards the T1 EXTERNAL contract for the code-review completion lane:
 //   - every verdict in {CONFIRMED, PLAUSIBLE}  (readCodeReviewArtifact rejects
 //     the whole artifact on any enum violation — never-false-complete)
-//   - every class in {correctness, cleanup, requirement-gap}
+//   - every class a non-blank string  (class is free text, not an enum)
 //   - zero serialized `confidence` in any finding  (readCodeReviewArtifact
 //     ignores extra keys so it will NOT reject a leaked confidence; only this
 //     raw-string scan catches that — ADR D-3, risk R1)
@@ -271,7 +273,7 @@ describe("T7: requirement-gap 클래스 커버리지 계약 (regression guard)",
 	});
 
 	// 진짜 판별 케이스: PLAUSIBLE × LOW는 NOTE(non-blocking)이므로 위 BLOCK 케이스와 대조된다.
-	test("requirement-gap 클래스 PLAUSIBLE LOW finding — requestComplete는 adjudication으로 거부", () => {
+	test("requirement-gap 클래스 PLAUSIBLE LOW finding — 메모라 requestComplete를 막지 않는다", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeArtifact(SID, {
 			status: "COMPLETE",
@@ -280,7 +282,7 @@ describe("T7: requirement-gap 클래스 커버리지 계약 (regression guard)",
 			at: "2026-06-26T10:00:00",
 		});
 
-		expect(requestComplete(SID)).toBe(false);
+		expect(requestComplete(SID)).toBe(true);
 	});
 });
 

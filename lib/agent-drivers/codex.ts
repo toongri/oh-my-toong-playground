@@ -48,6 +48,8 @@ export const codexDriver: AgentDriver = {
 		let hasTurnFailed = false;
 		let hasItemCompleted = false;
 		let usage: Record<string, number> | undefined;
+		let turnFailedMessage: string | undefined;
+		let lastErrorEventMessage: string | undefined;
 
 		for (const event of rawEvents) {
 			if (!isRecord(event)) continue;
@@ -66,6 +68,13 @@ export const codexDriver: AgentDriver = {
 
 			if (ev.type === "turn.failed") {
 				hasTurnFailed = true;
+				if (isRecord(ev.error) && typeof ev.error.message === "string") {
+					turnFailedMessage = ev.error.message;
+				}
+			}
+
+			if (ev.type === "error" && typeof ev.message === "string") {
+				lastErrorEventMessage = ev.message;
 			}
 
 			if (ev.type === "item.completed") {
@@ -94,6 +103,7 @@ export const codexDriver: AgentDriver = {
 			text: textParts.join(""),
 			rawEvents,
 			usage,
+			errorMessage: turnFailedMessage ?? lastErrorEventMessage,
 		};
 	},
 
