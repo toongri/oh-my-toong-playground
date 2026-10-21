@@ -112,8 +112,8 @@ describe("code-review SKILL.md: 신호-게이팅 불변식 (regression guard: ma
 	});
 
 	describe("Agent Dispatch 페이로드 파싱과 정적 검토 계약", () => {
-		it("concise Step 4 preserves named-field completion-gate parsing", () => {
-			expect(skillContent).toContain("named-field completion-gate parsing");
+		it("Step 4 이전 dispatch 페이로드는 5-slot intent payload로 파싱된다", () => {
+			expect(skillContent).toContain("5-slot intent payload");
 		});
 
 		it("리뷰 시작 전 build/test/lint 실행을 요구하는 Evidence Verification 게이트가 존재하지 않는다 (정적-전용 리뷰 불변식)", () => {

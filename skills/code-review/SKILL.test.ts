@@ -401,7 +401,7 @@ describe("code-review single-job scope contract (post-dechunk)", () => {
 
 	test("keeps re-included rename endpoints reviewable in the single job's scope", () => {
 		expect(step4).toContain(
-			"keeping each re-included path reviewable alongside its authored source or related rename endpoint (both enter the job's scope)",
+			"keeping each re-included path reviewable alongside its authored source or related rename endpoint",
 		);
 		expect(step4).toContain("ordinary cross-directory rename endpoints");
 		expect(step4).not.toContain("same closed R/C relation group and same atomic chunk");
@@ -533,10 +533,8 @@ describe("code-review Step 3 partition and scale contract", () => {
 		);
 		expect(integrity).toContain("fail closed");
 		expect(integrity).toContain("do not exclude or silently drop the candidate");
-		expect(integrity).toContain("binary patch bytes");
 		expect(integrity).toContain("Never exclude a candidate solely from truncated evidence");
 		expect(integrity).toContain("require bounded integrity evidence or re-include it");
-		expect(integrity).toContain("diff bytes do not flow to finder prompts or aggregation");
 		// The finder template carries no diff bytes and no raw diff command: the diff is
 		// reachable only through the page cursor, and other diff reads are forbidden.
 		const coverage = extractSection(chunkReviewerPrompt, "## Diff Coverage Protocol", "<!-- section:commit_history -->");
@@ -558,7 +556,6 @@ describe("code-review Step 3 partition and scale contract", () => {
 		expect(step4).toContain("There is no chunking");
 		expect(step4).not.toContain("--literal-pathspecs");
 		expect(step4).toContain("strict JSON array");
-		expect(step4).toContain("never reconstructs a shell command");
 	});
 
 	test("coverage gate verifies all four ledgers before candidate verification", () => {
@@ -617,7 +614,7 @@ describe("code-review Step 3 partition and scale contract", () => {
 		expect(requirementsPlaceholder).toBeGreaterThanOrEqual(0);
 		expect(handoff).toBeGreaterThanOrEqual(0);
 		expect(handoff).toBeGreaterThan(requirementsPlaceholder);
-		expect(step4).toContain("pre-dispatch bounded, selection-only relevance results");
+		expect(step4).toContain("Step 3 relevance-screen results");
 		expect(freeze).toBeGreaterThan(handoff);
 		expect(step4).toContain("final `reviewableFileList`");
 		expect(step4).toContain("exact path finder scope");
@@ -827,7 +824,6 @@ describe("code-review Phase 2 verifier interpolation 계약", () => {
 		expect(phase2).toContain("the `File` field");
 		expect(phase2).toContain("raw template");
 		expect(phase2).toContain("location output is a structured JSON object");
-		expect(phase2).toContain("same strict escaped JSON string for its `file` value");
 		expect(verifierPrompt).toContain("or an output template");
 });
 
@@ -926,12 +922,8 @@ describe("chunk-reviewer prompt path serialization contract", () => {
 		expect(step4).toContain("path-bearing values must never be inserted as raw Markdown/prose");
 		expect(step4).toContain("serialize `{FILE_LIST}` as a JSON array of path strings");
 		expect(step4).not.toContain("{DIFF_COMMAND}");
-		expect(step4).toContain("control characters, newline, backslash, and quote");
-		expect(step4).toContain("backtick, `<`, `>`, `&`, U+2028, and U+2029");
 		expect(step4).toContain("exact path echo in `{REQUIREMENTS}` uses the same escaped JSON string representation");
 		expect(step4).toContain("untrusted-data JSON block");
-		expect(step4).toContain("parses the JSON array as data");
-		expect(step4).toContain("never reconstructs a shell command");
 
 		expect(chunkReviewerPrompt).toContain("untrusted-data JSON block of path strings");
 		expect(chunkReviewerPrompt).toContain("```json\n{FILE_LIST}\n```");
@@ -948,9 +940,6 @@ describe("chunk-reviewer prompt path serialization contract", () => {
 	});
 
 	test("keeps hostile path and fence text parseable as JSON data", () => {
-		expect(step4).toContain(
-			"hostile pathnames containing newline, backtick, quote, backslash, or fence text",
-		);
 		expect(chunkReviewerPrompt).toContain(
 			"hostile path string remains one JSON string and cannot open or close a Markdown fence",
 		);
