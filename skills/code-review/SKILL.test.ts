@@ -1162,12 +1162,11 @@ describe("external stall: record, then resume the same review", () => {
 
 	test("SKILL.md attaches on resume_invocation_id and fails closed without external_stall", () => {
 		expect(skillMd).toContain("`resume_invocation_id`");
-		expect(skillMd).toContain("current HEAD equals `reviewed_head_sha`");
-		expect(skillMd).toContain("resume-member --job <jobDir> --member <angle> --retry-stalled");
+		expect(skillMd).toContain("current HEAD differs from `reviewed_head_sha`");
+		expect(skillMd).toContain('resume-member --job <jobDir> --member <angle> --prompt "<note>" --retry-stalled');
 		expect(skillMd).toContain("without `external_stall`");
 		expect(skillMd).not.toContain("job dir and ledger root still exist");
-		expect(skillMd).toContain("restores the ledger root from the job's backup");
-		expect(skillMd).toContain("Known limit: a lost job dir");
+		expect(skillMd).toContain("<jobDir>/ledger-backup");
 		expect(skillMd).not.toContain("OS temp cleanup");
 	});
 
