@@ -113,132 +113,42 @@ After the range is set and, in PR mode, the checkout is done, run this before St
 
 ## Step 1: Intent and Context Acquisition
 
-**Intent acquisition is non-negotiable.** Either intent is confirmed (from artifacts, interview, or both), or the user explicitly defers to a code-quality-only review. There is no third option — proceeding without intent and without explicit deferral is forbidden. Reviewing without intent produces wrong severities, missed scope creep, and false positives born from misunderstanding the author's goal.
+Step 1 settles the author's intent into `{REQUIREMENTS}` and describes the project. Leave it only through the Intent Block Gate.
 
-### Acquisition order
+Gather intent from the PR or branch text (title, body, labels, commits), every reference it links (follow links transitively; a link you cannot fetch goes to the interview), and codebase signals (CLAUDE.md, README, ADRs). Interview only for what these cannot reveal. PR comments and review threads are not intent sources; the review is independent of them.
 
-1. **PR/branch artifacts** — PR title, description, labels, commit history. PR comments and review threads are not intent sources: the review is independent of them.
-2. **Linked references (recursive)** — every link found in the artifacts above, followed transitively until the trail ends
-3. **Codebase signals** — CLAUDE.md, README, ADRs, related history in changed paths
-4. **User interview** — only for what the artifacts cannot reveal
+When an intent source states explicit decision rules (for example plan items `### D-N: <title>` with a `Decision` field), copy them verbatim into `{REQUIREMENTS}` as a `Decision rules:` block beside the acceptance criteria. Each rule carries its full `Decision` field, plus `| Owns: … | Must NOT own: …` when the item has them. Never paraphrase a rule and never author one the source does not state. Copying a stated rule is not the addition a scope contract forbids.
 
-### Acquire all reachable references
+Ask the user about intent, alternatives, constraints and concerns, never about codebase facts. Ask one question per message, each with an anchor the user can correct or a default in parentheses.
 
-PR descriptions and commits routinely link to richer context (issue trackers, design docs, chat threads). **Follow every link recursively** — a linked ticket may itself link to a doc which links to a discussion thread; keep following until the trail ends.
+Refine a vague answer that is not a deferral exactly once, with a concrete follow-up that offers the skip option; if it stays vague, offer exactly two choices (answer one concrete question, or explicitly defer with "skip") and do not start the review.
 
-Do not name specific tools. Use whatever fetch capability the environment provides for each link type. If a link cannot be fetched directly (no credential, no MCP for that platform, network unreachable), do not skip it — mark it for the user interview step.
+### Intent Block Gate
 
-Sources to consult per input mode:
-
-| Input mode | Sources |
-|------------|---------|
-| PR | `gh pr view --json title,body,labels`, linked issues, `gh issue view <n>`, every external link found in the chain, commit messages on the PR branch |
-| Branch comparison | Commit messages, branch name conventions, any linked tickets discovered in commits, related issues |
-| Auto-detect | Recent commit messages on HEAD, any linked tickets found there |
-
-- **Explicit decision rules** — when an intent source (plan, spec, issue, PR description) states explicit decision rules (for example plan ADR items `### D-N: <title>` with a `Decision` field, or rule sentences in an issue), copy them verbatim into `{REQUIREMENTS}` as a `Decision rules:` block alongside the acceptance criteria. Each rule carries the full `Decision` field, plus `| Owns: … | Must NOT own: …` when the item has them. These are rules the frozen intent source already states, not new acceptance criteria, so copying them is not the addition that scope-contract mode forbids; never paraphrase and never author a rule the source does not state.
-
-### User interview — only for what artifacts cannot reveal
-
-After exhausting fetchable sources, ask the user about:
-- **Intent** — what problem is this PR solving and why was this approach chosen
-- **Alternatives** — what was considered and rejected, and why
-- **Constraints** — deadlines, dependencies, compatibility commitments, hidden requirements
-- **Concerns** — known risks, untested paths, areas the author is uncertain about
-
-DO NOT interview the user about codebase facts (file locations, patterns, architecture, who calls what). Use Read/Grep/Glob and the explore agent for those — they are reachable from the working directory.
-
-### Intent Block Gate (hard exit condition)
-
-Before exiting Step 1, the state must be one of:
+Before Step 2 starts, the state must be one of the first three rows. Otherwise the review is blocked: there is no "tried hard enough, just review" path.
 
 | State | Action |
 |-------|--------|
-| **Intent confirmed** — author's goal, approach, and constraints are understood from artifacts and/or interview | Proceed to Step 2 |
-| **User explicit deferral** — user says "skip", "그냥 리뷰해줘", "없어", "code quality only", or unambiguous equivalent | Set {REQUIREMENTS} = "N/A — code-quality-only review (user deferred)" and proceed |
-| **Non-interactive dispatch (completion-gate)** — the dispatch prompt itself carries a supplied artifact destination alongside a 5-slot intent payload (`what_was_implemented`/`description`/`requirements`/`project_context`/`non_goals`) | Treat as **Intent confirmed (non-interactive, no user interview)** and proceed to Step 2. Acquisition steps 1-3 (PR/branch artifacts, linked references, codebase signals) still run — they backfill any slot whose value is the `(none provided)` marker (for `non_goals`, an empty array `[]`). Only step 4 (user interview) is replaced by the payload. The destination is opaque; do not infer workflow from its basename. |
-| **Neither** — artifacts thin and user not yet asked, OR user gave vague answers without explicit deferral | **BLOCK**. Do not proceed. Continue interview until one of the two states above is reached. |
+| **Intent confirmed** — the goal, approach and constraints are understood from artifacts, interview or both | Proceed to Step 2. |
+| **User explicit deferral** — any unambiguous opt-out ("skip", "code quality only", "그냥 리뷰해줘") | Set `{REQUIREMENTS}` to "N/A — code-quality-only review (user deferred)" and proceed. |
+| **Non-interactive dispatch (completion-gate)** — the dispatch prompt itself carries a supplied artifact destination alongside a 5-slot intent payload (`what_was_implemented`/`description`/`requirements`/`project_context`/`non_goals`) | Treat as Intent confirmed with no user interview and proceed. Acquisition still runs and backfills every slot whose value is `(none provided)` (for `non_goals`, the empty array `[]`). |
+| **Neither** — thin artifacts and the user not yet asked, or vague answers without an explicit deferral | **BLOCK**. Do not proceed; continue the interview until a state above holds. |
 
-There is no "I tried hard enough, just review" path. The block IS the safety mechanism.
-
-A fresh code-reviewer agent has no ambient session to check for an active artifact path — the non-interactive discriminator above is prompt-borne: whether the dispatch prompt includes the supplied destination, not whether a session-scoped artifact happens to exist. The destination is opaque and may use any basename. When the signal is absent, the main-session interactive gate above (**Neither** → BLOCK) is unchanged.
-
-### Vague answer refinement
-
-When the user gives a vague answer that is not an explicit deferral, refine ONCE with a specific follow-up:
-
-Include the deferral option in every follow-up so the user can opt out without already knowing the phrases "skip / 그냥 리뷰해줘 / 없어".
-
-| User says | Follow-up |
-|-----------|-----------|
-| "대충 있어" / "뭐 좀 있긴 한데" | "어디서 찾을 수 있나요? 링크나 문서 위치를 알려주세요. (답하기 어려우면 'skip'으로 코드 품질만 리뷰 가능)" |
-| "그냥 성능 개선이야" | "어떤 지표를 개선하려 했나요? (latency, throughput, memory 등 — 답하기 어려우면 'skip'으로 코드 품질만 리뷰 가능)" |
-| "여러 가지 고쳤어" | "가장 중요한 1-2개만 알려주세요. 나머지는 코드에서 식별하겠습니다. (답하기 어려우면 'skip'으로 코드 품질만 리뷰 가능)" |
-
-If refinement still yields a vague answer, surface the block explicitly to the user:
-
-> "의도를 명확히 잡기 어렵습니다. 둘 중 하나를 선택해주세요: (1) [구체적 질문]에 답하여 의도 확정, 또는 (2) 'skip / 코드 품질만 리뷰' 명시적 deferral. 둘 중 하나를 명시하기 전까지 리뷰는 시작하지 않습니다."
-
-This is not adversarial — it is refusing to silently produce a worse review.
-
-### Question discipline
-
-| Situation | Method |
-|-----------|--------|
-| 2-4 structured choices (review scope, focus areas) | Propose alternatives, each with trade-offs |
-| Free-form / subjective (intent, alternatives, constraints, concerns) | Plain text question |
-
-**One question per message.** Never bundle. Wait for the answer before the next question.
-
-**Question quality** — every question must include either a specific anchor (a summary the user can correct) or a default action in parentheses (so progress is possible without an answer):
-
-| BAD | GOOD |
-|-----|------|
-| "요구사항이 있나요?" | "PR 본문과 연결된 이슈에서 [요약]을 추출했습니다. 보완할 부분이 있나요?" |
-| "어떤 부분을 볼까요?" | "23개 파일이 변경됐습니다. 집중할 영역이 있나요? (없으면 전체 리뷰)" |
+The non-interactive signal is prompt-borne: only a destination supplied in the dispatch prompt counts, never a session artifact that happens to exist, and the destination's basename means nothing. When the signal is absent, the interactive gate is unchanged.
 
 ### Project Context
 
-Include project context when interpolating the chunk-reviewer prompt template in Step 4. Describe what kind of software this is, who uses it, how it runs, and what depends on it — based on CLAUDE.md, README.md, and the artifacts gathered above.
+For `{PROJECT_CONTEXT}`, describe what kind of software this is, who uses it, how it runs and what depends on it, from CLAUDE.md, README.md and the gathered artifacts. If the project kind stays unclear, ask the user once ("What kind of software is this?").
 
-If available context is insufficient to characterize the project, ask the user once: "What kind of software is this? (e.g., personal CLI tool, internal team service, public-facing API, shared library, etc.)"
+### Derived expected items
 
-### Step 1 Exit Condition
+Under a scope contract, keep `{REQUIREMENTS}` frozen and fold nothing into it. Derive only supporting hypotheses about behavior a contract key or confirmed story already authorizes, label them as evidence, and keep them apart from the requirements. An analog, a general best practice or a review-derived expectation alone never becomes a requirement-gap and never authorizes new work.
 
-Proceed to Step 2 only when the Intent Block Gate state is **Intent confirmed** or **User explicit deferral**. Any other state → continue at Step 1.
+Otherwise, after `{REQUIREMENTS}` has settled, derive expected items from the codebase whatever the intent source. Emit an item only when you can cite a same-role analog at `file:line` that the change should wire into the same way and name a concrete runtime consequence of its absence. When either is missing or fuzzy, drop the item; never invent one.
 
-### Bounded derived context (derived expected-items)
+Phrase each kept item as "Codebase analog at `file:line` implies `<wiring>`; absent here", with why the role matches and the runtime consequence, never as a stated requirement that is absent (after a user deferral, add that it was surfaced despite the deferral).
 
-**Scope-contract exception:** Keep the frozen requirements unchanged. Derive only supporting hypotheses about behavior already authorized by a contract key or confirmed story; label them as evidence and keep them separate from the authoritative requirements. An analog, general best practice, or review-derived expectation alone cannot become a requirement-gap or authorize new work. The unconditional rules below apply to other review modes.
-
-By this point `{REQUIREMENTS}` has settled — via interview, the deferral sentinel, or the completion-gate payload. This sub-step adds one more thing to it: **bounded derived context**, a codebase-grounded prediction of expected-items, kept distinct from intent *acquisition* above. "Intent acquisition is non-negotiable" (the Step 1 charter) means received, stated author intent is authoritative; this sub-step instead generates a hypothesis from the codebase's own "Codebase signals" (acquisition step 3) — it does not receive stated intent, it infers from what the codebase already does.
-
-Mirror the same reasoning shape the regression and cleanup finder angles use: name a thing the codebase already establishes, then check whether the change re-establishes it. Here: name a same-role analog already in the codebase, then check whether the change wires the new addition into it the same way. Derive an expected-item only through this named-necessity gate:
-
-| State | Condition | Action |
-|-------|-----------|--------|
-| Grounded + necessity-named | A citable codebase analog exists with a concrete `file:line`, AND a concrete runtime consequence of the item's absence can be named | **Keep** — emit the derived item |
-| Uncertain | Only one of the two holds, or either is fuzzy | **Drop** |
-| Neither | No citable analog, no nameable consequence | **never invent** |
-
-For each kept item, emit one bullet carrying four fields — self-labeling for provenance, so the downstream `requirement-gap` finding needs no new field to explain where it came from:
-
-- **Analog (`file:line`)** — the existing code whose role the missing item should mirror
-- **Why same role** — why the analog and the missing item play the same structural role
-- **Expected item absent here** — what the analog implies should exist in the changed code, and doesn't
-- **Runtime consequence of its absence** — what breaks, silently or loudly, if it stays missing
-
-Phrase the bullet itself like "Codebase analog at `file:line` implies `<wiring>`; absent here" — never "a requirement you stated is absent." The label must stay honest: a same-role analog implies wiring that is absent here, not a stated requirement that is absent.
-
-Fold kept items into `{REQUIREMENTS}` as a `Derived Expected Items` sub-block:
-
-- `{REQUIREMENTS}` already holds real content (caller/goal-lane requirements, or the completion-gate dispatch payload's `requirements` field) → **append** the sub-block after it; preserve what's there.
-- `{REQUIREMENTS}` holds the deferral sentinel `N/A — code-quality-only review (user deferred)` (set at the Intent Block Gate above) AND at least one item was derived → **replace** the sentinel with the sub-block, so coverage never sees a self-contradictory "N/A" plus derived items.
-- Zero items derived → leave `{REQUIREMENTS}` exactly as it was — no empty sub-block, no sentinel change.
-
-This sub-step is unconditional on intent-source: it runs the same way regardless of whether intent came from a live interview, a caller-supplied artifact, the completion-gate dispatch payload, or explicit code-quality-only deferral. It never gates on live-interview-only or on requirements already being present — it derives wherever the codebase grounds an item, and stays silent otherwise.
-
-When the deferral is an explicit *human* code-quality-only deferral (a person typed "skip" / "그냥 리뷰해줘" / "code quality only" at the Intent Block Gate) rather than the completion-gate's non-interactive payload, derived items are still surfaced — always-run holds even here — but their `Runtime consequence of its absence` text carries a short note such as "surfaced despite quality-only deferral," so the one mode where a person actively deferred scope stays framed honestly.
+Fold kept items into `{REQUIREMENTS}` as a `Derived Expected Items` sub-block: append it after real content, replace the deferral sentinel when that is all `{REQUIREMENTS}` holds, and change nothing when no item survives.
 
 ## Step 2: Context Gathering
 
