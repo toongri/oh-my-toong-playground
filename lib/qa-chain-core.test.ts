@@ -533,6 +533,23 @@ describe("derivedVerdict: 기록에서 계산되는 판정", () => {
 		state.scenarios[1] = reviewed({ ...state.scenarios[1], status: "fail" });
 		expect(derivedVerdict(state, probe)).toBeNull();
 	});
+	test("이전 사이클의 baseline·run check 실패는 이번 사이클의 REQUEST_CHANGES 근거가 되지 않음", () => {
+		const unrecorded = (state: CompleteFixture) => {
+			state.scenarios = state.scenarios.map(({ status: _status, evidence: _evidence, evidence_review: _review, ...rest }) => rest);
+			return state;
+		};
+		const baseline = unrecorded(authoredState());
+		baseline.stories[0].baseline = { result: "fail", cycle: 1 };
+		expect(derivedVerdict(baseline, probe)).toBeNull();
+		for (const key of ["stale_state", "flaky_rerun"] as const) {
+			const check = unrecorded(authoredState());
+			check.run_checks[key] = { result: "fail", cycle: 1 };
+			expect(derivedVerdict(check, probe)).toBeNull();
+		}
+		const current = unrecorded(authoredState());
+		current.stories[0].baseline = { result: "fail", cycle: 2 };
+		expect(derivedVerdict(current, probe)).toBe("REQUEST_CHANGES");
+	});
 	test("기록되지 않은 시나리오가 남으면 판정이 없음", () => {
 		const state = authoredState();
 		const { status: _status, evidence: _evidence, evidence_review: _review, ...rest } = state.scenarios[1];

@@ -649,10 +649,12 @@ function failureEstablished(state: QaChainState, scenario: QaScenario, probe: Ev
 export function requestChangesOk(state: QaChainState, probe: EvidenceProbe): boolean {
 	if (!chainComplete(state)) return false;
 	const checks = state.run_checks ?? {};
+	// `inc-cycle` keeps earlier records for audit; only this cycle's failures count.
+	const currentFail = (value: QaRunCheck | QaResult | null | undefined) => recordCycle(value, state) && result(value) === "fail";
 	return (
 		currentScenarios(state).some((scenario) => failureEstablished(state, scenario, probe)) ||
-		(state.stories ?? []).some((story) => result(story.baseline) === "fail") ||
-		[checks.stale_state, checks.flaky_rerun].some((check) => result(check) === "fail")
+		(state.stories ?? []).some((story) => currentFail(story.baseline)) ||
+		[checks.stale_state, checks.flaky_rerun].some(currentFail)
 	);
 }
 
