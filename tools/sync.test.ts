@@ -795,7 +795,7 @@ describe("syncCategory", () => {
 		});
 	});
 
-	it("dry-run previews codex variant roles without writing them", async () => {
+	it("dry-run에서 codex variant 역할을 파일 생성 없이 미리보기로 출력", async () => {
 		await writeFile(path.join(rootDir, "agents", "sisyphus-junior.md"), "agent\n");
 		const modelMap: ModelMap = {
 			tiers: {},
