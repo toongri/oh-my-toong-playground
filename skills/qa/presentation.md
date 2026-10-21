@@ -63,7 +63,7 @@ what the capture shows for each. The CLI refuses the review without it:
 A broken layout is still a `supported` claim of what the capture shows; the
 scenario itself is recorded `fail`.
 
-A `fail` scenario that grounds REQUEST_CHANGES needs one cause claim. It shows the
+A `fail` scenario that the CLI counts as a product failure needs one cause claim. It shows the
 change broke the product, not who wrote the wrong line: finding that line is
 DIAGNOSIS's work. Record it in one of two forms. `base-run`: the same steps under
 the same setup end as expected on the base commit; the setup is the same on both
@@ -71,10 +71,10 @@ sides, so it cannot be the cause. When the base commit cannot run those steps (t
 screen or endpoint is new), use `product-path` and `base-commit`: `product-path`
 cites the product's own log line or code location that took the wrong path, not
 setup such as signing, keys or debug mode, and `base-commit` cites the diff hunk
-that touches the code that breaks. REQUEST_CHANGES counts the failure only once this
+that touches the code that breaks. The CLI computes REQUEST_CHANGES from the failure only once this
 claim is `supported`. A failure whose cause you could not show may be reviewed
 without it, or with a cause claim marked `insufficient` and the gap named. It then
-has no verdict: the CLI refuses REQUEST_CHANGES and COMMENT until it is attributed.
+has no verdict: the CLI computes none until it is attributed.
 
 ```json
 {
@@ -389,7 +389,7 @@ observation or screenshot) refuse the final render and make the command exit 1.
 a visible gap marker; the command still exits 0. Fix every `error:` and read every
 `gap:` before rendering.
 
-Render command (at STATE, after `set-verdict`, before `complete`; it runs the same checks):
+Render command (at STATE, once `qa-state.ts get` shows the computed verdict, before `complete`; it runs the same checks):
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts --session <id> --out <path> --narrative <presentation>.json
 ```

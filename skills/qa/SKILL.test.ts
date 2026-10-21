@@ -278,8 +278,16 @@ describe("new-prose: PRE-FLIGHT contract gate", () => {
 		expect(skillMd).toContain("B ⊆ A");
 	});
 
-	test("fail-fast immediate REQUEST_CHANGES on violation is present", () => {
-		expect(skillMd).toContain("immediate REQUEST_CHANGES");
+	test("PRE-FLIGHT violation is recorded with record-preflight-violation and the CLI computes REQUEST_CHANGES", () => {
+		expect(skillMd).toContain("record-preflight-violation --reason");
+		expect(skillMd).toContain("the CLI computes REQUEST_CHANGES");
+	});
+
+	test("the verdict is computed by the CLI: no set-verdict and no COMMENT paragraph that tells the AI which verdict to issue", () => {
+		expect(skillMd).not.toContain("set-verdict");
+		expect(skillMd).not.toContain("**On COMMENT.**");
+		expect(skillMd).toContain("record-preflight-violation");
+		expect(skillMd).toContain("The CLI computes the verdict from the record on every write");
 	});
 
 	test("cycle-not-executed fail-fast wording is present", () => {
@@ -775,7 +783,7 @@ describe("new-prose: issuance precondition names both carve-outs", () => {
 		const guardStart = skillMd.indexOf("## Approval Decision");
 		expect(guardStart).not.toBe(-1);
 		const tableStart = skillMd.indexOf(
-			"| Condition | Verdict |",
+			"| Scenario state |",
 			guardStart + 1,
 		);
 		expect(tableStart).not.toBe(-1);
@@ -787,7 +795,7 @@ describe("new-prose: issuance precondition names both carve-outs", () => {
 		const guardStart = skillMd.indexOf("## Approval Decision");
 		expect(guardStart).not.toBe(-1);
 		const tableStart = skillMd.indexOf(
-			"| Condition | Verdict |",
+			"| Scenario state |",
 			guardStart + 1,
 		);
 		expect(tableStart).not.toBe(-1);
@@ -934,13 +942,13 @@ describe("new-prose: actor-perspective evidence contract", () => {
 // ---------------------------------------------------------------------------
 
 describe("new-prose: approval is gated on boundary depth", () => {
-	test("an unexecuted scenario blocks every verdict regardless of priority", () => {
+	test("an unexecuted scenario leaves the verdict uncomputed regardless of priority", () => {
 		const guardStart = skillMd.indexOf("## Approval Decision");
 		expect(guardStart).not.toBe(-1);
 		const approval = skillMd.slice(guardStart);
 		expect(approval).toContain("Priority orders execution; it never lets an unexecuted scenario through");
-		expect(approval).toContain("refuses APPROVE and COMMENT while a scenario is unrecorded");
-		expect(approval).toContain("the CLI refuses REQUEST_CHANGES without a recorded failure");
+		expect(approval).toContain("Execute unrecorded scenarios, cheapest proof first");
+		expect(approval).toContain("You do not choose or set a verdict");
 	});
 
 	test("Quick Reference carries the actor-boundary and evidence lines", () => {
@@ -1163,6 +1171,11 @@ describe("new-prose: a failed row is judged by its recorded cause", () => {
 		expect(checkSection).not.toContain("open finding");
 	});
 
+	// No caller reads qa's COMMENT; the sentence describing its consumers came from the code-review era.
+	test("no stale description of COMMENT consumers remains", () => {
+		expect(skillMd).not.toContain("approve-with-notes");
+	});
+
 	test("a re-drive is re-recorded, not amended", () => {
 		expect(checkSection).toContain("record the re-driven result with `record-scenario`");
 	});
@@ -1205,15 +1218,15 @@ describe("new-prose: a failed row is judged by its recorded cause", () => {
 	test("the Approval Decision table has no score band", () => {
 		const approval = skillMd.slice(skillMd.indexOf("## Approval Decision"));
 		expect(approval).not.toContain("CHECK soft-passes");
-		expect(approval).toContain("A scenario `fail` whose cause is unproven");
+		expect(approval).toContain("A `fail` whose cause is unproven keeps the verdict null");
 		expect(approval).not.toContain("open finding");
 	});
 
-	test("COMMENT is described by what the CLI allows, without code-review severity", () => {
+	test("notes are described as report Issues that never change the computed verdict, without code-review severity", () => {
 		const approval = skillMd.slice(skillMd.indexOf("## Approval Decision"));
 		for (const leftover of ["soft-pass variant", "CRITICAL", "MEDIUM tier", "binary"]) expect(approval).not.toContain(leftover);
 		expect(skillMd).not.toContain("[CRITICAL/LOW]");
-		expect(approval).toContain("No scenario failed");
+		expect(approval).toContain("goes in the report's Issues list and does not change the verdict");
 	});
 
 	test("the cause claim takes a base-run alone, or product-path with base-commit", () => {
@@ -1490,7 +1503,7 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 
 	test("STATE terminal sequence renders the report before completing the state", () => {
 		const setVerdict = skillMd.indexOf(
-			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES>",
+			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts get` and check it shows the computed verdict",
 		);
 		const report = skillMd.indexOf(
 			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts --session <id> --out <path> [--narrative <json-file>]",
@@ -1527,7 +1540,7 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 
 	test("qa-report.ts is invoked at STATE, before complete", () => {
 		expect(skillMd).toContain("bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts");
-		expect(skillMd).toContain("immediately after `set-verdict` and before `complete`");
+		expect(skillMd).toContain("once `get` shows the computed verdict and before `complete`");
 	});
 
 	test("the report renders from qa-state records, not re-narrated", () => {

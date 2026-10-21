@@ -7,6 +7,7 @@ import {
 	chainComplete,
 	commentOk,
 	cycleUntouched,
+	derivedVerdict,
 	driverGateArmed,
 	evidenceReviewSnapshot,
 	qaReportComplete,
@@ -19,6 +20,7 @@ import {
 	riskCoverageComplete,
 	rosterComplete,
 	storyContractValid,
+	verdictBlockers,
 	type QaChainState,
 	type QaFeatureRef,
 	type QaScenario,
@@ -490,6 +492,62 @@ describe("qa chain core", () => {
 		]);
 		expect(BASELINE_INDEX).toBe(2);
 		expect(QA_PHASES).not.toContain("ROLLBACK");
+	});
+});
+
+describe("derivedVerdict: 기록에서 계산되는 판정", () => {
+	function emptyCycle(): QaChainState {
+		return { active: true, phase: "PRE-FLIGHT", cycle: 1, actors: [], stories: [], scenarios: [], run_checks: null };
+	}
+
+	test("아무것도 기록하지 않은 사이클에 실행 전 위반이 기록되면 REQUEST_CHANGES", () => {
+		const state = emptyCycle();
+		expect(derivedVerdict(state, probe)).toBeNull();
+		state.preflight_violation = { reason: "요청이 MUST NOT DO를 어긴다", cycle: 1 };
+		expect(derivedVerdict(state, probe)).toBe("REQUEST_CHANGES");
+	});
+	test("작업이 시작된 사이클에서는 실행 전 위반 기록만으로 REQUEST_CHANGES가 되지 않음", () => {
+		const state = authoredState();
+		state.preflight_violation = { reason: "요청이 MUST NOT DO를 어긴다", cycle: 2 };
+		expect(derivedVerdict(state, probe)).toBe("APPROVE");
+	});
+	test("원인이 입증된 실패는 REQUEST_CHANGES", () => {
+		const state = authoredState();
+		state.scenarios[1] = failedWithCause(state.scenarios[1]);
+		expect(derivedVerdict(state, probe)).toBe("REQUEST_CHANGES");
+	});
+	test("모든 시나리오가 pass이면 APPROVE이고 dirty-worktree 실패 같은 참고 사항은 COMMENT로 바꾸지 않음", () => {
+		const state = authoredState();
+		expect(derivedVerdict(state, probe)).toBe("APPROVE");
+		state.run_checks.dirty_worktree = { result: "fail", cycle: 2 };
+		expect(derivedVerdict(state, probe)).toBe("APPROVE");
+	});
+	test("blocked 시나리오가 있으면 COMMENT", () => {
+		const state = authoredState();
+		const { evidence: _evidence, evidence_review: _review, ...rest } = state.scenarios[1];
+		state.scenarios[1] = { ...rest, status: "blocked", blocked: { obstacle: "외부 결제 샌드박스 응답 없음", attempts: ["결제 요청 → 30초 무응답"], deepest_reachable: "결제 요청 직전", attempt_log: "/attempts.log" } };
+		expect(derivedVerdict(state, probe)).toBe("COMMENT");
+	});
+	test("원인이 입증되지 않은 실패는 판정이 없음", () => {
+		const state = authoredState();
+		state.scenarios[1] = reviewed({ ...state.scenarios[1], status: "fail" });
+		expect(derivedVerdict(state, probe)).toBeNull();
+	});
+	test("기록되지 않은 시나리오가 남으면 판정이 없음", () => {
+		const state = authoredState();
+		const { status: _status, evidence: _evidence, evidence_review: _review, ...rest } = state.scenarios[1];
+		state.scenarios[1] = rest;
+		expect(derivedVerdict(state, probe)).toBeNull();
+	});
+	test("verdictBlockers는 원인이 입증되지 않은 실패와 기록 공백을 한 줄씩 알려 줌", () => {
+		const state = authoredState();
+		state.scenarios[1] = reviewed({ ...state.scenarios[1], status: "fail" });
+		const lines = verdictBlockers(state, probe);
+		expect(lines.some((line) => line.startsWith("s1/today-tablet: fail with unproven cause") && line.includes("review-evidence") && line.includes("await-user"))).toBe(true);
+		const unrecorded = authoredState();
+		unrecorded.stories[0].baseline = null;
+		expect(verdictBlockers(unrecorded, probe)).toEqual(recordGaps(unrecorded, probe));
+		expect(verdictBlockers(authoredState(), probe)).toEqual([]);
 	});
 });
 

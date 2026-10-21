@@ -69,7 +69,7 @@ Run automated checks BEFORE any code analysis. This is not optional.
 2. Run the project's declared test command (its verification contract's scopeable form — not necessarily the entire suite)
 3. Run linter/static analysis
 
-**Any failure -> Immediate `REQUEST_CHANGES`**
+**Any failure the change adds -> record it as a baseline `fail`; the CLI computes REQUEST_CHANGES**
 
 ---
 
@@ -81,7 +81,7 @@ Run automated checks BEFORE any code analysis. This is not optional.
 - Changed code without test coverage is risky
 - "Tests pass" requires tests to actually exist
 
-**Action:** REQUEST_CHANGES with requirement to add tests before re-review.
+**Action:** record the baseline `fail` (the CLI computes REQUEST_CHANGES) and state the requirement to add tests before re-review.
 
 ---
 
@@ -115,7 +115,7 @@ When project lacks build tools, tests, or linter:
 | Tests | PASS (N/N) / FAIL (N/M) | [failed test names if any] |
 | Lint | PASS / FAIL | [error count if any] |
 
-**BASELINE Result:** PASS -> Proceed to ADVERSARIAL E2E / FAIL -> REQUEST_CHANGES
+**BASELINE Result:** PASS -> Proceed to ADVERSARIAL E2E / FAIL -> recorded baseline `fail` (the CLI computes REQUEST_CHANGES)
 ```
 
 ---
@@ -125,7 +125,7 @@ When project lacks build tools, tests, or linter:
 Run the failing check on the base commit too.
 
 - **The base commit fails the same way** → the failure is pre-existing, not this change's. Record the baseline `pass`, name the pre-existing failure in `--note`, and continue to ADVERSARIAL E2E.
-- **The change adds the failure** → do not proceed. Report it with its output, issue `REQUEST_CHANGES`, and re-run BASELINE after the fix.
+- **The change adds the failure** → do not proceed. Report it with its output and record the baseline `fail`; the CLI computes REQUEST_CHANGES. Re-run BASELINE after the fix.
 
 ---
 

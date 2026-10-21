@@ -382,7 +382,10 @@ export interface QaChainState {
 	run_checks_history?: QaRunCheckHistory;
 	scenario_amendments?: QaScenarioAmendment[];
 	inert?: QaInert;
+	/** This cycle's verdict. The CLI recomputes it from the record on every write (`derivedVerdict`); `null` means none yet. */
 	verdict?: QaVerdict;
+	/** Recorded by `record-preflight-violation`: the request breaks a PRE-FLIGHT rule, so an untouched cycle ends REQUEST_CHANGES. */
+	preflight_violation?: { reason: string; cycle: number };
 	/** Acceptance criteria captured at PLAN; rendered by the report from records. */
 	acceptance_criteria?: string[];
 	derived?: QaDerived;
@@ -680,7 +683,7 @@ export function approveOk(state: QaChainState, probe: EvidenceProbe): boolean {
 
 /**
  * COMMENT leaves the merge to a person when nothing failed but APPROVE is out of
- * reach (a blocked scenario or rerun) or there are notes to surface. A failure
+ * reach (a blocked scenario or rerun). A failure
  * never rides through it: an established one asks for REQUEST_CHANGES, and one
  * whose cause is unproven has no verdict until it is attributed.
  */
@@ -697,6 +700,37 @@ export function cycleUntouched(state: Partial<QaChainState>): boolean {
 		scenarios.some((scenario) => scenario.status !== null && scenario.status !== undefined || scenario.evidence !== null && scenario.evidence !== undefined) ||
 		Object.values(state.run_checks ?? {}).some((check) => check !== null && check !== undefined);
 	return actors.length === 0 && stories.length === 0 && scenarios.length === 0 && !records;
+}
+
+/**
+ * The cycle's verdict, computed from the record. `null` means no verdict yet; see
+ * `verdictBlockers` for what to record. A note (such as a pre-existing defect)
+ * never changes the verdict; it belongs in the report's Issues list.
+ */
+export function derivedVerdict(state: QaChainState, probe: EvidenceProbe): QaVerdict {
+	if (cycleUntouched(state) && state.preflight_violation && state.preflight_violation.cycle === currentCycle(state)) return "REQUEST_CHANGES";
+	if (requestChangesOk(state, probe)) return "REQUEST_CHANGES";
+	if (approveOk(state, probe)) return "APPROVE";
+	if (commentOk(state, probe)) return "COMMENT";
+	return null;
+}
+
+/** One actionable line per reason `derivedVerdict` is null; empty when a verdict exists. */
+export function verdictBlockers(state: QaChainState, probe: EvidenceProbe): string[] {
+	if (derivedVerdict(state, probe) !== null) return [];
+	const lines: string[] = [];
+	if (!chainComplete(state)) lines.push("scenario chain incomplete — author the actor roster, stories, scenarios and risk coverage (add-actor / add-story / author-scenario / declare-risk-na)");
+	lines.push(...recordGaps(state, probe));
+	for (const scenario of currentScenarios(state)) {
+		if (scenario.status === "fail" && !failureEstablished(state, scenario, probe)) {
+			lines.push(`${scenario.story}/${scenario.id}: fail with unproven cause — run the same steps on the base commit under the same setup and record a cause claim (review-evidence); if the base fails the same way, amend the scenario to what the change promised (a caller-provided one: ask the user with await-user)`);
+		}
+	}
+	for (const story of state.stories ?? []) {
+		const baseline = result(story.baseline);
+		if (baseline !== null && baseline !== "pass" && baseline !== "fail") lines.push(`${story.id}: baseline is ${baseline}, not pass — re-run record-baseline once the boundary is reachable`);
+	}
+	return lines;
 }
 
 export function driverGateArmed(state: QaChainState): boolean {

@@ -109,8 +109,8 @@ After ALL verification completes (pass or fail):
 
 | Failure | Action |
 |---------|--------|
-| Server won't start | First distinguish a correctable setup/config gap (missing env/local config) — bootstrap it (env-setup read, isolated instance, retry) — from an application startup defect. REQUEST_CHANGES ("server fails to start") only when startup still fails after that bootstrap |
-| Server crashes during test | REQUEST_CHANGES ("server crashed during verification") |
+| Server won't start | First distinguish a correctable setup/config gap (missing env/local config) — bootstrap it (env-setup read, isolated instance, retry) — from an application startup defect. record the failure ("server fails to start") only when startup still fails after that bootstrap |
+| Server crashes during test | Record the failure ("server crashed during verification") |
 | Server won't stop | Kill process forcefully, report as finding |
 
 ### Modality-Specific Primitives
