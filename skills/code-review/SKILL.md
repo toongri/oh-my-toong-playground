@@ -214,13 +214,11 @@ An empty `reviewableFileList` after the integrity pass is a valid review with no
 
 ## Step 5: Verification + Synthesis
 
-After all finder jobs reach terminal state, produce the final findings in two phases: direct per-candidate verification (Phase 2), and findings synthesis (Phase 3). The terminal deliverable is the **Phase 3 findings text** — no walkthrough, no diagrams, no HTML.
-
-The zero-reviewable exception applies when Step 3 yields no reviewable files: proceed directly to Phase 3. Phase 2: SKIP FOR ZERO-REVIEWABLE; do not create a finder job, empty chunk, pathless diff. Phase 3 must record all changed paths under Out of Scope and label this the zero-reviewable flow. The completion-gate artifact uses `"findings": []` and retains `"findings_report"`.
+Step 5 starts when every finder member is `done`: pass the coverage gate, verify the candidates (Phase 2), then synthesize the findings (Phase 3). The deliverable is the Phase 3 findings text (Terminal Output). The zero-reviewable flow skips the gate and Phase 2 and goes to Phase 3 (Step 3).
 
 ### Coverage gate (before Phase 2)
 
-Candidate verification starts only after the coverage gate passes. Run:
+Candidate verification starts only after this command exits 0:
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/diff-cursor.ts verify \
@@ -229,151 +227,71 @@ bun ${CLAUDE_SKILL_DIR}/scripts/diff-cursor.ts verify \
             "$ledgerRoot/ledgers/cleanup" "$ledgerRoot/ledgers/requirement"
 ```
 
-`verify` must exit 0, which means all four ledgers are finished at 100% of the plan's pages (and the cleanup checklist is complete). On a non-zero exit, do not verify candidates: return to the Step 4 conductor loop (`resume-member`) for the members it names. If the gate cannot pass because a stall needs the user, stop and surface it. Never proceed on an incomplete walk.
+Exit 0 means all four ledgers are finished at 100% of the plan's pages and the cleanup checklist is complete. On a non-zero exit, verify nothing: return to the Step 4 conductor loop and resume the members `verify` names. If the gate cannot pass because a member is `stalled`, follow Step 4 item 4 (Stalls and the wall cap); it is the one publish path for a stall. Never proceed on an incomplete walk.
 
 ### Phase 2: Candidate Verification (MANDATORY)
 
-For the zero-reviewable flow, SKIP FOR ZERO-REVIEWABLE; do not create a finder job, empty chunk, pathless diff.
+Finders surface candidates; they do not judge them. In every review mode, verify every deduplicated candidate yourself, one at a time, in batches of at most 25 with correctness candidates first. Never defer or drop a candidate: an unverified candidate makes the review `INCONCLUSIVE`. Spawn no verifier subagents and assign no numeric confidence scores.
 
-Finders surface candidates; they do not judge them. For every review mode, verify each deduplicated candidate yourself, one at a time: read the code, trace the caller and runtime conditions, then record a verdict and its evidence. Do not spawn verifier subagents or assign numeric confidence scores. When you notice a different real defect while verifying, add it as a new candidate (file, line, summary, failure scenario, `found by: verifier`) and verify it in turn. You need not hunt for unrelated work.
-
-When a valid `[SCOPE_CONTRACT]` is supplied, use its original requirements/non-goals to judge both the symptom and proposed remedy before judging quality. Record `scope` and `scope_evidence` yourself, including OUT_OF_SCOPE and UNKNOWN. A missing/invalid scope decision makes the artifact INCONCLUSIVE. The contract adds scope evidence to the same direct verification procedure.
-
-**Inline judgment steps:**
-
-1. **Dedup near-duplicates first** (same defect, same location, same reason → keep one, and carry onto it everything the duplicates contributed: the merged `found by` angles, the most concrete failure scenario, and any field only one of them supplied). Merging removes the repetition, never the substance. Deduplication reduces the judgment workload before it starts.
-2. **MANDATORY READ: `references/verifier-prompt.md`** — read it before beginning judgment. Apply its verdict ladder (CONFIRMED / PLAUSIBLE / REFUTED), verification method, and enrichment output contract directly for each candidate.
-
-   **Verifier interpolation safety** — When interpolating `references/verifier-prompt.md`, insert `{RANGE}` and `{CANDIDATE_FILE}` each as a complete strict JSON string literal, including its surrounding quotes, only at the unquoted value positions in that template's untrusted-data JSON block, encoded as the Untrusted path rendering contract defines. Parse the block first, then use the parsed `candidate.file` and parsed `execution.argv` values directly. Never echo decoded path and range values into Markdown/prose, the `File` field, a raw template, or a shell command. The location output is a structured JSON object (see LOCATION below).
-
-   **No-safe-default candidates** — Before the mandatory **VERDICT** step, trace a no-safe-default candidate's execution model (concurrency, money, security, data destruction, external contract). "I did not trace it" is never a basis for PLAUSIBLE. When the execution model still cannot be established after tracing, record PLAUSIBLE, name the exact runtime fact that would settle it, and keep the finding with its priority and assessment in the card, `findings.md`, and the artifact `findings`. Never omit it, and never mark the review `INCONCLUSIVE` for this reason. Every candidate receives exactly one CONFIRMED / PLAUSIBLE / REFUTED verdict.
-
-3. For each remaining candidate, in order:
-
-   **REASONING** — read the code at the issue location (Read/Grep on the candidate file), trace the call chain from the entry point, and check the execution context (threading, dispatch model, runtime configuration). Apply the verdict ladder from `references/verifier-prompt.md`. Reason explicitly before issuing a verdict.
-
-   **VERDICT** — exactly one of CONFIRMED / PLAUSIBLE / REFUTED (ladder in `references/verifier-prompt.md`).
-
-   For **CONFIRMED** or **PLAUSIBLE** (kept findings), emit the full enrichment inline:
-
-   ```
-   VERDICT: <CONFIRMED | PLAUSIBLE>
-   TITLE: <short finding title>
-   LOCATION: {"file": <strict escaped JSON string of parsed candidate.file>, "line": <line>} — <section / function name>
-   CURRENT CODE:
-   <5-15 lines centered on the issue>
-   WHAT'S WRONG: <the problem, grounded in the quoted line>
-   FAILURE SCENARIO: <concrete inputs/state -> wrong output, crash, or lost effect; for a cleanup finding, the concrete cost>
-   FIX: <concrete diff, or design direction if structural>
-   BLAST RADIUS: <grep/reference evidence — what else references this, or "This location only">
-   AC: <the candidate's acceptance criterion / inferred intent — omit this line entirely when it carries none>
-   FOUND BY: <angle(s)>
-   ```
-
-   For **REFUTED**, emit a one-line note:
-
-   ```
-   VERDICT: REFUTED — <one line naming the evidence that proves it is not a defect>
-   CODE EVIDENCE: {"file": <strict escaped JSON string>, "line": <line>} — <the quoted line/guard/invariant, or the satisfying line>
-   INTENT EVIDENCE: <requirement-gap only, in place of CODE EVIDENCE: the quoted intent text that shows the requirement was never stated>
-   ```
-
-   A REFUTED entry with neither `CODE EVIDENCE` nor, for a requirement-gap, `INTENT EVIDENCE` is invalid. One whose reason is a plan, requirement, decision, or exclusion that excludes the defect is also invalid: that is a scope reason. Re-judge it as CONFIRMED or PLAUSIBLE and record that reason as its scope.
-
-4. **Uncertainty** — when the mechanism is real but its trigger remains uncertain, record PLAUSIBLE and state the missing evidence. Preserve unresolved scope as UNKNOWN. If verification cannot be completed, report INCONCLUSIVE with the unverified candidates identified; never report an unverified review as clean.
-
-**Cap & batching:** judge at most **25 candidates per batch** inline. If more survive dedup, batch by file proximity, **correctness candidates first**, and state how many were deferred — never silently drop.
+1. **Dedup first.** Merge candidates that report the same defect at the same location for the same reason. The kept candidate carries the merged `found by` angles, the most concrete failure scenario, and any field only one duplicate supplied.
+2. **Read `references/verifier-prompt.md` before the first verdict.** It owns the verdict ladder (CONFIRMED / PLAUSIBLE / REFUTED), the verification method and the finding card. Insert `{RANGE}` and `{CANDIDATE_FILE}` each as a complete strict JSON string literal, encoded per Untrusted path rendering, only at the unquoted value positions of its untrusted-data JSON block. Parse the block, then use the parsed `candidate.file` and run the parsed `execution.argv` (Range and command safety).
+3. **Judge.** Read the code at the location, trace the call chain and the runtime conditions, and record exactly one verdict with its evidence. Judge scope before quality, per Caller-supplied scope contract. UNKNOWN is only for the two cases named in Remedy and UNKNOWN (Caller-supplied scope contract), and only after the evidence fails to settle the scope.
+4. **REFUTED needs evidence.** A REFUTED cites quoted code (`CODE EVIDENCE`) or, for a requirement-gap, quoted intent (`INTENT EVIDENCE`). A REFUTED with neither, or one that rests on a scope reason, is invalid.
+5. **No-safe-default candidates.** When a candidate in concurrency, money, security, data destruction or an external contract keeps an unknown execution model after tracing, record PLAUSIBLE and name the exact runtime fact that would settle it. Keep the finding, with its priority and assessment, in the card, `findings.md` and the artifact `findings`. It never makes the review `INCONCLUSIVE`.
 
 ### Phase 3: Findings Synthesis (report-only)
 
-This is a **report**. You surface verified findings, ranked by what matters most. You do NOT decide whether to merge and you do NOT decide whether to fix — that is the reader's call.
+You rank and report verified findings; you do not decide merge or repair (Roles and Context).
 
-For the zero-reviewable flow, record all changed paths under Out of Scope. Phase 3 writes `findings.md` under the same invocation directory and same invocation ID; the completion-gate "findings_report" points to that same invocation ID and `findings.md` path, with `"findings": []`.
+**Merge** verified findings with the same root cause, keeping all their evidence and the union of their `found by` angles. Under a scope contract, merge only when the scope decision and the authorized remedy agree, and keep each finding's `scope` and `scope_evidence` unchanged in its card and artifact entry.
 
-**Scope-contract synthesis:** Keep each finding's `scope` and `scope_evidence` unchanged in its full card and its artifact entry. Merge candidates only when their scope decision and authorized remedy agree, and keep all their evidence. Report OUT_OF_SCOPE (a nonblocking observation) and UNKNOWN (an unresolved scope decision) apart from IN_SCOPE findings, in `findings.md` and in the artifact. A scope-contract review keeps every verified finding, LOW included. Only an ordinary review applies the top-15 cap.
+**Class** each finding by the defect's nature, not by the angle that found it: `correctness` (the change behaves wrong), `regression` (it breaks behavior that worked), `cleanup` (correct but low quality), `requirement-gap` (a stated requirement is absent), or another short class when none fits.
 
-1. **Merge** verified findings that describe the same defect (same root cause, across chunks) — combine their evidence and note the corroborating angles. (Near-duplicates within a chunk were already deduped before verification.)
-2. **Class** each finding by the defect's nature, not by the angle that found it: **correctness** (the change behaves wrong), **regression** (previously-working behavior the change breaks), **cleanup** (behaves correctly but is low quality), **requirement-gap** (an AC or stated requirement is absent — the behavior is missing, not wrong), or a short free-text class when none of these fits. `found by` records the angle(s) that surfaced it; a regression found by the correctness angle is still class regression.
-3. **Impact** each finding: read its full card (failure scenario + blast radius) and assign the harm grade independently of confidence and priority. Impact is about the harm if the scenario occurs. Weigh occurrence rarity, patch size/touched lines, and maintenance exposure in priority, not in impact; the finding angle does not measure harm. A severe, irreparable harm remains severe even when occurrence is unknown or the cheapest remedy is expensive:
-   - **HIGH** — realistic unacceptable harm such as data loss/corruption, money, auth/permissions failure, a working feature regression, required user-reaching behavior missing, user-facing crash, or unrecoverable damage.
-   - **MEDIUM** — observable but recoverable harm, conditional wrong behavior, performance degradation, or a regression-detection gap.
-   - **LOW** — subjective cosmetics, unclear benefit, or report-only quality observations whose harm is not user-impacting.
+**Grade** each finding after you read its full card. Establish impact first. Impact is the harm if the failure scenario occurs. Priority is the response you recommend, not a severity score. Set them independently of each other and of the verdict.
 
-   Do not manufacture occurrence or exposure numbers. For occurrence, weigh competing requests for the same resource; batching and retries do not prove a globally concurrent user count. For maintenance exposure, weigh read/change frequency, not request count. Unknown exposure stays unknown.
-4. **Assign priority** after the full card and impact are established. Priority is a response recommendation, not a severity score:
-   - **HIGH** — a mandatory response is warranted because the realistic harm is unacceptable; expensive remediation does not downrate it. Seek the smallest mitigation that contains the harm.
-   - **MEDIUM** — a bounded remedy has demonstrated net benefit after considering maintenance/regression burden, including cases such as a frequently edited duplicate with a small safe consolidation.
-   - **LOW** — subjective cosmetics, unclear benefit, disproportionate remedy, or a retained report-only observation. Weigh unknown exposure and rare occurrence with the harm; neither alone makes a finding LOW.
+| Grade | Impact | Priority |
+|---|---|---|
+| HIGH | Realistic unacceptable harm: data loss or corruption, money, an auth or permission failure, a working feature broken, required user-reaching behavior missing, a user-facing crash, unrecoverable damage. | A response is mandatory because the realistic harm is unacceptable; an expensive remedy does not lower it. Seek the smallest mitigation that contains the harm. |
+| MEDIUM | Observable but recoverable harm, conditional wrong behavior, performance degradation, or a regression-detection gap. | A bounded remedy has net benefit after its maintenance and regression cost, for example a small safe consolidation of a duplicate that is often edited. |
+| LOW | Subjective cosmetics, unclear benefit, or a quality observation whose harm does not reach users. | Cosmetics, unclear benefit, a disproportionate remedy, or a report-only observation. |
 
-   Record five nonblank assessment slots on every final finding: `unfixed_cost`, `exposure`, `remedy`, `added_cost`, and `rationale`. The conductor assigns priority and rationale after reviewing the complete card; direct verification supplies the grounded facts and assessment inputs; repair and completion remain caller decisions.
-5. **Rank for display only** by **priority (HIGH, then MEDIUM, then LOW)**, then reviewer confidence (CONFIRMED before PLAUSIBLE). Impact remains a separate field and must not be used as a hidden priority score.
-6. **Cap (ordinary reviews only)**: keep the most significant findings. If a review produced an unwieldy number, keep the top ~15 and state how many were dropped — never silently truncate.
-7. **Pre-existing**: a candidate on an unchanged context line is tagged `[Pre-existing]` and listed under Out of Scope — unless the change worsens it (increases blast radius or frequency) or it prevents an approved requirement from working, in which case it stays in the main list.
-8. **Derived artifacts**: files the Step 3 partition ultimately excluded are listed once under Out of Scope as `Excluded from review (derived artifacts):` followed by an explicitly marked untrusted-data JSON block whose structured `files` field is a JSON array of escaped strings produced by the same strict JSON encoder as the chunk prompt. Apply the Untrusted path rendering contract: never insert a raw path into Markdown prose, heading, or fence — the encoded array is the only path-bearing representation. This preserves derived artifacts as explicitly marked untrusted-data structured fields so the reader knows they were not line-reviewed, never silently omits them; any re-included file is removed from this list and reviewed as an exact file.
-All Phase 3 finding paths use the Untrusted path rendering contract in structured fields: use the structured LOCATION object with the same strict escaped JSON string in its `file` member and a separate `line`; never echo decoded paths into `findings.md` prose.
-9. **Persist the cards**: write every kept finding's full verifier card (`references/verifier-prompt.md`, output contract), plus its class, impact, priority, and five-slot assessment, to `$OMT_DIR/code-review/<invocationId>/findings.md` — the same invocation directory as `candidates.json`. The artifact tuples are cut from these cards, so this file lets a caller re-adjudicate a finding after the review ends. After the cards, a `## Refuted` section lists each REFUTED candidate with its structured location, a one-line reason, and its evidence (the `CODE EVIDENCE` or `INTENT EVIDENCE` line). End the file with a `## Coverage` section: per finder, pages acknowledged / total pages, candidates proposed, and candidates retained after verification. Then add the cleanup checklist table with columns rule item, source `path:line`, verdict (`준수` / `위반` / `해당 없음`), and evidence, read from the cleanup ledger's `export --out <file>`. A `위반` row whose candidate did not survive verification states why it was dropped.
+Do not invent occurrence or exposure numbers: unknown exposure stays unknown, and unknown exposure or rare occurrence alone does not make a finding LOW. A deadline, seniority, "all bugs must be fixed" or sunk cost never changes impact or priority. Fill the five assessment slots on every finding: `unfixed_cost`, `exposure`, `remedy`, `added_cost` and `rationale`.
 
-#### Edge Cases
+**Rank** for display by priority (HIGH, then MEDIUM, then LOW), then CONFIRMED before PLAUSIBLE. Impact stays a separate field.
 
-| Situation | Handling |
-|-----------|----------|
-| Finding references a deleted file | Read the file at base branch (`git show {base}:{file}`). Note "(deleted file)" in Context. |
-| Finding spans multiple files | Primary file gets the code snippet. Other files listed in Blast Radius with brief context. |
-| Fix cannot be expressed as simple diff | State design direction + "Concrete diff not possible — structural change required". |
-| Zero findings after verification | Report a clean review: "No findings survived verification." |
-| 50+ candidates requiring verification | Verify candidates yourself in batches (≤25), correctness candidates first. |
+**Report scope apart.** Under a scope contract, show OUT_OF_SCOPE and UNKNOWN findings apart from IN_SCOPE ones, in `findings.md` and in the artifact; an `unrelated` finding shows as "Pre-existing" (Caller-supplied scope contract). A scope-contract review keeps every verified finding, LOW included. An ordinary review may keep only the top ~15 and states how many it dropped. List the derived artifacts Step 3 excluded once under Out of Scope as `Excluded from review (derived artifacts):` followed by an explicitly marked untrusted-data JSON block whose `files` field is the encoded path array, so the reader sees they changed and were not line-reviewed. Render every path per Untrusted path rendering.
+
+**Persist** `findings.md` at `$OMT_DIR/code-review/<invocationId>/findings.md` (Step 4 item 2); the artifact's `findings_report` is this path. Its sections, in this order:
+
+1. Every kept finding's card from `references/verifier-prompt.md`, with its class, impact, priority and five-slot assessment.
+2. After the cards, a `## Refuted` section lists each REFUTED candidate with its structured location, a one-line reason, and its evidence (the `CODE EVIDENCE` or `INTENT EVIDENCE` line).
+3. The cleanup checklist table, read from the cleanup ledger's `export --out <file>`: rule item, source `path:line`, verdict (`준수` / `위반` / `해당 없음`), evidence. A `위반` row whose candidate did not survive verification states why.
+4. End the file with a `## Coverage` section: per finder, pages acknowledged / total pages, candidates proposed, and candidates retained after verification.
 
 ### Terminal Output
 
-This is a **report**. It does not gate. There is no Assessment / "Ready to merge" section, and there is no HTML — the deliverable is the Phase 3 findings as terminal text.
+The deliverable is the ranked findings as terminal text: no walkthrough, no diagrams, no HTML, no browser. Emit the findings in the Phase 3 rank order. Each carries its verdict, class, impact, priority and five assessment slots, named as in the artifact below, plus its card from `references/verifier-prompt.md`, with every path per Untrusted path rendering. This findings text is the handoff contract for any caller that dispatches a code-reviewer agent running this skill; do not invent a different format.
 
-The report carries no coverage-size notice: every finder reviewed 100% of the diff (the Coverage gate guarantees it), so the report states coverage as fact in the `findings.md` Coverage section instead.
-
-Every path-bearing terminal value uses the Untrusted path rendering contract: use a strict escaped JSON string in a structured field and never render decoded path text as Markdown or backtick prose.
-
-**Structured artifact publisher.** When the caller supplies an artifact destination, publish the original `CodeReviewArtifact` JSON through the generic bundled publisher with a safe quoted heredoc:
+When the caller supplies an artifact destination, publish the original `CodeReviewArtifact` JSON through the bundled publisher with a quoted heredoc. The example is the ordinary artifact: `findings_report` is optional and `class` is any short nonblank class.
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/submit-review.ts \
   --artifact '<supplied-output-path>' --json - <<'REVIEW'
-{"status":"COMPLETE|INCONCLUSIVE","findings_report":"<optional findings.md path>","reviewer":"<reviewer id>","at":"<ISO timestamp>","findings":[{"class":"correctness|regression|cleanup|requirement-gap","verdict":"CONFIRMED|PLAUSIBLE","impact":"HIGH|MEDIUM|LOW","priority":"HIGH|MEDIUM|LOW","assessment":{"unfixed_cost":"<nonblank>","exposure":"<nonblank>","remedy":"<nonblank>","added_cost":"<nonblank>","rationale":"<nonblank>"},"ref":"<file:line>","scope":"IN_SCOPE|OUT_OF_SCOPE|UNKNOWN","scope_evidence":{"basis":"requirement|regression|changed_code|non_goal|unrelated|uncertain","reference":"<contract field or story id>","rationale":"<evidence>","non_goal":"<OUT_OF_SCOPE + non_goal only: one declared non_goals statement, copied exactly>"}}]}
+{"status":"COMPLETE|INCONCLUSIVE","findings_report":"<optional findings.md path>","reviewer":"<reviewer id>","at":"<ISO timestamp>","findings":[{"class":"correctness|regression|cleanup|requirement-gap","verdict":"CONFIRMED|PLAUSIBLE","impact":"HIGH|MEDIUM|LOW","priority":"HIGH|MEDIUM|LOW","assessment":{"unfixed_cost":"<nonblank>","exposure":"<nonblank>","remedy":"<nonblank>","added_cost":"<nonblank>","rationale":"<nonblank>"},"ref":"<file:line>"}]}
 REVIEW
 ```
 
-The publisher validates and atomically saves the original review JSON bytes, returning only the transport receipt `{"path":"<path>","sha256":"<hash>"}`. It has no caller, goal, session, aggregate, repair, or completion policy and never classifies destinations by filename. Valid or hashless `INCONCLUSIVE` diagnostics are published as supplied; the caller owns scope validation and all subsequent policy.
+The publisher checks the shape, saves the original review JSON bytes atomically, and prints only the receipt `{"path":"<path>","sha256":"<hash>"}`. It validates no scope field and holds no completion policy; the caller owns both. Valid or hashless `INCONCLUSIVE` diagnostics are published as supplied. On a refusal such as `invalid JSON` or `finding assessment.rationale must be a non-empty string`, correct the JSON from your verified findings and publish again; never fill a slot with placeholder text.
 
-`COMPLETE` is valid only when every retained finding has a non-blank `class`, the `verdict`
-and `impact` enums, plus `priority` and all five nonblank `assessment` slots. A review whose
-candidates were all verified is `COMPLETE`, including its `IN_SCOPE` + `PLAUSIBLE` findings; never
-invent certainty or a speculative repair. `INCONCLUSIVE` is for a review that could not be
-completed (unverified candidates, a missing or damaged scope contract). A no-safe-default finding
-whose execution model could not be established is a verified PLAUSIBLE finding, not a reason for
-`INCONCLUSIVE`. An `INCONCLUSIVE` artifact still lists its verified findings, classified like a
-`COMPLETE` one, and may omit only the `priority`/`assessment` fields when verification or scope is unresolved. If the
-`verdict` or `impact` enum is unavailable, do not invent it: keep the unresolved narrative in
-`findings_report` and omit that incomplete tuple from diagnostic `findings`. The publisher still receives the
-original JSON and returns only its `{path,sha256}` receipt; it does not assign priority, repair
-findings, or decide completion.
+**Scope-contract artifact.** Under a valid scope contract, add the original `scope_contract_sha256` at top level, and on every finding the `scope` and `scope_evidence` you authored (shape in Caller-supplied scope contract): CONFIRMED and PLAUSIBLE, LOW, OUT_OF_SCOPE and UNKNOWN findings alike. The hash is required only for `COMPLETE`. An `INCONCLUSIVE` artifact from incomplete verification carries the verified original hash; with no trustworthy hash, publish the hashless diagnostic as supplied. Never invent a hash or rebuild one from mutable state. An ordinary review carries none of these fields.
 
-The ordinary CodeReviewArtifact schema is fixed:
-
-```json
-{"status":"COMPLETE|INCONCLUSIVE","scope_contract_sha256":"<hash>","findings_report":"<findings.md path>","reviewer":"<reviewer id>","at":"<ISO timestamp>","findings":[{"class":"correctness|regression|cleanup|requirement-gap","verdict":"CONFIRMED|PLAUSIBLE","impact":"HIGH|MEDIUM|LOW","priority":"HIGH|MEDIUM|LOW","assessment":{"unfixed_cost":"<nonblank>","exposure":"<nonblank>","remedy":"<nonblank>","added_cost":"<nonblank>","rationale":"<nonblank>"},"ref":"<file:line>","scope":"IN_SCOPE|OUT_OF_SCOPE|UNKNOWN","scope_evidence":{"basis":"requirement|regression|changed_code|non_goal|unrelated|uncertain","reference":"<contract field or story id>","rationale":"<evidence>","non_goal":"<OUT_OF_SCOPE + non_goal only: one declared non_goals statement, copied exactly>"}}]}
-```
-
-This exact JSON is the input to `submit-review`; any caller may read or validate the resulting transport receipt according to its own policy.
-
-For a valid scope-contract artifact, additionally include the original `scope_contract_sha256` at top level and every finding's reviewer-authored `scope` and `scope_evidence` as defined above. These are required even for LOW findings and OUT_OF_SCOPE/UNKNOWN observations. The top-level hash is required only for `COMPLETE`; an `INCONCLUSIVE` artifact may lack it. Incomplete direct verification writes `status: "INCONCLUSIVE"` with the verified original hash; if no trustworthy hash exists, publish the hashless diagnostic as supplied. Never invent a hash or reconstruct one from mutable state to make it valid.
-
-A short deadline, seniority, “all bugs must be fixed,” or sunk cost never changes impact or
-priority by itself.
-
-Emit the ranked findings directly. Each finding carries its verdict, class, impact, final priority, and five assessment slots, named as in the artifact tuple above. Add the enrichment card from `references/verifier-prompt.md` (current code, what's wrong, failure scenario, fix, blast radius). Render every path as a structured LOCATION object under the Untrusted path rendering contract, with `line` separate. This findings text is also the handoff contract consumed by any caller that dispatches a code-reviewer agent that runs this skill — do not invent a different format.
+**Status.** `COMPLETE` means every candidate was verified, also when IN_SCOPE + PLAUSIBLE findings remain. It requires on every finding a nonblank `class`, the `verdict` and `impact` enums, `priority`, and the five nonblank `assessment` slots. `INCONCLUSIVE` means the review could not finish: unverified candidates, or under a scope contract a candidate with no valid scope decision (name them), a missing or damaged scope contract, or a Step 4 stall. It still lists its verified findings with `class`, `verdict` and `impact`, and may omit only `priority` and `assessment` where verification or scope is unresolved.
 
 ## Reference Files (on-demand)
 
-These files live in `references/` alongside this skill. Each is loaded only when the workflow reaches the step that needs it — do not preload all of them.
+Load each file only when its step needs it.
 
 | Reference file | What it contains | When to read |
 |---|---|---|
-| `references/verifier-prompt.md` | The direct candidate verification reference: verdict ladder (CONFIRMED / PLAUSIBLE / REFUTED), verification method, read-only constraint | Phase 2 — before directly verifying candidates |
+| `scripts/chunk-reviewer-prompt.md` | The one finder template for all four angles | Step 4, item 1 |
+| `references/verifier-prompt.md` | The verdict ladder (CONFIRMED / PLAUSIBLE / REFUTED), the verification method and the finding card | Phase 2, before the first verdict |
