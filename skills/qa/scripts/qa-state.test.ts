@@ -1220,6 +1220,19 @@ describe("qa-state CLI wiring", () => {
 		expect(rawState().verdict).toBe("APPROVE");
 	});
 
+	test("마지막 쓰기 뒤 증거 파일이 사라지면 get은 저장된 APPROVE가 아니라 지금 계산한 판정을 보여 줌", () => {
+		authorCompleteChain();
+		recordAllPass();
+		const evidence = join(tmpDir, "s1-evidence.txt");
+		writeFileSync(evidence, "200 OK\n");
+		run(`record-scenario --story story-1 --scenario s1 --status pass --evidence-path ${evidence} --evidence-surface bash`);
+		expect(rawState().verdict).toBe("APPROVE");
+		rmSync(evidence);
+		const view = JSON.parse(run("get"));
+		expect(view.verdict_report.verdict).toBeNull();
+		expect(view.verdict_blockers).toContain("story-1/s1: pass evidence missing or invalid");
+	});
+
 	test("미실행 시나리오가 남으면 판정이 계산되지 않고 get이 막힌 기록 공백을 알려 줌", () => {
 		authorCompleteChain();
 		run("record-baseline --story story-1 --result pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");

@@ -1614,6 +1614,8 @@ export function readQaView(sessionId: string): QaView | null {
 				flaky_rerun: isPriorCycleRecord(state.run_checks.flaky_rerun, cycle) ? null : state.run_checks.flaky_rerun,
 			}
 		: state.run_checks;
+	// Live, not the stored field: evidence can change on disk after the last write.
+	const verdict = derivedVerdict(state, stateProbe);
 	return {
 		...state,
 		report_source_snapshot: qaReportSnapshot(state),
@@ -1623,8 +1625,8 @@ export function readQaView(sessionId: string): QaView | null {
 		risk_not_applicable: (state.risk_not_applicable ?? []).filter((entry) => entry.cycle === cycle),
 		prior_cycle_scenarios: scenarios.filter((scenario) => scenario.cycle !== cycle),
 		scenario_amendments: (state.scenario_amendments ?? []).filter((entry) => entry.cycle === cycle),
-		verdict_report: { verdict: state.verdict, cycle, ...(currentInert ? { inert: currentInert } : {}) },
-		verdict_blockers: verdictBlockers(state, stateProbe),
+		verdict_report: { verdict, cycle, ...(currentInert ? { inert: currentInert } : {}) },
+		verdict_blockers: verdict === null ? verdictBlockers(state, stateProbe) : [],
 	};
 }
 
