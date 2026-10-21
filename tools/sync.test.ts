@@ -795,6 +795,33 @@ describe("syncCategory", () => {
 		});
 	});
 
+	it("dry-run에서 codex variant 역할을 파일 생성 없이 미리보기로 출력", async () => {
+		await writeFile(path.join(rootDir, "agents", "sisyphus-junior.md"), "agent\n");
+		const modelMap: ModelMap = {
+			tiers: {},
+			variants: { "sisyphus-junior": { deep: { model: "m1" }, light: { model: "m2" } } },
+		};
+		const logs: string[] = [];
+		const origStderr = process.stderr.write.bind(process.stderr);
+		process.stderr.write = (chunk: string | Uint8Array) => {
+			if (typeof chunk === "string") logs.push(chunk);
+			return true;
+		};
+		try {
+			await syncCategory(
+				makeContext({ dryRun: true, modelMaps: new Map([["codex", modelMap]]) }), "agents",
+				{ path: targetPath, agents: { platforms: ["codex"], items: ["sisyphus-junior"] } } as SyncYaml,
+				makeAdapterMap(["codex"]), rootDir, targetPath,
+			);
+		} finally {
+			process.stderr.write = origStderr;
+		}
+		const out = logs.join("");
+		expect(out).toContain("[codex] agents/sisyphus-junior-deep");
+		expect(out).toContain("[codex] agents/sisyphus-junior-light");
+		expect(await exists(path.join(targetPath, ".codex", "agents", "sisyphus-junior-deep.toml"))).toBe(false);
+	});
+
 	it("a codex variant no longer declared is removed as an orphan", async () => {
 		await writeFile(path.join(rootDir, "agents", "sisyphus-junior.md"), "agent\n");
 		const staleVariant = path.join(targetPath, ".codex", "agents", "sisyphus-junior-deep.toml");
