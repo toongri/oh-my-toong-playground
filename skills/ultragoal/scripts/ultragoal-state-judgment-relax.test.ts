@@ -135,6 +135,16 @@ describe("review_base_commit", () => {
 		expect((state.readGoalState(SID) as { review_base_commit?: string }).review_base_commit).toBe("a".repeat(40));
 	});
 
+	test("an already-pursuing state without the field keeps no base on a later pursuing write", () => {
+		pursuing();
+		const raw = state.readGoalState(SID) as { review_base_commit?: string };
+		delete raw.review_base_commit;
+		writeFileSync(join(dir, `ultragoal-state-${SID}.json`), JSON.stringify(raw));
+		state.setGoalState(SID, { phase: "pursuing", resume_summary: "again" });
+		expect((state.readGoalState(SID) as { review_base_commit?: string }).review_base_commit).toBeUndefined();
+		expect(state.serializeReviewContext(SID).project_context).not.toContain("Review base commit");
+	});
+
 	test("a state without the field emits no base line and no placeholder", () => {
 		state.setGoalState(SID, { phase: "planning", outcome: "ship it", verification_surface: "v1" });
 		const context = state.serializeReviewContext(SID).project_context;

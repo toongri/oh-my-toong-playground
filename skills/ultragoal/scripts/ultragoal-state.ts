@@ -790,9 +790,11 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 		completion_evidence_paths: opts.completion_evidence_paths,
 		codex_goal_objective: opts.codex_goal_objective,
 	};
-	// The pursuit's review range starts where it first enters `pursuing`; later pursuing
-	// writes and re-plan loop-backs of the same goal keep the recorded base.
-	if (readPrior(sessionId).review_base_commit === undefined) {
+	// The pursuit's review range starts where it enters `pursuing` from `planning`. Later
+	// pursuing writes and re-plan loop-backs keep the recorded base; an older state already
+	// in `pursuing` has none, so the reviewer falls back to its own range.
+	const prior = readPrior(sessionId);
+	if (prior.phase === "planning" && prior.review_base_commit === undefined) {
 		const head = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" });
 		const sha = head.status === 0 ? head.stdout.trim() : "";
 		if (/^[0-9a-f]{40,64}$/.test(sha)) next.review_base_commit = sha;
