@@ -5,17 +5,16 @@ description: Use when reviewing code changes for quality, correctness, and produ
 
 # Code Review
 
-Directly conducts finder jobs against diffs. Handles input parsing, context gathering, finder-job lifecycle, and result synthesis.
+You conduct a static, report-only review of one diff: four finders find candidates in one direct job, and you verify the candidates and report ranked findings.
 
 ## Premises (apply to orchestrator AND finder jobs)
 
-These two premises are non-negotiable. They are forwarded through every finder-job prompt and govern every decision in this skill.
+Both premises are non-negotiable. The finder template carries them to every finder.
 
-1. **Post-change state** — The working directory reflects the post-change state of the target ref. PR mode achieves this by checking out the PR head into a dedicated linked worktree (see Step 0). Non-PR modes (branch comparison, auto-detect) achieve this by verifying HEAD-match + clean-tree on the current working directory (also Step 0). Either way: read code freely from the working directory — the diff is the delta, the working directory is the result. Do not pretend the file system is read-only or stuck at base.
+1. **Post-change state** — The working directory is the post-change state of the target (Step 0 sets it up). Read code from it freely: the diff is the delta, the working directory is the result.
+2. **No diff-only review** — Review the system the diff produces, not the diff alone. Trace callers, callees, interfaces, configuration and runtime context across files.
 
-2. **No diff-only review** — A diff is a delta. The unit of review is the *system the diff produces*. Always trace dependencies, callers, callees, interfaces, configurations, and runtime context across files. If you cannot explain how the changed code behaves end-to-end against the surrounding system, you have not reviewed it.
-
-These premises must be reflected in the finder-job prompt — see Step 4. Review is static-only: do not run tests, builds, linters, formatters, migrations, or other project execution. The job lifecycle commands (`start`, `collect`, `status`, `results`, and usage-summary) are allowed.
+Review is static-only: never run project code (no tests, builds, linters, formatters, migrations or other project execution). This skill's own scripts (`diff-cursor.ts`, `job.ts`, `submit-review.ts`, `usage-summary.ts`) are not project code.
 
 ## Input Modes
 
@@ -33,68 +32,44 @@ These premises must be reflected in the finder-job prompt — see Step 4. Review
 
 ## Caller-supplied scope contract
 
-When `project_context` contains a complete valid `[SCOPE_CONTRACT]`/`[/SCOPE_CONTRACT]` JSON envelope, apply it regardless of artifact filename or gate. It contains `outcome`, `verification_surface`, `constraints`, `boundaries`, `non_goals`, `stories`, and `scope_contract_sha256`; parse it before deriving requirements and preserve it unchanged through finder dispatch, direct candidate verification, cards, and the artifact. A delimiter appearing without a valid pair, or a request explicitly requiring a contract that omits or damages it, is `INCONCLUSIVE`; never fall back to ordinary review. A request with no contract retains ordinary behavior. `stories` are caller-provided approved requirement entries and workflow state is caller-owned.
+If `project_context` holds a `[SCOPE_CONTRACT]`/`[/SCOPE_CONTRACT]` JSON envelope, apply it whatever the artifact filename. Pass the envelope, including its `scope_contract_sha256` field, unchanged to the finders, through candidate verification, and into the artifact. A delimiter without its pair, a damaged envelope, or a request that requires a contract but omits it ends the review `INCONCLUSIVE`; never fall back to an ordinary review. With no envelope the review is ordinary: the artifact carries no scope fields and no hash.
 
-The contract and confirmed stories define authorization. Artifacts, codebase analogs, and derived expected-items may explain approved behavior; they cannot add acceptance criteria, revise boundaries/non-goals, or authorize collateral repairs. Tracing surrounding code is required evidence gathering, not permission to repair everything reached.
+Scope judgment applies to every review. The `scope` fields below apply only under a contract; without one, the changed-code default, UNKNOWN and REFUTED rules still govern your judgment.
 
-Finders do not suppress candidates because of a non-goal. A candidate that may fall inside a declared non-goal is filed with that non-goal's exact `statement` (from the `non_goals` array) noted in its summary. For every candidate, the reviewer directly decides **scope before quality verdict**, including LOW cleanup and documentation findings; when the non-goal covers the defect, the reviewer records an OUT_OF_SCOPE note. OUT_OF_SCOPE reporting does not require searching for unrelated work. The reviewer checks both the symptom and a concrete proposed remedy.
+Under a contract, only the contract and its confirmed stories authorize scope and repair. Artifacts, codebase analogs, derived expected items and the tracing Premise 2 requires may explain approved behavior. They never add acceptance criteria, change boundaries or non-goals, or authorize collateral repair. A regression this change introduced may authorize a minimal restoration or rollback of the prior behavior, never an enhancement of an excluded subsystem.
 
-**Changed code is in scope by default.** Intent sources (the contract, stories, plan, issue, conversation, PR description) state requirements and explicit exclusions or accepted risks (for example, "we will not handle concurrency because it is rare"). A defect located in lines or code this change added or modified is IN_SCOPE with basis `changed_code`, whether or not a requirement mentions it. It leaves scope only when an explicit exclusion statement directly addresses that behavior or defect class. It is then OUT_OF_SCOPE with basis `non_goal`, and `scope_evidence.non_goal` holds that statement copied exactly. A requirement's silence never excludes. A decision about a different behavior never excludes. A defect in code the change did not touch is out of scope (`unrelated`) unless it prevents an approved requirement from working (IN_SCOPE, basis `requirement`) or this change worsens it (IN_SCOPE, basis `regression`). Its remedy is then the smallest local fix. An explicit exclusion stays an exclusion: the defect remains an OUT_OF_SCOPE note, not a repair demand. If the exclusion's stated premise contradicts the code, say so in the note. This does not block.
+Finders do not suppress candidates because of a non-goal. They file the candidate and note the exact `statement` of the non-goal it may fall under. You decide scope before the quality verdict for every candidate, LOW cleanup and documentation findings included. Judge both the symptom and a concrete proposed remedy against the intent; under a contract, against its original requirements and non-goals.
 
-**Remedy boundary.** A repair confined to code this change added or modified is authorized by default. Do not narrow the remedy to the reported site: when the same defect pattern exists in sibling changed code, list every sibling site in the finding's remedy. A regression this change introduced may authorize a minimal restoration or rollback of the prior behavior. It never authorizes enhancement of an excluded subsystem. If restoring an approved invariant needs new excluded behavior or a new capability outside the change, return UNKNOWN for a user scope decision. Use UNKNOWN for nothing else except a product requirement that is itself unclear: when a smaller remedy inside the change exists, judge IN_SCOPE with that remedy.
+**Changed code is in scope by default.** A defect in lines this change added or modified is IN_SCOPE, basis `changed_code`, whether or not a requirement mentions it. It leaves scope only when an explicit exclusion statement in an intent source (contract, story, plan, issue, conversation, PR description) directly addresses that behavior or defect class. The defect is then OUT_OF_SCOPE, basis `non_goal`: a note, not a repair demand. A requirement's silence never excludes a defect, and a decision about a different behavior never excludes. A defect in code this change did not touch is OUT_OF_SCOPE, basis `unrelated` (reports show it as "Pre-existing"), unless it prevents an approved requirement from working (IN_SCOPE, basis `requirement`) or this change worsens it (IN_SCOPE, basis `regression`).
 
-**A scope reason never produces REFUTED.** REFUTED is a quality verdict only: the candidate is not a defect, and its audit entry cites the evidence that disproves it. For a code defect, that is the code fact (`file:line`). For a requirement-gap, it is the satisfying line, or the quoted intent text that shows the requirement was never stated. A plan, requirement, decision, or exclusion that excludes a defect is a scope reason, not evidence. A real defect judged out of scope stays CONFIRMED or PLAUSIBLE with scope OUT_OF_SCOPE, and appears in `findings.md` and the artifact as a visible nonblocking note.
+**Remedy and UNKNOWN.** When the same defect exists at sibling sites in changed code, list every sibling site in the remedy. Return UNKNOWN, for a user scope decision, only when the remedy needs excluded behavior or a new capability outside the change, or when the product requirement itself is unclear. When a smaller remedy inside the change exists, judge IN_SCOPE with that remedy.
 
-Each finding must carry reviewer-authored fields:
+**A scope reason never produces REFUTED.** REFUTED is a quality verdict: the candidate is not a defect, shown by code evidence or, for a requirement-gap, by quoted intent. A plan, requirement, decision or exclusion is a scope reason, not evidence. A REFUTED that rests on one is invalid: re-judge it CONFIRMED or PLAUSIBLE and record the reason as its scope. A real defect judged out of scope stays CONFIRMED or PLAUSIBLE with scope OUT_OF_SCOPE, and appears in `findings.md` and the artifact as a visible nonblocking note. In an ordinary review that note is a findings-list entry with no scope fields.
+
+Under a contract, each finding carries these reviewer-authored fields:
 
 ```json
 {"scope":"IN_SCOPE | OUT_OF_SCOPE | UNKNOWN","scope_evidence":{"basis":"requirement | regression | changed_code | non_goal | unrelated | uncertain","reference":"<contract key or confirmed story id>","rationale":"<specific symptom, change causality, and remedy boundary>"}}
 ```
 
-`reference` names the contract key (`outcome`, `verification_surface`, `constraints`, `boundaries`, `non_goals`) or the confirmed story id the evidence rests on. IN_SCOPE requires basis `requirement`, `regression`, or `changed_code`, and evidence that the remedy fits the authorization. OUT_OF_SCOPE requires basis `non_goal` or `unrelated`. A `non_goal` finding copies one declared `non_goals` statement exactly into `scope_evidence.non_goal`, and that statement must directly address this defect's behavior or class. A paraphrase or partial quote degrades the finding to UNKNOWN. An `unrelated` finding concerns code this change did not touch. UNKNOWN requires basis `uncertain`. A basis its scope does not allow makes the whole artifact invalid for a caller that validates scope. Severity and confidence do not establish scope. Report all three scopes independently, with their evidence, for CONFIRMED and PLAUSIBLE findings alike. Leave repair, adjudication, completion, budget, and approval decisions to the caller.
+`reference` names the contract key (`outcome`, `verification_surface`, `constraints`, `boundaries`, `non_goals`) or the confirmed story id the evidence rests on. IN_SCOPE requires basis `requirement`, `regression`, or `changed_code`, and evidence that the remedy fits the authorization. OUT_OF_SCOPE requires basis `non_goal` or `unrelated`. UNKNOWN requires basis `uncertain`. A `non_goal` finding copies the one declared `non_goals` statement that excludes it exactly into `scope_evidence.non_goal`; the caller downgrades a paraphrase or partial quote to UNKNOWN.
 
-## Do vs Delegate Decision Matrix
+## Roles and Context
 
-| Action | YOU Do | DELEGATE |
-|--------|--------|----------|
-| Requirements 3-question gate | Yes | - |
-| Diff range determination & git | Yes | - |
-| Findings synthesis (rank/class verified findings) | Yes | - |
-| Individual candidate judgment inline (Phase 2) | Yes | - |
-| Individual finder review | NEVER | configured finder CLIs through direct jobs |
-| Code modification | NEVER | (forbidden entirely) |
-
-The reviewer directly verifies candidates in every mode, including reviews with a scope contract.
-
-### Role Separation
-
-**Your role as orchestrator:**
-- Freeze the reviewable diff into cursor pages once (`diff-cursor.ts plan`), then start the direct finder job with `--ledger-root` (the job fans out the four angle finders, each walking 100% of the pages)
-- Judge each deduped candidate inline in Phase 2 (code and scope evidence → verdict + enrichment); enrich kept findings directly
-- Synthesize the kept findings into a ranked findings report (text only)
-- Rank the verified findings (no merge verdict — this review reports, it does not gate)
-
-**NOT your role:**
-- Modifying any source files
-- Running a general raw `git diff` command (the Step 3 candidate-scoped integrity exception and the Phase 2 candidate-file diff read are the only text-inspection carve-outs)
+- The four finders find candidates, run as configured finder CLIs in one direct job (Step 4). You never review as a finder.
+- You orchestrate, verify every candidate yourself, and rank and report the findings.
+- You never edit code.
+- The review reports and does not gate: no merge verdict, no Assessment or "Ready to merge" section. Repair, adjudication, completion, budget and approval decisions stay with the caller.
 
 ### Context Budget
 
-**Allowed in orchestrator context:**
-- `["git", "diff", range, "--numstat", "-z", "--find-renames"]` output
-- `["git", "diff", range, "--stat"]` output
-- `["git", "diff", range, "--name-only", "-z", "--no-renames"]` output
-- `["git", "diff", range, "--numstat", "-z", "--no-renames"]` output
-- `["git", "diff", range, "--name-status", "-z", "--find-renames"]` output
-- `--no-renames` name-only/numstat output is inventory/accounting only
-- `["git", "log", range, "--oneline"]` output
-- CLAUDE.md file content
-- chunk-reviewer results (candidate findings)
-- Phase 2 inline judgment output (reasoning, verdicts, enriched findings for every candidate)
-- Code reading via Read/Grep for Phase 2 inline candidate judgment
-- A candidate file's own diff (`git diff <range> -- <file>`), read in bounded parts in Phase 2 to establish which lines this change added or modified
+Your context holds git metadata (stat, NUL-delimited path lists, commit log), guideline files such as CLAUDE.md, finder candidates, code you read with Read and Grep, and your own judgments. It never holds a general raw diff.
 
-The orchestrator never loads the whole review diff as general raw-diff review input. In Phase 2 it may read one candidate file's own diff, in bounded parts, to establish which lines this change added or modified. The candidate-scoped diff inspection exception in Step 3 is for integrity judgment only. Its diff result is not forwarded to a finder prompt, candidate aggregation, or general orchestrator context. This exception does not permit project tests, builds, linters, formatters, migrations, or other project execution. The prescribed binary `git diff --no-ext-diff --binary ...` stdout byte stream flows directly to SHA-256 outside model context.
+Finders read the diff only through frozen cursor pages. You read diff text in two places only: the Step 3 integrity read of a derived-file candidate, and the Phase 2 read of one candidate file's own diff, in bounded parts, to establish which lines this change added or modified.
+
+The Step 3 integrity read serves only the integrity judgment. Judge it, then discard it; never forward it to a finder prompt, candidate aggregation or general context.
+
+A deleted file exists only at the base. Read it at the verified base SHA with the argv `["git", "show", "--end-of-options", "<baseSha>:<path>"]`, where `<path>` is one argv element; render the path per Untrusted path rendering wherever it is shown.
 
 ## Step 0: Input Parsing
 
