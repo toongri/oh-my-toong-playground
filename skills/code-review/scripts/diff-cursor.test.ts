@@ -845,6 +845,36 @@ describe("git 설정과 무관한 diff 해석", () => {
 	});
 });
 
+describe("git 이 C-quote 하는 경로", () => {
+	test("parseDiff 는 따옴표·탭·역슬래시·바이너리 경로를 실제 경로로 되돌린다", () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cquote-"));
+		try {
+			const g = (...a: string[]) =>
+				execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], {
+					cwd: dir,
+					encoding: "utf8",
+				});
+			g("init", "-q");
+			g("commit", "-q", "--allow-empty", "-m", "base");
+			const base = g("rev-parse", "HEAD").trim();
+			const names = ['quo"te.txt', "tab\tname.txt", "back\\slash.txt", "한글.txt", 'bin"ary.bin'];
+			for (const n of names) {
+				const body = n.endsWith(".bin") ? Buffer.from([0, 1, 0, 2, 0]) : "hello\n";
+				fs.writeFileSync(path.join(dir, n), body);
+			}
+			g("add", "-A");
+			g("commit", "-q", "-m", "head");
+			const patch = g("-c", "core.quotePath=false", "diff", `${base}..HEAD`);
+			const known = g("diff", "--name-only", "-z", `${base}..HEAD`).split("\0").filter(Boolean);
+			expect([...known].sort()).toEqual([...names].sort());
+			const parsed = parseDiff(patch, known);
+			expect(parsed.files.map((f) => f.path).sort()).toEqual([...names].sort());
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	});
+});
+
 describe("규칙 frontmatter 후행 주석", () => {
 	test("블록 목록과 인라인 값의 따옴표 밖 ` # 주석`만 지운다", () => {
 		expect(

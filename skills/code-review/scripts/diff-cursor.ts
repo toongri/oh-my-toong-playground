@@ -82,14 +82,64 @@ export interface ParsedDiff {
 	lens: number[];
 }
 
+const C_ESCAPES: Readonly<Record<string, string>> = {
+	"\x07": "a", "\b": "b", "\t": "t", "\n": "n", "\v": "v", "\f": "f", "\r": "r", '"': '"', "\\": "\\",
+};
+
+/** git's quote_c_style with core.quotePath=false: bytes >= 0x80 stay raw. */
+function quoteCPath(p: string): string {
+	if (![...p].some((c) => c === '"' || c === "\\" || c < " " || c === "\x7f")) return p;
+	let out = '"';
+	for (const ch of p) {
+		const esc = C_ESCAPES[ch];
+		if (esc !== undefined) out += `\\${esc}`;
+		else if (ch < " " || ch === "\x7f") out += `\\${ch.charCodeAt(0).toString(8).padStart(3, "0")}`;
+		else out += ch;
+	}
+	return `${out}"`;
+}
+
+/** Inverse of quoteCPath; a token without a leading quote is returned unchanged. */
+function unquoteCPath(token: string): string {
+	if (!token.startsWith('"')) return token;
+	const inner = token.endsWith('"') && token.length > 1 ? token.slice(1, -1) : token.slice(1);
+	const unesc = Object.fromEntries(Object.entries(C_ESCAPES).map(([raw, e]) => [e, raw]));
+	const bytes: number[] = [];
+	for (let i = 0; i < inner.length; ) {
+		const chunk = String.fromCodePoint(inner.codePointAt(i) ?? 0);
+		if (chunk !== "\\") {
+			bytes.push(...Buffer.from(chunk, "utf8"));
+			i += chunk.length;
+			continue;
+		}
+		const oct = /^[0-7]{1,3}/.exec(inner.slice(i + 1));
+		if (oct) {
+			bytes.push(Number.parseInt(oct[0], 8));
+			i += 1 + oct[0].length;
+		} else {
+			const raw = unesc[inner[i + 1] ?? ""];
+			bytes.push(...Buffer.from(raw ?? (inner[i + 1] ?? ""), "utf8"));
+			i += 2;
+		}
+	}
+	return Buffer.from(bytes).toString("utf8");
+}
+
 function resolveDiffPath(header: readonly string[], known: readonly string[]): string {
 	const first = header[0] ?? "";
-	const exact = known.find((f) => first === `diff --git a/${f} b/${f}`);
+	const exact = known.find(
+		(f) => first === `diff --git ${quoteCPath(`a/${f}`)} ${quoteCPath(`b/${f}`)}`,
+	);
 	if (exact !== undefined) return exact;
-	const plus = header.find((l) => l.startsWith("+++ b/"));
-	if (plus) return plus.slice(6).replace(/\t$/, "");
-	const minus = header.find((l) => l.startsWith("--- a/"));
-	if (minus) return minus.slice(6).replace(/\t$/, "");
+	for (const [marker, prefix] of [["+++ ", "b/"], ["--- ", "a/"]] as const) {
+		for (const l of header) {
+			if (!l.startsWith(marker)) continue;
+			const tok = unquoteCPath(l.slice(marker.length).replace(/\t$/, ""));
+			if (tok.startsWith(prefix)) return tok.slice(prefix.length);
+		}
+	}
+	const quoted = first.lastIndexOf(' "b/');
+	if (quoted >= 0) return unquoteCPath(first.slice(quoted + 1)).slice(2);
 	const idx = first.lastIndexOf(" b/");
 	return idx >= 0 ? first.slice(idx + 3) : first.slice("diff --git ".length);
 }
