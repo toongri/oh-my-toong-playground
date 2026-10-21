@@ -131,7 +131,7 @@ Before Step 2 starts, the state must be one of the first three rows. Otherwise t
 |-------|--------|
 | **Intent confirmed** — the goal, approach and constraints are understood from artifacts, interview or both | Proceed to Step 2. |
 | **User explicit deferral** — any unambiguous opt-out ("skip", "code quality only", "그냥 리뷰해줘") | Set `{REQUIREMENTS}` to "N/A — code-quality-only review (user deferred)" and proceed. |
-| **Non-interactive dispatch (completion-gate)** — the dispatch prompt itself carries a supplied artifact destination alongside a 5-slot intent payload (`what_was_implemented`/`description`/`requirements`/`project_context`/`non_goals`) | Treat as Intent confirmed with no user interview and proceed. Acquisition still runs and backfills every slot whose value is `(none provided)` (for `non_goals`, the empty array `[]`). |
+| **Non-interactive dispatch (completion-gate)** — the dispatch prompt itself carries a supplied artifact destination alongside a 5-slot intent payload (`what_was_implemented`/`description`/`requirements`/`project_context`/`non_goals`) | Treat as Intent confirmed with no user interview and proceed. Acquisition (without the interview) still runs and backfills every slot whose value is `(none provided)` (for `non_goals`, the empty array `[]`). |
 | **Neither** — thin artifacts and the user not yet asked, or vague answers without an explicit deferral | **BLOCK**. Do not proceed; continue the interview until a state above holds. |
 
 The non-interactive signal is prompt-borne: only a destination supplied in the dispatch prompt counts, never a session artifact that happens to exist, and the destination's basename means nothing. When the signal is absent, the interactive gate is unchanged.
@@ -152,77 +152,37 @@ Fold kept items into `{REQUIREMENTS}` as a `Derived Expected Items` sub-block: a
 
 ## Step 2: Context Gathering
 
-Collect in parallel (using `{range}` from Step 0):
+Collect with the `{range}` from Step 0:
 
-1. `["git", "diff", range, "--stat"]` (change overview; not the scale input)
-2. `["git", "diff", range, "--name-only", "-z", "--no-renames"]` (file list)
-3. `["git", "diff", range, "--numstat", "-z", "--no-renames"]` (per-file insertion/deletion counts)
-4. `["git", "diff", range, "--name-status", "-z", "--find-renames"]` (rename/copy relation pass)
-5. `["git", "diff", range, "--numstat", "-z", "--find-renames"]` (rename-aware insertion/deletion counts for scale)
-6. `["git", "log", range, "--oneline"]` (commit history)
-7. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
+1. `["git", "diff", range, "--stat"]` for the change overview.
+2. `["git", "diff", range, "--name-only", "-z", "--no-renames"]` for the changed paths.
+3. `["git", "log", range, "--oneline"]` for `{COMMIT_HISTORY}`.
 
-Parse raw stdout as NUL-delimited records from all manifest commands. Never use newline, line, or word splitting, and never use shell command substitution. A name-only record is one path; a numstat record splits only its first two tab fields while preserving the remainder as the path. This preserves arbitrary Git pathnames, including newline, tab, quote, and backslash filenames. `--no-renames` avoids old/new pair ambiguity by emitting separate single-path records for each side of rename/copy changes. The relation pass is pairing only: parse its NUL-safe R/C old/new endpoint pair and normalize its R/C old/new endpoint pair; name-only/numstat outputs are membership/accounting and must not double-count endpoints or insertions.
-
-For NUL-separated `--numstat -z --find-renames` R/C output, associate one stats tuple with its R/C relation record, then consume its NUL-separated old/new endpoints as a pair. Do not interpret the endpoints as independent numstat records or add them twice.
-
-Keep the no-renames manifest for endpoint membership/path scope. Before scale, reconcile the rename-aware numstat records with the R/C relation map. For each R/C relation record, use its single rename-aware insertion/deletion tuple for scale; a pure rename contributes 0 insertions. Consume each no-renames endpoint exactly once for membership/accounting. The no-renames endpoint values remain membership/accounting only; never add the endpoint-level `--no-renames` values to scale.
-
-While parsing each NUL-delimited numstat record, treat an insertion or deletion field of `-` as numeric zero for `reviewableInsertionLines` arithmetic; preserve that path's binary marker separately. Normalize only finite numeric fields into the insertion/deletion sums: do not add `-`, `undefined`, or `NaN` (or any non-numeric value). This applies to mixed text/binary diffs when they are not binary-only. This is Step 2 accounting and must not be confused with the fresh-manifest binary-only Early Exit; the latter reports paths and exits before Step 2.
+Parse path output as NUL-delimited records, never by line or word splitting and never through shell command substitution. With `--no-renames`, each side of a rename or copy is its own path; take each path once.
 
 ## Step 3: Reviewable-File Selection
 
 ### Derived-artifact partition (runs first)
 
-Before partitioning, preserve the complete changed-file manifest from `--name-only` as `completeChangedFileManifest`. Build a separate `reviewableFileList` only after the integrity pass decides which paths remain reviewable; never use the complete manifest as finder scope. Then split that manifest into **reviewable source** and **derived artifacts**. A derived artifact is a file a build / codegen / lock / migration step mechanically (re)generates from other tracked source — you would never hand-edit it, so its diff is a tool's output, not an authored decision. This is ecosystem-agnostic; recognize it by the **category**, not a fixed filename list:
+Keep two lists apart and never substitute one for the other. `completeChangedFileManifest` holds every path of the Step 2 list and feeds Out of Scope reporting; it is never finder scope. `reviewableFileList` is the finder scope, the only value for `{FILE_LIST}` and `plan --files`; finalize it only after the integrity pass below.
 
-- **Regenerable, not authored** — a command in the repo reproduces it (bundler, code generator, lockfile resolver, ORM schema-snapshot dumper).
-- **Carries a machine header** — `@generated`, `DO NOT EDIT`, Go's `Code generated by … DO NOT EDIT.`, and equivalents in any language.
-- **A dependency lockfile or a conventionally-generated path** — across ecosystems: `pnpm-lock.yaml` / `Cargo.lock` / `go.sum` / `gradle.lockfile` / `poetry.lock` / `composer.lock` / `Gemfile.lock`; build output under `dist/` · `build/` · `target/`; codegen such as `**/__generated__/**`, `*.pb.go`, `*_pb2.py`, `*.g.kt`; ORM migration snapshots like Drizzle's `**/migrations/meta/*_snapshot.json` · `_journal.json`.
+A file is a derived artifact only on positive evidence that a tool regenerates it from tracked source: a repo command reproduces it, it carries a machine header (`@generated`, `DO NOT EDIT`), or it is a lockfile, build output, codegen or an ORM schema snapshot. Recognize the category, not a filename list. Decide per file, never per directory: drop the generated snapshot, review the migration beside it. Every other file is reviewable, an authored `.d.ts`, migration or DDL included.
 
-The filenames above are illustrations of the three categories, not a closed list — a Kotlin / Java / Go / Rust / Python project's generated files match the same categories under different names.
-
-**Initial classification:** candidate derived artifacts are not yet excluded until the integrity pass completes.
-
-**Partition per file, not per directory — keep the authored delta beside the generated state.** Exclude only the mechanically-generated file, never the hand-authored change it came from. The generated schema *snapshot/dump* is excluded; the authored migration or DDL beside it stays reviewable. The same split holds for any ORM in any language — drop the snapshot, review the migration: Drizzle's `meta/*.json` (excluded) vs its `NNNN_*.sql` and schema source (reviewable; the migration can carry destructive DDL); a Rails `schema.rb` dump vs its migration; a jOOQ/Diesel generated schema vs its migration.
-
-**Judgment carve-out — re-include when intent makes content meaningful.** Recognition is mechanical; exclude-vs-keep is gated on intent. A derived file returns to review when intent or an angle makes its bytes matter: a lockfile diff that intent frames as a dependency bump or supply-chain concern, or a generated file whose output shifted in a way the authored source change does not explain. When intent is silent and there is no such angle, exclude and note it — do not spend a finder job on generator output by default.
+Re-include a derived file when the intent or any finder angle makes its bytes matter, for example a lockfile framed as a dependency bump or supply-chain concern, or generated output the authored change does not explain. Otherwise, after the integrity pass below, exclude it and note it under Out of Scope, also when the intent is silent.
 
 ### Derived-output integrity (before exclusion)
 
-To keep binary diffs out of model context, stream the complete candidate diff only to an out-of-band digest/byte-count sink; never load or print the full binary patch into model context. Expose bounded metadata: path, status, old/new object IDs or sizes, full-stream hash, and byte count; expose at most a fixed 64 KiB textual excerpt and an explicit truncation flag. Continue draining the producer stdout to EOF after the 64 KiB excerpt cap, hashing and counting every byte; finalize only after EOF and a complete hash/count. Any nonzero producer exit, partial/early stream, malformed metadata, or incomplete hash/count is `INCONCLUSIVE`; fail closed: do not exclude or silently drop the candidate, re-include it for review, and report the integrity failure. Never exclude a candidate solely from truncated evidence; require bounded integrity evidence or re-include it.
+Exclude no candidate before this pass. For each derived candidate, run the path-scoped diff read from Range and command safety and stream its stdout only to an out-of-band SHA-256 and byte-count sink; never load or print the full patch into your context.
 
-Keep the two manifests as separate values. Never substitute one for the other. Before exclusion and before any path-filtered finder command, inspect each candidate derived file in the complete changed-file manifest by streaming its complete candidate-scoped diff only to the out-of-band sink above; inspect only the bounded integrity evidence against authored source/generator evidence:
+Judge the candidate against its authored source or generator from bounded evidence only: path, status, object IDs or sizes, the full-stream hash, the byte count, and an excerpt of at most 64 KiB with a truncation flag. After the excerpt cap, keep draining the stream to EOF and hash and count every byte.
 
-Before final integrity exclusion, run a bounded, selection-only relevance screen for each candidate against the review intent and every configured angle even when intent is silent. The screen uses candidate-scoped evidence only; it is not a full finder job or general aggregation and sends no diff bytes to either. Record a per-path decision and reason: if intent or any angle deems the exact path relevant, remove it from Out of Scope and re-include it in `reviewableFileList`, keeping it reviewable alongside its authored source or related rename endpoint (both enter the single job's scope). If no angle is relevant, leave the path in Out of Scope for final exclusion, including when intent is silent. After this screen, apply the final integrity exclusion.
+If the producer exits nonzero, the stream ends early, the metadata is malformed, or the hash or count is incomplete, that file's integrity check is inconclusive: keep the file reviewable, report the failure, and continue the review. Never exclude a file on truncated evidence. An inconclusive file check does not make the review `INCONCLUSIVE`.
 
-Execute this candidate-scoped diff through Bash. The preferred form is argv-safe direct process execution with the argument vector `["git", "--literal-pathspecs", "diff", "--binary", "--no-ext-diff", "--no-textconv", range, "--", candidatePath]`; if Bash must run the command, quote the diff range and candidate path as separate arguments:
-
-```bash
-git --literal-pathspecs diff --binary --no-ext-diff --no-textconv "$range" -- "$candidatePath"
-```
-
-Raw interpolation is forbidden. Git's `--` is only the revision/pathspec separator; it does not disable Git pathspec magic, external diff drivers, or textconv filters. `--literal-pathspecs` must be before `diff`; `--binary` is required, and `--no-ext-diff` and `--no-textconv` are required for this candidate integrity read. `--literal-pathspecs` treats the candidate path literally and is not shell escaping. These rules apply even when a changed filename contains spaces, shell metacharacters, command substitution, or newlines, including `:(exclude)*`.
-
-This candidate-scoped diff inspection exception is for integrity judgment only. Compare the changed bytes with authored source/generator evidence to decide whether the output is meaningful, stale, manually altered, or otherwise unexplained. Its diff result is not forwarded to a finder prompt, candidate aggregation, or general orchestrator context. Project tests, builds, linters, formatters, migrations, and other project execution remain forbidden. A `.d.ts` is excluded only with generated evidence; an authored `.d.ts` remains reviewable and contributes to `reviewableInsertionLines`. Authored migrations and DDL remain reviewable, including when a neighboring migration snapshot is derived. Authored `.d.ts`, migrations, and DDL remain reviewable without generated evidence.
-
-After this integrity pass and partition, finalize `reviewableFileList`; derive the scale units from the relation-reconciled reviewable subset for rename-aware insertion/deletion scale, while deriving `reviewableFileCount` as the finalized reviewable endpoint/path count (that is, count each path in `reviewableFileList` exactly once, including both endpoints of an R/C relation when both are reviewable). Derive `reviewableInsertionLines` from the `--find-renames` numstat insertion counts. R/C relation reconciliation is used for rename-aware insertion/deletion scale only; it does not collapse endpoint membership or double-count endpoints. Endpoint-level `--no-renames` values never feed scale. Derived artifacts do not satisfy the changed-file threshold.
-
-**Handling:** derived artifacts are excluded from the insertion-line scale count and are never assigned to a chunk or finder job — a 5,000-line `*_snapshot.json` must not inflate the scale decision or consume finder budget. They are **not** silently dropped: list them under Out of Scope in the report (synthesis item below) so the reader sees they changed and were not line-reviewed. Re-included outputs are reviewed as exact files instead.
+Record each candidate's decision and reason in a `Derived-artifact relevance decisions` block of `{REQUIREMENTS}`. Add each re-included path to `reviewableFileList` as an exact path and remove it from Out of Scope. A re-included renamed path keeps both endpoints reviewable, also across directories; pair them from the NUL-delimited `["git", "diff", range, "--name-status", "-z", "--find-renames"]` (each rename record is a status token, then the old path, then the new path) output.
 
 ### Zero-reviewable-files review
 
-This is a valid zero-reviewable-files review. If `reviewableFileCount` is 0, do not dispatch a finder job, do not create an empty chunk or pathless diff, report all changed derived artifacts under Out of Scope, and explicitly report that this is not a single empty chunk. This branch applies only to a non-empty, non-binary-only diff after Step 2; empty-diff and binary-only Early Exit flows do not initialize these artifacts. If derived re-inclusion makes `reviewableFileCount` > 0, use the normal finder path instead.
-
-Before entering Phase 3, allocate a fresh cryptographically random, path-safe `invocationId`; before writing, verify that the invocation directory is contained within `$OMT_DIR/code-review`; atomically persist the frozen invocation manifest plus `candidates.json` with an empty `candidates` array (`"candidates": []`), using the normal invocation-manifest/`candidates.json` schemas and all configured angle coverage fields (one coverage record per configured angle, including unavailable angles); do not create or start a finder, job, chunk, attempt, or prompt, including an empty chunk or pathless diff.
-
-### Scale
-
-Determine scale from the **reviewable subset** using the derived values — of the two line counts, only `X` (insertions), never `Y` (deletions), feeds this decision:
-
-These are the rename-aware, relation-reconciled scale values from Step 2: each R/C relation contributes its single insertion/deletion tuple to scale, pure renames contribute 0 insertions, while `reviewableFileCount` remains the finalized `reviewableFileList` endpoint/path count and endpoint-level `--no-renames` values never feed scale.
-
-`reviewableInsertionLines` and `reviewableFileCount` no longer branch review strategy and no longer produce a coverage notice: every non-empty reviewable set gets exactly four finders (one per angle) in one job, and every finder walks 100% of the diff.
+An empty `reviewableFileList` after the integrity pass is a valid review with no finders. Run no `plan`, start no job, dispatch no finder, and never diff an empty or pathless scope. Take a fresh `invocationId` as Step 4 defines it, skip the rest of Step 4 and Phase 2, and go to Phase 3. Phase 3 lists every path of `completeChangedFileManifest` under Out of Scope, writes `findings.md`, and the artifact carries `"findings": []` and `findings_report` pointing to that file. When any reviewable path remains, with or without re-inclusion, take the normal finder path.
 
 ## Step 4: Direct Finder-Job Dispatch
 
