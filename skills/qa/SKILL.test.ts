@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 
 // ---------------------------------------------------------------------------
@@ -26,10 +26,6 @@ const scenarioAuthoringMd = readFileSync(
 );
 const stage3Md = readFileSync(join(import.meta.dir, "stage3-handson.md"), "utf8");
 const stage1Md = readFileSync(join(import.meta.dir, "stage1-commands.md"), "utf8");
-const feedbackMd = readFileSync(
-	join(import.meta.dir, "feedback-protocol.md"),
-	"utf8",
-);
 const presentationMd = readFileSync(
 	join(import.meta.dir, "presentation.md"),
 	"utf8",
@@ -671,8 +667,12 @@ describe("preserved: binary APPROVE/REQUEST_CHANGES output contract", () => {
 		expect(skillMd).toContain("REQUEST_CHANGES");
 	});
 
-	test("feedback-protocol.md is still referenced", () => {
-		expect(skillMd).toContain("feedback-protocol.md");
+	test("the code-review confidence-scoring protocol is gone", () => {
+		expect(existsSync(join(import.meta.dir, "feedback-protocol.md"))).toBe(false);
+		for (const leftover of ["feedback-protocol", "confidence score", "Confidence Scoring", "nitpick", "50–74", "50-74"]) {
+			expect(skillMd).not.toContain(leftover);
+			expect(stage3Md).not.toContain(leftover);
+		}
 	});
 });
 
@@ -1146,79 +1146,80 @@ describe("new-prose: scenario-authoring actor layer carries the boundary", () =>
 // the Scope list, making the gate vacuously true.
 // ---------------------------------------------------------------------------
 
-describe("new-prose: a failed row's disposition is pinned", () => {
-	test("CHECK states that a FAILED row blocks, with the soft-pass carve-out", () => {
-		const checkStart = skillMd.indexOf("### CHECK");
-		expect(checkStart).not.toBe(-1);
-		const checkEnd = skillMd.indexOf("### DIAGNOSIS", checkStart + 1);
-		expect(checkEnd).not.toBe(-1);
-		const checkSection = skillMd.slice(checkStart, checkEnd);
-		expect(checkSection).toContain("A FAILED scenario row blocks CHECK");
-		expect(checkSection).toContain("soft pass");
-		expect(checkSection).toContain("COMMENT, never APPROVE");
+describe("new-prose: a failed row is judged by its recorded cause", () => {
+	const checkStart = skillMd.indexOf("### CHECK");
+	const checkSection = skillMd.slice(checkStart, skillMd.indexOf("### DIAGNOSIS", checkStart + 1));
+
+	test("CHECK blocks on an established cause whatever the row's priority", () => {
+		expect(checkSection).toContain("whatever its priority");
+		expect(checkSection).toContain("supported `cause` claim");
+		expect(checkSection).not.toContain("soft pass");
 	});
 
-	test("a failed H-priority row blocks regardless of confidence", () => {
-		expect(skillMd).toContain(
-			"A failed **`H`-priority** row blocks whatever its score",
-		);
+	test("an unproven cause has no verdict: attribute it on the base commit or hand it to the user", () => {
+		expect(checkSection).toContain("no verdict");
+		expect(checkSection).toContain("on the base commit under the same setup");
+		expect(checkSection).toContain("await-user");
+		expect(checkSection).not.toContain("open finding");
+	});
+
+	test("a re-drive is re-recorded, not amended", () => {
+		expect(checkSection).toContain("record the re-driven result with `record-scenario`");
+	});
+
+	// A caller-provided scenario cannot be amended, so the pre-existing-defect path
+	// (amend to what the change promised) left it with no verdict at all.
+	test("a caller-provided scenario that fails on the base commit too goes to the user", () => {
+		const rule = skillMd.indexOf("Before you record a `fail`");
+		const paragraph = skillMd.slice(rule, skillMd.indexOf("\n\n", rule));
+		expect(paragraph).toContain("A caller-provided scenario cannot be amended");
+		expect(paragraph).toContain("await-user");
+	});
+
+	test("a caller-provided failure follows the same cause rule", () => {
+		expect(skillMd).not.toContain("ANY provided-scenario failure = immediate REQUEST_CHANGES");
+		expect(skillMd).not.toContain("record its failing scenario and declare REQUEST_CHANGES");
+		expect(checkSection).toContain("whatever its priority or source");
 	});
 
 	test("restating a failed row as PASS is forbidden", () => {
 		expect(skillMd).toContain("Never restate a failed row as PASS");
 	});
 
-	test("the Approval Decision table carries the soft-pass row", () => {
-		const guardStart = skillMd.indexOf("## Approval Decision");
-		expect(guardStart).not.toBe(-1);
-		expect(skillMd.slice(guardStart)).toContain("CHECK soft-passes");
-	});
-});
-
-describe("new-prose: the soft-pass carve-out is reachable and unambiguously scoped", () => {
-	test("the soft-pass band is stated as a concrete score range, not a named threshold in another file", () => {
-		const checkStart = skillMd.indexOf("### CHECK");
-		const checkSection = skillMd.slice(
-			checkStart,
-			skillMd.indexOf("### DIAGNOSIS", checkStart + 1),
-		);
-		expect(checkSection).toContain("50–74");
-		expect(checkSection).not.toContain("blocking threshold");
+	// The pre-existing-defect rule used to sit under DIAGNOSIS, after CHECK, so a
+	// run recorded the defect as `fail` first and then had no verdict to reach.
+	test("the base-commit check sits where a fail is recorded, before CHECK", () => {
+		const rule = skillMd.indexOf("Before you record a `fail`");
+		expect(rule).toBeGreaterThan(skillMd.indexOf("### ADVERSARIAL E2E"));
+		expect(rule).toBeLessThan(checkStart);
+		expect(skillMd.indexOf("Before you record a `fail`", rule + 1)).toBe(-1);
 	});
 
-	test("caller-provided and 75+ failures are excluded from the carve-out", () => {
-		expect(skillMd).toContain("A failed **caller-provided** row blocks");
-		expect(skillMd).toContain("A finding scoring **75+** blocks");
-	});
-
-	// A 75 is "likely to occur in practice, directly impacts functionality" on
-	// feedback-protocol's own scale. A band that swallowed it into `nitpick`
-	// would let a functional failure close a cycle as COMMENT instead of
-	// entering DIAGNOSIS → FIX → RE-VERIFY.
-	test("the nitpick band stops below the score the scale calls functional", () => {
-		expect(skillMd).not.toContain("scores **50–79**");
-		expect(feedbackMd).toContain("75+ → report as a blocking issue");
-		expect(feedbackMd).toContain("50–74 → report as `nitpick (non-blocking)`");
-		expect(feedbackMd).not.toContain("50–79");
-		const quickRef = skillMd.slice(skillMd.indexOf("## Quick Reference"));
-		expect(quickRef).toContain("50-74 nitpick, 75+ blocking");
-	});
-
-	// CHECK's soft pass is a distinct cycle outcome; EXIT is mandatory and its
-	// table was exhaustive over {full-green, max_cycles, same-failure, safety},
-	// leaving the soft pass with no transition to CLEANUP/STATE.
-	test("EXIT has a transition for the soft pass", () => {
+	test("EXIT has no COMMENT exit for a failed row", () => {
 		const exitStart = skillMd.indexOf("### EXIT");
-		const exitSection = skillMd.slice(
-			exitStart,
-			skillMd.indexOf("### CLEANUP", exitStart + 1),
-		);
-		expect(exitSection).toContain("Goal Met, soft pass");
-		expect(exitSection).toContain("PASS → COMMENT");
+		const exitSection = skillMd.slice(exitStart, skillMd.indexOf("### CLEANUP", exitStart + 1));
+		expect(exitSection).not.toContain("Open finding");
+		expect(exitSection).not.toContain("soft pass");
 	});
 
-	test("a failure that cannot be scored at 50+ is re-run, not soft-passed", () => {
-		expect(skillMd).toContain("not a soft pass but an unexplained failure");
+	test("the Approval Decision table has no score band", () => {
+		const approval = skillMd.slice(skillMd.indexOf("## Approval Decision"));
+		expect(approval).not.toContain("CHECK soft-passes");
+		expect(approval).toContain("A scenario `fail` whose cause is unproven");
+		expect(approval).not.toContain("open finding");
+	});
+
+	test("COMMENT is described by what the CLI allows, without code-review severity", () => {
+		const approval = skillMd.slice(skillMd.indexOf("## Approval Decision"));
+		for (const leftover of ["soft-pass variant", "CRITICAL", "MEDIUM tier", "binary"]) expect(approval).not.toContain(leftover);
+		expect(skillMd).not.toContain("[CRITICAL/LOW]");
+		expect(approval).toContain("No scenario failed");
+	});
+
+	test("the cause claim takes a base-run alone, or product-path with base-commit", () => {
+		expect(presentationMd).toContain('"checked": ["base-run"]');
+		expect(presentationMd).toContain("`product-path` and `base-commit`");
+		expect(presentationMd).not.toContain("open finding under COMMENT");
 	});
 
 	test("the upstream ADVERSARIAL E2E gate routes by row class instead of stopping on any failure", () => {
@@ -1243,10 +1244,8 @@ describe("new-prose: the soft-pass carve-out is reachable and unambiguously scop
 		expect(table).toContain("stay `NOT-RUN` in the roster");
 	});
 
-	test("feedback-protocol's threshold rule matches its own 50-row instead of contradicting it", () => {
-		expect(feedbackMd).not.toContain("Report only issues scoring 80+");
-		expect(feedbackMd).toContain("`nitpick (non-blocking)`");
-		expect(feedbackMd).toContain("Below 50 → discard");
+	test("stage3 hands a lower-priority failure to CHECK to judge by its cause", () => {
+		expect(stage3Md).toContain("judges it by its recorded cause");
 	});
 });
 

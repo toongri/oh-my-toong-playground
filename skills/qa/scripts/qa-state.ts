@@ -58,7 +58,7 @@ import {
 	CLIENT_IMPACTS,
 	REACHABILITIES,
 	RISK_AXES,
-	CAUSE_CHECKS,
+	causeCheckSet,
 	LAYOUT_CHECKS,
 	isRiskAxis,
 	TEST_EVIDENCE_SURFACE,
@@ -995,7 +995,7 @@ export function amendScenario(sessionId: string, opts: AmendScenarioOpts): void 
 		if (index < 0) throw new Error(`amend-scenario: no scenario "${next.story}:${next.id}" authored this cycle`);
 		const previous = scenarios[index];
 		if (!previous.status) throw new Error("amend-scenario: this scenario has no recorded result yet; rewrite it with author-scenario");
-		if (previous.source === "caller-provided") throw new Error("amend-scenario: a caller-provided scenario runs verbatim and cannot be amended; its failure is the change's failure (REQUEST_CHANGES)");
+		if (previous.source === "caller-provided") throw new Error("amend-scenario: a caller-provided scenario runs verbatim and cannot be amended; its failure stands");
 		scenarios[index] = clearScenarioRecord(next);
 		const amendments = [...(prior.scenario_amendments ?? []), { story: next.story, id: next.id, cycle, reason, previous }];
 		const flaky = prior.run_checks?.flaky_rerun;
@@ -1303,11 +1303,15 @@ export function reviewEvidence(sessionId: string, story: string, scenarioId: str
 			const sources = item.sources.map((source: { path?: unknown; location?: unknown }) => ({ path: probePlainFile(nonEmpty(source?.path, "source path")), location: readerLabel(source?.location, "source location") }));
 			if (item.kind === undefined) return { claim, observation, verdict: item.verdict, gap: item.gap, sources };
 			if (item.kind !== "layout" && item.kind !== "cause") throw new Error('claim kind must be "layout" or "cause" when given');
-			const required = item.kind === "layout" ? LAYOUT_CHECKS : CAUSE_CHECKS;
 			const checked: unknown[] = Array.isArray(item.checked) ? item.checked : [];
-			const missing = required.filter((check) => !checked.includes(check));
+			if (item.kind === "cause") {
+				const set = causeCheckSet(checked);
+				if (!set) throw new Error('cause claim must record checked: ["base-run"] or ["product-path","base-commit"]');
+				return { claim, observation, verdict: item.verdict, gap: item.gap, sources, kind: item.kind, checked: [...set] };
+			}
+			const missing = LAYOUT_CHECKS.filter((check) => !checked.includes(check));
 			if (missing.length) throw new Error(`${item.kind} claim must record checked: ${missing.join(", ")}`);
-			return { claim, observation, verdict: item.verdict, gap: item.gap, sources, kind: item.kind, checked: [...required] };
+			return { claim, observation, verdict: item.verdict, gap: item.gap, sources, kind: item.kind, checked: [...LAYOUT_CHECKS] };
 		});
 		if (scenario.profile && !claims.some((claim) => claim.kind === "layout")) {
 			throw new Error(`profile scenario needs a layout claim for "${scenario.profile}": {"kind":"layout","checked":${JSON.stringify(LAYOUT_CHECKS)}, …} observing that nothing is clipped or overlapping, the page does not scroll sideways, and text wraps without breaking`);
@@ -1401,10 +1405,10 @@ export function setVerdict(sessionId: string, verdict: string): void {
 			throw new Error("set-verdict: APPROVE refused — approveOk is false; APPROVE needs every scenario pass and a passing flaky-rerun. Execute and record every remaining scenario; a blocked scenario or blocked rerun leaves it unproven, so the verdict is COMMENT at most" + gapList(prior));
 		}
 		if (verdict === "COMMENT" && !commentOk(prior, stateProbe)) {
-			throw new Error("set-verdict: COMMENT refused — commentOk is false; every scenario must be recorded, and an H fail with a supported cause claim asks for REQUEST_CHANGES" + gapList(prior));
+			throw new Error("set-verdict: COMMENT refused — commentOk is false; every scenario must be recorded and none may be fail. A fail with a supported cause claim asks for REQUEST_CHANGES. A fail whose cause is unproven has no verdict yet: run the same steps on the base commit under the same setup and record a {\"kind\":\"cause\",\"checked\":[\"base-run\"]} claim, or, if it fails there too, amend the scenario to what the change promised; when you cannot run the base commit or show the product path, ask the user and run await-user" + gapList(prior));
 		}
 		if (verdict === "REQUEST_CHANGES" && !cycleUntouched(prior) && !requestChangesOk(prior, stateProbe)) {
-			throw new Error("set-verdict: REQUEST_CHANGES refused — it requires a recorded failure (a failed scenario, baseline, or run check); a failed scenario counts once its review-evidence carries a supported {\"kind\":\"cause\",\"checked\":[\"product-path\",\"base-commit\"]} claim citing the product's own log line or code location and the base commit run or diff hunk (and, on a screen, its screenshots). If you cannot show the cause, fix the setup and re-drive, or keep it as an open finding under COMMENT. Unexecuted scenarios are your remaining work, not a product defect: execute them, or record-scenario --status blocked with the attempts that failed");
+			throw new Error("set-verdict: REQUEST_CHANGES refused — it requires a recorded failure (a failed scenario, baseline, or run check); a failed scenario counts once its review-evidence carries a supported cause claim (and, on a screen, its screenshots): {\"kind\":\"cause\",\"checked\":[\"base-run\"]} when the same steps under the same setup end as expected on the base commit, or {\"kind\":\"cause\",\"checked\":[\"product-path\",\"base-commit\"]} citing the product's own log line or code location and the diff hunk when the base commit cannot run them. If you cannot show either, fix the setup and re-drive, or ask the user and run await-user. Unexecuted scenarios are your remaining work, not a product defect: execute them, or record-scenario --status blocked with the attempts that failed");
 		}
 		mergeWriteUnlocked(sessionId, { verdict });
 	});

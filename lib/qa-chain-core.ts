@@ -254,7 +254,7 @@ export interface QaEvidenceClaim {
 	sources: Array<{ path: string; location: string }>;
 	/**
 	 * "layout" marks the claim that a profile screen was checked for the LAYOUT_CHECKS breakages.
-	 * "cause" marks the claim that a failure is the change's product defect, checked for CAUSE_CHECKS.
+	 * "cause" marks the claim that a failure is the change's product defect, checked for one of CAUSE_CHECK_SETS.
 	 */
 	kind?: "layout" | "cause";
 	checked?: string[];
@@ -264,11 +264,19 @@ export interface QaEvidenceClaim {
 export const LAYOUT_CHECKS = ["clipping", "overlap", "horizontal-scroll", "text-wrap"] as const;
 
 /**
- * What a failure must show before it counts as the change's defect: the product's own
- * log or code took the wrong path (not setup such as signing, keys or debug mode), and
- * the base commit behaves differently or the diff touches the code that breaks.
+ * What a failure must show before it counts as the change's defect, as one of two sets.
+ * `base-run`: the same steps under the same setup end as expected on the base commit,
+ * which rules out setup and pins the failure on the change. When the base commit cannot
+ * run those steps: `product-path` (the product's own log or code took the wrong path, not
+ * setup such as signing, keys or debug mode) and `base-commit` (the base commit behaves
+ * differently or the diff touches the code that breaks).
  */
-export const CAUSE_CHECKS = ["product-path", "base-commit"] as const;
+export const CAUSE_CHECK_SETS = [["base-run"], ["product-path", "base-commit"]] as const;
+
+/** The cause check set a claim's `checked` list covers, if any. */
+export function causeCheckSet(checked: readonly unknown[] | undefined): readonly string[] | undefined {
+	return CAUSE_CHECK_SETS.find((set) => set.every((check) => checked?.includes(check)));
+}
 
 export interface QaEvidenceReview {
 	claims: QaEvidenceClaim[];
@@ -621,7 +629,7 @@ function failureEstablished(state: QaChainState, scenario: QaScenario, probe: Ev
 	const story = storyFor(state, scenario);
 	const driver = story ? actorFor(state, story)?.driver : undefined;
 	if (scenarioNeedsVisualProof(scenario, driver) && !visualEvidenceComplete(scenario.evidence, probe)) return false;
-	const cause = scenario.evidence_review?.claims?.some((claim) => claim?.kind === "cause" && CAUSE_CHECKS.every((check) => claim.checked?.includes(check)));
+	const cause = scenario.evidence_review?.claims?.some((claim) => claim?.kind === "cause" && causeCheckSet(claim.checked) !== undefined);
 	return !!cause && evidenceReviewComplete(scenario, probe);
 }
 
@@ -670,15 +678,15 @@ export function approveOk(state: QaChainState, probe: EvidenceProbe): boolean {
 		currentScenarios(state).every((scenario) => scenario.status === "pass");
 }
 
-/** Soft pass: a failed non-H scenario (the 50-74 nitpick band) permits COMMENT. */
 /**
- * COMMENT leaves the merge to a person. An H failure whose product cause is
- * established asks for REQUEST_CHANGES instead; an H failure whose cause is
- * still unproven may stay as an open finding under COMMENT.
+ * COMMENT leaves the merge to a person when nothing failed but APPROVE is out of
+ * reach (a blocked scenario or rerun) or there are notes to surface. A failure
+ * never rides through it: an established one asks for REQUEST_CHANGES, and one
+ * whose cause is unproven has no verdict until it is attributed.
  */
 export function commentOk(state: QaChainState, probe: EvidenceProbe): boolean {
 	return verdictGround(state, probe) &&
-		currentScenarios(state).every((scenario) => scenario.priority !== "H" || !failureEstablished(state, scenario, probe));
+		currentScenarios(state).every((scenario) => scenario.status !== "fail");
 }
 
 export function cycleUntouched(state: Partial<QaChainState>): boolean {

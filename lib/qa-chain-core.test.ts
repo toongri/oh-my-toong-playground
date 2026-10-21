@@ -424,17 +424,28 @@ describe("qa chain core", () => {
 		expect(approveOk(state, probe)).toBe(false);
 		expect(commentOk(state, probe)).toBe(true);
 	});
-	test("commentOk는 M/L 실패와 원인 미증명 H 실패를 허용하고 원인이 증명된 H 실패는 거부함", () => {
+	test("commentOk는 실패가 하나라도 있으면 원인 입증 여부·우선순위와 무관하게 거부함", () => {
 		const state = authoredState();
+		expect(state.scenarios[1].priority).not.toBe("H");
 		state.scenarios[1] = reviewed({ ...state.scenarios[1], status: "fail" });
-		expect(commentOk(state, probe)).toBe(true);
+		expect(commentOk(state, probe)).toBe(false);
 		expect(approveOk(state, probe)).toBe(false);
-		state.scenarios[0] = reviewed({ ...state.scenarios[0], status: "fail" });
-		expect(commentOk(state, probe)).toBe(true);
 		expect(requestChangesOk(state, probe)).toBe(false);
-		state.scenarios[0] = failedWithCause(state.scenarios[0]);
+		state.scenarios[1] = failedWithCause(state.scenarios[1]);
 		expect(commentOk(state, probe)).toBe(false);
 		expect(requestChangesOk(state, probe)).toBe(true);
+	});
+	test("같은 환경의 base 실행 대조(base-run) 하나만으로 실패 원인이 입증됨", () => {
+		const state = authoredState();
+		const failed = reviewed({ ...state.scenarios[1], status: "fail" });
+		failed.evidence_review!.claims.push({ kind: "cause", checked: ["base-run"], claim: "이번 변경이 목록 순서를 바꾼다", verdict: "supported", observation: "같은 계정·같은 빌드 설정으로 base 커밋에서 같은 단계를 밟으면 담은 순서가 유지된다", gap: "", sources: [{ path: state.scenarios[1].evidence!.after!, location: "목록 첫 행" }] });
+		state.scenarios[1] = failed;
+		expect(requestChangesOk(state, probe)).toBe(true);
+		const diffOnly = authoredState();
+		const partial = reviewed({ ...diffOnly.scenarios[1], status: "fail" });
+		partial.evidence_review!.claims.push({ kind: "cause", checked: ["base-commit"], claim: "diff가 목록 코드를 건드린다", verdict: "supported", observation: "diff가 정렬 함수를 바꾼다", gap: "", sources: [{ path: diffOnly.scenarios[1].evidence!.after!, location: "목록 첫 행" }] });
+		diffOnly.scenarios[1] = partial;
+		expect(requestChangesOk(diffOnly, probe)).toBe(false);
 	});
 
 	test("recordComplete false-case: missing run check, missing and empty evidence, surface mismatch", () => {

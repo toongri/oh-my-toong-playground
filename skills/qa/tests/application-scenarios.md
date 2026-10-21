@@ -35,7 +35,7 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 | A-19 | Trigger Activation Trace — output compliance | Output format compliance | Active Triggers 테이블 출력 검증 |
 | A-20 | Scenario Verification Principle | Consumer-boundary declaration | Cross-entry consistency with prometheus |
 
-> **Note:** Confidence Scoring, YAGNI Detection, Verdict Classification, Output Format 등 기존 기법 테스트(이전 A-5~A-10)는 2026-02-10에 전부 GREEN PASS 확인됨. 해당 기법들은 이번 변경에 영향받지 않으므로 이 파일에서 제외. 기법 자체가 변경될 경우 별도 시나리오 추가 필요.
+> **Note:** YAGNI Detection, Verdict Classification, Output Format 등 기존 기법 테스트(이전 A-5~A-10)는 2026-02-10에 전부 GREEN PASS 확인됨. 해당 기법들은 이번 변경에 영향받지 않으므로 이 파일에서 제외. 기법 자체가 변경될 경우 별도 시나리오 추가 필요.
 >
 > **Note (2026-05-12):** "Rich Feedback Protocol" was removed in this PR (oracle now owns diagnosis). Related scenarios have been archived.
 

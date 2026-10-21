@@ -64,27 +64,31 @@ A broken layout is still a `supported` claim of what the capture shows; the
 scenario itself is recorded `fail`.
 
 A `fail` scenario that grounds REQUEST_CHANGES needs one cause claim. It shows the
-failure is the change's product defect. `product-path` cites the product's own log line or code location that
-took the wrong path, not setup such as signing, keys or debug mode. `base-commit`
-cites the base commit run that behaves differently, or the diff hunk that touches the
-code that breaks. REQUEST_CHANGES counts the failure only once this claim is
-`supported`. A failure whose cause you could not show may be reviewed without it, or
-with a cause claim marked `insufficient` and the gap named. It then stays an open
-finding under COMMENT, and the report says the cause is unproven:
+change broke the product, not who wrote the wrong line: finding that line is
+DIAGNOSIS's work. Record it in one of two forms. `base-run`: the same steps under
+the same setup end as expected on the base commit; the setup is the same on both
+sides, so it cannot be the cause. When the base commit cannot run those steps (the
+screen or endpoint is new), use `product-path` and `base-commit`: `product-path`
+cites the product's own log line or code location that took the wrong path, not
+setup such as signing, keys or debug mode, and `base-commit` cites the diff hunk
+that touches the code that breaks. REQUEST_CHANGES counts the failure only once this
+claim is `supported`. A failure whose cause you could not show may be reviewed
+without it, or with a cause claim marked `insufficient` and the gap named. It then
+has no verdict: the CLI refuses REQUEST_CHANGES and COMMENT until it is attributed.
 
 ```json
 {
   "kind": "cause",
-  "checked": ["product-path", "base-commit"],
+  "checked": ["base-run"],
   "claim": "앱이 새 연결 링크를 기기 연결 화면으로 보내지 않는다",
   "verdict": "supported",
-  "observation": "앱 로그에 딥링크 해소 결과가 '찾을 수 없음'으로 남는다. 같은 단계를 base 커밋 빌드에서 돌리면 기기 연결 화면이 열린다",
+  "observation": "같은 기기·같은 계정으로 base 커밋 빌드에서 같은 단계를 밟으면 기기 연결 화면이 열린다. 이번 빌드에서는 '찾을 수 없음' 화면이 열린다",
   "gap": "",
-  "sources": [{ "path": "evidence/installed-link-logcat.txt", "location": "딥링크 해소 결과 줄" }]
+  "sources": [{ "path": "evidence/installed-link-after.png", "location": "링크를 연 뒤의 화면" }]
 }
 ```
 
-When you cannot show both, the cause is not established. Fix the setup and drive the
+When you cannot show either form, the cause is not established. Fix the setup and drive the
 scenario again. Record it `blocked` with those attempts only when absent hardware, an
 off-network third party, or a person stops the rerun (`--obstacle-kind`).
 

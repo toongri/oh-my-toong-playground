@@ -224,12 +224,14 @@ Build/test/lint green baseline.
 
 Drive the changed surface for real and attack it. Two parts, both required when the change touches a risk surface — user-facing OR an internal risk surface (feature-flag-gated logic, payment/notification resolver internals, permission/state transitions), per [stage3-handson.md] `### Decision Logic`; only a genuinely inert refactor that touches no risk surface skips:
 
-1. **Execute caller-provided scenarios verbatim**, with per-scenario evidence. This covers each scenario that checks product behavior in the target environment; a release, operations or provenance scenario goes to `## Out of QA Scope` (see *Target environment*). ANY provided-scenario failure = immediate REQUEST_CHANGES. Caller-provided scenarios always run verbatim, unchanged — the derivation framework below governs only scenarios qa self-authors; it never rewrites what the caller handed in.
+1. **Execute caller-provided scenarios verbatim**, with per-scenario evidence. This covers each scenario that checks product behavior in the target environment; a release, operations or provenance scenario goes to `## Out of QA Scope` (see *Target environment*). A provided-scenario failure stops the run and goes to CHECK, which judges it by its cause like any other failure. Caller-provided scenarios always run verbatim, unchanged — the derivation framework below governs only scenarios qa self-authors; it never rewrites what the caller handed in.
 2. **Self-author the user scenarios** for the changed surface, in this order — breadth before depth:
    1. **Derive candidate scenarios by breadth** via [scenario-authoring.md]: Layer A impact-map → coverage-gap → H/M/L priority, then Layer D product use-case breadth (arrival paths · adjacent state transitions · lifecycle stances) from a product-context map built from the repo.
    2. **Give the scenarios their hostile depth, highest priority (H) first.** Each of the 6 risks — failure paths, boundary/malformed input, injection, interruption-resume + dirty state, misleading success, idempotency — enters as a user scenario that walks into it (a careless user double-taps, an attacker pastes a payload, the network drops mid-checkout) and is tagged with that risk. See [stage3-handson.md] `## Adversarial Scenario Matrix` for each risk's hostile condition and the lifecycle detail (start → verify → stop). Rows 7–9 (stale-state, dirty-worktree, flaky-rerun) are per-run checks recorded separately with `record-run-check`.
 
-When a caller-provided scenario fails, record its failing scenario and declare REQUEST_CHANGES; the scenarios left unrun stay unrecorded, and the report shows them as not run. The same holds after an EXIT that follows a FIX dispatch (max-cycles or Safety) with a recorded failure. `inc-cycle` invalidates prior-cycle records, including baseline and run-check records in the current view. Prior-cycle records remain in the raw state/history for audit.
+When a caller-provided scenario fails, record its failing scenario and go to CHECK; the scenarios left unrun stay unrecorded, and the report shows them as not run. The same holds after an EXIT that follows a FIX dispatch (max-cycles or Safety) with a recorded failure. `inc-cycle` invalidates prior-cycle records, including baseline and run-check records in the current view. Prior-cycle records remain in the raw state/history for audit.
+
+**A defect the change did not cause is not the change's failure.** Before you record a `fail`, run the same steps on the base commit (the PR's first parent) under the same setup. If the base shows it too and the diff does not touch the code that breaks, it is pre-existing: record the scenario on what the change promised, and name the pre-existing defect in the observation and in the report's findings. It never drives REQUEST_CHANGES or a fix. A scenario already recorded `fail` for such a defect is corrected with `amend-scenario --reason`. A caller-provided scenario cannot be amended: when it fails the same way on the base commit, only the user can say whether it stays in scope, so ask in plain text with both runs' evidence, run `await-user`, and end the turn.
 
 For a genuinely inert refactor with no risk surface, author the roster and stories, run `declare-inert --reason "<why no behavior reaches any surface>"` with zero scenarios, and record the story baseline and all three run checks.
 
@@ -280,7 +282,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts record-scenario --story … --scenar
 | "The device model the profile names isn't installed, so that profile is blocked" | A profile is a size. Use an installed device of that size, or size the Android emulator to it. |
 | "My setup hit an obstacle, so the scenario is blocked" | Setup is your work, not a limit outside the change. Find the cause and try another approach. `blocked` takes only `hardware`, `third-party` or `person`, and the CLI refuses the rest. `await-user` only for a person's identity or decision. |
 | "The emulator's logged-in account is stuck in onboarding; switching accounts or changing its data might break something, so `blocked`" | The stack and the device are this cycle's. Read the project's QA runbook for a seeded account past onboarding, log out or clear app data, log in with it, and seed what the screen needs through the QA tool or the local database. One fix unblocks every profile. |
-| "The screen or response is not what I expected, so it fails" | First show it is the product: check that `expected` is what the PR or spec promised, find the product code that causes it, and compare the base commit. A setup cause is setup work. |
+| "The screen or response is not what I expected, so it fails" | First show it is the change: check that `expected` is what the PR or spec promised, and run the same steps on the base commit under the same setup. A setup cause is setup work. |
 | "A test already asserts this, but I'll drive it by hand too" | Cite the test. Spend the effort on what it doesn't cover. |
 | "The flag lives in the admin web — launch it" | Set it through the API, a seed, or the DB. |
 | "Keep the device up until CLEANUP" | Release it now. |
@@ -325,12 +327,14 @@ missing outcomes and review again. File existence alone does not close CHECK.
 - Does every client the change reaches have an actor, and does every `render` actor have a recorded scenario on each of its profiles?
 - Is any scenario still unrecorded? Then no verdict exists yet, whatever the other rows say. Execute it, or record it `blocked` with its attempts.
 
-A FAILED scenario row blocks CHECK, with exactly one carve-out: a failed **self-authored `M`/`L`** row whose finding scores **50–74** — the `nitpick (non-blocking)` band, which [feedback-protocol.md]'s scale defines as *real but minor, rarely happens in practice* — leaves the cycle a **soft pass**: the row stays FAIL in the roster, the finding is reported as a LOW note, and the verdict is COMMENT, never APPROVE.
+A FAILED scenario row is judged by its recorded cause. The cause is who broke it, not the line of code: the root cause is DIAGNOSIS's work.
 
-Everything else blocks. A finding scoring **75+** blocks whatever the row's priority — the scale calls 75 *likely to occur in practice, directly impacts functionality*, which is a defect, not a nitpick. A failed **`H`-priority** row blocks whatever its score. A failed **caller-provided** row blocks — it never soft-passes, per `### ADVERSARIAL E2E` part 1. And a failed row whose finding cannot be scored at **50 or above** is not a soft pass but an unexplained failure: re-run or diagnose it, because a scenario that failed for reasons you cannot state is the one most likely to matter. Never restate a failed row as PASS to reach a clean sheet.
+- **Cause established** — its review carries a supported `cause` claim ([presentation.md](presentation.md#claim-review-record)): the same steps end as expected on the base commit under the same setup (`base-run`), or, when the base commit cannot run them, the product's own log or code took the wrong path and the diff touches it (`product-path` + `base-commit`). The change broke it. CHECK fails, whatever its priority or source. Enter the loop below.
+- **Cause unproven** — the row has no verdict yet; the CLI refuses REQUEST_CHANGES and COMMENT. A setup cause is setup work: fix it, re-drive, and record the re-driven result with `record-scenario` (`amend-scenario` is only for a scenario that is itself wrong). Then run the same steps on the base commit under the same setup and record what it shows. When you can neither run the base commit nor show the product path, ask the user in plain text with the failure's evidence, run `await-user`, and end the turn.
+
+A defect the base commit shows too never reaches CHECK as a failed row (see `### ADVERSARIAL E2E`). Never restate a failed row as PASS to reach a clean sheet.
 
 - **Pass → PASS.** Emit APPROVE (see Output Format).
-- **Soft pass → PASS with COMMENT.**
 - **Fail → enter the loop below.**
 
 ### DIAGNOSIS → FIX → RE-VERIFY (loop, ≤5 cycles)
@@ -338,8 +342,6 @@ Everything else blocks. A finding scoring **75+** blocks whatever the row's prio
 CHECK failure hands off to a three-way-separated loop so the agent that fixes the defect is never the one that certifies the fix:
 
 **Enter the loop only for code the caller owns and asked you to fix** — a working branch handed to QA with that request. When the target is a pull request under review or its merge commit, do not fix: the failure stands, the verdict is REQUEST_CHANGES, and the worktree stays at the target commit. A fix committed there would make the verdict describe code nobody submitted.
-
-**A defect the change did not cause is not the change's failure.** Before you record a `fail`, check the same screen or call on the base commit (the PR's first parent). If the base shows it too and the diff does not touch the code that breaks, it is pre-existing: record the scenario on what the change promised, and name the pre-existing defect in the observation and in the report's findings. It never drives REQUEST_CHANGES or a fix.
 
 #### DIAGNOSIS
 
@@ -362,7 +364,6 @@ Loop back to CHECK. Continue until an EXIT condition below fires.
 | Condition | Trigger | Action |
 |-----------|---------|--------|
 | **Goal Met** | CHECK passes (BASELINE + full matrix green) | PASS → APPROVE |
-| **Goal Met, soft pass** | CHECK soft-passes (one carve-out row, per `### CHECK`) | PASS → COMMENT, carrying the failed row and its LOW note |
 | **max_cycles=5** | `cycle` reaches `max_cycles` (5) still unresolved | Terminate, report unresolved with last diagnosis |
 | **Safety** | A safety invariant refuses to proceed | Terminate, report the refusal reason |
 
@@ -594,18 +595,15 @@ A risk that nothing on the changed surface can carry is not a scenario state: it
 |-----------|---------|
 | PRE-FLIGHT contract violation | **REQUEST_CHANGES** (MUST-NOT-DO / B⊆A violated, cycle not executed) |
 | A recorded product failure: a failed scenario whose review carries a supported cause claim ([presentation.md](presentation.md#claim-review-record)), baseline, stale-state, or flaky-rerun check (unresolved after the loop, or a stop-driving failure) | **REQUEST_CHANGES** — name the failure and its evidence |
-| CHECK soft-passes: every scenario recorded; the only failures are self-authored `M`/`L` rows in the 50–74 nitpick band | **COMMENT** (never APPROVE — the failed row stays FAIL in the roster) |
-| Every scenario `pass`; baseline and run checks green | **APPROVE** (or **COMMENT** to surface LOW notes) |
+| Every scenario `pass`; baseline and run checks green | **APPROVE** (or **COMMENT** to surface a note, such as a pre-existing defect) |
 | Any scenario `blocked`, no failure | **COMMENT**: its requirement is unproven, so the CLI refuses APPROVE. The report banner states how many scenarios are `blocked` and that the verdict was made without verifying them; your final message names each one |
 | flaky-rerun `blocked` (the environment kept the rerun from running), no failure | **COMMENT**: stability is unproven, so the CLI refuses APPROVE. The report banner states it in a fixed sentence (the obstacle and attempts stay in the audit section); your final message names the obstacle |
-| An H scenario `fail` whose product cause you could not show (your setup or an external service may explain it) | **COMMENT**: report the failure as an open finding and say its cause is unproven. Fix the setup and re-drive first when you can |
+| A scenario `fail` whose cause is unproven (your setup or an external service may explain it) | **No verdict.** Fix the setup, re-drive, and run the same steps on the base commit under the same setup. When you can do neither, ask the user, run `await-user`, and end the turn |
 | Any scenario unrecorded and no recorded failure | **No verdict.** Execute the remaining scenarios, cheapest proof first. A request to hurry or wrap up means execute faster, not stop. Only when the user explicitly says to stop verifying or to defer the rest: say which scenarios remain and why, show `force-complete`, run `await-user`, and end the turn |
 
 REQUEST_CHANGES is a request to change the product. Work you did not do is not a product defect: the CLI refuses REQUEST_CHANGES without a recorded failure, and refuses APPROVE and COMMENT while a scenario is unrecorded. The verdict never describes the cycle as end-to-end unless the roster's `driven-at` values say it was.
 
-Every issue surfaced MUST include a confidence score. See [feedback-protocol.md] for Confidence Scoring, Validation, and Conventional Comments.
-
-**On COMMENT.** The product decision above is binary — APPROVE or REQUEST_CHANGES. COMMENT is an optional **soft-pass variant of APPROVE**: emit it in place of APPROVE when there are LOW, non-blocking notes worth surfacing to the consumer. It carries **no MEDIUM tier** — severity is CRITICAL / LOW only — and it is never a partial or "almost" verdict. Consumers read COMMENT as approve-with-notes: a per-task verifier closes the task after its evidence gate; an objective-level completion gate still requires an explicit APPROVE (the never-false-complete invariant), so a COMMENT there prompts addressing the notes and re-verifying toward APPROVE, never completion.
+**On COMMENT.** No scenario failed, and either APPROVE is out of reach (a `blocked` scenario or flaky-rerun leaves a requirement unproven) or there is a note worth surfacing. A failure never rides through COMMENT. Consumers read COMMENT as approve-with-notes: a per-task verifier closes the task after its evidence gate; an objective-level completion gate still requires an explicit APPROVE (the never-false-complete invariant), so a COMMENT there prompts addressing the notes and re-verifying toward APPROVE, never completion.
 
 ---
 
@@ -614,14 +612,14 @@ Every issue surfaced MUST include a confidence score. See [feedback-protocol.md]
 ```
 CYCLE:      PRE-FLIGHT → PLAN → BASELINE → ADVERSARIAL E2E → CHECK → [DIAGNOSIS → FIX → RE-VERIFY loop ≤5] → EXIT → CLEANUP → STATE
 PRE-FLIGHT: MUST-NOT-DO scope + B⊆A only; violation = immediate REQUEST_CHANGES, cycle NOT executed. No EXPECTED OUTCOME → B⊆A is not-evaluable, never A:=Scope
-CHECK:      a FAILED row blocks, except a self-authored M/L row scoring 50-74 = soft pass → EXIT Goal Met, soft pass → COMMENT, never APPROVE. 75+ blocks, H blocks, caller-provided blocks, unscorable-below-50 = re-run not soft-pass
+CHECK:      a failed row with a supported cause claim (base-run, or product-path + base-commit) blocks whatever its priority or source → loop. Cause unproven → no verdict: fix setup, re-drive, run the base commit under the same setup; when neither works → await-user. Base commit shows it too → not a fail: record what the change promised, name the defect as a finding
 ECONOMY:    verify the change's stories and scenarios by the cheapest means that proves them. Server-only → curl the API; UI → one browser/device; a test asserting the scenario is proof (--evidence-surface test); device only for screen claims, released at once. Unchanged platforms are not under test
 INPUT:      read the plan/issue/spec/PR yourself; write ACs as user-observable outcomes in the report language. A state file or summary is never the source of requirements
 ENV:        one target environment, `local` unless the user names another; the source never picks it. Sort each source item: product behavior → AC proven there; release/operations work → `## Out of QA Scope`, never an AC or blocked; provenance (PR, wiki) → input, never queried. Sources contradict each other on product behavior and the code does not settle it → ask the user (await-user) before set-acceptance
 ACTOR:      Actor Roster before scenarios — actor · boundary (verification surface) · driver · client impact (none|contract|render + reason) · profiles · reachable. One actor per client that reads what changed; "screen unchanged" means contract, never an inward boundary. Human-only step (pairing code, OTP) → await-user. Substitute only an unreachable hop and record driven-at; otherwise record blocked (obstacle kind hardware|third-party|person + obstacle + attempts + deepest reachable + attempt log), never PASS. Local accounts, seed, onboarding, app/device state = setup work, fixed once for all profiles
 PROFILES:   render actors are proven on every device profile they run on; profiles come from qa-device-profiles.ts get; unconfigured → set --defaults, then fit them to the platforms the repo ships with remove / upsert; never guess sizes. Each profile: before/after screenshots, readable and unbroken
 SCENARIOS:  user scenarios under stories (author-scenario; amend-scenario corrects one with a recorded result: result reset, prior kept, reason required): what the actor does and sees; ≥1 H per story; risks 1..6 are tags; each risk covered by a scenario or declare-risk-na once per cycle. States: pass/fail · blocked · unrecorded (open work). author-cell, record-cell, waive, na, not_applicable are retired
-VERDICT:    REQUEST_CHANGES needs a recorded product failure (a failed scenario counts once a supported cause claim shows product path + base commit; an H fail with its cause unproven caps at COMMENT); APPROVE needs every scenario pass (a blocked one caps at COMMENT); any unrecorded scenario with no failure = no verdict yet
+VERDICT:    REQUEST_CHANGES needs a recorded product failure (a failed scenario counts once a supported cause claim shows product path + base commit; a fail with its cause unproven has no verdict until attributed; COMMENT never carries a fail); APPROVE needs every scenario pass (a blocked one caps at COMMENT); any unrecorded scenario with no failure = no verdict yet
 BOOTSTRAP:  set up only what the chosen surface needs — isolated local instance, documented QA accounts/seeders first, cross-platform preconditions via API/seed/DB. When the user names a deployed environment as the target, its failure is the FAIL
 EVIDENCE:   the observation at the surface (before/action/after for screens) or a cited test run; claim only what it proves; launch screens prove nothing; depths never merge
 BASELINE:   build/test/lint green. See stage1-commands.md
@@ -637,7 +635,6 @@ EXIT:       Goal Met / max_cycles=5 / Safety
 STATE:      bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts <sub>; continue resumes at last phase/cycle
 NESTING:    qa's fix-loop must NOT be called inside another fix-loop — doc contract, YAGNI; upgrade trigger: add a code guard when qa gains its first fix-loop-owning caller
 ROSTER:     ## Scenarios Executed is a precondition for verdict issuance; absent → verdict not issued, cycle incomplete. Exception: PRE-FLIGHT fail-fast issues REQUEST_CHANGES with no roster — never synthesize an empty one there; present+0 rows means inert refactor, a completed cycle
-FEEDBACK:   feedback-protocol.md for Confidence Scoring; CONFIDENCE 0-49 discard, 50-74 nitpick, 75+ blocking
 REPORT:     STATE renders self-contained HTML (qa-report.ts) after set-verdict, before complete; leads with a reader-facing presentation layer (product/user perspective, not code-diff — affected users · user flows · big-picture diagram · AC→fulfillment mapping) via --narrative presentation object, anchored to recorded actors/stories/ACs; unwritten required slots render visible gap markers. presentation.md owns the contract
 ```
 

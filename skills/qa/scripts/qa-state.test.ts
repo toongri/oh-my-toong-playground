@@ -1152,38 +1152,38 @@ describe("qa-state CLI wiring", () => {
 		const before = readFileSync(resolveStatePath(S), "utf8");
 		expect(() => run("set-verdict APPROVE")).toThrow();
 		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
-		expect(() => run("set-verdict REQUEST_CHANGES")).toThrow(/supported \{"kind":"cause"/);
+		expect(() => run("set-verdict REQUEST_CHANGES")).toThrow(/supported cause claim.*"checked":\["base-run"\].*"checked":\["product-path","base-commit"\]/s);
 		const source = { path: "skills/qa/scripts/qa-state.test.ts", location: "실패한 단언 줄" };
 		const content = { claim: "오늘 영양제 목록이 비어 있다", verdict: "supported", observation: "응답의 목록이 비어 있다", gap: "", sources: [source] };
 		const reviewFile = join(tmpDir, "fail-review.json");
 		writeFileSync(reviewFile, JSON.stringify([content]));
 		// a failure may be reviewed without a cause claim; it just does not ground REQUEST_CHANGES
 		run(`review-evidence --story story-1 --scenario s1 --json-file ${reviewFile}`);
-		expect(() => run("set-verdict REQUEST_CHANGES")).toThrow(/supported \{"kind":"cause"/);
+		expect(() => run("set-verdict REQUEST_CHANGES")).toThrow(/supported cause claim.*"checked":\["base-run"\].*"checked":\["product-path","base-commit"\]/s);
 		const cause = { kind: "cause", checked: ["product-path", "base-commit"], claim: "목록 조회가 오늘 날짜를 빼고 거른다", verdict: "supported", observation: "서버 로그의 조회 조건에 오늘 날짜가 없고, base 커밋에서는 목록이 채워진다", gap: "", sources: [source] };
 		writeFileSync(reviewFile, JSON.stringify([content, { ...cause, checked: ["product-path"] }]));
-		expect(() => run(`review-evidence --story story-1 --scenario s1 --json-file ${reviewFile}`)).toThrow(/cause claim must record checked: base-commit/);
+		expect(() => run(`review-evidence --story story-1 --scenario s1 --json-file ${reviewFile}`)).toThrow(/cause claim must record checked: \["base-run"\] or \["product-path","base-commit"\]/);
 		writeFileSync(reviewFile, JSON.stringify([content, cause]));
 		run(`review-evidence --story story-1 --scenario s1 --json-file ${reviewFile}`);
 		run("set-verdict REQUEST_CHANGES");
 		expect(rawState().verdict).toBe("REQUEST_CHANGES");
 	});
 
-	test("실패한 시나리오가 H가 아니거나 원인이 미증명이면 COMMENT를 허용하고 원인이 증명된 H이면 거부한다", () => {
+	test("실패한 시나리오가 있으면 우선순위·원인 입증과 무관하게 COMMENT를 거부하고 base-run 원인으로 REQUEST_CHANGES를 허용한다", () => {
 		authorCompleteChain();
 		recordAllPass();
 		run("record-scenario --story story-1 --scenario s2 --status fail");
-		run("set-verdict COMMENT");
-		expect(rawState().verdict).toBe("COMMENT");
+		expect(() => run("set-verdict COMMENT")).toThrow(/COMMENT refused.*base commit.*await-user/s);
+		expect(() => run("set-verdict REQUEST_CHANGES")).toThrow(/REQUEST_CHANGES refused/);
 		run(`record-scenario --story story-1 --scenario s1 --status fail ${PASS_EVIDENCE}`);
-		run("set-verdict COMMENT");
-		expect(rawState().verdict).toBe("COMMENT");
 		const source = { path: "skills/qa/scripts/qa-state.test.ts", location: "실패한 단언 줄" };
-		const cause = { kind: "cause", checked: ["product-path", "base-commit"], claim: "목록 조회가 오늘 날짜를 빼고 거른다", verdict: "supported", observation: "서버 로그의 조회 조건에 오늘 날짜가 없고, base 커밋에서는 목록이 채워진다", gap: "", sources: [source] };
-		const reviewFile = join(tmpDir, "h-fail-review.json");
+		const cause = { kind: "cause", checked: ["base-run"], claim: "이번 변경이 오늘 목록을 비운다", verdict: "supported", observation: "같은 계정·같은 설정으로 base 커밋에서 같은 요청을 보내면 목록이 채워진다", gap: "", sources: [source] };
+		const reviewFile = join(tmpDir, "base-run-review.json");
 		writeFileSync(reviewFile, JSON.stringify([cause]));
 		run(`review-evidence --story story-1 --scenario s1 --json-file ${reviewFile}`);
 		expect(() => run("set-verdict COMMENT")).toThrow(/COMMENT refused/);
+		run("set-verdict REQUEST_CHANGES");
+		expect(rawState().verdict).toBe("REQUEST_CHANGES");
 	});
 
 	test("REQUEST_CHANGES는 제품 실패 기록 없이 거부되고 거부 메시지가 남은 실행을 안내함", () => {
