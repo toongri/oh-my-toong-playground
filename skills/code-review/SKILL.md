@@ -16,20 +16,6 @@ Both premises are non-negotiable. The finder template carries them to every find
 
 Review is static-only: never run project code (no tests, builds, linters, formatters, migrations or other project execution). This skill's own scripts (`diff-cursor.ts`, `job.ts`, `submit-review.ts`, `usage-summary.ts`) are not project code.
 
-## Input Modes
-
-```bash
-# PR (number or URL)
-/code-review pr 123
-/code-review pr https://github.com/org/repo/pull/123
-
-# Branch comparison
-/code-review main feature/auth
-
-# Auto-detect (current branch vs origin/main or origin/master)
-/code-review
-```
-
 ## Caller-supplied scope contract
 
 If `project_context` holds a `[SCOPE_CONTRACT]`/`[/SCOPE_CONTRACT]` JSON envelope, apply it whatever the artifact filename. Pass the envelope, including its `scope_contract_sha256` field, unchanged to the finders, through candidate verification, and into the artifact. A delimiter without its pair, a damaged envelope, or a request that requires a contract but omits it ends the review `INCONCLUSIVE`; never fall back to an ordinary review. With no envelope the review is ordinary: the artifact carries no scope fields and no hash.
@@ -73,80 +59,57 @@ A deleted file exists only at the base. Read it at the verified base SHA with th
 
 ## Step 0: Input Parsing
 
-Environment setup runs first — resolve the range and, in PR mode, check out the post-change code into the worktree **before** any code-reading step (intent acquisition, the derived-context sub-step, chunk-review). Every downstream step reads the working directory, so the working directory must already hold the post-change state.
-
-Determine range and setup for subsequent steps:
+Set up the environment before any code reading (intent acquisition, derived context, finder dispatch): resolve the range and, in PR mode, check out the post-change code. Every later step reads the working directory.
 
 | Input | Setup | Range |
 |-------|-------|-------|
-| `pr <number or URL>` | Fetch and check out PR ref into the worktree (see below) | `origin/<baseRefName>...pr-<number>` |
-| `<base> <target>` | Verify HEAD is `<target>` via `git rev-parse --abbrev-ref HEAD`; verify clean tree via `git status --porcelain -uno`. Abort if mismatch or dirty. | `<base>...<target>` |
-| (none) | Detect default branch (`origin/main` or `origin/master`). Verify HEAD is the target branch via `git rev-parse --abbrev-ref HEAD`; verify clean tree via `git status --porcelain -uno`. Abort if mismatch or dirty. | `<default>...HEAD` |
+| `pr <number or URL>` | Check out the PR head (below). `<N>` is the numeric PR id; take it from the number after `/pull/` in a URL and never put the URL in a command. | `origin/<baseRefName>...pr-<N>` |
+| `<base> <target>` | `git rev-parse --abbrev-ref HEAD` must print `<target>` and `git status --porcelain -uno` must be empty; otherwise abort. | `<base>...<target>` |
+| (none) | Detect the default branch (`origin/main` or `origin/master`). Run the same two checks, with the current branch as the target; otherwise abort. | `<default>...HEAD` |
 
-**Review base commit.** When the dispatch's `project_context` contains a line `Review base commit: <sha> — …`, use `<sha>...HEAD` as the range instead of the default branch. Verify clean tree as above, and verify `<sha>` like any other endpoint (below). With no such line, use the table.
+**Review base commit.** When the dispatch's `project_context` contains a line `Review base commit: <sha> — …`, use `<sha>...HEAD` as the range instead of the default branch. Verify a clean tracked tree as above, and verify `<sha>` like any other endpoint (below).
 
 ### PR Mode: Worktree Checkout (per Premise 1)
 
-This skill assumes the orchestrator is already running inside a worktree dedicated to this review (the caller is responsible for creating the worktree). Therefore: **fetch the PR ref AND check it out**. The working directory must reflect the post-change state of the PR so that all subsequent code reading (Phase 2 verification, chunk-reviewer Step 2) sees the actual code under review.
-
-**PR ID extraction rule**: When the user supplies a URL (`https://github.com/<org>/<repo>/pull/<N>`), extract numeric `<N>` from the trailing path segment and substitute it for `<number>` *before* entering the bash block below. Substituting the URL itself makes `git fetch origin pull/<URL>/head` fail with an invalid refspec and `git checkout -B pr-<URL>` fail with an invalid branch name.
+The caller runs you inside a linked worktree made for this review, so fetch the PR head and check it out. Substitute the numeric PR id for `<N>` first, then run the block as written. Before any state change it refuses a tree with tracked modifications and a primary clone; on a refusal, abort and report, and never check out over the user's work. It fetches the base first and the PR head last, so `FETCH_HEAD` is the PR head and a rerun after a force-push gives the same result.
 
 ```bash
 set -euo pipefail
-
-# 0. Safety guards (Premise 1 enforcement) — abort BEFORE any state change
-# -uno: untracked files are preserved by checkout; only check tracked modifications
-if [ -n "$(git status --porcelain -uno)" ]; then
-  echo "Error: working directory has uncommitted changes — refusing to checkout over the user's work" >&2
-  exit 1
-fi
-# Distinguish primary repo from linked worktree.
-# In a linked worktree, --git-dir points inside .git/worktrees/<wt>,
-# while --git-common-dir points to the shared .git directory; they differ.
-# In a primary clone they are equal — refuse so we never checkout over the user's main work tree.
-if [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ]; then
-  echo "Error: refusing to run in primary repo — create a dedicated linked worktree first (Premise 1). Hint: 'git worktree add ../review-pr-<N> -b review/pr-<N>'" >&2
-  exit 1
-fi
-
-# 1. Get base branch name (abort if gh fails or returns empty)
-BASE_REF=$(gh pr view <number> --json baseRefName --jq '.baseRefName')
-if [ -z "$BASE_REF" ]; then
-  echo "Error: gh pr view returned empty baseRefName — aborting before any fetch" >&2
-  exit 1
-fi
-
-# 2. Fetch base branch first, then PR ref last so FETCH_HEAD points to PR head
-#    (rerun-safe — force-push on the PR is picked up on re-review)
+# Refuse: tracked modifications would be overwritten (untracked files survive checkout).
+if [ -n "$(git status --porcelain -uno)" ]; then echo "Error: uncommitted tracked changes; refusing to check out over them" >&2; exit 1; fi
+# Refuse: equal git-dir and git-common-dir means a primary clone, the user's main work tree.
+if [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ]; then echo "Error: not a linked worktree; run 'git worktree add ../review-pr-<N> -b review/pr-<N>' first" >&2; exit 1; fi
+BASE_REF=$(gh pr view <N> --json baseRefName --jq '.baseRefName')
+if [ -z "$BASE_REF" ]; then echo "Error: empty baseRefName; aborting before any fetch" >&2; exit 1; fi
 git fetch origin "${BASE_REF}"
-git fetch origin pull/<number>/head
-
-# 3. Reset local pr-<N> to the freshly fetched PR head (FETCH_HEAD) and check it out
-#    so the working directory matches the PR state
-git checkout -B pr-<number> FETCH_HEAD
+git fetch origin pull/<N>/head
+git checkout -B pr-<N> FETCH_HEAD
 ```
 
-If the working directory is dirty (uncommitted changes) or the caller is not in a worktree, abort and report — do not silently checkout over the user's work. The worktree premise is the safety net; without it, the safety net is gone.
+### Range and command safety
 
-All range formats use **three-dot syntax** (`A...B`), which is equivalent to `git diff $(git merge-base A B)..B`. This shows only changes introduced by the target since the common ancestor — not changes on the base branch. This prevents false positives when `origin/main` has moved ahead after branching.
+Verify each raw base and target endpoint, a review base `<sha>` included, with the exact argv `["git", "rev-parse", "--verify", "--end-of-options", "<ref>^{commit}"]`. `--end-of-options` is required, because argv separation alone does not stop Git option parsing. On a non-zero exit or empty stdout, abort and report; never treat it as an empty diff. Build the three-dot range `<baseSha>...<targetSha>` from the verified commit IDs only, and use it as `{range}` for every later diff and log command. Three dots diff from the merge base, so commits that reached the base after branching do not show as changes.
 
-All subsequent steps use `{range}` from this table. All subsequent commands that receive range or path values must use argv-safe arguments; if Bash is required, quote each dynamic value as a separate argument. After checkout, code reading via Read/Grep/Glob reflects the **post-change** state, which is the intended behavior — diff shows the delta, the working directory shows the result.
+Pass the range, paths and other external values as separate argv elements. When Bash must run a command, quote each dynamic value as its own argument; never interpolate one raw.
 
-Before constructing the review range, verify each raw base and target endpoint with the exact argv `["git", "rev-parse", "--verify", "--end-of-options", "<ref>^{commit}"]`. Abort and report on non-zero exit or empty stdout; never treat it as an empty diff. Construct `<baseSha>...<targetSha>` from verified commit IDs only and use it for every subsequent diff and log command. argv separation alone does not prevent Git option parsing; `--end-of-options` is required.
+A diff read that names a path (the Step 3 integrity read and the Phase 2 candidate-file read) uses `["git", "--literal-pathspecs", "diff", "--binary", "--no-ext-diff", "--no-textconv", range, "--", candidatePath]`, because `--` does not disable pathspec magic, external diff drivers or textconv. In Phase 2 this is the verifier prompt's parsed `execution.argv`; run it exactly as parsed.
 
 ### Untrusted path rendering
 
-**Untrusted path rendering contract:** Use the same strict escaped JSON/structured representation for every untrusted report path, including binary paths, derived artifact paths, pre-existing paths, and finding locations. Encode each path as a JSON string, escaping every JSON control character, including newline, plus backslash and double quote; additionally encode backtick, `<`, `>`, `&`, U+2028, and U+2029 as `\u` escapes. Preserve the encoded value only in an explicitly marked untrusted-data JSON array or structured JSON field. Use this representation whenever a path is surfaced; never raw Markdown/backtick prose, raw `file:line`, headings, fences, or shell commands. Decoded paths never enter prose, raw output templates, or command strings.
+Every path or range value you surface is untrusted: binary, derived and pre-existing paths, finding locations, `{FILE_LIST}`, path echoes in `{REQUIREMENTS}`, and the verifier `{RANGE}` and `{CANDIDATE_FILE}`. Encode it as a JSON string with the normal JSON escapes for `"`, `\` and every control character (newline as `\n`), and also escape backtick as `\u0060`, `<` as `\u003c`, `>` as `\u003e`, `&` as `\u0026`, U+2028 as `\u2028` and U+2029 as `\u2029`; a plain JSON encoder can leave these six raw. Put the encoded value only in an explicitly marked untrusted-data JSON field or array. Never put a decoded path in prose, a heading, a fence, a raw `file:line` or a command string. A finding LOCATION is `{"file":<encoded path>,"line":N}` followed by `— <section or function name>`.
+
+Example: a changed path is `lib/x`, a backtick, `<y>&z`, a line break, then `"w".ts`. Its only rendered form is the value of a marked field:
+
+```json
+{"file":"lib/x\u0060\u003cy\u003e\u0026z\n\"w\".ts","line":42}
+```
 
 ### Early Exit
 
-After the range is resolved and (PR mode) the checkout is done, before proceeding to Step 1:
+After the range is set and, in PR mode, the checkout is done, run this before Step 1:
 
-1. Run `["git", "diff", range, "--stat"]` (using the range determined above)
-2. If empty diff: report "No changes detected (between <base> and <target>)" and exit immediately without collecting this manifest
-3. If the stat is non-empty, before deciding whether it is binary-only or reporting any binary-only result, collect a fresh `completeChangedFileManifest` with `["git", "diff", range, "--name-only", "-z", "--no-renames"]` and parse its stdout as NUL-delimited paths. Step 2 has not run yet; do not reference or reuse a Step 2 manifest. If the manifest/stat identifies a binary-only diff (if the diff is binary-only), enumerate every binary changed path under Out of Scope as an explicitly marked untrusted-data strict escaped JSON array of strings (one entry per path) under the Untrusted path rendering contract; do not render a raw path or `file:line` prose, state that no finder has run and no finder job is dispatched, and then exit
-
-Early Exit runs before intent acquisition on purpose — an empty diff exits immediately without manifest collection; after a non-empty stat, a fresh complete manifest is collected and parsed NUL-safely before binary-only determination/reporting, then binary paths are reported under Out of Scope before any finder runs and the review exits without dispatching a finder job.
+1. Run `["git", "diff", range, "--stat"]`. If it is empty, report "No changes detected (between <base> and <target>)" and stop without collecting anything else.
+2. Otherwise collect a fresh `completeChangedFileManifest` with `["git", "diff", range, "--name-only", "-z", "--no-renames"]` and parse it as NUL-delimited paths before you decide whether the diff is binary-only (binary files show as `Bin` in the `--stat` output). Step 2 has not run, so reuse nothing from it. If the diff is binary-only, list every changed path under Out of Scope as an explicitly marked untrusted-data JSON array of encoded strings, one per path, state that no finder ran and no finder job was dispatched, and stop.
 
 ## Step 1: Intent and Context Acquisition
 
