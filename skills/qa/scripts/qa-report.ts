@@ -614,7 +614,7 @@ function renderFailures(view: QaView, narrative: QaReportNarrative): string {
 	const issueRows = (narrative.issues ?? [])
 		.map(
 			(issue) =>
-				`<li class="issue issue-${escapeHtml(issue.severity)}"><strong>[${escapeHtml(issue.severity)}]</strong> ${escapeHtml(issue.description)}` +
+				`<li class="issue">${escapeHtml(issue.description)}` +
 				(issue.location ? ` — <code>${escapeHtml(issue.location)}</code>` : "") +
 				(issue.what ? `<br>${escapeHtml(issue.what)}` : "") +
 				`</li>`,
@@ -980,8 +980,6 @@ thead th { border-top: 0; font-size: 13.5px; color: var(--ink-3); font-weight: 6
 .provenance-record { display: flex; flex-direction: column; gap: 8px; }
 .raw-evidence { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 8px 14px; }
 .raw-evidence summary { font-size: 13.5px; color: var(--ink-2); word-break: break-all; }
-.issue-CRITICAL { color: var(--bad); }
-.issue-LOW { color: var(--warn); }
 section > ul { padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
 .verdict { font-size: 22px; font-weight: 700; }
 `;

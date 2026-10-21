@@ -562,7 +562,7 @@ Close the table with exactly one coverage-delta line naming the impact-map domai
 
 ## Issues (if any)
 [For each issue:]
-- **[CRITICAL/LOW]**: [Brief description]
+- [Brief description]
   - Location: [file:line]
   - What: [problem]
 
