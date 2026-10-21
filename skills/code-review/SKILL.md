@@ -38,7 +38,7 @@ Under a contract, each finding carries these reviewer-authored fields:
 {"scope":"IN_SCOPE | OUT_OF_SCOPE | UNKNOWN","scope_evidence":{"basis":"requirement | regression | changed_code | non_goal | unrelated | uncertain","reference":"<contract key or confirmed story id>","rationale":"<specific symptom, change causality, and remedy boundary>"}}
 ```
 
-`reference` names the contract key (`outcome`, `verification_surface`, `constraints`, `boundaries`, `non_goals`) or the confirmed story id the evidence rests on. IN_SCOPE requires basis `requirement`, `regression`, or `changed_code`, and evidence that the remedy fits the authorization. OUT_OF_SCOPE requires basis `non_goal` or `unrelated`. UNKNOWN requires basis `uncertain`. A `non_goal` finding copies the one declared `non_goals` statement that excludes it exactly into `scope_evidence.non_goal`; the caller downgrades a paraphrase or partial quote to UNKNOWN.
+`reference` names the contract key (`outcome`, `verification_surface`, `constraints`, `boundaries`, `non_goals`) or the confirmed story id the evidence rests on. IN_SCOPE requires basis `requirement`, `regression`, or `changed_code`, and evidence that the remedy fits the authorization. OUT_OF_SCOPE requires basis `non_goal` or `unrelated`. UNKNOWN requires basis `uncertain`. A basis its scope does not allow makes the whole artifact invalid for a caller that validates scope. A `non_goal` finding copies the one declared `non_goals` statement that excludes it exactly into `scope_evidence.non_goal`, and that statement must directly address this defect's behavior or class; the caller downgrades a paraphrase or partial quote to UNKNOWN.
 
 ## Roles and Context
 
