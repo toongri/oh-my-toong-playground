@@ -34,13 +34,10 @@ import {
 import { computeDerived, type ExplainDiffState } from "@lib/explain-diff-core";
 import { deliverableRefusalBody } from "@lib/deliverable-refusal";
 import {
-	approveOk,
-	requestChangesOk,
-	chainComplete,
-	commentOk,
 	cycleUntouched,
-	recordComplete,
+	derivedVerdict,
 	qaReportComplete,
+	verdictBlockers,
 	type QaChainState,
 } from "@lib/qa-chain-core";
 import { evaluateProgress } from "./progress.ts";
@@ -281,56 +278,32 @@ function probeQaEvidence(path: string): { exists: boolean; size: number; image?:
 
 function buildQaContinuationMessage(
 	state: QaChainState,
-	verdict: string | null,
 	probe: (path: string) => { exists: boolean; size: number },
 ): string {
-	const refusal = !chainComplete(state)
+	const computed = derivedVerdict(state, probe);
+	const refusal = computed === null
 		? {
-			deliverable: "actor roster and scenario chain",
-			problem: "chainComplete=false — the actor roster / stories / user scenarios / risk coverage are not authored",
-			guideline: "scenario-authoring.md (actor roster, story, user-scenario, and risk-coverage authoring)",
-			produce: "author the actor roster, stories, and user scenarios for every user boundary; cover each risk axis with a scenario or declare it not applicable",
-			submit: "qa-state.ts add-actor / add-story / author-scenario / declare-risk-na",
+			deliverable: "the facts the computed verdict is waiting for",
+			problem: `the CLI has no verdict for this record yet:\n${verdictBlockers(state, probe).map((line) => `- ${line}`).join("\n")}`,
+			guideline: "SKILL.md (Approval Decision — the CLI computes the verdict from the record)",
+			produce: "record the facts the blockers name; the CLI computes the verdict",
+			submit: "qa-state.ts record-scenario / review-evidence / record-run-check, then qa-state.ts get to read the computed verdict",
 		}
-		: !recordComplete(state, probe)
+		: computed !== (state.verdict ?? null)
 			? {
-				deliverable: "recorded scenario evidence",
-				problem: "recordComplete=false — baseline / scenario evidence / per-run checks are not recorded",
-				guideline: "stage3-handson.md (adversarial e2e execution and boundary-observation evidence)",
-				produce: "drive the real boundary and record each scenario's boundary-observation evidence plus the per-run checks",
-				submit: "qa-state.ts record-baseline / record-scenario / review-evidence / record-run-check",
+				deliverable: "a verdict the CLI has recomputed",
+				problem: `the stored verdict (${state.verdict ?? "none"}) differs from the one the record computes (${computed}) — a recorded file or result changed after the last write`,
+				guideline: "SKILL.md (Approval Decision — the CLI computes the verdict from the record)",
+				produce: "repeat the last record command (any CLI write recomputes the verdict), then read the result with qa-state.ts get",
+				submit: "qa-state.ts get",
 			}
-			: !qaReportComplete(state, probe)
-				? {
-					deliverable: "QA HTML report checked against the record",
-					problem: "qaReportComplete=false — the QA report is missing, changed, or not checked against the record",
-					guideline: "presentation.md (QA report render and record check)",
-					produce: "render the qa-report HTML and check that each card carries its recorded images and observation",
-					submit: "qa-state.ts review-report --path <html>",
-				}
-			: verdict === "APPROVE"
-				? {
-					deliverable: "verdict-backing scenario outcomes",
-					problem: "approveOk=false — APPROVE is unsupported while failed or unrecorded scenarios remain",
-					guideline: "SKILL.md (Approval Decision — verdicts follow recorded outcomes)",
-					produce: "execute and record the remaining scenarios, or record a scenario blocked with the attempts that failed; set REQUEST_CHANGES only when a failure is recorded",
-					submit: "qa-state.ts record-scenario (pass|fail|blocked), then qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES> matching the recorded outcomes",
-				}
-				: verdict === "COMMENT"
-					? {
-						deliverable: "scenario records that support COMMENT",
-						problem: "commentOk=false — a scenario is unresolved or an H-priority failure has an established cause",
-						guideline: "SKILL.md (Approval Decision — verdicts follow recorded outcomes)",
-						produce: "record every remaining scenario; an H-priority fail supports REQUEST_CHANGES, not COMMENT",
-						submit: "qa-state.ts record-scenario, then qa-state.ts set-verdict matching the recorded outcomes",
-					}
-					: {
-						deliverable: "the missing QA outcome",
-						problem: "no QA Stop-gate arm matched",
-						guideline: "SKILL.md (QA chain and completion gate)",
-						produce: "read the current state and record whatever outcome the chain is missing (with the chain complete and no verdict, that outcome is the verdict)",
-						submit: "qa-state.ts get to inspect the chain, then qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES> to record the missing verdict",
-					};
+			: {
+				deliverable: "QA HTML report checked against the record",
+				problem: "qaReportComplete=false — the QA report is missing, changed, or not checked against the record",
+				guideline: "presentation.md (QA report render and record check)",
+				produce: "render the qa-report HTML and check that each card carries its recorded images and observation",
+				submit: "qa-state.ts review-report --path <html>",
+			};
 	return `<qa-continuation>\n\n[QA STOP-GATE]\n\nThe recorded QA session cannot stop yet.\n\n${deliverableRefusalBody(refusal)}\n\n${continuationContract("preferred", null)}\n\n</qa-continuation>\n\n---\n`;
 }
 
@@ -817,16 +790,12 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		const qaAttemptId = `qa-${attemptId}`;
 		const qaProbe = probeQaEvidence;
 		const untouched = cycleUntouched(qaState);
-		const approve = approveOk(qaState, qaProbe);
-		const comment = commentOk(qaState, qaProbe);
-		const verdict = qaState.verdict ?? null;
-		const allowApprove = verdict === "APPROVE" && approve;
-		const allowComment = verdict === "COMMENT" && comment;
-		const allowRequestChanges =
-			verdict === "REQUEST_CHANGES" && (requestChangesOk(qaState, qaProbe) || untouched);
+		// The CLI writes the verdict on every record; Stop opens only when the record still computes the stored one.
+		const computed = derivedVerdict(qaState, qaProbe);
+		const verdictSettled = computed !== null && computed === (qaState.verdict ?? null);
 		const escaped = getBlockCount(stateDir, qaAttemptId) >= MAX_BLOCK_COUNT;
 
-		if ((allowApprove || allowComment || allowRequestChanges) && qaReportComplete(qaState, qaProbe)) {
+		if (verdictSettled && qaReportComplete(qaState, qaProbe)) {
 			cleanupBlockCountFiles(stateDir, qaAttemptId);
 		} else if (qaState.forced_complete === true && qaState.active === false) {
 			// The user ended this cycle with `force-complete`; its gates no longer apply.
@@ -849,7 +818,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			return formatContinueOutput();
 		} else if (qaState.active === true || !untouched) {
 			incrementBlockCount(stateDir, qaAttemptId);
-			return formatBlockOutput(buildQaContinuationMessage(qaState, verdict, qaProbe));
+			return formatBlockOutput(buildQaContinuationMessage(qaState, qaProbe));
 		}
 	}
 

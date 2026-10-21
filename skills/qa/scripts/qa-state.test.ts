@@ -13,7 +13,7 @@ import {
 	completeQa,
 	forceCompleteQa,
 	startQa,
-	setVerdict,
+	recordPreflightViolation,
 	setAwaitingUser,
 	resolveStatePath,
 	addActor,
@@ -197,7 +197,7 @@ describe("qa state: terminal completion (P2 finding 1 — no active:false resurr
 		setQaState(S, { phase: "PRE-FLIGHT" });
 		advancePhase(S, "PLAN");
 		expect(readQaState(S)).not.toBeNull();
-		setVerdict(S, "REQUEST_CHANGES");
+		recordPreflightViolation(S, "요청이 MUST NOT DO를 어긴다");
 		completeQa(S);
 		expect(readQaState(S)).toBeNull();
 		// but the underlying file still exists (inactive, not deleted)
@@ -210,7 +210,7 @@ describe("qa state: background resource gate", () => {
 	test("complete refuses while a recorded resource is unreleased, then succeeds after release", () => {
 		setQaState(S, { phase: "PRE-FLIGHT" });
 		advancePhase(S, "PLAN");
-		setVerdict(S, "REQUEST_CHANGES");
+		recordPreflightViolation(S, "요청이 MUST NOT DO를 어긴다");
 		recordResource(S, { id: "emulator-5554", kind: "emulator", stop: "true" });
 		expect(() => completeQa(S)).toThrow("qa-state.ts release-resource --id emulator-5554");
 		expect(rawState().active).not.toBe(false);
@@ -763,9 +763,9 @@ describe("qa state: amend-scenario", () => {
 		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
 	});
 
-	test("amend는 저장된 verdict를 지운다", () => {
+	test("amend는 저장된 verdict를 기록에서 다시 계산해 결과가 없는 시나리오 때문에 비움", () => {
 		seedRun();
-		// A verdict gate-passed on the old result is hard to reach here, so plant one directly.
+		// Plant a stale verdict directly; the amend write recomputes it from the record.
 		writeFileSync(resolveStatePath(S), JSON.stringify({ ...rawState(), verdict: "COMMENT" }));
 		expect(rawState().verdict).toBe("COMMENT");
 		amendScenario(S, amendOpts("s1", "M", [1]));
@@ -1053,7 +1053,6 @@ describe("qa-state CLI wiring", () => {
 		expect(scenarioOf("s1").evidence_review).toBeUndefined();
 		expect(rawState().derived.record_complete).toBe(true);
 		expect(rawState().derived.approve_ok).toBe(true);
-		run("set-verdict APPROVE");
 		expect(rawState().verdict).toBe("APPROVE");
 	});
 
@@ -1071,8 +1070,6 @@ describe("qa-state CLI wiring", () => {
 		expect(() => run(`record-run-check --check stale-state --result blocked --obstacle o --attempts '["a"]' --deepest-reachable d --attempt-log ${logPath}`)).toThrow(/flaky-rerun/);
 		run(`record-run-check --check flaky-rerun --result blocked --obstacle "에뮬레이터 부팅 멈춤" --attempts '["런처 재실행 → ADB 기기 없음"]' --deepest-reachable "QEMU 기동" --attempt-log ${logPath}`);
 		expect(rawState().run_checks.flaky_rerun.blocked.obstacle).toBe("에뮬레이터 부팅 멈춤");
-		expect(() => run("set-verdict APPROVE")).toThrow(/APPROVE refused/);
-		run("set-verdict COMMENT");
 		expect(rawState().verdict).toBe("COMMENT");
 	});
 
@@ -1124,11 +1121,48 @@ describe("qa-state CLI wiring", () => {
 
 	test("CLI complete deactivates the session; get then reports absent", () => {
 		run("set --phase PRE-FLIGHT");
-		run("set-verdict REQUEST_CHANGES");
+		run('record-preflight-violation --reason "요청이 MUST NOT DO를 어긴다"');
 		run("complete");
 		expect(rawState().active).toBe(false);
 		const out = run("get").trim();
 		expect(out).toBe("null");
+	});
+
+	test("set-verdict는 제거됐고 0이 아닌 코드로 끝나며 계산 안내와 막힌 기록 공백을 알려 줌", () => {
+		authorCompleteChain();
+		expect(() => run("set-verdict APPROVE")).toThrow(/set-verdict was removed: the CLI computes the verdict from the record on every write.*story-1\/s1: not recorded/s);
+		expect(rawState().verdict ?? null).toBeNull();
+	});
+
+	test("record-preflight-violation은 사유를 요구하고 작업이 시작된 사이클에서는 거부됨", () => {
+		expect(() => run("record-preflight-violation")).toThrow(/reason is required/);
+		expect(() => run('record-preflight-violation --reason "   "')).toThrow();
+		run(actorCmd());
+		expect(() => run('record-preflight-violation --reason "요청이 MUST NOT DO를 어긴다"')).toThrow(/refused/);
+		expect(rawState().preflight_violation).toBeUndefined();
+	});
+
+	test("record-preflight-violation은 비어 있는 사이클을 REQUEST_CHANGES로 계산하고 complete를 허용함", () => {
+		run("set --phase PRE-FLIGHT");
+		expect(rawState().verdict ?? null).toBeNull();
+		run('record-preflight-violation --reason "요청이 MUST NOT DO를 어긴다"');
+		expect(rawState().preflight_violation).toEqual({ reason: "요청이 MUST NOT DO를 어긴다", cycle: 0 });
+		expect(rawState().verdict).toBe("REQUEST_CHANGES");
+		run("complete");
+		expect(rawState().active).toBe(false);
+	});
+
+	test("get은 계산된 판정과, 판정이 없을 때 그 막힌 항목을 보여 줌", () => {
+		authorCompleteChain();
+		const view = JSON.parse(run("get"));
+		expect(view.verdict_report.verdict).toBeNull();
+		expect(view.verdict_blockers).toContain("story-1/s1: not recorded");
+	});
+
+	test("판정이 계산되지 않으면 complete가 거부되고 막힌 항목을 알려 줌", () => {
+		run("set --phase PRE-FLIGHT");
+		expect(() => run("complete")).toThrow(/no computed verdict yet.*scenario chain incomplete/s);
+		expect(rawState().active).not.toBe(false);
 	});
 
 	const recordAllPass = () => {
@@ -1145,68 +1179,69 @@ describe("qa-state CLI wiring", () => {
 		return log;
 	};
 
-	test("set-verdict follows recorded outcomes: a fail scenario refuses APPROVE and permits REQUEST_CHANGES", () => {
+	test("verdict follows recorded outcomes: a fail scenario with unproven cause leaves no verdict until a cause claim makes it REQUEST_CHANGES", () => {
 		authorCompleteChain();
 		recordAllPass();
 		run(`record-scenario --story story-1 --scenario s1 --status fail ${PASS_EVIDENCE}`);
-		const before = readFileSync(resolveStatePath(S), "utf8");
-		expect(() => run("set-verdict APPROVE")).toThrow();
-		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
-		expect(() => run("set-verdict REQUEST_CHANGES")).toThrow(/supported \{"kind":"cause"/);
+		expect(rawState().verdict).toBeNull();
 		const source = { path: "skills/qa/scripts/qa-state.test.ts", location: "실패한 단언 줄" };
 		const content = { claim: "오늘 영양제 목록이 비어 있다", verdict: "supported", observation: "응답의 목록이 비어 있다", gap: "", sources: [source] };
 		const reviewFile = join(tmpDir, "fail-review.json");
 		writeFileSync(reviewFile, JSON.stringify([content]));
 		// a failure may be reviewed without a cause claim; it just does not ground REQUEST_CHANGES
 		run(`review-evidence --story story-1 --scenario s1 --json-file ${reviewFile}`);
-		expect(() => run("set-verdict REQUEST_CHANGES")).toThrow(/supported \{"kind":"cause"/);
+		expect(rawState().verdict).toBeNull();
 		const cause = { kind: "cause", checked: ["product-path", "base-commit"], claim: "목록 조회가 오늘 날짜를 빼고 거른다", verdict: "supported", observation: "서버 로그의 조회 조건에 오늘 날짜가 없고, base 커밋에서는 목록이 채워진다", gap: "", sources: [source] };
 		writeFileSync(reviewFile, JSON.stringify([content, { ...cause, checked: ["product-path"] }]));
-		expect(() => run(`review-evidence --story story-1 --scenario s1 --json-file ${reviewFile}`)).toThrow(/cause claim must record checked: base-commit/);
+		expect(() => run(`review-evidence --story story-1 --scenario s1 --json-file ${reviewFile}`)).toThrow(/cause claim must record checked: \["base-run"\] or \["product-path","base-commit"\]/);
 		writeFileSync(reviewFile, JSON.stringify([content, cause]));
 		run(`review-evidence --story story-1 --scenario s1 --json-file ${reviewFile}`);
-		run("set-verdict REQUEST_CHANGES");
 		expect(rawState().verdict).toBe("REQUEST_CHANGES");
 	});
 
-	test("실패한 시나리오가 H가 아니거나 원인이 미증명이면 COMMENT를 허용하고 원인이 증명된 H이면 거부한다", () => {
+	test("실패한 시나리오가 있으면 우선순위·원인 입증과 무관하게 COMMENT를 거부하고 base-run 원인으로 REQUEST_CHANGES를 허용한다", () => {
 		authorCompleteChain();
 		recordAllPass();
 		run("record-scenario --story story-1 --scenario s2 --status fail");
-		run("set-verdict COMMENT");
-		expect(rawState().verdict).toBe("COMMENT");
+		expect(rawState().verdict).toBeNull();
 		run(`record-scenario --story story-1 --scenario s1 --status fail ${PASS_EVIDENCE}`);
-		run("set-verdict COMMENT");
-		expect(rawState().verdict).toBe("COMMENT");
 		const source = { path: "skills/qa/scripts/qa-state.test.ts", location: "실패한 단언 줄" };
-		const cause = { kind: "cause", checked: ["product-path", "base-commit"], claim: "목록 조회가 오늘 날짜를 빼고 거른다", verdict: "supported", observation: "서버 로그의 조회 조건에 오늘 날짜가 없고, base 커밋에서는 목록이 채워진다", gap: "", sources: [source] };
-		const reviewFile = join(tmpDir, "h-fail-review.json");
+		const cause = { kind: "cause", checked: ["base-run"], claim: "이번 변경이 오늘 목록을 비운다", verdict: "supported", observation: "같은 계정·같은 설정으로 base 커밋에서 같은 요청을 보내면 목록이 채워진다", gap: "", sources: [source] };
+		const reviewFile = join(tmpDir, "base-run-review.json");
 		writeFileSync(reviewFile, JSON.stringify([cause]));
 		run(`review-evidence --story story-1 --scenario s1 --json-file ${reviewFile}`);
-		expect(() => run("set-verdict COMMENT")).toThrow(/COMMENT refused/);
+		expect(rawState().verdict).toBe("REQUEST_CHANGES");
 	});
 
-	test("REQUEST_CHANGES는 제품 실패 기록 없이 거부되고 거부 메시지가 남은 실행을 안내함", () => {
+	test("harness 잔여물(dirty-worktree 실패)만 있으면 REQUEST_CHANGES가 아니라 APPROVE로 계산됨", () => {
 		authorCompleteChain();
 		recordAllPass();
 		// dirty-worktree fail is harness debris; every scenario passed.
-		const before = readFileSync(resolveStatePath(S), "utf8");
-		expect(() => run("set-verdict REQUEST_CHANGES")).toThrow(/requires a recorded failure/);
-		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
-		run("set-verdict APPROVE");
 		expect(rawState().verdict).toBe("APPROVE");
 	});
 
-	test("미실행 시나리오가 남으면 APPROVE·COMMENT·REQUEST_CHANGES 모두 거부됨", () => {
+	test("마지막 쓰기 뒤 증거 파일이 사라지면 get은 저장된 APPROVE가 아니라 지금 계산한 판정을 보여 줌", () => {
+		authorCompleteChain();
+		recordAllPass();
+		const evidence = join(tmpDir, "s1-evidence.txt");
+		writeFileSync(evidence, "200 OK\n");
+		run(`record-scenario --story story-1 --scenario s1 --status pass --evidence-path ${evidence} --evidence-surface bash`);
+		expect(rawState().verdict).toBe("APPROVE");
+		rmSync(evidence);
+		const view = JSON.parse(run("get"));
+		expect(view.verdict_report.verdict).toBeNull();
+		expect(view.verdict_blockers).toContain("story-1/s1: pass evidence missing or invalid");
+	});
+
+	test("미실행 시나리오가 남으면 판정이 계산되지 않고 get이 막힌 기록 공백을 알려 줌", () => {
 		authorCompleteChain();
 		run("record-baseline --story story-1 --result pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
 		recordPass("s2");
 		run("record-run-check --check stale-state --result pass");
 		run("record-run-check --check dirty-worktree --result pass");
 		run("record-run-check --check flaky-rerun --result pass");
-		for (const verdict of ["APPROVE", "COMMENT", "REQUEST_CHANGES"]) expect(() => run(`set-verdict ${verdict}`)).toThrow();
-		expect(rawState().verdict ?? null).toBeNull();
-		expect(() => run("set-verdict COMMENT")).toThrow(/story-1\/s1: not recorded/);
+		expect(rawState().verdict).toBeNull();
+		expect(JSON.parse(run("get")).verdict_blockers).toContain("story-1/s1: not recorded");
 	});
 
 	test("blocked requires obstacle, attempts, deepest-reachable, and a readable attempt log, then caps the verdict at COMMENT", () => {
@@ -1222,15 +1257,12 @@ describe("qa-state CLI wiring", () => {
 		expect(scenario.status).toBe("blocked");
 		expect(scenario.evidence).toBeUndefined();
 		expect(scenario.blocked).toEqual({ obstacle: "no physical dispenser", obstacle_kind: "hardware", attempts: ["asked the user for a dispenser → none available"], deepest_reachable: "pairing screen", attempt_log: log });
-		expect(() => run("set-verdict REQUEST_CHANGES")).toThrow();
-		expect(() => run("set-verdict APPROVE")).toThrow(/APPROVE refused/);
-		run("set-verdict COMMENT");
 		expect(rawState().verdict).toBe("COMMENT");
 	});
 
 	test("start resets a completed cycle and refuses to launder active work", () => {
 		run("set-acceptance --json '[\"first cycle AC\"]'");
-		run("set-verdict REQUEST_CHANGES");
+		run('record-preflight-violation --reason "요청이 MUST NOT DO를 어긴다"');
 		run("complete");
 		const completed = rawState();
 		completed.report = { path: "/old.html", sha256: "a".repeat(64), state_snapshot: "old", reviewed: true };
@@ -1259,7 +1291,7 @@ describe("qa-state CLI wiring", () => {
 	});
 
 	test("complete is gated and accepts the four normative arms", () => {
-		run("set-verdict REQUEST_CHANGES");
+		run('record-preflight-violation --reason "요청이 MUST NOT DO를 어긴다"');
 		run("complete");
 		// Re-enter, author a complete but failing chain, and close with RC.
 		run('start --target "recorded failure"');
@@ -1269,7 +1301,7 @@ describe("qa-state CLI wiring", () => {
 		run("record-run-check --check stale-state --result fail --note stale");
 		run("record-run-check --check dirty-worktree --result fail --note debris");
 		run("record-run-check --check flaky-rerun --result fail --note flaky");
-		run("set-verdict REQUEST_CHANGES");
+		expect(rawState().verdict).toBe("REQUEST_CHANGES");
 		expect(() => run("complete")).toThrow("report");
 		const report = join(tmpDir, "report.html");
 		execSync(`bun ${join(import.meta.dir, "qa-report.ts")} --session ${S} --out ${report} --narrative ${observedNarrative()}`, { env: process.env });
@@ -1309,14 +1341,13 @@ describe("qa-state CLI wiring", () => {
 		expect(rawState().derived.chain_complete).toBe(true);
 		run("record-baseline --story story-1 --result pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
 		recordPass("s1");
+		run("record-run-check --check stale-state --result pass");
+		run("record-run-check --check dirty-worktree --result pass");
+		run("record-run-check --check flaky-rerun --result pass");
 		expect(() => run("complete")).toThrow(/record-case --story story-1 --scenario s1/);
 		expect(() => run("record-case --story story-1 --scenario s1")).toThrow(/exactly one of --case or --none/);
 		run('record-case --story story-1 --scenario s1 --none "이름만 바꾼 리팩터링이라 재생할 사용자 경로가 없음"');
 		expect(rawState().scenarios[0].case).toEqual({ kind: "none", reason: "이름만 바꾼 리팩터링이라 재생할 사용자 경로가 없음" });
-		run("record-run-check --check stale-state --result pass");
-		run("record-run-check --check dirty-worktree --result pass");
-		run("record-run-check --check flaky-rerun --result pass");
-		run("set-verdict APPROVE");
 		expect(rawState().verdict).toBe("APPROVE");
 		const report = join(tmpDir, "inert-report.html");
 		execSync(`bun ${join(import.meta.dir, "qa-report.ts")} --session ${S} --out ${report} --narrative ${observedNarrative()}`, { env: process.env });

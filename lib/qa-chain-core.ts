@@ -254,7 +254,7 @@ export interface QaEvidenceClaim {
 	sources: Array<{ path: string; location: string }>;
 	/**
 	 * "layout" marks the claim that a profile screen was checked for the LAYOUT_CHECKS breakages.
-	 * "cause" marks the claim that a failure is the change's product defect, checked for CAUSE_CHECKS.
+	 * "cause" marks the claim that a failure is the change's product defect, checked for one of CAUSE_CHECK_SETS.
 	 */
 	kind?: "layout" | "cause";
 	checked?: string[];
@@ -264,11 +264,19 @@ export interface QaEvidenceClaim {
 export const LAYOUT_CHECKS = ["clipping", "overlap", "horizontal-scroll", "text-wrap"] as const;
 
 /**
- * What a failure must show before it counts as the change's defect: the product's own
- * log or code took the wrong path (not setup such as signing, keys or debug mode), and
- * the base commit behaves differently or the diff touches the code that breaks.
+ * What a failure must show before it counts as the change's defect, as one of two sets.
+ * `base-run`: the same steps under the same setup end as expected on the base commit,
+ * which rules out setup and pins the failure on the change. When the base commit cannot
+ * run those steps: `product-path` (the product's own log or code took the wrong path, not
+ * setup such as signing, keys or debug mode) and `base-commit` (the base commit behaves
+ * differently or the diff touches the code that breaks).
  */
-export const CAUSE_CHECKS = ["product-path", "base-commit"] as const;
+export const CAUSE_CHECK_SETS = [["base-run"], ["product-path", "base-commit"]] as const;
+
+/** The cause check set a claim's `checked` list covers, if any. */
+export function causeCheckSet(checked: readonly unknown[] | undefined): readonly string[] | undefined {
+	return CAUSE_CHECK_SETS.find((set) => set.every((check) => checked?.includes(check)));
+}
 
 export interface QaEvidenceReview {
 	claims: QaEvidenceClaim[];
@@ -374,7 +382,10 @@ export interface QaChainState {
 	run_checks_history?: QaRunCheckHistory;
 	scenario_amendments?: QaScenarioAmendment[];
 	inert?: QaInert;
+	/** This cycle's verdict. The CLI recomputes it from the record on every write (`derivedVerdict`); `null` means none yet. */
 	verdict?: QaVerdict;
+	/** Recorded by `record-preflight-violation`: the request breaks a PRE-FLIGHT rule, so an untouched cycle ends REQUEST_CHANGES. */
+	preflight_violation?: { reason: string; cycle: number };
 	/** Acceptance criteria captured at PLAN; rendered by the report from records. */
 	acceptance_criteria?: string[];
 	derived?: QaDerived;
@@ -621,7 +632,7 @@ function failureEstablished(state: QaChainState, scenario: QaScenario, probe: Ev
 	const story = storyFor(state, scenario);
 	const driver = story ? actorFor(state, story)?.driver : undefined;
 	if (scenarioNeedsVisualProof(scenario, driver) && !visualEvidenceComplete(scenario.evidence, probe)) return false;
-	const cause = scenario.evidence_review?.claims?.some((claim) => claim?.kind === "cause" && CAUSE_CHECKS.every((check) => claim.checked?.includes(check)));
+	const cause = scenario.evidence_review?.claims?.some((claim) => claim?.kind === "cause" && causeCheckSet(claim.checked) !== undefined);
 	return !!cause && evidenceReviewComplete(scenario, probe);
 }
 
@@ -638,10 +649,12 @@ function failureEstablished(state: QaChainState, scenario: QaScenario, probe: Ev
 export function requestChangesOk(state: QaChainState, probe: EvidenceProbe): boolean {
 	if (!chainComplete(state)) return false;
 	const checks = state.run_checks ?? {};
+	// `inc-cycle` keeps earlier records for audit; only this cycle's failures count.
+	const currentFail = (value: QaRunCheck | QaResult | null | undefined) => recordCycle(value, state) && result(value) === "fail";
 	return (
 		currentScenarios(state).some((scenario) => failureEstablished(state, scenario, probe)) ||
-		(state.stories ?? []).some((story) => result(story.baseline) === "fail") ||
-		[checks.stale_state, checks.flaky_rerun].some((check) => result(check) === "fail")
+		(state.stories ?? []).some((story) => currentFail(story.baseline)) ||
+		[checks.stale_state, checks.flaky_rerun].some(currentFail)
 	);
 }
 
@@ -670,15 +683,15 @@ export function approveOk(state: QaChainState, probe: EvidenceProbe): boolean {
 		currentScenarios(state).every((scenario) => scenario.status === "pass");
 }
 
-/** Soft pass: a failed non-H scenario (the 50-74 nitpick band) permits COMMENT. */
 /**
- * COMMENT leaves the merge to a person. An H failure whose product cause is
- * established asks for REQUEST_CHANGES instead; an H failure whose cause is
- * still unproven may stay as an open finding under COMMENT.
+ * COMMENT leaves the merge to a person when nothing failed but APPROVE is out of
+ * reach (a blocked scenario or rerun). A failure
+ * never rides through it: an established one asks for REQUEST_CHANGES, and one
+ * whose cause is unproven has no verdict until it is attributed.
  */
 export function commentOk(state: QaChainState, probe: EvidenceProbe): boolean {
 	return verdictGround(state, probe) &&
-		currentScenarios(state).every((scenario) => scenario.priority !== "H" || !failureEstablished(state, scenario, probe));
+		currentScenarios(state).every((scenario) => scenario.status !== "fail");
 }
 
 export function cycleUntouched(state: Partial<QaChainState>): boolean {
@@ -689,6 +702,37 @@ export function cycleUntouched(state: Partial<QaChainState>): boolean {
 		scenarios.some((scenario) => scenario.status !== null && scenario.status !== undefined || scenario.evidence !== null && scenario.evidence !== undefined) ||
 		Object.values(state.run_checks ?? {}).some((check) => check !== null && check !== undefined);
 	return actors.length === 0 && stories.length === 0 && scenarios.length === 0 && !records;
+}
+
+/**
+ * The cycle's verdict, computed from the record. `null` means no verdict yet; see
+ * `verdictBlockers` for what to record. A note (such as a pre-existing defect)
+ * never changes the verdict; it belongs in the report's Issues list.
+ */
+export function derivedVerdict(state: QaChainState, probe: EvidenceProbe): QaVerdict {
+	if (cycleUntouched(state) && state.preflight_violation && state.preflight_violation.cycle === currentCycle(state)) return "REQUEST_CHANGES";
+	if (requestChangesOk(state, probe)) return "REQUEST_CHANGES";
+	if (approveOk(state, probe)) return "APPROVE";
+	if (commentOk(state, probe)) return "COMMENT";
+	return null;
+}
+
+/** One actionable line per reason `derivedVerdict` is null; empty when a verdict exists. */
+export function verdictBlockers(state: QaChainState, probe: EvidenceProbe): string[] {
+	if (derivedVerdict(state, probe) !== null) return [];
+	const lines: string[] = [];
+	if (!chainComplete(state)) lines.push("scenario chain incomplete — author the actor roster, stories, scenarios and risk coverage (add-actor / add-story / author-scenario / declare-risk-na)");
+	lines.push(...recordGaps(state, probe));
+	for (const scenario of currentScenarios(state)) {
+		if (scenario.status === "fail" && !failureEstablished(state, scenario, probe)) {
+			lines.push(`${scenario.story}/${scenario.id}: fail with unproven cause — run the same steps on the base commit under the same setup and record a cause claim (review-evidence); if the base fails the same way, amend the scenario to what the change promised (a caller-provided one: ask the user with await-user)`);
+		}
+	}
+	for (const story of state.stories ?? []) {
+		const baseline = result(story.baseline);
+		if (baseline !== null && baseline !== "pass" && baseline !== "fail") lines.push(`${story.id}: baseline is ${baseline}, not pass — re-run record-baseline once the boundary is reachable`);
+	}
+	return lines;
 }
 
 export function driverGateArmed(state: QaChainState): boolean {

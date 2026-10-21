@@ -3102,6 +3102,14 @@ describe("QA Stop-gate decision table", () => {
 		};
 	}
 
+	/** A scenario the environment kept from running: a blocked record with an attempt log that exists. */
+	function blockedScenario(story: string, id: string, risks: number[]): Record<string, any> {
+		return {
+			...scenario(story, id, risks, "blocked"),
+			blocked: { obstacle: "external sandbox is off-network", obstacle_kind: "third-party", attempts: ["request the sandbox -> no reply"], deepest_reachable: "request sent", attempt_log: evidencePath },
+		};
+	}
+
 	function completeQa(verdict: "APPROVE" | "COMMENT" | "REQUEST_CHANGES" = "APPROVE"): Record<string, any> {
 		return {
 			active: true,
@@ -3189,6 +3197,7 @@ describe("QA Stop-gate decision table", () => {
 
 	it("qa inactive completed COMMENT with commentOk allows stop", () => {
 		const state = completeQa("COMMENT");
+		state.scenarios[1] = blockedScenario("story-1", "bad-input", [2, 3]);
 		state.active = false;
 		writeQaState(state);
 		expect(makeDecision(context())).toEqual({ continue: true });
@@ -3221,12 +3230,14 @@ describe("QA Stop-gate decision table", () => {
 	});
 
 	it("qa inactive untouched REQUEST_CHANGES allows stop", () => {
-		writeQaState({ active: false, phase: "PRE-FLIGHT", phase_max: 0, cycle: 0, verdict: "REQUEST_CHANGES", actors: [], stories: [], scenarios: [], run_checks: {} });
+		writeQaState({ active: false, phase: "PRE-FLIGHT", phase_max: 0, cycle: 0, verdict: "REQUEST_CHANGES", preflight_violation: { reason: "the request breaks a MUST NOT DO", cycle: 0 }, actors: [], stories: [], scenarios: [], run_checks: {} });
 		expect(makeDecision(context())).toEqual({ continue: true });
 	});
 
 	it("qa comment allow: active COMMENT with commentOk falls through", () => {
-		writeQaState(completeQa("COMMENT"));
+		const state = completeQa("COMMENT");
+		state.scenarios[1] = blockedScenario("story-1", "bad-input", [2, 3]);
+		writeQaState(state);
 		expect(makeDecision(context())).toEqual({ continue: true });
 	});
 
@@ -3243,9 +3254,37 @@ describe("QA Stop-gate decision table", () => {
 		expect(makeDecision(context())).toMatchObject({ decision: "block" });
 	});
 
-	it("qa request-changes allow: cycleUntouched pre-flight fail-fast", () => {
-		writeQaState({ active: true, phase: "PRE-FLIGHT", phase_max: 0, cycle: 0, verdict: "REQUEST_CHANGES", actors: [], stories: [], scenarios: [], run_checks: {} });
+	it("qa request-changes allow: recorded pre-flight violation on an untouched cycle", () => {
+		writeQaState({ active: true, phase: "PRE-FLIGHT", phase_max: 0, cycle: 0, verdict: "REQUEST_CHANGES", preflight_violation: { reason: "the request breaks a MUST NOT DO", cycle: 0 }, actors: [], stories: [], scenarios: [], run_checks: {} });
 		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("qa REQUEST_CHANGES 저장값만 있고 실행 전 위반 기록이 없는 빈 사이클은 Stop을 차단함", () => {
+		writeQaState({ active: true, phase: "PRE-FLIGHT", phase_max: 0, cycle: 0, verdict: "REQUEST_CHANGES", actors: [], stories: [], scenarios: [], run_checks: {} });
+		expect(makeDecision(context())).toMatchObject({ decision: "block" });
+	});
+
+	it("qa 저장된 판정이 계산된 판정과 다르면 Stop을 차단함", () => {
+		// All scenarios pass, so the record computes APPROVE; a stored COMMENT is stale.
+		writeQaState(completeQa("COMMENT"));
+		expect(makeDecision(context())).toMatchObject({ decision: "block" });
+	});
+
+	it("qa 저장된 판정이 비어 있으면 계산값이 있어도 Stop을 차단함", () => {
+		const state = completeQa("APPROVE");
+		state.verdict = null;
+		writeQaState(state);
+		expect(makeDecision(context())).toMatchObject({ decision: "block" });
+	});
+
+	it("qa 계산된 판정이 없으면 차단 메시지가 막힌 항목을 나열하고 set-verdict를 언급하지 않음", () => {
+		const state = completeQa("APPROVE");
+		(state.scenarios as Array<Record<string, unknown>>)[0].status = null;
+		writeQaState(state);
+		const reason = makeDecision(context()).reason ?? "";
+		expect(reason).toContain("story-1/happy: not recorded");
+		expect(reason).toContain("the CLI computes the verdict");
+		expect(reason).not.toContain("set-verdict");
 	});
 
 	it("qa wedge: block-count >= MAX_BLOCK_COUNT allows stop without making approveOk true", async () => {

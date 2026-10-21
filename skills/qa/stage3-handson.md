@@ -109,8 +109,8 @@ After ALL verification completes (pass or fail):
 
 | Failure | Action |
 |---------|--------|
-| Server won't start | First distinguish a correctable setup/config gap (missing env/local config) — bootstrap it (env-setup read, isolated instance, retry) — from an application startup defect. REQUEST_CHANGES ("server fails to start") only when startup still fails after that bootstrap |
-| Server crashes during test | REQUEST_CHANGES ("server crashed during verification") |
+| Server won't start | First distinguish a correctable setup/config gap (missing env/local config) — bootstrap it (env-setup read, isolated instance, retry) — from an application startup defect. record the failure ("server fails to start") only when startup still fails after that bootstrap |
+| Server crashes during test | Record the failure ("server crashed during verification") |
 | Server won't stop | Kill process forcefully, report as finding |
 
 ### Modality-Specific Primitives
@@ -287,7 +287,7 @@ Whatever fails, first report it with specific output (response body, error messa
 |------------|-------------|
 | Caller-provided scenario | **Stop driving.** Abandon the remaining rows (leave them `NOT-RUN`), stop the server/application, go straight to CHECK — where a failed caller-provided row blocks, so the cycle enters DIAGNOSIS → FIX → RE-VERIFY and re-runs from BASELINE after the fix |
 | Self-authored `H`-priority row | Stop driving that actor's surface: abandon its remaining rows and go to CHECK, which blocks on it. Finish the H rows of the other actors first; their surfaces did not fail |
-| Self-authored `M`/`L` row | Keep driving. Record it FAIL in the roster, finish the remaining rows, and carry it to CHECK, which decides between a blocking failure and a soft pass |
+| Self-authored `M`/`L` row | Keep driving. Record it FAIL in the roster, finish the remaining rows, and carry it to CHECK, which judges it by its recorded cause |
 
 The stop-driving classes exist so an expensive cycle is not spent against a surface that already failed what the caller or the risk ranking called essential. An iOS store page that fails says nothing about the dispenser screen, so a self-authored H failure stops only its own actor's rows. A lower-priority failure does not earn that interrupt — it earns a FAIL row and a verdict decided with the whole roster in view. Stopping early is not a verdict: the abandoned rows stay `NOT-RUN` in the roster and CHECK reads them as unproven, never as passing.
 

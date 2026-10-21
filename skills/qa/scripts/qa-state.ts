@@ -47,18 +47,18 @@ import {
 	blockedRecordValid,
 	chainComplete,
 	commentOk,
-	requestChangesOk,
 	cycleUntouched,
+	derivedVerdict,
+	verdictBlockers,
 	driverGateArmed,
 	recordComplete,
-	recordGaps,
 	scenarioNeedsVisualProof,
 	scenariosMissingCase,
 	visualEvidenceComplete,
 	CLIENT_IMPACTS,
 	REACHABILITIES,
 	RISK_AXES,
-	CAUSE_CHECKS,
+	causeCheckSet,
 	LAYOUT_CHECKS,
 	isRiskAxis,
 	TEST_EVIDENCE_SURFACE,
@@ -140,7 +140,6 @@ const PRIORITIES = ["H", "M", "L"] as const;
 const RESULTS = ["pass", "fail", "blocked"] as const;
 const BINARY_RESULTS = ["pass", "fail"] as const;
 const CHECKS = ["stale-state", "dirty-worktree", "flaky-rerun"] as const;
-const VERDICTS = ["APPROVE", "COMMENT", "REQUEST_CHANGES"] as const;
 type CheckName = (typeof CHECKS)[number];
 
 function nonEmpty(value: unknown, field: string): string {
@@ -484,6 +483,8 @@ function mergeWriteUnlocked(sessionId: string, next: Partial<ChainState>): QaSta
 		if (value !== undefined) chain[key] = value;
 	}
 	if (chain.user_answer_open !== true) delete chain.user_reply;
+	// The verdict is computed from the record on every write; no caller chooses it.
+	chain.verdict = derivedVerdict(chain, stateProbe);
 	const derived = {
 		chain_complete: chainComplete(chain),
 		record_complete: recordComplete(chain, stateProbe),
@@ -995,7 +996,7 @@ export function amendScenario(sessionId: string, opts: AmendScenarioOpts): void 
 		if (index < 0) throw new Error(`amend-scenario: no scenario "${next.story}:${next.id}" authored this cycle`);
 		const previous = scenarios[index];
 		if (!previous.status) throw new Error("amend-scenario: this scenario has no recorded result yet; rewrite it with author-scenario");
-		if (previous.source === "caller-provided") throw new Error("amend-scenario: a caller-provided scenario runs verbatim and cannot be amended; its failure is the change's failure (REQUEST_CHANGES)");
+		if (previous.source === "caller-provided") throw new Error("amend-scenario: a caller-provided scenario runs verbatim and cannot be amended; its failure stands");
 		scenarios[index] = clearScenarioRecord(next);
 		const amendments = [...(prior.scenario_amendments ?? []), { story: next.story, id: next.id, cycle, reason, previous }];
 		const flaky = prior.run_checks?.flaky_rerun;
@@ -1007,8 +1008,6 @@ export function amendScenario(sessionId: string, opts: AmendScenarioOpts): void 
 			scenarios,
 			scenario_amendments: amendments,
 			trusted_receipts: trustedReceipts,
-			// mergeWriteUnlocked skips `undefined`, so a cleared verdict is stored as null (as startQa does).
-			verdict: null,
 			...(rerunStale ? { run_checks: { ...prior.run_checks, flaky_rerun: null } } : {}),
 		});
 	});
@@ -1303,11 +1302,15 @@ export function reviewEvidence(sessionId: string, story: string, scenarioId: str
 			const sources = item.sources.map((source: { path?: unknown; location?: unknown }) => ({ path: probePlainFile(nonEmpty(source?.path, "source path")), location: readerLabel(source?.location, "source location") }));
 			if (item.kind === undefined) return { claim, observation, verdict: item.verdict, gap: item.gap, sources };
 			if (item.kind !== "layout" && item.kind !== "cause") throw new Error('claim kind must be "layout" or "cause" when given');
-			const required = item.kind === "layout" ? LAYOUT_CHECKS : CAUSE_CHECKS;
 			const checked: unknown[] = Array.isArray(item.checked) ? item.checked : [];
-			const missing = required.filter((check) => !checked.includes(check));
+			if (item.kind === "cause") {
+				const set = causeCheckSet(checked);
+				if (!set) throw new Error('cause claim must record checked: ["base-run"] or ["product-path","base-commit"]');
+				return { claim, observation, verdict: item.verdict, gap: item.gap, sources, kind: item.kind, checked: [...set] };
+			}
+			const missing = LAYOUT_CHECKS.filter((check) => !checked.includes(check));
 			if (missing.length) throw new Error(`${item.kind} claim must record checked: ${missing.join(", ")}`);
-			return { claim, observation, verdict: item.verdict, gap: item.gap, sources, kind: item.kind, checked: [...required] };
+			return { claim, observation, verdict: item.verdict, gap: item.gap, sources, kind: item.kind, checked: [...LAYOUT_CHECKS] };
 		});
 		if (scenario.profile && !claims.some((claim) => claim.kind === "layout")) {
 			throw new Error(`profile scenario needs a layout claim for "${scenario.profile}": {"kind":"layout","checked":${JSON.stringify(LAYOUT_CHECKS)}, …} observing that nothing is clipped or overlapping, the page does not scroll sideways, and text wraps without breaking`);
@@ -1385,29 +1388,27 @@ export function recordRunCheck(sessionId: string, opts: RecordRunCheckOpts): voi
 	mergeWrite(sessionId, { run_checks: existingChecks, ...(Object.keys(history).length ? { run_checks_history: history } : {}) });
 }
 
-function gapList(state: QaChainState): string {
-	const gaps = recordGaps(state, stateProbe);
-	return gaps.length ? `\nIncomplete record:\n${gaps.map((gap) => `  ${gap}`).join("\n")}` : "";
-}
-
-export function setVerdict(sessionId: string, verdict: string): void {
-	if (!isOneOf(verdict, VERDICTS)) {
-		throw new Error("set-verdict: verdict must be APPROVE, COMMENT, or REQUEST_CHANGES");
-	}
+/**
+ * Records that the request breaks a PRE-FLIGHT rule (a MUST-NOT-DO or a B⊆A
+ * violation). Only an untouched cycle accepts it; derivedVerdict then computes
+ * REQUEST_CHANGES without any execution.
+ */
+export function recordPreflightViolation(sessionId: string, reason: string): void {
+	const cleaned = nonEmpty(reason, "reason");
 	withStateLock(resolveStatePath(sessionId), () => {
 		ensureSeed("qa", sessionId);
 		const prior = readPrior(sessionId);
-		if (verdict === "APPROVE" && !approveOk(prior, stateProbe)) {
-			throw new Error("set-verdict: APPROVE refused — approveOk is false; APPROVE needs every scenario pass and a passing flaky-rerun. Execute and record every remaining scenario; a blocked scenario or blocked rerun leaves it unproven, so the verdict is COMMENT at most" + gapList(prior));
+		if (!cycleUntouched(prior)) {
+			throw new Error("record-preflight-violation: refused — this cycle already has actors, stories, scenarios or records; a PRE-FLIGHT violation is recorded before any work starts");
 		}
-		if (verdict === "COMMENT" && !commentOk(prior, stateProbe)) {
-			throw new Error("set-verdict: COMMENT refused — commentOk is false; every scenario must be recorded, and an H fail with a supported cause claim asks for REQUEST_CHANGES" + gapList(prior));
-		}
-		if (verdict === "REQUEST_CHANGES" && !cycleUntouched(prior) && !requestChangesOk(prior, stateProbe)) {
-			throw new Error("set-verdict: REQUEST_CHANGES refused — it requires a recorded failure (a failed scenario, baseline, or run check); a failed scenario counts once its review-evidence carries a supported {\"kind\":\"cause\",\"checked\":[\"product-path\",\"base-commit\"]} claim citing the product's own log line or code location and the base commit run or diff hunk (and, on a screen, its screenshots). If you cannot show the cause, fix the setup and re-drive, or keep it as an open finding under COMMENT. Unexecuted scenarios are your remaining work, not a product defect: execute them, or record-scenario --status blocked with the attempts that failed");
-		}
-		mergeWriteUnlocked(sessionId, { verdict });
+		mergeWriteUnlocked(sessionId, { preflight_violation: { reason: cleaned, cycle: currentCycle(prior) } });
 	});
+}
+
+/** Lines naming what keeps the verdict null, ready to append to a refusal message. */
+function blockerList(state: QaChainState): string {
+	const lines = verdictBlockers(state, stateProbe);
+	return lines.length ? `\nBlockers:\n${lines.map((line) => `  ${line}`).join("\n")}` : "";
 }
 
 /**
@@ -1486,6 +1487,7 @@ export function startQa(sessionId: string, target: string): void {
 			trusted_receipts: [],
 		};
 		delete reset.inert;
+		delete reset.preflight_violation;
 		delete reset.report;
 		delete reset.forced_complete;
 		delete reset.forced_reason;
@@ -1525,13 +1527,9 @@ export function completeQa(sessionId: string): void {
 			throw new Error(`complete: refused — ${uncovered.length} H scenario(s) passed by driving the boundary but have no saved case or reason. Save each as a reusable case (qa-cases.ts save), replay it (qa-replay.ts), then link it; if it cannot be a case, record why:\n${uncovered.map((scenario) => `  record-case --story ${scenario.story} --scenario ${scenario.id} (--case <id> | --none "<reason>")`).join("\n")}`);
 		}
 		if (!qaReportComplete(prior, stateProbe)) throw new Error("complete: report missing, changed, or not checked against the record; render qa-report then review-report --path <html>");
-		const verdict = prior.verdict;
-		const canComplete =
-			(verdict === "APPROVE" && approveOk(prior, stateProbe)) ||
-			(verdict === "COMMENT" && commentOk(prior, stateProbe)) ||
-			(verdict === "REQUEST_CHANGES" && (requestChangesOk(prior, stateProbe) || cycleUntouched(prior)));
-		if (!canComplete) {
-			throw new Error("complete: refused — unmet verdict/record predicate; run set-verdict after recording the current cycle");
+		const computed = derivedVerdict(prior, stateProbe);
+		if (computed === null || computed !== prior.verdict) {
+			throw new Error("complete: refused — no computed verdict yet; record the facts the blockers name, then check qa-state.ts get" + blockerList(prior));
 		}
 		mergeWriteUnlocked(sessionId, { active: false });
 	});
@@ -1574,6 +1572,8 @@ export type QaView = QaState & {
 	/** Current-cycle `amend-scenario` corrections, each with the record it replaced. */
 	scenario_amendments?: QaScenarioAmendment[];
 	verdict_report: { verdict: QaState["verdict"]; cycle: number; inert?: QaInert };
+	/** Why the computed verdict is null, one actionable line each; empty when a verdict exists. */
+	verdict_blockers?: string[];
 };
 
 function isPriorCycleRecord(value: unknown, cycle: number): boolean {
@@ -1614,6 +1614,8 @@ export function readQaView(sessionId: string): QaView | null {
 				flaky_rerun: isPriorCycleRecord(state.run_checks.flaky_rerun, cycle) ? null : state.run_checks.flaky_rerun,
 			}
 		: state.run_checks;
+	// Live, not the stored field: evidence can change on disk after the last write.
+	const verdict = derivedVerdict(state, stateProbe);
 	return {
 		...state,
 		report_source_snapshot: qaReportSnapshot(state),
@@ -1623,7 +1625,8 @@ export function readQaView(sessionId: string): QaView | null {
 		risk_not_applicable: (state.risk_not_applicable ?? []).filter((entry) => entry.cycle === cycle),
 		prior_cycle_scenarios: scenarios.filter((scenario) => scenario.cycle !== cycle),
 		scenario_amendments: (state.scenario_amendments ?? []).filter((entry) => entry.cycle === cycle),
-		verdict_report: { verdict: state.verdict, cycle, ...(currentInert ? { inert: currentInert } : {}) },
+		verdict_report: { verdict, cycle, ...(currentInert ? { inert: currentInert } : {}) },
+		verdict_blockers: verdict === null ? verdictBlockers(state, stateProbe) : [],
 	};
 }
 
@@ -1690,7 +1693,7 @@ const ROSTER: CliCommand[] = [
 		effect: "records that the rendered HTML report was checked against the record",
 	},
 	{ name: "record-run-check", authority: "ai", effect: "records one of the three per-run checks" },
-	{ name: "set-verdict", authority: "ai", effect: "persists the cycle verdict" },
+	{ name: "record-preflight-violation", authority: "ai", effect: "records that the request breaks a PRE-FLIGHT rule: --reason (required, untouched cycle only); the CLI then computes REQUEST_CHANGES" },
 	{ name: "await-user", authority: "ai", effect: "pauses at a human-decision gate; Stop-allowed, auto-cleared next write" },
 	{ name: "start", authority: "ai", effect: "creates or re-enters the guarded state for a target" },
 	{ name: "set-acceptance", authority: "ai", effect: "records the acceptance criteria array (--json-file PATH or --json '[...]') and prints what it recorded" },
@@ -1877,12 +1880,10 @@ function main(): void {
 					attemptLog: str(args["attempt-log"]),
 				});
 			} else if (subcommand === "set-verdict") {
-				const verdict = process.argv.slice(3).find((arg) => !arg.startsWith("--"));
-				if (!verdict) {
-					process.stderr.write("set-verdict: <APPROVE|COMMENT|REQUEST_CHANGES> argument is required\n");
-					process.exit(1);
-				}
-				setVerdict(sessionId, verdict);
+				// Tombstone: sessions that loaded the old skill text still call it.
+				throw new Error("set-verdict was removed: the CLI computes the verdict from the record on every write. Run qa-state.ts get to see it; when it is null, do the work its blockers name." + blockerList(readPrior(sessionId)));
+			} else if (subcommand === "record-preflight-violation") {
+				recordPreflightViolation(sessionId, requiredArg(args, "reason"));
 			} else if (subcommand === "await-user") {
 				setAwaitingUser(sessionId);
 			} else if (subcommand === "start") {

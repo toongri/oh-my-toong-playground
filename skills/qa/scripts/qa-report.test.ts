@@ -942,12 +942,20 @@ describe("qa-report renderer", () => {
 	});
 
 	test("renders the 실패 · 불일치 section from narrative issues plus failed scenarios", () => {
-		const narrative: QaReportNarrative = { issues: [{ severity: "LOW", description: "minor timing flake", location: "app.ts:12" }] };
+		const narrative: QaReportNarrative = { issues: [{ description: "minor timing flake", location: "app.ts:12" }] };
 		const html = renderQaReport(baseView(), narrative, fakeReader)!;
 		const failures = html.slice(html.indexOf("<h2>실패 · 불일치"), html.indexOf("<h2>판정"));
 		expect(failures).toContain("minor timing flake");
 		expect(failures).toContain("app.ts:12");
 		expect(failures).toContain("<code>story-1/sc-2</code>");
+	});
+
+	test("이전 narrative에 남은 issue 등급은 렌더링하지 않음", () => {
+		const legacy = { issues: [{ severity: "CRITICAL", description: "목록이 비어 있다" }] } as unknown as QaReportNarrative;
+		const html = renderQaReport(baseView(), legacy, fakeReader)!;
+		const failures = html.slice(html.indexOf("<h2>실패 · 불일치"), html.indexOf("<h2>판정"));
+		expect(failures).toContain("목록이 비어 있다");
+		expect(failures).not.toContain("CRITICAL");
 	});
 
 	test("실패가 하나도 없으면 실패 섹션은 없음을 명시함", () => {

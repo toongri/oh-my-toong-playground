@@ -117,7 +117,6 @@ export function escapeHtml(s: string): string {
 }
 
 export interface QaReportNarrativeIssue {
-	severity: "CRITICAL" | "LOW";
 	description: string;
 	location?: string;
 	what?: string;
