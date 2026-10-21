@@ -952,6 +952,58 @@ describe("ledger 잠금", () => {
 	}, 20_000);
 });
 
+describe("고정 페이지 변조 검사", () => {
+	/** A private plan, so altering a page file does not touch the plan the other tests share. */
+	function privatePlan(): { planDir: string; ledger: string } {
+		const dir = path.join(fx.tmp, `tamper-plan-${++ledgerSeq}`);
+		const p = run([
+			"plan",
+			"--repo",
+			fx.repo,
+			"--range",
+			fx.range,
+			"--files",
+			JSON.stringify(fx.files),
+			"--out",
+			dir,
+			"--page-bytes",
+			String(PAGE_BYTES),
+		]);
+		expect(p.code).toBe(0);
+		const ledger = path.join(fx.tmp, "ledgers", `tamper-${ledgerSeq}`);
+		expect(run(["init", "--plan", dir, "--angle", "correctness", "--ledger", ledger]).code).toBe(0);
+		return { planDir: dir, ledger };
+	}
+
+	test("plan 이후 바뀐 계획 페이지는 ACK 줄이 같아도 next에서 거부된다", () => {
+		const t = privatePlan();
+		const out = cli(t.ledger, "next").stdout;
+		const id = pageIdOf(out);
+		const file = path.join(t.planDir, "pages", `${id}.txt`);
+		fs.writeFileSync(file, `${fs.readFileSync(file, "utf8")}\n변조된 줄\n`);
+
+		const again = cli(t.ledger, "next");
+		expect(again.code).toBe(1);
+		expect(again.stderr).toContain(id);
+		expect(again.stderr).toContain("changed since plan");
+	});
+
+	test("ledger에 쓴 resplit 페이지가 바뀌어도 거부된다", () => {
+		const t = privatePlan();
+		const id = pageIdOf(cli(t.ledger, "next").stdout);
+		expect(cli(t.ledger, "resplit", id, "--page-bytes", "2048").code).toBe(0);
+		const sub = pageIdOf(cli(t.ledger, "next").stdout);
+		expect(sub).toBe(`${id}.1`);
+		const file = path.join(t.ledger, "pages", `${sub}.txt`);
+		fs.writeFileSync(file, `${fs.readFileSync(file, "utf8")}\n변조된 줄\n`);
+
+		const again = cli(t.ledger, "next");
+		expect(again.code).toBe(1);
+		expect(again.stderr).toContain(sub);
+		expect(again.stderr).toContain("changed since plan");
+	});
+});
+
 describe("파일 권한", () => {
 	test("plan 디렉터리·페이지·diff.patch·ledger는 소유자만 접근한다", () => {
 		const ledger = newLedger("correctness");

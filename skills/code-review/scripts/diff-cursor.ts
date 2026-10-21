@@ -1066,6 +1066,7 @@ interface ExtraPage {
 	end: Pos;
 	bytes: number;
 	ack: string;
+	sha256: string;
 }
 interface Candidate {
 	id: string;
@@ -1216,7 +1217,7 @@ function save(ctx: Ctx): void {
 function pageMeta(
 	ctx: Ctx,
 	id: string,
-): { ack: string; bytes: number; start: Pos; end: Pos } {
+): { ack: string; bytes: number; start: Pos; end: Pos; sha256: string } {
 	const extra = ctx.ledger.extraPages[id];
 	if (extra) return extra;
 	const rec = ctx.plan.pages.find((p) => p.id === id);
@@ -1225,12 +1226,16 @@ function pageMeta(
 }
 
 function pageText(ctx: Ctx, id: string): string {
-	return fs.readFileSync(
-		ctx.ledger.extraPages[id]
-			? path.join(ctx.dir, "pages", `${id}.txt`)
-			: path.join(ctx.ledger.planDir, "pages", `${id}.txt`),
-		"utf8",
-	);
+	const extra = ctx.ledger.extraPages[id];
+	const file = extra
+		? path.join(ctx.dir, "pages", `${id}.txt`)
+		: path.join(ctx.ledger.planDir, "pages", `${id}.txt`);
+	const text = fs.readFileSync(file, "utf8");
+	if (sha256(text) !== pageMeta(ctx, id).sha256)
+		throw refuse(
+			`page ${id} changed since plan (its bytes no longer match the recorded sha256); re-plan the review`,
+		);
+	return text;
 }
 
 const currentPage = (l: Ledger) => l.order.find((id) => l.pages[id]?.state !== "done") ?? null;
@@ -1687,6 +1692,7 @@ function cmdResplit(v: Values, env: NodeJS.ProcessEnv, id: string | undefined): 
 				end: s.record.end,
 				bytes: s.record.bytes,
 				ack: s.record.ack,
+				sha256: s.record.sha256,
 			};
 		}
 		const ids = subs.map((s) => s.record.id);
