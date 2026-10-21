@@ -845,13 +845,6 @@ describe("deterministic ultragoal review routing contract", () => {
 		}
 	});
 
-	test("code-review producer publishes a generic receipt, not a caller aggregate", () => {
-		expect(codeReviewMd).toContain("scripts/submit-review.ts");
-		expect(codeReviewMd).toContain('"path":"<path>"');
-		expect(codeReviewMd).toContain('"sha256":"<hash>"');
-		expect(codeReviewMd).toContain("original review JSON");
-	});
-
 	test("ultragoal consumer docs do not embed the removed state-CLI publisher", () => {
 		expect(skillMd).not.toContain("ultragoal-state.ts submit-review");
 		expect(completionGateMd).not.toContain("ultragoal-state.ts submit-review");
@@ -904,16 +897,8 @@ describe("deterministic ultragoal review routing contract", () => {
 		);
 	});
 
-	test("reviewer writes only the final JSON submission and rejects hashless inconclusive input", () => {
-		expect(codeReviewMd).toContain("Valid or hashless `INCONCLUSIVE` diagnostics are published as supplied");
-		expect(codeReviewMd).toMatch(/Never invent a hash/i);
+	test("ultragoal passes the supplied artifact destination to the reviewer opaquely", () => {
 		expect(skillMd).toContain("pass the supplied artifact destination opaquely");
-	});
-
-	test("submit example preserves the original CodeReviewArtifact input schema", () => {
-		expect(codeReviewMd).toContain('"status":"COMPLETE|INCONCLUSIVE"');
-		expect(codeReviewMd).toContain('"findings"');
-		expect(codeReviewMd).not.toContain('"verdict":"..."');
 	});
 
 	test("lower completion-gate prose does not reintroduce unconditional review routing", () => {

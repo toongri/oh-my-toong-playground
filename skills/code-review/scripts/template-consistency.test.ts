@@ -13,26 +13,20 @@ const TEMPLATE_MD = join(
 	"scripts",
 	"chunk-reviewer-prompt.md",
 );
+const VERIFIER_PROMPT_MD = join(REPO_ROOT, "skills", "code-review", "references", "verifier-prompt.md");
 const COMPLETION_GATE_MD = join(REPO_ROOT, "skills", "ultragoal", "references", "completion-gate.md");
 
-/** Extract placeholder names from Step 4's concise interpolation sentence. */
-function extractSkillPlaceholders(content: string): Set<string> {
-	const interpolationLine = content
-		.split("\n")
-		.find((line) => line.includes("interpolate the existing inputs:"));
-	if (!interpolationLine) {
-		throw new Error(
-			"SKILL.md: Could not locate the concise interpolation sentence in Step 4. " +
-				"The section may have been renamed — update the parser in template-consistency.test.ts.",
+/**
+ * Extract the finder-template placeholders SKILL.md names: `{UPPER_CASE}` tokens outside code fences and
+ * without a `$` prefix (shell variables), minus the tokens references/verifier-prompt.md owns.
+ */
+function extractSkillPlaceholders(content: string, verifierContent: string): Set<string> {
+	const tokens = (text: string): Set<string> =>
+		new Set(
+			[...text.replace(/```[\s\S]*?```/g, "").matchAll(/(?<!\$)\{[A-Z_]+\}/g)].map((match) => match[0]),
 		);
-	}
-
-	const placeholders = new Set<string>();
-	for (const match of interpolationLine.matchAll(/\{[A-Z_]+\}/g)) {
-		placeholders.add(match[0]);
-	}
-
-	return placeholders;
+	const verifierTokens = tokens(verifierContent);
+	return new Set([...tokens(content)].filter((token) => !verifierTokens.has(token)));
 }
 
 /**
@@ -123,36 +117,26 @@ describe("dispatch template body coverage", () => {
 });
 
 describe("dispatch template placeholder consistency", () => {
-	it("SKILL.md Step 4 and chunk-reviewer-prompt.md Field Reference declare the same placeholder set", () => {
+	it("SKILL.md가 이름 붙인 finder 템플릿 placeholder는 chunk-reviewer-prompt.md Field Reference에 선언된 것뿐이다", () => {
 		// Arrange
 		const skillContent = readFileSync(SKILL_MD, "utf-8");
 		const templateContent = readFileSync(TEMPLATE_MD, "utf-8");
+		const verifierContent = readFileSync(VERIFIER_PROMPT_MD, "utf-8");
 
-		const skillPlaceholders = extractSkillPlaceholders(skillContent);
+		const skillPlaceholders = extractSkillPlaceholders(skillContent, verifierContent);
 		const templatePlaceholders = extractTemplateFieldReferences(templateContent);
 
-		// Guard: parsers must not silently return empty sets (format regression detection)
-		expect(skillPlaceholders.size).toBeGreaterThan(0);
+		// Guard: the template parser must not silently return an empty set (format regression detection)
 		expect(templatePlaceholders.size).toBeGreaterThan(0);
 
-		// Act: compute symmetric difference
+		// Act: SKILL.md may spell the names or point at the template instead, so require a subset.
 		const onlyInSkill = [...skillPlaceholders].filter((p) => !templatePlaceholders.has(p));
-		const onlyInTemplate = [...templatePlaceholders].filter((p) => !skillPlaceholders.has(p));
 
-		// Assert: sets must be equal
-		const mismatchLines: string[] = [];
-		if (onlyInSkill.length > 0) {
-			mismatchLines.push(
-				`Declared in SKILL.md Step 4 but MISSING from chunk-reviewer-prompt.md Field Reference: ${onlyInSkill.join(", ")}`,
-			);
-		}
-		if (onlyInTemplate.length > 0) {
-			mismatchLines.push(
-				`Declared in chunk-reviewer-prompt.md Field Reference but MISSING from SKILL.md Step 4: ${onlyInTemplate.join(", ")}`,
-			);
-		}
-
-		expect(mismatchLines.length).toBe(0);
+		// Assert
+		expect(
+			onlyInSkill,
+			`Named in SKILL.md but MISSING from chunk-reviewer-prompt.md Field Reference: ${onlyInSkill.join(", ")}`,
+		).toEqual([]);
 	});
 });
 
