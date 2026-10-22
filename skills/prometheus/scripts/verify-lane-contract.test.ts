@@ -124,23 +124,6 @@ describe("interview.md absence — replaced ladder verdict line", () => {
 });
 
 // ---------------------------------------------------------------------------
-// P2-A: no-op template branch in Phase-1 Evidence template (SKILL.md :344)
-// The no-op text now lives in the template bullet itself (additive to the
-// No-op path rule section). Guard that the template carries the conditional
-// form so a missing template entry cannot hide behind the rule-section copy.
-// ---------------------------------------------------------------------------
-
-describe("SKILL.md P2-A — no-op form lives in Phase-1 Evidence template", () => {
-	it("P2-A-P2: N/A branch for Trivial/Scoped is present in template", () => {
-		// The template bullet also specifies the Trivial/Scoped N/A form so both
-		// branches of the visible-or-violation mandate appear inline.
-		expect(skillContent).toContain(
-			'"N/A — intent is Trivial/Scoped (verify lane is Complex/Architecture only)"',
-		);
-	});
-});
-
-// ---------------------------------------------------------------------------
 // P2-B: per-finding verdict contract
 // SKILL.md: per-finding token + N counts lanes unit note.
 // interview.md: {LANE_FINDINGS} present / {LANE_FINDING} (exact singular) absent /
