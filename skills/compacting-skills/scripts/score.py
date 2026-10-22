@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Score graded scenario answers.
 
-Usage: score.py <grades-dir> <out.md> [--reps r1,r2,r3,r4,r5]
+Usage: score.py <grades-dir> <out.md> [--reps r1,r2,r3,r4,r5] [--scenarios <rubric-dir>]
 
 Reads every grades-*.csv in <grades-dir> (columns: scenario,rep,grade[,note]; grade C/P/W),
 scores C=1, P=0.5, W=0, and writes a per-scenario table plus the total to <out.md>.
 A scenario missing any listed rep is reported and left out of the total.
+With --scenarios, every `### <id>` heading in <rubric-dir>/scenarios-*.md must have grades;
+ids with none are reported as "No grades" and the run exits 1.
 """
+import argparse
 import collections
 import csv
 import glob
@@ -17,15 +20,13 @@ POINTS = {"C": 1.0, "P": 0.5, "W": 0.0}
 
 
 def main(argv):
-    args = [a for a in argv if not a.startswith("--reps")]
-    reps = ["r1", "r2", "r3", "r4", "r5"]
-    for i, a in enumerate(argv):
-        if a == "--reps":
-            reps = argv[i + 1].split(",")
-            args.remove(argv[i + 1])
-    if len(args) != 2:
-        sys.exit(__doc__)
-    grades_dir, out = args
+    parser = argparse.ArgumentParser(usage=__doc__)
+    parser.add_argument("grades_dir")
+    parser.add_argument("out")
+    parser.add_argument("--reps", default="r1,r2,r3,r4,r5")
+    parser.add_argument("--scenarios")
+    opts = parser.parse_args(argv)
+    grades_dir, out, reps = opts.grades_dir, opts.out, opts.reps.split(",")
     grades = collections.defaultdict(dict)
     for path in sorted(glob.glob(os.path.join(grades_dir, "grades-*.csv"))):
         with open(path, encoding="utf-8") as f:
@@ -58,11 +59,22 @@ def main(argv):
     lines += ["", summary]
     if missing:
         lines.append("Missing reps (excluded): " + ", ".join(missing))
+    ungraded = []
+    if opts.scenarios:
+        expected = set()
+        for path in glob.glob(os.path.join(opts.scenarios, "scenarios-*.md")):
+            with open(path, encoding="utf-8") as f:
+                expected.update(m.split()[1] for m in f if m.startswith("### ") and len(m.split()) > 1)
+        ungraded = sorted(expected - set(grades), key=order)
+        if ungraded:
+            lines.append("No grades: " + ", ".join(ungraded))
     with open(out, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     print(summary)
     if missing:
         print("missing:", ", ".join(missing))
+    if ungraded:
+        sys.exit("no grades: " + ", ".join(ungraded))
 
 
 if __name__ == "__main__":

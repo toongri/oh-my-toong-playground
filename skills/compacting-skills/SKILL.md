@@ -49,11 +49,11 @@ Keep a plan file with one checkbox per step and append one progress line (date, 
 | 1 | Worktree from the default branch; run the target's tests | Clean tree; baseline pass count recorded |
 | 2 | Rule inventory → `references/rule-inventory.md` | Every normative sentence has exactly one id and a class with evidence |
 | 3 | Doc conflicts → user | Every internal contradiction resolved by the user (offer a recommendation) |
-| 4 | Scenario suite + baseline on the OLD doc → `references/behavior-measurement.md` | Every MUST row in ≥1 scenario; 5 reps graded; baseline misses classified |
+| 4 | Scenario suite + baseline on the OLD doc → `references/behavior-measurement.md` | Every MUST and ENFORCED row in ≥1 scenario; 5 reps graded; baseline misses classified |
 | 5 | Outline + test strategy → `references/rewriting.md` | Each kept rule has one target location; each doc-reading assertion has a disposition |
 | 6 | Test migration (before rewriting) | Wording pins gone, contract tests kept or added; tests pass; commit |
 | 7 | Rewrite section by section, each with a two-way trace check | Trace check LOSS 0; tests and lint pass; commit per section |
-| 8 | Full regression measurement (same suite, same grading) | Every must-fix scenario 1.0; no scenario below baseline without a recorded, verified cause |
+| 8 | Full regression measurement (same suite, same grading) | Every must-fix scenario 1.0; no scenario below baseline unless its recorded, verified cause is the scenario or the grading (a doc cause: fix the doc, re-run that set) |
 | 9 | Compression regression audit → `references/regression-audit.md` | Every finding fixed or recorded as pre-existing follow-up; targeted scenarios show the fix |
 | 10 | Real-run comparison when the skill can run on a fixed input | New run finds ⊇ old run; outputs pass their validators |
 | 11 | Summary (lines, bytes, paragraphs >100 words, before/after; scores; audit) | Report states what was measured and what was not |

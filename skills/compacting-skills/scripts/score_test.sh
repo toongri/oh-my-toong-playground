@@ -70,6 +70,19 @@ else
     pass "invalid grade X exits non-zero"
 fi
 
+# Rubric lists S-A-4, which no grader graded: it must be reported and fail the run.
+RUBRIC_DIR="$WORK_DIR/rubric"
+mkdir -p "$RUBRIC_DIR"
+printf '### S-A-2 two\n### S-A-10 ten\n' > "$RUBRIC_DIR/scenarios-a.md"
+printf '### S-A-3 three\n### S-A-4 four\n' > "$RUBRIC_DIR/scenarios-b.md"
+UNGRADED_OUT="$WORK_DIR/ungraded-out.md"
+if python3 -I "$SCORE_PY" "$GRADES_DIR" "$UNGRADED_OUT" --reps r1,r2 --scenarios "$RUBRIC_DIR" >/dev/null 2>&1; then
+    fail "ungraded rubric scenario must exit non-zero"
+else
+    pass "ungraded rubric scenario exits non-zero"
+fi
+assert_contains "ungraded rubric scenario is listed" "$(cat "$UNGRADED_OUT" 2>/dev/null)" 'No grades: S-A-4'
+
 echo ""
 echo "Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"
 [[ "$TESTS_FAILED" -eq 0 ]]

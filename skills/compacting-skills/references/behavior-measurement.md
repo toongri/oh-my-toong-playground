@@ -4,7 +4,7 @@ Prove the new doc makes agents act as the old one did (or better where a decided
 
 ## 1. Write scenarios
 
-Cover every MUST row (and every RULE pin) with at least one scenario; check coverage mechanically against the keep files. Format per scenario:
+Cover every MUST row, every ENFORCED row (what its note says the agent must still know: when to run the command and how to read its refusal), and every RULE pin with at least one scenario; check coverage mechanically against the keep files. Format per scenario:
 
 ```
 ### S-<slice>-<nn> <short title>
@@ -36,7 +36,7 @@ Build question-only sets: `runs/sets/<set>.md` with ~7 scenarios each (situation
 - Grader agents read `scenarios-*.md` (the rubric) and the answer files, and write CSV `scenario,rep,grade,note` with C/P/W, applying the Grading sentence literally.
 - Where reps of one scenario mix C and P (or anything with W), one fresh adjudicator per scenario reads only that scenario's rubric and its five answers and re-applies the grading sentences consistently. Record before/after per rep and the reason in `adjudication.md`. Change a grade only where the grader misapplied the rubric.
 - Use the same grader instructions and adjudication rule for baseline and new runs. A stricter adjudicator in a later run is a measurement change, not a doc change: when a drop appears, re-grade the baseline answers with the same strictness before concluding.
-- Score: C=1, P=0.5, W=0; mean per scenario over 5 reps; total over all answers. `scripts/score.py <grades-dir> <out.md>` does this.
+- Score: C=1, P=0.5, W=0; mean per scenario over 5 reps; total over all answers. `scripts/score.py <grades-dir> <out.md> --scenarios <evidence-dir>` does this; `--scenarios` fails the run when a rubric scenario has no grades.
 
 ## 4. Interpret
 
@@ -45,7 +45,7 @@ Baseline misses:
 - scenario defect (ambiguous situation, rubric asks for something the question did not) → fix the scenario, re-run that set for all versions you compare.
 - one-off omission → "no drop allowed".
 
-Regression table `regression.md`: scenario, baseline grades, baseline score, new grades, new score, run source, delta. For every drop, read the raw answers before deciding the cause: doc, scenario, or grading. Record the verdict and evidence; never re-run until the number looks good.
+Regression table `regression.md`: scenario, baseline grades, baseline score, new grades, new score, run source, delta. For every drop, read the raw answers before deciding the cause: doc, scenario, or grading. Record the verdict and evidence; never re-run until the number looks good. A doc cause is a regression, not an explanation: fix the doc and re-run that set before step 8 can pass.
 
 ## 5. Targeted scenarios for audit findings
 
