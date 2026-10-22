@@ -39,8 +39,15 @@ S-A-3,r1,C,
 CSV
 
 OUT="$WORK_DIR/out.md"
-STDOUT=$(python3 -I "$SCORE_PY" "$GRADES_DIR" "$OUT" --reps r1,r2)
+MAIN_EXIT=0
+STDOUT=$(python3 -I "$SCORE_PY" "$GRADES_DIR" "$OUT" --reps r1,r2 2>/dev/null) || MAIN_EXIT=$?
 REPORT=$(cat "$OUT")
+
+if [[ "$MAIN_EXIT" -ne 0 ]]; then
+    pass "scenario missing a rep exits non-zero"
+else
+    fail "scenario missing a rep must exit non-zero"
+fi
 
 assert_contains "row for S-A-2 has grades CP and score 0.75" "$REPORT" '| S-A-2 | CP | 1 | 1 | 0 | 0.75 |'
 assert_contains "total line counts only complete scenarios" "$REPORT" 'Total: 4 answers, C 2 / P 1 / W 1, score 0.625'
@@ -74,9 +81,17 @@ fi
 RUBRIC_DIR="$WORK_DIR/rubric"
 mkdir -p "$RUBRIC_DIR"
 printf '### S-A-2 two\n### S-A-10 ten\n' > "$RUBRIC_DIR/scenarios-a.md"
-printf '### S-A-3 three\n### S-A-4 four\n' > "$RUBRIC_DIR/scenarios-b.md"
+printf '### S-A-4 four\n' > "$RUBRIC_DIR/scenarios-b.md"
+COMPLETE_DIR="$WORK_DIR/complete"
+mkdir -p "$COMPLETE_DIR"
+printf 'scenario,rep,grade,note\nS-A-2,r1,C,\nS-A-2,r2,C,\nS-A-10,r1,C,\nS-A-10,r2,C,\n' > "$COMPLETE_DIR/grades-1.csv"
+if python3 -I "$SCORE_PY" "$COMPLETE_DIR" "$WORK_DIR/complete-out.md" --reps r1,r2 --scenarios "$WORK_DIR/none" >/dev/null 2>&1; then
+    pass "complete grades exit zero"
+else
+    fail "complete grades must exit zero"
+fi
 UNGRADED_OUT="$WORK_DIR/ungraded-out.md"
-if python3 -I "$SCORE_PY" "$GRADES_DIR" "$UNGRADED_OUT" --reps r1,r2 --scenarios "$RUBRIC_DIR" >/dev/null 2>&1; then
+if python3 -I "$SCORE_PY" "$COMPLETE_DIR" "$UNGRADED_OUT" --reps r1,r2 --scenarios "$RUBRIC_DIR" >/dev/null 2>&1; then
     fail "ungraded rubric scenario must exit non-zero"
 else
     pass "ungraded rubric scenario exits non-zero"

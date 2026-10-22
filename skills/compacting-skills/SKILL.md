@@ -55,7 +55,7 @@ Keep a plan file with one checkbox per step and append one progress line (date, 
 | 7 | Rewrite section by section, each with a two-way trace check | Trace check LOSS 0; tests and lint pass; commit per section |
 | 8 | Full regression measurement (same suite, same grading) | Every must-fix scenario 1.0; no scenario below baseline unless its recorded, verified cause is the scenario or the grading (a doc cause: fix the doc, re-run that set) |
 | 9 | Compression regression audit → `references/regression-audit.md` | Every finding fixed or recorded as pre-existing follow-up; targeted scenarios show the fix |
-| 10 | Real-run comparison when the skill can run on a fixed input | New run finds ⊇ old run; outputs pass their validators |
+| 10 | Real-run comparison when the skill can run on a fixed input | Graded against the answer key, the new run gets right every case the old run got right; outputs pass their validators |
 | 11 | Summary (lines, bytes, paragraphs >100 words, before/after; scores; audit) | Report states what was measured and what was not |
 
 Steps 2–5 run on the OLD doc. Do not edit the doc before the baseline exists: a baseline taken after editing measures nothing.

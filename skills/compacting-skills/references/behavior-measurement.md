@@ -36,7 +36,7 @@ Build question-only sets: `runs/sets/<set>.md` with ~7 scenarios each (situation
 - Grader agents read `scenarios-*.md` (the rubric) and the answer files, and write CSV `scenario,rep,grade,note` with C/P/W, applying the Grading sentence literally.
 - Where reps of one scenario mix C and P (or anything with W), one fresh adjudicator per scenario reads only that scenario's rubric and its five answers and re-applies the grading sentences consistently. Record before/after per rep and the reason in `adjudication.md`. Change a grade only where the grader misapplied the rubric.
 - Use the same grader instructions and adjudication rule for baseline and new runs. A stricter adjudicator in a later run is a measurement change, not a doc change: when a drop appears, re-grade the baseline answers with the same strictness before concluding.
-- Score: C=1, P=0.5, W=0; mean per scenario over 5 reps; total over all answers. `scripts/score.py <grades-dir> <out.md> --scenarios <evidence-dir>` does this; `--scenarios` fails the run when a rubric scenario has no grades.
+- Score: C=1, P=0.5, W=0; mean per scenario over 5 reps; total over all answers. `scripts/score.py <grades-dir> <out.md> --scenarios <evidence-dir>` does this; it exits 1 when a scenario is missing a rep or, with `--scenarios`, a rubric scenario has no grades.
 
 ## 4. Interpret
 
@@ -53,4 +53,4 @@ For each regression the audit finds, write a scenario that the regression would 
 
 ## 6. Real-run comparison
 
-When the skill can run end to end on a fixed input, plant known cases in a small fixture (for a reviewer: an in-scope defect, an out-of-scope defect, a non-goal case, a generated file; for a planner: a small request with a known scope trap). Keep the answer key outside the fixture. Run the old and new doc once each, in a trusted worktree (sandboxed runs in untrusted directories can fail with EPERM and measure nothing). Pass: the new run finds a superset of the old run, and both outputs pass the skill's own validators. Remove the fixture worktree and branch afterwards.
+When the skill can run end to end on a fixed input, plant known cases in a small fixture (for a reviewer: an in-scope defect, an out-of-scope defect, a non-goal case, a generated file; for a planner: a small request with a known scope trap). Keep the answer key outside the fixture. Run the old and new doc once each, in a trusted worktree (sandboxed runs in untrusted directories can fail with EPERM and measure nothing). Grade both runs case by case against the answer key: a positive case passes when reported, a negative control (out-of-scope, non-goal, generated file) passes when not reported as a finding. Pass: the new run gets right every case the old run got right, and both outputs pass the skill's own validators. A case the new run gets wrong is a regression even when the old run reported nothing more; record cases both runs get wrong as follow-ups. Remove the fixture worktree and branch afterwards.

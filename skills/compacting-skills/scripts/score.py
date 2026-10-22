@@ -7,7 +7,8 @@ Reads every grades-*.csv in <grades-dir> (columns: scenario,rep,grade[,note]; gr
 scores C=1, P=0.5, W=0, and writes a per-scenario table plus the total to <out.md>.
 A scenario missing any listed rep is reported and left out of the total.
 With --scenarios, every `### <id>` heading in <rubric-dir>/scenarios-*.md must have grades;
-ids with none are reported as "No grades" and the run exits 1.
+ids with none are reported as "No grades".
+The run exits 1 when any scenario is missing a rep or has no grades.
 """
 import argparse
 import collections
@@ -74,7 +75,9 @@ def main(argv):
     if missing:
         print("missing:", ", ".join(missing))
     if ungraded:
-        sys.exit("no grades: " + ", ".join(ungraded))
+        print("no grades:", ", ".join(ungraded))
+    if missing or ungraded:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
