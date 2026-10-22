@@ -1,8 +1,8 @@
 # Plan Template Examples
 
-**This file is lookup-only.** The mandatory plan-structure rules are defined inline in `SKILL.md > ## Plan Structure (Mandatory Contract)`. The contract is authoritative; the examples below are for reference when drafting concrete TODO bodies, Wave visualizations, or Success Criteria.
+**This file is a mandatory full read at its trigger.** The mandatory plan-structure rules are defined inline in `SKILL.md > ## Plan Structure (Mandatory Contract)`. The contract is authoritative; the examples below are for reference when drafting concrete TODO bodies, Wave visualizations, or Success Criteria. SKILL.md prevails.
 
-Read this file when you want to consult a worked example. You do NOT need to read it to know what the plan structure requires — that knowledge is already in SKILL.md.
+Read this whole file in one Read call before the Write that puts the ## TODOs body in the plan file.
 
 ## Work Objectives
 
@@ -97,7 +97,7 @@ Critical Path: Task 1 -> Task 2 -> Task 4 -> Task 7 -> F1-F4
 
 ## ADR Example (worked example)
 
-Each entry is one titled `D-N` item. Contested items carry the full 7-field MADR. Solo items carry the lightweight fields plus ownership and edges. See `SKILL.md > ### ADR` for the authoritative contract; this example is lookup-only.
+Each entry is one titled `D-N` item. Contested items carry the full 7-field MADR. Solo items carry the lightweight fields plus ownership and edges. See `SKILL.md > ### ADR` for the authoritative contract; this example is an example only.
 
 ```
 ## ADR

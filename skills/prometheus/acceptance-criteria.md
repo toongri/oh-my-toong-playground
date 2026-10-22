@@ -1,8 +1,8 @@
-# Acceptance Criteria — Lookup
+# Acceptance Criteria
 
-**This file is lookup-only.** The mandatory AC rules are defined inline in `SKILL.md > ## Acceptance Criteria (Mandatory Contract)`. The contract is authoritative; this file is per-tool examples + a worked example.
+**This file is a mandatory full read at its trigger.** The AC rules are defined in `SKILL.md > ## Acceptance Criteria (Mandatory Contract)`; this file adds per-tool examples and a worked example. SKILL.md prevails.
 
-Read this file when you want a concrete example for a specific tool, or want to consult a worked AC proposal.
+Read this whole file in one Read call before you propose the AC.
 
 ---
 

@@ -1,8 +1,8 @@
-# Interview Mode — Lookup
+# Interview Mode
 
-**This file is lookup-only.** The mandatory interview rules are defined inline in `SKILL.md > ## Interview Mode (Mandatory Contract)`. The contract is authoritative.
+**This file is a mandatory full read at its trigger.** The interview rules are defined in `SKILL.md > ## Interview Mode (Mandatory Contract)`; this file adds examples and templates. SKILL.md prevails.
 
-Read this file when you want a concrete example of question categories, a quality standard reference, the Rich Context pattern for complex design decisions, or a subagent dispatch prompt template.
+Read this whole file in one Read call before the first Phase 1 dispatch or the first interview question, whichever comes first.
 
 ---
 
@@ -93,8 +93,6 @@ Agent(subagent_type="librarian", prompt="I'm planning OAuth 2.0 implementation a
 - 2+ technical approaches competing → alternative evaluation
 - Change scope spans 3+ modules/services → dependency mapping
 - Design decision directly affects performance/security/scalability → risk assessment, feasibility
-
-**When NOT to dispatch Oracle:** Simple codebase facts (use explore), user preference questions, standard low-risk implementations, codebase not yet explored.
 
 ### Phase-1 multi-aspect fan-out explore (Complex / Architecture intent)
 
