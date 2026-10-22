@@ -14,6 +14,7 @@ English | [한국어](authoring.md)
 | **make-pr** | PR description authoring | Before submitting code change PRs |
 | **scan-pdf-to-notes** | Scanned PDF → markdown/study notes | OCR book chapter extraction |
 | **git-master** | Commit messages + branch naming | git commits, branch creation |
+| **compacting-skills** | Shrink skill/agent instructions without changing behavior (rule inventory, before/after scenario measurement, compaction regression audit) | When a SKILL.md has grown long or accumulated duplicate/contradictory rules; before merging a compacted version |
 
 ---
 
@@ -169,6 +170,25 @@ When 3 or more files are changed, a commit plan is output before any commit runs
 
 ---
 
+### compacting-skills
+
+**Role**: Shrinks an existing skill, agent, or rules doc while keeping the behavior it produces. Size is the outcome, not the goal. It is the companion of writing-skills: writing-skills creates and edits skills test-first, compacting-skills shrinks skills that already exist.
+
+**Three kinds of evidence**: each catches what the others miss.
+- **Rule inventory + trace table**: finds rules lost during compaction.
+- **Before/after scenario measurement**: fresh agents solve the same scenarios with the old and new doc, 5 reps each, graded and adjudicated, to find behavior drift.
+- **Compression regression audit**: checks four directions — old→new presence, new→old fidelity (rules widened or narrowed), code and consumers (including whether the doc's state lists cover every state the code produces), and deleted premises.
+
+**Keep criteria**: contract, safety, core guarantee, real failure, repo-specific meaning. Everything else is left to AI judgment.
+
+**Constraint**: scripts and hooks are not changed. The doc is made to match the code.
+
+**Files**: `SKILL.md`, `references/` (rule-inventory, behavior-measurement, rewriting, regression-audit), `scripts/measure.ts` (the only CLI that writes the `measurement.json` evidence file)
+
+**Triggers**: shrinking a SKILL.md that has grown long or accumulated duplicate/contradictory rules; checking a compacted version before merge
+
+---
+
 ## 3. Skill Selection Guide
 
 ```
@@ -180,6 +200,7 @@ What do you need to produce?
   |-- PR description             → make-pr
   |-- Scanned PDF extraction     → scan-pdf-to-notes
   |-- Commit / branch naming     → git-master
+  |-- SKILL.md grew long with duplicate/contradictory rules, or a compacted version needs a pre-merge check → compacting-skills
 ```
 
 ---

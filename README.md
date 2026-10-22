@@ -63,7 +63,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 | [리뷰/품질](docs/skills/review-quality.md) | code-review · design-review · slides-review · qa · explain-diff (선택적 reusable QA 케이스는 [가이드](skills/qa/reusable-cases.md)) |
 | [프론트엔드 디자인](docs/skills/frontend-design.md) | frontend · visual-qa — 웹 UI 설계·구현과 렌더링 결과 독립 검증 |
 | [리서치](docs/skills/research.md) | ultraresearch · insane-browsing — 포화 리서치 엔진과 차단 소스 브라우징 |
-| [문서/콘텐츠·유틸](docs/skills/authoring.md) | html-report · create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |
+| [문서/콘텐츠·유틸](docs/skills/authoring.md) | html-report · create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master · compacting-skills |
 | [지식 그래프(pins)](docs/skills/knowledge-graph-pins.md) | pins 지식 그래프 — pin-setup · record · query · audit · wrap-up |
 | [유틸·개인 워크플로우](docs/skills/utilities-personal.md) | agent-device · agent-browser · dogfood · hud · read-db · resume · jd · mock-interview 등 |
 | [오케스트레이션 가이드](docs/ORCHESTRATION.md) | deep-interview → craft-tasks → 선택적 prometheus → ultragoal → sisyphus 워크플로우 (sisyphus는 ultragoal의 내부 실행자이며 직접 경로가 아님)와 사용법 |
