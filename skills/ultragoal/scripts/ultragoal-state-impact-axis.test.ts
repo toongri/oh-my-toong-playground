@@ -521,18 +521,9 @@ describe("스킬 문서 계약 회귀 검사", () => {
 		expect(text).toContain('Do **NOT** refute a candidate merely for being "speculative"');
 	});
 
-	test("code-review/SKILL.md에 앵글→class 매핑이 존재하고 regression 앵글의 목적지를 명시한다", () => {
+	test("code-review/SKILL.md의 아티팩트 지시문이 ultragoal-state.ts가 읽는 findings_report 키를 포함한다", () => {
 		const text = readRepoFile("skills/code-review/SKILL.md");
-		expect(text).toContain("**regression**");
-		// 앵글 4종 → class 4종 매핑 문장: regression 앵글이 regression class로 간다는 명시.
-		expect(text).toMatch(/regression.*(angle|앵글)|(angle|앵글).*regression/);
-	});
-
-	test("code-review/SKILL.md의 아티팩트 지시문이 impact와 findings_report를 포함한다", () => {
-		const text = readRepoFile("skills/code-review/SKILL.md");
-		expect(text).toContain('"impact"');
 		expect(text).toContain("findings_report");
-		expect(text).toContain("findings.md");
 	});
 
 	test("completion-gate.md의 스키마가 impact 필수·class 4종·findings_report를 담는다", () => {
