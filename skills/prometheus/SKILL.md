@@ -532,7 +532,7 @@ After Momus returns APPROVE or COMMENT, run these steps in order, before the han
 
 The submission records the plan, HTML, and receipt hashes. It refuses a receipt written for other HTML bytes or another source, and HTML that lacks a `data-todo="<id>"` anchor for any plan TODO id. `set --phase S6` or later is refused (`cannot advance to S6 — ...`) unless `plan_path` is set, the HTML exists at that path and is not older than the plan, and a current submission binds this plan, HTML, and receipt. Existing HTML or a link in the chat does not count. Re-run Stage A, render and submit, on every pass through S5, including after a scoped re-review, a revise, or a resume: a plan rewritten at the same path leaves the earlier render stale.
 
-On selection: Option 1 → `Skill(skill: "ultragoal")` with the plan path and the stored `state.non_goals` value in Ultragoal's existing `--non-goals` slot. Option 2 (Finish) → emit `<prometheus-done/>`; the plan file and its Stage A presentation are the deliverables. Option 3 (Revise plan) → the S0 requirements interview.
+On selection: Option 1 → `Skill(skill: "ultragoal")` with the plan path and the stored `state.non_goals` value in Ultragoal's existing `--non-goals` slot. Option 2 (Finish) → emit `<prometheus-done/>`; the plan file and its Stage A presentation are the deliverables. Option 3 (Revise plan) → the S0 requirements interview. Run the hand-off yourself; never tell the user to run a command for it, even when they ask.
 
 ### State Lifecycle Directives
 
