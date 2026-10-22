@@ -54,7 +54,7 @@ After loading context, classify the request and print the class. The class sets 
 
 - **Trivial**: 1 file, under 10 lines, obvious fix. Focused interview until requirements are ready; reuse confirmed answers. Explore is optional. Decomposition: quick-check.
 - **Scoped**: 1-3 files, one component, clear scope. Standard interview. Explore only when the plan needs code facts; otherwise the Phase 1 Evidence block records `N/A` with the reason. Decomposition: full MECE and atomicity check, no output block.
-- **Complex**: 4+ files, or several components at any file count. Deep interview; explore is mandatory before the first question. Decomposition: full check, anti-pattern review, and the Decomposition Self-Check block before the plan Write.
+- **Complex**: 4+ files, or several components at any file count. Deep interview; explore is mandatory before the first question. Decomposition: full check, anti-pattern review, and the Decomposition Self-Check block before the Write that puts the `## TODOs` body in the plan file.
 - **Architecture**: system design, infrastructure, or long-term impact. Oracle review is mandatory, with no exceptions; it also confirms the Ambiguity Score. Explore and librarian are mandatory, dispatched in parallel. Decomposition: same as Complex.
 
 File count outranks per-file ease: 3 files with trivial changes are Scoped, not Trivial. The class comes from these criteria, never from user pressure or urgency; a downgrade is your decision. State does not store the class, so on resume re-derive it from the request facts.
@@ -251,26 +251,26 @@ Next question: {decision ID, affected dimension, and why it is the next prerequi
 
 ## Acceptance Criteria (Mandatory Contract)
 
-`acceptance-criteria.md` holds per-tool Verification examples (agent-device/agent-browser/curl/grep/CLI/unit) + worked example + Handling User Response that the contract below points to but does not duplicate.
+> Read `acceptance-criteria.md` in full, in one Read call, before you propose the AC (`## Reference Full-Read Mandate`). It holds the per-tool Verification examples (agent-device, agent-browser, curl, grep, CLI, unit), a worked example, and how to handle the user's response to the draft.
 
-> Full-read `acceptance-criteria.md` here — see `## Reference Full-Read Mandate`.
-
-### When to Draft
-
-If user does not provide AC, you MUST draft them. Propose → user confirms → finalize. NEVER proceed to Metis (on Trivial, to Co-Design) without confirmed AC. A "just do it" on the AC and non-goals draft is explicit delegation per `### User Deferral Handling`: record it in the Decision Register (who, verbatim quote, choice, evidence, consequence). Risk-domain items still need the S2 human gate.
+When the user gives no AC, draft them. Propose the AC and the non-goals together; the user confirms both; only then are they final. Never invoke Metis without user-confirmed AC, and on Trivial never enter Co-Design without them. A bare "just do it" on the shown AC and non-goals draft is an explicit delegation (`### User Deferral Handling`): record it in the Decision Register with who, the verbatim quote, the choice, the evidence, and the consequence. Risk-domain items still need the S2 human design gate.
 
 ### Non-Goals (co-confirmed with the user)
 
-Any bounded task excludes something — there is always work this iteration deliberately will NOT do — and an unstated exclusion is a scope-creep surface an executor or reviewer can walk right into. A non-goal is safe to touch AND safe to leave alone, just excluded by choice; it is distinct from a constraint (what must not regress). Draft the non-goals **during AC drafting and confirm them with the user together with the AC**, before Metis — the same "propose → user confirms → finalize" loop, so what goes to Metis is user-agreed, not planner-invented.
+Every bounded task excludes something, and an unstated exclusion is where an executor or reviewer walks into scope creep. A non-goal is work that would be safe to do and safe to leave, excluded by choice; what must not regress is a constraint, not a non-goal. Draft the non-goals with the AC and confirm them with the user before Metis, so what reaches Metis is user-agreed, not planner-invented.
 
-Each non-goal is one line in the `{excluded item} | decider: {how to tell whether a candidate finding falls inside this exclusion}` shape — the same decider shape deep-interview and ultragoal use, so it survives verbatim into the Metis SCOPE section and the downstream scope contract. A decider-less exclusion has no edge to any finding and does nothing.
+Each non-goal is one line in this form, leading `-` included:
 
-The canonical persisted value is newline-delimited and includes the leading `-` on every line: `- {excluded item} | decider: {membership test}`. After the user confirms the AC and non-goals, S1 persists that exact value as `state.non_goals` before creating any downstream artifact; Scoped+ then invokes Metis with that state value, and S3 plan generation copies the same stored lines verbatim for every intent.
+- {excluded item} | decider: {membership test}
 
-- **Scoped / Complex / Architecture**: **≥1 decider-bearing non-goal is REQUIRED for Scoped+** and flows verbatim into the Metis SCOPE `OUT of Scope` list (`review-pipeline.md`). The Metis B2 gate rejects a brief whose OUT-of-scope list is empty (Metis runs only for Scoped+, so the tier falls out of the pipeline). **Existence is mandatory; precision is not gated** — a mechanical existence check, never an interpretation dispute.
-- **Trivial**: skip the Metis invocation (Trivial skips Metis only — AC drafting with user confirmation, Momus, and Stage A–C still run) and any separate decider review ceremony, but record the **one-line boundary** of what the fix does NOT touch in the canonical `- {excluded item} | decider: {membership test}` format.
+The decider tells whether a candidate finding falls inside the exclusion; an exclusion without one has no edge to any finding and does nothing. deep-interview and ultragoal use the same form, so the line passes verbatim into the Metis SCOPE section and the downstream scope contract.
 
-A deliberately-excluded risk domain is a non-goal like any other (see `### Risk-Domain Assessment`) and populates `Must NOT Have / Guardrails`. Absence is not an entry.
+Right after the user confirms, and before any downstream artifact (Metis included), store the newline-delimited value as `state.non_goals` with `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase S1 --record-non-goals -` (stdin form in `### State Lifecycle Directives`). The CLI skips blank lines and refuses any other line not in the form (`non-goals refused — line does not match "- {excluded item} | decider: {membership test}" format`); from S2 on it refuses an empty value (`non-goals are required for <phase> and must contain a canonical decider line`). Scoped and above invoke Metis with the stored value, and S3 copies the same lines verbatim into the plan for every intent.
+
+- **Scoped, Complex, Architecture**: ≥1 decider-bearing non-goal is REQUIRED for Scoped+. It flows into the Metis `OUT of Scope` list, and the Metis B2 gate rejects a brief whose list is empty. Existence is mandatory; precision is not gated.
+- **Trivial**: no Metis and no separate decider review, but record the one-line boundary of what the fix does not touch, in the same form.
+
+A risk domain the user deliberately excludes is a non-goal like any other (`### Risk-Domain Assessment`).
 
 ### AC Format (two-line, mandatory)
 
@@ -279,54 +279,9 @@ A deliberately-excluded risk domain is a non-goal like any other (see `### Risk-
       **Verification**: HOW to confirm — executable command, observable behavior, or state assertion
 ```
 
-Optional `Setup` / `Cleanup` lines when Verification mutates state. The criterion is the contract between planner and executor; executor has NO interview context.
+The executor has no interview context. Write each AC so an agent that never saw the chat can run it and judge it: the AC states the expected result and never leaves "what counts as passing" to the executor. An AC states one observable outcome and its verification; split any AC that needs "and". Verify at the layer the consumer observes (a UI scenario, an HTTP call, CLI output); cite a unit test as an AC only when that unit is the consumer boundary, and say why. An AC that only names a file or restates the task is an implementation detail; rewrite it as the consumer-visible outcome. A universal truth such as "all tests pass" is not plan-specific: it goes in `## Verification Strategy`, not in the AC.
 
-### AC Granularity (1 AC = 1 observable state change)
-
-Each AC describes a single atomic outcome confirmed by a single Verification command. Compound ACs bundle independent changes — one failure hides others. Decompose: one AC per state change.
-
-### Verification at Consumer Boundary (MANDATORY)
-
-Verify at the layer the consumer observes:
-
-| Deliverable | Consumer | AC Layer |
-|---|---|---|
-| Mobile feature | End user | agent-device UI scenario |
-| Web feature | End user | agent-browser UI scenario |
-| HTTP API | API client | curl + jq integration |
-| CLI command | Shell user | exec + stdout assertion |
-| Library function | Calling dev/agent | unit test (with consumer-boundary justification) |
-
-**Anti-tautology rule**: Prometheus specifies the input/output or behavioral constraint in the AC text. Do NOT delegate "what counts as passing" to executor — meta-circular verification.
-
-Implementation test files (`*.test.ts`, `*.spec.ts`) are implementation evidence, NOT default AC primitives. Citing a unit test as AC requires: (1) who's the consumer of this unit? (2) where invoked directly (file:line)? (3) why is this unit the consumer boundary?
-
-**Verification method — prefer real, avoid mocks.** Verify a requirement's AC by reproducing conditions as close to real as possible and running E2E at the consumer boundary — not by asserting against mocks. A mock-based test is low-trust.
-
-**Non-deterministic logic is still verifiable.** When an outcome is mediated by something non-deterministic (an LLM deciding to call a tool, a model, a ranker), you cannot assert its exact output — but you can assert the flow holds with it in place: the input reaches it, it produces a valid action, the result flows through. Assert at the flow level, not the exact output. See `acceptance-criteria.md > Non-deterministic logic`.
-
-### Verification Transparency (4-question rule)
-
-Reviewer must answer 4 questions from AC text alone:
-1. What state must exist before Verification? (Setup)
-2. What command verifies the requirement? (Verification)
-3. What does success look like? (Expected outcome)
-4. How is state restored, if needed? (Cleanup)
-
-### State Mutation: Setup / Cleanup
-
-If Verification mutates state (DB rows, files, registered users, keychain entries), AC must declare Setup/Cleanup OR rely on isolation (ephemeral schema, randomized IDs, container-per-run).
-
-| Field | Purpose |
-|---|---|
-| **Setup** | Commands establishing required state (run before Verification) |
-| **Cleanup** | Commands reverting mutations (run after Verification, even on failure) |
-
-Omit when: read-only Verification, runner provides isolation. Strongly recommended when mutations cross persistent boundaries (DB, FS outside `/tmp`, simulator state).
-
-### Required Chaining Template (executable safety contract)
-
-Setup/Verification/Cleanup share a single shell session. Executor MUST chain so that (a) Cleanup runs unconditionally and (b) Verification's exit code is preserved:
+When Verification mutates state (DB rows, files, registered users, keychain entries), the AC adds `Setup` and `Cleanup` lines or relies on isolation (ephemeral schema, randomized IDs, a container per run). Setup, Verification, and Cleanup run in one shell session, chained so that Cleanup always runs and the Verification exit code survives:
 
 ```bash
 setup_cmd && { verify_cmd; VERIFY_EXIT=$?; } || VERIFY_EXIT=$?
@@ -334,85 +289,30 @@ cleanup_cmd
 exit ${VERIFY_EXIT:-1}
 ```
 
-Forbidden patterns:
-
-| Pattern | Why forbidden |
-|---|---|
-| `verify_cmd && cleanup_cmd` | Skips Cleanup on verification failure → resource leak |
-| `verify_cmd; cleanup_cmd` | Cleanup exit code masks verification failure → false PASS |
-
-Defensive Cleanup guard for unset IDs: `[ -n "$id" ] && curl -X DELETE ".../$id" || true`.
+Use this chain as given: `verify_cmd && cleanup_cmd` skips Cleanup after a failed verify, and `verify_cmd; cleanup_cmd` lets Cleanup's exit code hide the failure.
 
 ### Executor-Provided Variables
 
-AC may reference ambient variables exported by the QA executor (the qa skill, or sisyphus's inline verify):
+An AC may use these variables without defining them. The QA executor (the qa skill) is their only exporter:
 
-| Variable | Scope | Source |
+| Variable | AC scope | Exported |
 |---|---|---|
-| `$API_BASE_URL` | HTTP API ACs | QA executor (server boot) |
-| `$IOS_UDID` | iOS mobile ACs | QA executor (simulator boot) |
-| `$ANDROID_SERIAL` | Android mobile ACs | QA executor (emulator boot) |
-| `$evidence_xml` | Tool ACs emitting a report file | QA executor, per-AC (resolved before each verification) |
+| `$API_BASE_URL` | HTTP API ACs | at server boot |
+| `$IOS_UDID` | iOS mobile ACs | at simulator boot |
+| `$ANDROID_SERIAL` | Android mobile ACs | at emulator boot |
+| `$evidence_xml` | tool ACs that write a report file | per AC, resolved before each verification |
 
-Adding a new variable requires (1) updating this table and (2) ensuring executor exports it. Introduce only when ≥2 AC kinds reference.
-
-### Reference Integration (when user provides references)
-
-When user specifies references ("reference X", "based on Y pattern"):
-1. Each reference MUST produce ≥1 AC item with a specific behavioral constraint derived from that reference
-2. Constraint must be verifiable without reading the reference itself — self-contained
-
-If a reference cannot produce a specific behavioral constraint, ask: "What specific aspect of [reference] should the implementation follow?"
-
-### AC Anti-Patterns (cheat-sheet)
-
-| Anti-Pattern | Why It Fails | Fix |
-|---|---|---|
-| File listing ("shared/lib/x.js created") | Implementation detail | Outcome at consumer boundary + grep verification |
-| Section adding ("Add ## Model section") | Action, not result | Behavioral outcome ("protocol contains X instruction") |
-| Vague verification ("Verify it works") | Not executable | Name command, state, or assertion |
-| Task restatement ("Auth implemented") | Restates task | Observable consumer behavior ("Unauthenticated /api/* returns 401") |
-| Universal truths ("All tests pass") | Always-true, not plan-specific | Move to Verification Strategy |
-| Absence-only ("X not in grep") | Deletion alone passes | Presence checks first, then absence |
-| Compound AC | Bundles independent changes — one failure hides others | Decompose per state change |
-| State-mutating without teardown | Re-runs fail (409 Conflict) | Setup + Cleanup or unique-input scoping |
-
-### AC Self-Check (mandatory before finalizing)
-
-Run on every AC before proposing to user:
-- [ ] If Verification passes, does the consumer actually receive value?
-- [ ] Does an implementation exist that passes Verification vacuously? If yes, layer is too deep — move outward.
-- [ ] If citing a unit test, did you justify the unit as consumer-facing (per the three questions above)?
-
-> Per-tool Verification examples (agent-device, agent-browser, curl, grep, CLI, unit) + worked example + Handling User Response → [acceptance-criteria.md](acceptance-criteria.md). Lookup-only.
+No other variable is provided, `$APP_URL` included: the AC defines any other value itself, for example as a literal URL.
 
 ---
 
 ## Plan Structure (Mandatory Contract)
 
-This contract applies to EVERY plan. Trivial intent is exempt from exactly two parts of it: the ADR section and the Final Verification Wave. The Non-Goals handoff remains mandatory for every intent.
+> Read `plan-template.md` in full, in one Read call, before the Write that puts the `## TODOs` body in the plan file; the S0 draft Write does not trigger it (`## Reference Full-Read Mandate`). It holds a worked TODO body, the Wave visualization, the Success Criteria template, and an ADR example. This contract prevails over the examples.
 
-> Full-read `plan-template.md` here — see `## Reference Full-Read Mandate`.
+Every plan follows this contract. Trivial is exempt from exactly two parts: the ADR section and the Final Verification Wave.
 
-### Plan Output Rules
-
-- **Location**: `$OMT_DIR/plans/{name}.md`
-- **Language**: English
-- **Exclude**: Vague criteria ("verify it works")
-- **Agent anonymity**: The plan file records established facts, not the agents or passes that produced them. The ban is on agent-as-source attribution, not token presence: do not write "oracle confirmed", "explore found", "per the reviewer", "3 oracle passes established", or any phrasing that credits explore / librarian / oracle / Metis / Momus as the source of a fact. Bare domain use of those words is fine (e.g. "migrate to Oracle DB", "explore the cache policy"). State the conclusion as fact and let the WHY stand on its own evidence. Scope: the durable plan file only — the derived presentation view MAY surface pipeline/reviewer state (see `## Review Pipeline`).
-
-### Plan Sections (all required)
-
-| Section | Contents |
-|---------|----------|
-| **TL;DR** | Quick summary, deliverables (bullet list), estimated effort (Quick/Short/Medium/Large/XL), Parallel Execution (YES/NO + wave description), Critical Path |
-| **Context** | Original Request (verbatim), Interview summary and Decision Register (dependencies, evidence, rejected alternatives, checks, and explicit assumptions — the WHY behind each TODO) |
-| **Work Objectives** | Core objective, Definition of Done, Must Have, Must NOT Have / Guardrails |
-| **TODOs** | Numbered checkboxed tasks per TODO 7-field format below |
-| **Execution Strategy** | Wave visualization, Dependency Matrix, Critical Path. Target 5-8 tasks/wave. Circular dependencies forbidden. **Final Verification Wave mandatory for Scoped+ intent.** |
-| **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands **scoped to the change (not a whole-suite run)**. Zero Human Intervention — agent-executed with evidence to `$OMT_DIR/evidence/{plan-name}/` |
-| **Success Criteria** | Binary pass/fail end state. Verification commands + final checklist |
-| **ADR** | Co-authored decision log of titled `D-N` items — contested tier full 7-field MADR, solo tier lightweight fields + ownership/edges (see `### ADR`). Scoped+ default; Trivial exempt. |
+The plan lives at `$OMT_DIR/plans/{name}.md` and is written in English; only the Stage A presentation uses the session language. It records established facts, not who produced them: never credit explore, librarian, oracle, Metis, or Momus as the source of a fact ("oracle confirmed", "explore found", "per the reviewer"). Domain use of those words is fine ("migrate to Oracle DB", "explore the cache policy"). State the conclusion as fact and let its evidence carry the why. This rule covers the plan file only.
 
 Canonical required section headings (validator single source):
 ```
@@ -425,181 +325,137 @@ Canonical required section headings (validator single source):
 ## Success Criteria
 ```
 
-Each plan section is emitted as exactly its canonical heading above (plus `## ADR` when Scoped+).
+Each plan section is emitted as exactly its canonical heading above (plus `## ADR` when Scoped+). `## Context` holds the original request verbatim and the Decision Register. `## Work Objectives` holds the core objective, the Definition of Done, Must Have, Must NOT Have / Guardrails, and, for every intent with Trivial included, the non-goals handoff:
 
-Under `## Work Objectives`, every intent's plan includes the mandatory Non-Goals handoff; Trivial is not exempt from the canonical Non-Goals handoff:
-
+```
 ### Non-Goals
 - {excluded item} | decider: {membership test}
+```
 
-The lines in this section are verbatim from the stored Prometheus state, including the leading `-`; do not reconstruct, summarize, or omit ordinary confirmed exclusions.
+Its lines are verbatim from the stored Prometheus state, leading `-` included; do not reconstruct, summarize, or omit ordinary confirmed exclusions. `## Execution Strategy` shows the waves, the dependency matrix, and the critical path. `## Verification Strategy` names the test decision (TDD, tests-after, or none) and verification commands scoped to the change, not a whole-suite run; every check is agent-executed (Zero Human Intervention), with evidence under `$OMT_DIR/evidence/{plan-name}/`. `## Success Criteria` is a binary pass/fail end state.
 
 ### ADR
 
-Architecture Decision Record — one entry per significant design choice in the plan. **Required for Scoped+ intent. Trivial intent is exempt from ADR output.** Inline in the plan; no separate file needed.
+The ADR is the design source of truth: a decision log co-authored with the user during S2 Co-Design and reviewed by the human design gate and the in-phase Daedalus pass, not a record written alone afterwards. The plan's `## ADR` is a cleaned copy of that log. Both tiers populate it from Scoped upward.
 
-**The ADR log is the design source of truth — a co-authored decision log, not a solo post-hoc record.** It is filled WITH the user during the S2 Co-Design phase, and is the **review object** of both the human design gate and the in-phase Daedalus advisory pass. Every design decision — contested or not — is **one titled `D-N` item** carrying its own rationale. Items come in two tiers:
+Every design decision, contested or not, is **one titled `D-N` item**: a `### D-N: title` heading, a `Tier:` line (`contested` or `solo`), and its fields as `Label:` lines. Ultragoal reads these headings and labels and turns each item's `Decision:` field, with its `Owns:` and `Must NOT own:` text, into a binding rule for the executor.
 
-- **Contested tier** — a decision whose alternatives stand in a genuine tradeoff relationship, co-decided with the human. It carries the full 7-field MADR (fields listed below). An item whose **Decision** field is left empty is the open-fork representation: an unresolved contested decision still under co-design.
-- **Solo tier** — an uncontested decision, including every structural allocation and runtime edge. It carries lightweight fields: **Decision** / **Why** / **Invalidated alternative (one line)** / **Cites** (`file:symbol` for existing code, `(new)` for greenfield). A solo structural item also declares its **ownership** — what it owns, and **what it must NOT own** — and its **edges** `(caller→callee, side effect, failure path)`, or explicitly declares `Edges: none` (the close gate treats an explicit none as a complete enumeration, not an omission). When no Must-NOT boundary applies, the item must state it explicitly — e.g., `Must NOT own: none — <one-line reason>` — rather than omitting the field.
-  - **Edge callee grounding + internal consistency.** Every callee symbol named in an `edges` field is the **exact** symbol the caller invokes at that call site — read the caller's real code and transcribe it, never a plausible same-family sibling (a device-token axis that calls the member-check-free `getForHousehold` must be drawn `→getForHousehold`, never the member-checking `getForUser`, which it structurally cannot call because it lacks the `userId` that variant requires). A same-family sibling is still invention. And the method named for a given collaboration in one place MUST match the method named for that same collaboration everywhere else in the log — the item's own **Decision** / **Cites**, and any other D-item's `edges` describing the same caller→callee pair. An item whose `edges` name `getForUser` while its own Decision (or a sibling D-item) names `getForHousehold` for the same call is an **internal contradiction**, not a stylistic variance; the close gate rejects it.
-  - **Count grounding + internal consistency.** Every count of a code-defined set the plan states — enum members, probe/route targets, procedures, files, call sites — is obtained by COUNTING the actual code definition (read it and count), never asserted from memory or inference, and MUST agree with every corroborating statement of that same count elsewhere in the plan (a label/enumeration map, a sibling D-item, a diagram note). A stated `8 targets` that contradicts the plan's own 7-entry label map or 7-member enumeration is an internal contradiction the close gate rejects — and a fabricated count is not laundered by withholding the extra member's name: if you 'protect' a count by not naming its Nth member, re-count the code, because the missing name is the signal the member does not exist. State a count only at the cardinality you can enumerate by name from the code.
+- **Contested tier**: alternatives in a genuine tradeoff, co-decided with the user. Fields: `Context` (the principles that govern the choice), `Decision Drivers`, `Considered Options` (the options actually evaluated, at least 2, each with pros and cons; with one viable path write `N/A — single viable path, justified` and the reason, never a strawman), `Decision` (one declarative sentence), `Rationale`, `Consequences` (expected gains and accepted trade-offs), `Follow-ups` (`none` when empty).
+- **Solo tier**: an uncontested decision, including every structural allocation and runtime edge. Fields: `Decision`, `Why`, `Invalidated alternative` (one line), `Cites` (`file:symbol` for existing code, `(new)` for new code). A structural item also declares `Owns:`, `Must NOT own:` (when nothing applies, `Must NOT own: none — <one-line reason>`, never an omitted field), and `Edges:` as `(caller→callee, side effect, failure path)` or `Edges: none`. An explicit none is a complete enumeration, not an omission.
 
-By the time the plan is written at S3, the plan's `## ADR` section is a **refined copy** of this co-authored log (the same fields, cleaned up for the executor), not a freshly authored record.
+A contested item with an empty `Decision` is an open fork. Ultragoal omits an item that has no `Decision` field and turns an empty one into a blank rule line (`[D-N] title — `), so neither gives the executor a rule. Close every open fork with the user before hand-off; never fill it alone.
 
-**Human design approval and individual choices:** S2 requires the user's explicit holistic approval. Individual choices follow `### User Deferral Handling`: an unanswered choice stays pending, an explicit delegation yields a reasoned decision, and a scope deferral records the boundary. Record the basis in the ADR and register. If a chosen premise later changes, reopen the decision and its dependents through the earliest affected phase; a previously approved design does not conceal a new contradiction.
+Every code claim in the log is grounded and consistent:
 
-Contested-tier fields (all required per contested `D-N` item):
+- **Edge callee grounding + internal consistency.** Each callee in `Edges` is the exact symbol the caller invokes at that call site: read the caller's code and transcribe it, never a plausible sibling from the same family. One caller→callee pair names the same method everywhere in the log (the item's own `Decision` and `Cites`, other items' `Edges`); a mismatch is an internal contradiction.
+- **Count grounding + internal consistency.** Count every code-defined set the plan states (enum members, probe or route targets, procedures, files, call sites) from its definition in the code, never from memory, and keep every statement of that count in agreement. State a count only at the cardinality you can name member by member from the code.
 
-- **Context** — Background and design principles governing this decision (e.g., additive-only, zero-downtime, backward-compatible). State the principles from the requirements or interview here; they shape everything below.
-- **Decision Drivers** — Factors that constrained or guided the choice (e.g., performance budget, team conventions, existing contract, timeline).
-- **Considered Options** — The options actually evaluated, each with pros and cons. Minimum 2 options required. If only one path is viable, write `N/A — single viable path, justified` and state the justification (e.g., forced by an existing contract or API constraint). Do NOT fabricate a strawman alternative to satisfy this field.
-- **Decision** — The choice made, stated as a single declarative sentence.
-- **Rationale** — Reasoning for the chosen option over the alternatives.
-- **Consequences** — Positive outcomes expected AND trade-offs accepted.
-- **Follow-ups** — Open questions or tasks this decision defers (write "none" if empty).
-
-This full-item gate covers both tiers: contested and solo items alike populate the log from Scoped intent upward.
+Momus reviews these structural claims as document quality and feasibility, not architecture ideality, which stays with the user and Daedalus.
 
 #### Structural enumeration (Complex and Architecture only)
 
-**MUST enumeration rule.** At **Complex** and **Architecture** intent, **every component the change creates or modifies** is enumerated as a solo `D-N` item declaring its ownership and its edges (or an explicit none). Structural enumeration is Complex and Architecture ONLY — there is **no structural-enumeration path below the Complex band**. It is a distinct gate from full-item output, which starts at Scoped+.
+At Complex and Architecture, every component the change creates or modifies is a solo `D-N` item declaring its ownership and its edges (or an explicit none). S2 closes on the structural set only when this answer is YES: **Can a sequence/component diagram be drawn from the full set of D-items WITHOUT inventing new ownership or edges? (YES/NO)** YES needs every owner and Must-NOT boundary declared, every edge enumerated with the exact callee and agreeing with the rest of the log, and every stated count backed by the code; anything else is NO, and the loop stays open. The question is loop closure, not coverage: whether every touched file appears is the user's call at the design gate.
 
-**Close gate.** S2 closes on the structural set only when this is answerable YES: **Can a sequence/component diagram be drawn from the full set of D-items WITHOUT inventing new ownership or edges? (YES/NO)** YES means every component item gives its owner + Must-NOT boundary and every edge is enumerated (an explicit `Edges: none` or `Must NOT own: none` counts as a declared boundary, not an omission), **AND every enumerated edge's callee symbol is the exact symbol the caller invokes at that call site (not a plausible same-family sibling) and agrees with the method named for that same collaboration everywhere else in the log** (the item's own Decision / Cites, or another item's edges), **AND every count of a code-defined set the plan states (enum members, probe/route targets, procedures, files, call sites) was obtained by counting the actual code definition and agrees with every corroborating enumeration or label map of that same set elsewhere in the plan** — a stated cardinality the plan cannot back by naming each member from the code is a NO. NO keeps the loop open — an edge naming a method the caller cannot invoke, a count contradicting the plan's own enumeration, or a cardinality with an unnameable Nth member, is a NO. This gate is **loop-closure, not coverage** — whether every eventually-touched file appears is the human co-owner's call at the design gate, never folded into this question.
+**Anti-ceremony escape.** Skip structural enumeration only when the change adds no new ownership and no new edges, judged from the change itself, not from your effort, and record a named, specific consequence of skipping. Boilerplate ("low risk", "trivial", "no impact") fails and forces enumeration.
 
-**Anti-ceremony escape.** Structural enumeration may be skipped **only** when the change introduces **no new ownership and no new edges** (triviality derived from the change itself, not the planner's effort). Skipping requires recording a **named, specific** consequence of skipping — **not boilerplate** ("low risk", "trivial", "no impact" are rejected). Example of a good named consequence: "skips enumeration because this change only edits copy inside `Formatter.render`; if that turns out to also move the rounding rule, the unowned-rounding fork goes uncaught." A boilerplate consequence fails this clause and forces enumeration.
+**Boundary Map (REQUIRED alongside structural enumeration).** A plan that carries any `Must NOT own` label needs the Boundary Map at any intent. Consolidate the per-item ownership and edges into one `### Boundary Map` block:
 
-**Momus framing.** The solo items' structural claims are reviewed downstream as **document quality** (do the items agree with each other and with the prose?) and **feasibility** (do the cited references exist and match the codebase?) — **NOT architecture ideality**, which stays with the human and the in-phase Daedalus advisory.
+- a definition table with the columns Part / Layer (vertical domain · horizontal use-case) / Responsibility / Collaborators / affected·modified, marking each part **modified** (its behavior changes) or **affected** (consumed or depended on, unchanged);
+- a **Dependency direction** verdict per axis: whether the change keeps, violates, or restores one-way dependency. A domain back-reference, a cycle, or an inner-to-outer import is a coupling defect; flag it and do not add it.
 
-**Boundary Map (REQUIRED alongside structural enumeration).** The per-component D-items above carry ownership and edges scattered one-per-item; the reader cannot see the whole boundary picture from them. Consolidate that picture into one `### Boundary Map` block so the design's two axes are rendered explicitly, not left to be reconstructed:
-
-- A **definition table** naming every part this change touches — columns **Part / Layer (vertical domain · horizontal use-case) / Responsibility / Collaborators / affected·modified**. Every part is identifiable by name + responsibility + which layer/boundary it lives in + its collaborators, and marked **modified** (its behavior changes) vs **affected** (consumed or depended on but unchanged). A part you cannot name and place is a design smell.
-- A **Dependency direction** verdict: which way dependency flows on each axis, and whether the change keeps, violates, or restores unidirectional dependency. Flag any domain→domain back-reference, cycle, or inner/lower→outer/upper import as a coupling defect — do not add it.
-
-The two axes and the vocabulary follow the `architecture-boundaries` rule — borrow method names (DDD · FSD · Clean-arch) only as vocabulary, never make the work about a methodology. Server-side plans name the axes domain / use-case / service; client-side plans may borrow FSD slice / feature / widget — the same two axes. The labels `Collaborators`, `affected`/`modified`, and `Dependency direction` must be present; `validate-plan.ts` checks their presence in a plan that carries structural enumeration.
-
-> Worked example → [plan-template.md](plan-template.md). Lookup-only.
+The axes and their vocabulary follow the `architecture-boundaries` rule. `validate-plan.ts` refuses a plan that has the label but no block (`Boundary Map: block is missing ...`), and a block without `Collaborators`, `affected`, `modified`, or `Dependency direction` (`Boundary Map: missing "<slot>" slot ...`).
 
 ### Deliberate Mode Triggers
 
-T1 risk-domain triggers are a second classification axis, orthogonal to Intent class (Trivial/Scoped/Complex/Architecture). Intent class governs interview depth and review rigor based on size; T1 triggers govern activation of risk-specific artifacts based on domain. Regardless of intent class, a T1 hit activates Deliberate Mode — Risk override Size.
-
-Example: A 5-line auth fix is Trivial by size but Security by risk — the T1 trigger fires regardless of intent class. When size and risk conflict, risk overrides size.
-
-T1 categories and keyword patterns:
-
-- **Security** — auth, secrets, crypto, permission, JWT, token, authorization, authentication, role, privilege escalation
-- **Data destruction** — migration, drop, delete, truncate, purge, wipe, irreversible, destructive
-- **External contract** — public API, webhook, breaking change, contract, interface versioning, schema change, client-facing
-- **Concurrency** — race, lock, transaction, mutex, deadlock, atomic, concurrent, parallel write
-- **Money** — payment, billing, refund, charge, invoice, subscription, pricing, payout
-
-When a T1 trigger fires (any one category matched), activate `### Risk-Domain Pre-Mortem` and `### Expanded Test Plan` in addition to standard plan output. T1 triggers do NOT exempt a plan from Intent Classification — both axes apply simultaneously.
+T1 risk-domain triggers are a second classification axis beside the intent class. Size sets interview depth and review rigor; a T1 hit activates Deliberate Mode whatever the size, so risk overrides size (a 5-line auth fix is Trivial by size and Security by risk). Both axes apply at once. The five T1 categories are **Security**, **Data destruction**, **External contract**, **Concurrency**, and **Money**; match them by meaning, not by keyword. A T1 hit adds `### Risk-Domain Pre-Mortem` and `### Expanded Test Plan` to the plan.
 
 ### Risk-Domain Assessment
 
-Judge which no-safe-default domains (`### Deliberate Mode Triggers`) are in play — active judgment, not a per-plan checklist, regardless of whether the request named the risk. Resolve each live one with the user (never a silent default), which activates the Deliberate Mode artifacts; record each deliberately-excluded one as a non-goal-with-decider (e.g. `- 동시성 처리 안 함 | decider: 락/레이스/트랜잭션 finding은 out — 실행모델이 순차적`), which Metis and downstream code-review consume as an OUT-of-scope shield. **Absence is not an entry.**
+Judge which no-safe-default domains (the five T1 categories) are in play, whether or not the request named them: an active judgment, not a per-plan checklist. Resolve each live domain with the user, never with a silent default; that activates the Deliberate Mode sections. Record each deliberately excluded domain as a non-goal with a decider, for example:
+
+- 동시성 처리 안 함 | decider: 락/레이스/트랜잭션 finding은 out — 실행모델이 순차적
+
+Metis and downstream code review read it as an out-of-scope shield. **Absence is not an entry.**
 
 ### Risk-Domain Pre-Mortem
 
-T1-gated — emit this section in the plan output only when a T1 trigger fires (a T1 keyword match per `### Deliberate Mode Triggers`, or the Risk-Domain Assessment finding a domain in play). Conduct a pre-mortem: imagine the change has shipped and caused an incident. Enumerate at least 3 failure scenarios (3 scenario minimum), each with the following structure:
-
-- **Scenario name** — Brief label
-- **Trigger condition** — What user action or system event causes this failure
-- **Blast radius** — Which users, data, services, or downstream systems are affected
-- **Detection signal** — How would this failure be discovered (alert, user report, log pattern, metric spike)
+Emit this plan section only when a T1 trigger fired: the request touches a T1 category, or the assessment found a domain in play. Imagine the change shipped and caused an incident, and list at least 3 failure scenarios, each with a name, trigger condition, blast radius, and detection signal.
 
 ### Expanded Test Plan
 
-T1-gated — emit this section in the plan output only when a T1 trigger fires. Classify the planned test coverage into 4 layers:
+Emit this plan section only when a T1 trigger fired. Sort the existing QA scenarios into unit, integration, e2e, and observability layers and name the coverage gaps. Do not copy scenario content: the QA scenarios stay authoritative, and F3 runs them.
 
-- **unit** — Isolated logic, pure functions, single component behavior
-- **integration** — Cross-module, cross-service, or database interaction tests
-- **e2e** — End-to-end user flows (also called end-to-end tests)
-- **observability** — Metrics, alerts, logs, tracing coverage that would surface failures in production
+### TODO Task Format
 
-These 4 layers are a classification lens over the existing `QA Scenario 7-Field Structure` entries, which stay authoritative and are what `F3. QA Scenario Execution` runs. Do not duplicate QA scenario content here; categorize existing scenarios by layer and identify coverage gaps.
+Each TODO under `## TODOs` is a checkbox line `- [ ] N. Title` (the final audits are `- [ ] F1. Title` through `F4`) with seven fields:
 
-### TODO Task Format (7 fields, all required)
+1. **What to do**: the conclusions the executor needs (scope, approach, inputs, interview decisions), because it has no interview context. Write a verb-led lead sentence, then one bullet per deliverable or step.
+2. **Must NOT do**: at least one forbidden-scope constraint; never empty.
+3. **Files**: what the TODO creates or modifies.
+4. **References**: each a locator plus why it matters: Pattern (`file:line-range`), API/Type, Test, or External. Every implementation TODO has at least one Pattern or API/Type reference; a TODO with no existing pattern to copy writes `Greenfield — no existing pattern`.
+5. **Parallelization**: `Blocked By: 1, 3`, `Blocks: none`, `Wave: N` (1-based; `Wave: FINAL` for F1-F4).
+6. **Acceptance Criteria**: per `## Acceptance Criteria (Mandatory Contract)`.
+7. **QA Scenarios**: at least 2 per TODO, a happy path and a failure or edge case, in the structure below.
 
-Each TODO is a checkbox line `- [ ] N. Title` with body containing:
+F1-F4 are exempt from References only; they still carry Must NOT do and two QA scenarios.
 
-1. **What to do** — Content, Scope, Approach, Inputs, Decisions from interview. Executor has NO interview context — faithfully transfer conclusions. Format as a verb-led lead sentence followed by a bullet list of concrete deliverables/steps (one artifact or action per bullet); put any command in a fenced code block. Do NOT write a multi-sentence prose paragraph — bullets are scannable; prose buries the item count.
-2. **Must NOT do** — Explicit forbidden scope
-   - Every task MUST declare ≥1 forbidden-scope constraint; an empty field is not permitted.
-3. **Files** — What this TODO creates or modifies
-4. **References (CRITICAL)** — Executor has NO interview context. Provide:
-   - **Pattern**: `file:line-range` + WHY (what to adopt)
-   - **API/Type**: types, interfaces, APIs + WHY
-   - **Test**: existing test patterns + WHY
-   - **External**: official docs, RFCs + WHY
-   - Every implementation TODO needs ≥1 Pattern or API/Type reference. Greenfield → "Greenfield — no existing pattern" explicitly.
-   - **FINAL wave exemption**: F1-F4 audit tasks (Wave: FINAL) do NOT require Pattern/API/Type/Test/External references — their target IS the plan itself + the executed work. References field is optional for FINAL wave.
-5. **Parallelization** — `Blocked By: <comma-separated TODO ids, or none>`, `Blocks: <comma-separated TODO ids, or none>`, `Wave: N` (1-based, OR `Wave: FINAL` for F1-F4). Write ids as `Blocked By: 1, 3` / `Blocks: none`. The validator also accepts brackets (`[1, 3]`), none-like tokens (`—`, `n/a`, `없음`), `T`/`TODO ` prefixes, and ranges (`1-6`, `F1-F4`). `Blocks: M` on TODO N is valid when N is a direct or transitive predecessor of M through `Blocked By`; F1-F4 targets are exempt from that path check. Undefined targets and self-reference fail.
-6. **Acceptance Criteria** — Follow `## Acceptance Criteria (Mandatory Contract)` above.
-7. **QA Scenarios** — Minimum 2 per TODO (happy path + failure/edge case), 7-field structured block (see below)
+A TODO's Wave is at least `max(blocker waves) + 1`, and at least 1 with no blockers; default to the minimum. `Blocks: M` on TODO N requires M to reach N through `Blocked By` links (F1-F4 targets are exempt). `Wave: FINAL` is reserved for F1-F4; the numeric rule covers implementation tasks only. A wave targets 5-8 tasks; fewer than 3 in a non-bottleneck wave means the plan is under-split.
 
-**Wave Assignment Rule**: a TODO's Wave must be at least `max(wave of each blocker) + 1`; with no blockers, at least 1. A lower Wave fails the validator. A later Wave is allowed when the planner has a reason, but default to the minimum. Anti-pattern: assigning Wave 2 to an independent task because "it makes sense."
+At self-review, before Momus, run `bun "${CLAUDE_SKILL_DIR}/scripts/validate-plan.ts" <plan_path>` on the full plan, never a partial draft, then fix and re-run until it reports nothing. It refuses, among others, a missing canonical heading, a `dependency cycle: a -> b -> a`, a TODO `blocked by itself`, an undefined or unparseable `Blocked By` or `Blocks` entry, a missing Wave, a Wave below the minimum, F1-F4 without `Wave: FINAL`, and a missing Boundary Map block or slot.
 
 ### QA Scenario 7-Field Structure
 
-Each scenario:
-- **Scenario**: `{Name} — {Purpose}`
-- **Tool**: CLI command (`curl`, `bun test`, `agent-browser`, `agent-device`, `grep` — NOT prose descriptions)
-- **Preconditions**: Scenario-level setup state
-- **Steps**: Numbered exact commands
-- **Expected**: Observable outcome on success
-- **Failure**: Specific failure symptoms (NOT "Expected does not happen")
-- **Evidence**: `$OMT_DIR/evidence/{plan-name}/{task-slug}/{scenario-slug}.{ext}`
+Each scenario has: **Scenario** (`{Name} — {Purpose}`), **Tool** (a CLI command such as `curl`, `bun test`, `agent-browser`, `agent-device`, or `grep`, never prose), **Preconditions**, **Steps** (numbered exact commands), **Expected**, **Failure** (specific symptoms, not "Expected does not happen"), and **Evidence** (`$OMT_DIR/evidence/{plan-name}/{task-slug}/{scenario-slug}.{ext}`).
 
-Specificity: API → exact paths/methods, HTTP codes, JSON field paths. UI → CSS selectors, DOM state assertions. All → concrete test data, wait conditions, ≥1 failure scenario per task.
+### Decomposition Self-Check Output (Complex and Architecture only)
+
+Immediately before invoking `Write` on the plan file with the `## TODOs` body, output this block. Output it before the Write, never after: a check printed after the Write is a false signal. A missing block prohibits the Write: generate the block first, then write. Its names are those of `### MECE Decomposition` and `### Atomicity Heuristic` below.
+
+```
+## Decomposition Self-Check
+- Ambiguity Score (recalculated post-AC): <value>
+- MECE validation:
+  - Overlap: <none / found at TODO X & Y — resolved by ...>
+  - Coverage: <none / found in scope area Z — added TODO N>
+  - Hidden coupling: <none / instance ...>
+- Atomicity (per TODO):
+  - Concern scope: <all pass / TODOs X,Y fail because ...>
+  - File scope: <all pass / ...>
+  - Single-delegation: <all pass / ...>
+- Anti-pattern review:
+  - Under-planning: <none / instance ...>
+  - Over-decomposition: <none / instance ...>
+  - Hidden coupling: <none / instance ...>
+```
+
+Trivial: quick-check, no block. Scoped: full check, no block.
 
 ### MECE Decomposition
 
-Tasks must be Mutually Exclusive (no overlap) and Collectively Exhaustive (full coverage). Self-check after drafting TODOs:
+After drafting the TODOs, check that they are mutually exclusive and collectively exhaustive:
 
-| Check | Action |
-|-------|--------|
-| **Overlap** | Two TODOs modify same file for same purpose? → Merge or split by layer |
-| **Coverage** | All TODOs complete → requirement fulfilled? → Add missing TODO |
-| **Hidden coupling** | Implicit state, ordering, undeclared deps? → Make explicit or merge |
+- **Overlap**: two TODOs change the same file for the same purpose → merge them or split by layer.
+- **Coverage**: completing every TODO must fulfil the requirement → add any missing TODO.
+- **Hidden coupling**: implicit state, ordering, or undeclared dependencies → make them explicit or merge.
 
-Anti-patterns: same-file overlap (merge or split by layer), CRUD gap (add missing op), false MECE — "frontend"/"backend" but contract owned by neither (add contract TODO).
+When frontend and backend change together, add a contract TODO that both depend on; a contract owned by neither side is a false MECE split.
 
 ### Atomicity Heuristic
 
-Each TODO must be completable in one delegation pass:
+Each TODO is completable in one delegation pass:
 
-| Condition | Threshold |
-|-----------|-----------|
-| Concern scope | 1 concern per task |
-| File scope | 1-3 files per task (hard backstop) |
-| Single-delegation | Finish without mid-task coordination |
+- **Concern scope**: one concern per task.
+- **File scope**: 1-3 files per task (hard backstop); 4+ files or 2+ concerns → split by responsibility.
+- **Single-delegation**: the task finishes without mid-task coordination.
 
-Smell → action: "and" in description → split. Spans unrelated concerns → one TODO per responsibility. Requires sequential phases → each phase = own TODO with Blocked By. Touches 4+ files → decompose by responsibility.
+### Final Verification Wave (Scoped and above)
 
-**Vertical Slice Rule**: Prefer vertical slices (one feature end-to-end) over horizontal (all models, then all services). Exception: shared foundation tasks in Wave 1.
+Every Scoped+ plan ends with the four `Wave: FINAL` audits F1-F4. All four must APPROVE before the work is complete; on a rejection, add a fix task, re-enter implementation, and re-run all of F1-F4.
 
-### Maximum Parallelism
-
-| Rule | Threshold |
-|------|-----------|
-| Granularity | 1 task = 1 concern = 1-3 files. 4+ files or 2+ concerns → SPLIT |
-| Parallelism Target | 5-8 tasks per wave. <3 in non-bottleneck wave = under-split |
-| Dependency Minimization | Shared deps (types, interfaces) as Wave-1 tasks |
-
-### Final Verification Wave (MANDATORY for Scoped+ intent — Trivial exempt)
-
-Every plan with Scoped or higher intent MUST include Final Verification Wave at the end. ALL F1-F4 must APPROVE. Rejection → fix task → re-enter implementation → full F1-F4 re-run.
-
-- **F1. Plan Compliance Audit** — Read plan end-to-end. For each "Must Have": verify implementation exists. For each "Must NOT Have": search for forbidden patterns. Check evidence files in `$OMT_DIR/evidence/`. Output: `Must Have [N/N] | Must NOT Have [N/N] | VERDICT`.
-- **F2. Code Quality Review** — Run build + linter + tests. Review changed files for: `as any`, empty catches, console.log, unused imports. Check AI slop: excessive comments, over-abstraction, generic names. Output: `Build [PASS/FAIL] | Tests [N/N] | VERDICT`.
-- **F3. QA Scenario Execution** — Execute EVERY QA scenario from EVERY task. Test cross-task integration. Save evidence to `$OMT_DIR/evidence/{plan-name}/final-qa/`. Output: `Scenarios [N/N pass] | Integration [N/N] | VERDICT`.
-- **F4. Scope Fidelity Check** — For each task: read spec, read actual diff. Verify 1:1 correspondence (no missing, no creep). Check "Must NOT do" compliance. Detect cross-task contamination. Output: `Tasks [N/N compliant] | VERDICT`.
-
-Wave field for F1-F4: `Wave: FINAL` (literal string). Numeric rule applies to implementation tasks only.
-
-> Worked examples (TODO body example, Wave visualization, Success Criteria template) → [plan-template.md](plan-template.md). The examples are lookup-only; the contract above is authoritative.
+- **F1. Plan Compliance Audit**: read the plan end to end; for each Must Have, verify an implementation exists; for each Must NOT Have, search for the forbidden pattern; check the evidence files in `$OMT_DIR/evidence/`.
+- **F2. Code Quality Review**: run the build, lint, and the tests of the change's affected scope (the changed code and its dependents; a full-suite run only when the plan separately specifies it), and review the changed files for `as any`, empty catches, `console.log`, unused imports, and AI slop (excess comments, over-abstraction, generic names).
+- **F3. QA Scenario Execution**: run every QA scenario of every task, test cross-task integration, and save evidence to `$OMT_DIR/evidence/{plan-name}/final-qa/`.
+- **F4. Scope Fidelity Check**: for each task, read the spec and the actual diff; verify 1:1 correspondence (nothing missing, no creep), Must NOT do compliance, and no cross-task contamination.
 
 ---
 
