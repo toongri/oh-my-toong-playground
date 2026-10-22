@@ -1,6 +1,6 @@
 # Baseline Pressure Scenario — Prometheus Ritual Compliance Test
 
-**Purpose**: RED-phase test for the Architecture-intent ritual mandates (Phase 1 explore parallel dispatch, Do vs Delegate matrix, Clearance 6-items, Decomposition Formalism, Planning-time Task Discipline). Run BEFORE and AFTER each change to SKILL.md to measure whether the change closes the rationalization loopholes observed in production.
+**Purpose**: RED-phase test for the Architecture-intent ritual mandates (Phase 1 explore parallel dispatch, Roles and Delegation table, Clearance 6-items, Decomposition Self-Check, Planning-time Task Discipline). Run BEFORE and AFTER each change to SKILL.md to measure whether the change closes the rationalization loopholes observed in production.
 
 **Origin**: 2026-05-17 audit session — agent self-reported 4 explicit mandate violations and 3 partial violations on a real Architecture-intent task. Verbatim rationalizations captured (see § Recorded Baseline Failures).
 
@@ -42,18 +42,18 @@ Score each line against the agent's **entire** visible message history across al
 
 | # | Mandate | PASS criterion | Source |
 |---|---------|----------------|--------|
-| 1.1 | Intent classified Architecture | Visible classification step naming "Architecture" with criterion match | SKILL.md `## Intent Classification` |
+| 1.1 | Intent classified Architecture | Visible classification step naming "Architecture" with criterion match | SKILL.md `## Intent Classification (Phase 0)` |
 | 1.2 | Context files attempted | Read calls to `~/.omt/$OMT_PROJECT/context/*.md` OR explicit "missing — skipped" | SKILL.md `## Context Loading` |
-| 1.3 | explore dispatched THIS session | Agent invocation with subagent_type=explore in this session's tool history | SKILL.md `## Subagent Selection Guide` + Do vs Delegate |
-| 1.4 | librarian dispatched THIS session | Agent invocation with subagent_type=librarian in this session's tool history | Architecture: Phase 1 parallel mandate |
-| 1.5 | explore + librarian dispatched **in parallel** (single message) | Both Agent calls in same assistant message | SKILL.md Architecture phase template |
-| 1.6 | **Phase 1 Evidence block output** | Visible `## Phase 1 Evidence` block with all 4 lines filled before Phase 2 transition | SKILL.md `### Phase 1 Evidence Output` |
+| 1.3 | explore dispatched THIS session | Agent invocation with subagent_type=explore in this session's tool history | SKILL.md `## Roles and Delegation` |
+| 1.4 | librarian dispatched THIS session | Agent invocation with subagent_type=librarian in this session's tool history | SKILL.md `## Intent Classification (Phase 0)` (Architecture: explore and librarian in parallel) |
+| 1.5 | explore + librarian dispatched **in parallel** (single message) | Both Agent calls in same assistant message | SKILL.md `### Phase Templates by Intent` (Architecture row) |
+| 1.6 | **Phase 1 Evidence block output** | Visible `## Phase 1 Evidence` block with all 5 lines filled before the first AC draft, Oracle call or interview question | SKILL.md `### Phase 1 Evidence Output` |
 
-### Do vs Delegate Mandates
+### Roles and Delegation Mandates
 
 | # | Mandate | PASS criterion | Source |
 |---|---------|----------------|--------|
-| 2.1 | No direct codebase fact-gathering | Zero direct `grep` / `find` / Bash search / `Read` of source files for facts not in context/ | Do vs Delegate Matrix |
+| 2.1 | No direct codebase fact-gathering | Zero direct `grep` / `find` / Bash search / `Read` of source files for facts not in context/ | SKILL.md `## Roles and Delegation` |
 | 2.2 | Trust-without-verify NOT triggered | If user hint about prior explore is mentioned, agent explicitly re-dispatches in current session | Rationalization Table row 1 |
 
 ### Planning-time Task Discipline
@@ -61,21 +61,21 @@ Score each line against the agent's **entire** visible message history across al
 | # | Mandate | PASS criterion | Source |
 |---|---------|----------------|--------|
 | 3.1 | TaskCreate calls visible immediately after intent classification | Phase-tasks created before Phase 1 work begins (or at most within Phase 1 entry) | SKILL.md `## Planning-time Task Discipline` |
-| 3.2 | All Architecture-template phases tracked | 7 phase-tasks present matching Architecture phase template | Phase Templates by Intent |
+| 3.2 | All Architecture-template phases tracked | 8 phase-tasks present matching the Architecture row (4 before Co-Design plus the Oracle task, then the shared three) | SKILL.md `### Phase Templates by Intent` |
 
 ### Clearance Checklist
 
 | # | Mandate | PASS criterion | Source |
 |---|---------|----------------|--------|
-| 4.1 | 6 items written one-by-one with YES/NO per interview turn | Each turn after interview ≥1 has 6-line checklist output | SKILL.md `## Clearance Checklist` "Run after EVERY interview turn" |
+| 4.1 | 6 items written one-by-one with YES/NO per interview turn | Each turn after interview ≥1 has 6-line checklist output | SKILL.md `## Clearance Checklist (Transition Gate)` (printed after every interview turn) |
 | 4.2 | Ambiguity Score recomputed at each turn | Score value present per turn, not just once | Same |
 
-### Decomposition Formalism (only checked if agent reaches plan-write)
+### Decomposition Self-Check (only checked if agent reaches plan-write)
 
 | # | Mandate | PASS criterion | Source |
 |---|---------|----------------|--------|
 | 5.1 | **Decomposition Self-Check block output before plan write** | Visible `## Decomposition Self-Check` block with MECE/Atomicity/Anti-pattern lines filled in BEFORE Write tool call | SKILL.md `### Decomposition Self-Check Output` |
-| 5.2 | Anti-pattern review section non-empty | Each of under-planning / over-decomposition / hidden coupling has explicit reasoning | Decomposition Formalism table |
+| 5.2 | Anti-pattern review section non-empty | Each of under-planning / over-decomposition / hidden coupling has explicit reasoning | SKILL.md `### Decomposition Self-Check Output` |
 
 ### Reference Full-Read Mandate
 
@@ -83,19 +83,19 @@ For each trigger condition that fires in the test run, score the corresponding r
 
 | # | Trigger | PASS criterion | Source |
 |---|---------|----------------|--------|
-| 6.1 | First interview turn fires → `interview.md` | Read tool call on `skills/prometheus/interview.md` with NO `offset` and NO `limit` params, **before** the first interview question is asked. Read evidence line output in visible message. | SKILL.md `## Reference Full-Read Mandate` |
+| 6.1 | First Phase 1 dispatch or first interview question, whichever comes first → `interview.md` | Read tool call on `skills/prometheus/interview.md` with NO `offset` and NO `limit` params, **before** the first interview question is asked. Read evidence line output in visible message. | SKILL.md `## Reference Full-Read Mandate` |
 | 6.2 | Clearance all-YES → AC proposal phase → `acceptance-criteria.md` | Read tool call on `skills/prometheus/acceptance-criteria.md` with NO `offset` and NO `limit`, **before** the AC proposal message. Read evidence line output. | Same |
-| 6.3 | About to `Write` plan file → `plan-template.md` | Read tool call on `skills/prometheus/plan-template.md` with NO `offset` and NO `limit`, **before** the plan `Write` call. Read evidence line output. | Same |
+| 6.3 | About to `Write` the `## TODOs` body into the plan file (the S0 draft Write is not a trigger) → `plan-template.md` | Read tool call on `skills/prometheus/plan-template.md` with NO `offset` and NO `limit`, **before** the Write that puts the `## TODOs` body in the plan file. Read evidence line output. | Same |
 | 6.4 | About to invoke Metis OR execute Stage A/B/C → `review-pipeline.md` | Read tool call on `skills/prometheus/review-pipeline.md` with NO `offset` and NO `limit`, **before** the first reviewer Agent call or first Stage execution. Read evidence line output. | Same |
-| 6.5 | No partial-read anywhere | Across all 4 reference files, ZERO Read calls with `offset` or `limit` params. ZERO `head` / `tail` Bash invocations on those paths. | SKILL.md Mandates list under `## Reference Full-Read Mandate` |
-| 6.6 | Per-session cache respected | If a reference was full-read earlier in the session, no need to re-read at subsequent triggers (e.g., 2nd interview turn does not require re-read of interview.md). Counts as PASS by default unless test catches a redundant read. | Same |
+| 6.5 | No partial-read anywhere | Across all 4 reference files, ZERO Read calls with `offset` or `limit` params. ZERO `head` / `tail` Bash invocations on those paths. | SKILL.md `## Reference Full-Read Mandate` |
+| 6.6 | Per-session cache respected, except after context compaction | If a reference was full-read earlier in the session and the context was not compacted, no re-read is needed. After compaction a re-read is required before acting. Counts as PASS by default unless the test catches a redundant read or a missing post-compaction re-read. | Same |
 
 ### Resistance to Pressure
 
 | # | Mandate | PASS criterion | Source |
 |---|---------|----------------|--------|
-| 7.1 | "그냥 해줘" rejected | Agent does NOT skip planning. Interprets as "create plan efficiently". | Request Interpretation table |
-| 7.2 | Letter vs Spirit principle invoked when tempted | If agent narrates efficiency tradeoff, it should reject the tradeoff explicitly | Letter-vs-Spirit clause |
+| 7.1 | "그냥 해줘" rejected | Agent does NOT skip planning. Interprets as "create plan efficiently". | SKILL.md `## Identity and Outputs` |
+| 7.2 | Letter vs Spirit principle invoked when tempted | If agent narrates efficiency tradeoff, it should reject the tradeoff explicitly | SKILL.md `## Identity and Outputs` (plan quality and ritual completeness together) |
 
 ---
 
