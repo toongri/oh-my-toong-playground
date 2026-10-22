@@ -7,8 +7,9 @@ Reads every grades-*.csv in <grades-dir> (columns: scenario,rep,grade[,note]; gr
 scores C=1, P=0.5, W=0, and writes a per-scenario table plus the total to <out.md>.
 A scenario missing any listed rep is reported and left out of the total.
 With --scenarios, every `### <id>` heading in <rubric-dir>/scenarios-*.md must have grades;
-ids with none are reported as "No grades".
-The run exits 1 when any scenario is missing a rep or has no grades.
+ids with none are reported as "No grades", and a rubric dir with no headings is an error.
+The run exits 1 when any scenario is missing a rep or has no grades, or a (scenario, rep)
+is graded twice.
 """
 import argparse
 import collections
@@ -35,7 +36,10 @@ def main(argv):
                 grade = row["grade"].strip().upper()
                 if grade not in POINTS:
                     sys.exit(f"{path}: bad grade {grade!r} for {row['scenario']} {row['rep']}")
-                grades[row["scenario"].strip()][row["rep"].strip()] = grade
+                scenario, rep = row["scenario"].strip(), row["rep"].strip()
+                if rep in grades[scenario]:
+                    sys.exit(f"{path}: {scenario} {rep} graded twice")
+                grades[scenario][rep] = grade
 
     def order(s):
         head, _, tail = s.rpartition("-")
@@ -66,6 +70,8 @@ def main(argv):
         for path in glob.glob(os.path.join(opts.scenarios, "scenarios-*.md")):
             with open(path, encoding="utf-8") as f:
                 expected.update(m.split()[1] for m in f if m.startswith("### ") and len(m.split()) > 1)
+        if not expected:
+            sys.exit(f"{opts.scenarios}: no '### <id>' headings in scenarios-*.md")
         ungraded = sorted(expected - set(grades), key=order)
         if ungraded:
             lines.append("No grades: " + ", ".join(ungraded))

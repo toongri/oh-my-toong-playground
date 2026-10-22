@@ -34,9 +34,9 @@ Build question-only sets: `runs/sets/<set>.md` with ~7 scenarios each (situation
 ## 3. Grade
 
 - Grader agents read `scenarios-*.md` (the rubric) and the answer files, and write CSV `scenario,rep,grade,note` with C/P/W, applying the Grading sentence literally.
-- Where reps of one scenario mix C and P (or anything with W), one fresh adjudicator per scenario reads only that scenario's rubric and its five answers and re-applies the grading sentences consistently. Record before/after per rep and the reason in `adjudication.md`. Change a grade only where the grader misapplied the rubric.
+- Where reps of one scenario mix C and P (or anything with W), one fresh adjudicator per scenario reads only that scenario's rubric and its five answers and re-applies the grading sentences consistently. Record before/after per rep and the reason in `adjudication.md`. Change a grade only where the grader misapplied the rubric, and change it in the grader's CSV itself: `score.py` refuses a scenario and rep graded twice.
 - Use the same grader instructions and adjudication rule for baseline and new runs. A stricter adjudicator in a later run is a measurement change, not a doc change: when a drop appears, re-grade the baseline answers with the same strictness before concluding.
-- Score: C=1, P=0.5, W=0; mean per scenario over 5 reps; total over all answers. `scripts/score.py <grades-dir> <out.md> --scenarios <evidence-dir>` does this; it exits 1 when a scenario is missing a rep or, with `--scenarios`, a rubric scenario has no grades.
+- Score: C=1, P=0.5, W=0; mean per scenario over 5 reps; total over all answers. `scripts/score.py <grades-dir> <out.md> --scenarios <evidence-dir>` does this; it exits 1 when a scenario is missing a rep, a scenario and rep are graded twice, or, with `--scenarios`, a rubric scenario has no grades or the directory has no scenario headings.
 
 ## 4. Interpret
 

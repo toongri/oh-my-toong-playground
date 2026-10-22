@@ -85,11 +85,31 @@ printf '### S-A-4 four\n' > "$RUBRIC_DIR/scenarios-b.md"
 COMPLETE_DIR="$WORK_DIR/complete"
 mkdir -p "$COMPLETE_DIR"
 printf 'scenario,rep,grade,note\nS-A-2,r1,C,\nS-A-2,r2,C,\nS-A-10,r1,C,\nS-A-10,r2,C,\n' > "$COMPLETE_DIR/grades-1.csv"
-if python3 -I "$SCORE_PY" "$COMPLETE_DIR" "$WORK_DIR/complete-out.md" --reps r1,r2 --scenarios "$WORK_DIR/none" >/dev/null 2>&1; then
+FULL_RUBRIC_DIR="$WORK_DIR/full-rubric"
+mkdir -p "$FULL_RUBRIC_DIR"
+cp "$RUBRIC_DIR/scenarios-a.md" "$FULL_RUBRIC_DIR/"
+if python3 -I "$SCORE_PY" "$COMPLETE_DIR" "$WORK_DIR/complete-out.md" --reps r1,r2 --scenarios "$FULL_RUBRIC_DIR" >/dev/null 2>&1; then
     pass "complete grades exit zero"
 else
     fail "complete grades must exit zero"
 fi
+if python3 -I "$SCORE_PY" "$COMPLETE_DIR" "$WORK_DIR/typo-out.md" --reps r1,r2 --scenarios "$WORK_DIR/none" >/dev/null 2>&1; then
+    fail "rubric dir with no scenario headings must exit non-zero"
+else
+    pass "rubric dir with no scenario headings exits non-zero"
+fi
+
+DUP_DIR="$WORK_DIR/dup"
+mkdir -p "$DUP_DIR"
+printf 'scenario,rep,grade,note\nS-A-2,r1,W,\nS-A-2,r2,C,\n' > "$DUP_DIR/grades-1.csv"
+printf 'scenario,rep,grade,note\nS-A-2,r1,C,\n' > "$DUP_DIR/grades-2.csv"
+DUP_ERR=$(python3 -I "$SCORE_PY" "$DUP_DIR" "$WORK_DIR/dup-out.md" --reps r1,r2 2>&1 >/dev/null) && DUP_EXIT=0 || DUP_EXIT=$?
+if [[ "$DUP_EXIT" -ne 0 ]]; then
+    pass "scenario/rep graded twice exits non-zero"
+else
+    fail "scenario/rep graded twice must exit non-zero"
+fi
+assert_contains "duplicate grade names the scenario and rep" "$DUP_ERR" 'S-A-2 r1'
 UNGRADED_OUT="$WORK_DIR/ungraded-out.md"
 if python3 -I "$SCORE_PY" "$COMPLETE_DIR" "$UNGRADED_OUT" --reps r1,r2 --scenarios "$RUBRIC_DIR" >/dev/null 2>&1; then
     fail "ungraded rubric scenario must exit non-zero"
