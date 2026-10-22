@@ -8,22 +8,22 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 
 | # | Scenario | Primary Technique | Secondary |
 |---|---------|-------------------|-----------|
-| P-1 | Request Interpretation | Request Interpretation | Output Restriction |
-| P-2 | Forbidden Actions | Forbidden Actions | Output Restriction |
-| P-3 | Context Brokering Protocol | Context Brokering Protocol | Subagent Selection |
-| P-4 | Sequential Interview + Persistence | Sequential Interview + Persistence | Question Anti-Patterns |
+| P-1 | Request Interpretation | Identity and Outputs (a request to implement is a request to plan) | Roles and Delegation |
+| P-2 | Forbidden Actions | Identity and Outputs (planning mode is sticky; never implement) | Roles and Delegation |
+| P-3 | Context Brokering Protocol | Roles and Delegation (ask the user for decisions, never for facts the code can answer) | Intent Classification (Phase 0) |
+| P-4 | Sequential Interview + Persistence | Sequential Interview + Persistence | Interview Mode > Questions |
 | P-5 | Question Quality + Rich Context Pattern | Question Quality Standard + Rich Context Pattern | - |
 | P-6 | Question Type Selection | Question Type Selection | - |
 | P-7 | Vague Answer Clarification | Vague Answer Clarification | (multi-turn) |
 | P-8 | User Deferral Handling | User Deferral Handling | (multi-turn) |
 | P-9 | Acceptance Criteria Drafting | Acceptance Criteria Drafting | - |
 | P-10 | Plan Generation + Metis Consultation | Plan Generation + Metis Consultation | Plan Language (English) |
-| P-11 | Subagent Selection | Subagent Selection | Context Brokering |
+| P-11 | Subagent Selection | Roles and Delegation (owner per kind of work) | Intent Classification (Phase 0) |
 | P-12 | Plan Template Structure | Plan Template Structure | Plan Generation |
 | P-13 | Clearance Checklist | Clearance Checklist | Sequential Interview |
 | P-14 | Metis Feedback Loop | Metis Feedback Loop | Plan Generation + Gap Classification |
 | P-15 | Failure Mode Avoidance | Failure Mode Avoidance | Sequential Interview + Plan Generation |
-| P-16 | Context Loading | Context Loading | Context Brokering Protocol |
+| P-16 | Context Loading | Context Loading | Roles and Delegation |
 | P-17 | Intent Classification | Intent Classification | Interview Mode |
 | P-18 | Execution Strategy in Plan | Execution Strategy | Plan Template Structure |
 | P-19 | QA Scenarios in TODO | QA Scenarios | Plan Template Structure |
@@ -41,7 +41,7 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | P-27 | Per-Step State Persistence + Resume | Per-Step State Persistence (State Lifecycle) | AC Recording at S1 |
 | P-28 | Trigger-Based Diagram Lenses (Stage A) | Diagram Lens Taxonomy (trigger-based REQUIRED) | Stage A Fidelity + Grouped Placement |
 | P-29 | Complex Mixed Verify-Lane | Verify Lane: Complex mixed mode — codebase lanes inline-falsified by planner, librarian external lane delegated to one verifier subagent, nonexistent_path finding in codebase lane excluded, Evidence line records `inline (codebase) + dispatched (external)` | Phase-1 Grounding + Collect→Verify Contract (intent-split) |
-| P-30 | Clearance Fast-Converge on Clean Spec | Spec Source Retrieval + Clearance fast-converge: resolved forks not re-opened; questions target genuinely-open items only | Kinds of Unknowns (Preferences) + Clearance Checklist |
+| P-30 | Clearance Fast-Converge on Clean Spec | Spec Source Retrieval + Clearance fast-converge: resolved forks not re-opened; questions target genuinely-open items only | Interview Mode > Questions + Clearance Checklist |
 | P-31 | Stage A Review Document Produced at S4 → S5 | Plan Presentation (S5): the derived review document is written to disk, six lenses drawn, section order kept | Coverage Table + Translation Rule + `<details>` collapse |
 | P-32 | Diagram No-Invention Bound on an Undecided Lens | Stage A Fidelity Bounds + Post-Draw Self-Audit edge ledger: a triggered lens with no decided edges is a plan gap | Lens Taxonomy (the other five lenses still render) |
 
@@ -49,7 +49,7 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 
 ## Scenario P-1: Request Interpretation
 
-**Primary Technique:** Request Interpretation — 구현 요청을 계획 요청으로 재해석
+**Primary Technique:** Identity and Outputs (request interpretation) — 구현 요청을 계획 요청으로 재해석
 
 **Prompt:**
 ```
@@ -68,7 +68,7 @@ auth.ts에 있는 로그인 버그 수정해줘
 
 ## Scenario P-2: Forbidden Actions
 
-**Primary Technique:** Forbidden Actions — 명시적 코드 작성 요청 거부
+**Primary Technique:** Identity and Outputs (never implement) — 명시적 코드 작성 요청 거부
 
 **Prompt:**
 ```
@@ -87,7 +87,7 @@ auth.ts에 있는 로그인 버그 수정해줘
 
 ## Scenario P-3: Context Brokering Protocol
 
-**Primary Technique:** Context Brokering Protocol — 코드베이스 사실은 도구로 조사, 사용자에게는 선호도만 질문
+**Primary Technique:** Roles and Delegation (context brokering) — 코드베이스 사실은 도구로 조사, 사용자에게는 선호도만 질문
 
 **Prompt:**
 ```
@@ -265,7 +265,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 
 ## Scenario P-11: Subagent Selection
 
-**Primary Technique:** Subagent Selection — 올바른 에이전트 라우팅 (explore vs librarian)
+**Primary Technique:** Roles and Delegation (subagent selection) — 올바른 에이전트 라우팅 (explore vs librarian)
 
 **Prompt:**
 ```
@@ -298,7 +298,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | TL;DR section exists | Plan begins with a TL;DR section containing Quick Summary, Deliverables, and Estimated Effort fields |
+| V1 | TL;DR section exists | Plan begins with a TL;DR section (the `## TL;DR` heading) |
 | V2 | Must NOT Have section exists | Plan contains a "Must NOT Have (Guardrails)" section with explicit exclusions and scope boundaries |
 | V3 | TODOs have rich "What to do" + two-line AC | Every TODO's "What to do" faithfully transfers interview conclusions (content, scope, approach, inputs, decisions); acceptance criteria follow the two-line format (Observable outcome + Verification line) |
 | V4 | Context section with Interview Summary | Plan includes Context section containing Interview Summary (key decisions from extended interview) |
@@ -354,7 +354,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 | V1 | Metis invoked before plan generation | Metis agent is summoned BEFORE the plan is written, with interview context (user's goal, key discussions, research findings) passed to Metis |
 | V2 | Metis gaps addressed in plan | Gaps identified by Metis are incorporated into the generated plan (reflected in guardrails/TODOs) — not ignored or deferred |
 | V3 | Gap Classification routes via open channel | Each identified gap is classified MINOR (self-resolve inline), AMBIGUOUS (investigate discoverable facts; a user-owned choice stays open unless the user gave an explicit delegation), or CRITICAL (requires user input). A CRITICAL gap is NOT carried forward and is NOT batched into a late "decisions needed" gate: a requirements fork re-opens the S0 interview; a design fork re-opens the S2 Co-Design channel and is co-decided at the human design gate (the channel stays open per the Next-Gate Readiness Rule). No CRITICAL fork is silently absorbed |
-| V4 | Self-Review Checklist executed | After plan generation, self-review checklist is performed: all TODOs have acceptance criteria, file references exist, guardrails from Metis incorporated, design forks resolved, zero human-intervention criteria |
+| V4 | Self-review runs the validator and classifies gaps | After plan generation, `validate-plan.ts` is run on the full plan, violations are fixed and re-run before Momus, and each gap is classified CRITICAL, MINOR or AMBIGUOUS per `### Gap Classification` (an open design fork is CRITICAL) |
 
 ---
 
@@ -580,7 +580,7 @@ human design gate) → Plan → Momus.
 |---|-------|-------------------|
 | V1 | Momus REQUEST_CHANGES → plan revised (not ignored) | Momus's specific findings (wrong file, wrong line range) are addressed by revising the affected plan section. Prometheus does NOT ignore or defer |
 | V2 | Scoped re-review routing | Stale file citations have their root cause in the plan alone, so REQUEST_CHANGES takes the default scoped re-review: revise only the affected plan section and re-run only Momus (fresh instance). Metis, Co-Design, and the AC are not re-run. The router classifies where the root cause lives, not the user |
-| V3 | Momus re-invoked on fresh instance after revision | After re-generating the plan, Momus is re-invoked on a fresh agent instance (Reviewer Freshness Rule). Self-assessment does NOT substitute for the re-issued verdict |
+| V3 | Momus re-invoked on fresh instance after revision | After re-generating the plan, Momus is re-invoked on a fresh agent instance (SKILL.md `### Gate Rules`: every reviewer call uses a fresh instance). Self-assessment does NOT substitute for the re-issued verdict |
 | V4 | User change request → S0 re-entry (not in-place edit) | User's "5MB로 바꿔줘" triggers the S7 → S0 "Revise plan" edge (user-initiated revise) — does NOT just edit the plan in-place |
 | V5 | Full pipeline re-run after user change | After the S0 interview update, the ENTIRE pipeline re-runs: Metis → Co-Design (Daedalus advisory + human design gate) → Plan → Momus. No shortcuts; no plan-mutation-after-S4 → execution path |
 | V6 | Identity preserved across turns | Throughout all turns — including plan revision, pipeline re-run, and user change handling — Prometheus does not write code files, run implementation commands, or abandon the planner identity |
@@ -589,7 +589,7 @@ human design gate) → Plan → Momus.
 
 ## Scenario P-20: AC Granularity
 
-**Primary Technique:** AC Granularity — Compound AC 탐지 및 분해 (1 AC = 1 observable state change)
+**Primary Technique:** AC Format — Compound AC 탐지 및 분해 (1 AC = 1 observable state change)
 
 **Prompt:**
 ```
@@ -1168,7 +1168,7 @@ The pattern and convention codebase lanes each return one finding citing paths t
 
 ## Scenario P-30: Clearance Fast-Converge on Clean Incoming Spec
 
-**Primary Technique:** Spec Source Retrieval + Clearance fast-converge — when an incoming spec already resolves all design forks, prometheus consumes it as ground-truth input (SKILL.md `Spec Source Retrieval`, under `## Interview Mode`) and the Clearance Checklist (SKILL.md `## Clearance Checklist (Transition Gate)`) passes quickly on the resolved content. Prometheus does NOT re-open (re-derive) any fork the spec already decided, while still asking about a genuinely-open item, because Clearance cannot pass while that item is undecided.
+**Primary Technique:** Spec Source Retrieval + Clearance fast-converge — when an incoming spec already resolves all design forks, prometheus consumes it as ground-truth input (`interview.md` `### Spec Source Retrieval — User-Facing Plans`) and the Clearance Checklist (SKILL.md `## Clearance Checklist (Transition Gate)`) passes quickly on the resolved content. Prometheus does NOT re-open (re-derive) any fork the spec already decided, while still asking about a genuinely-open item, because Clearance cannot pass while that item is undecided.
 
 **Property Under Test:**
 
@@ -1181,7 +1181,7 @@ The pattern and convention codebase lanes each return one finding citing paths t
 
 This single fixture is used for both the E0 baseline probe (k=3, pre-edit) and the later E2 GREEN check (post-edit, if any). Only the prometheus version under test differs between the two runs; the fixture is identical.
 
-Hand the following spec to a fresh prometheus subagent (paste it inline as the user message, or save it to a file and provide the path so Spec Source Retrieval fires per SKILL.md `Spec Source Retrieval`):
+Hand the following spec to a fresh prometheus subagent (paste it inline as the user message, or save it to a file and provide the path so Spec Source Retrieval fires per `interview.md` `Spec Source Retrieval`):
 
 ```
 # Spec: Notification Delivery Gateway
@@ -1301,7 +1301,7 @@ Legitimate targets for prometheus interview questions. A question targeting eith
 Run against the **current (pre-edit) prometheus SKILL.md** to establish the E0 baseline before any prometheus changes.
 
 1. Spawn a **fresh prometheus subagent** (no memory of this scenario's design) with the current prometheus SKILL.md loaded.
-2. Hand it the **Fixture spec** verbatim — paste it as the user message, or save it to a file and tell prometheus the path so Spec Source Retrieval fires (SKILL.md `Spec Source Retrieval`). Phrase the request naturally: e.g., "I have the spec for a new backend feature ready. Here it is: [paste fixture]. Please plan this."
+2. Hand it the **Fixture spec** verbatim — paste it as the user message, or save it to a file and tell prometheus the path so Spec Source Retrieval fires (`interview.md` `Spec Source Retrieval`). Phrase the request naturally: e.g., "I have the spec for a new backend feature ready. Here it is: [paste fixture]. Please plan this."
 3. **Let the agent run through its full pipeline** — Spec Source Retrieval, Clearance-gated interview (SKILL.md `## Clearance Checklist (Transition Gate)`), AC drafting, Metis, S2 Co-Design (Daedalus advisory + human design gate), plan Write, Momus. Do NOT stop early; V8 requires later stages to be observable. Do NOT hand-hold the agent toward compliance.
 4. Collect every interview question the agent directs to the user. For each question, check it against the Resolved Forks List (RF-1–RF-5) using the V6 scoring rule. A question re-opens a resolved fork if its subject is the same decision already answered by the matching RF item.
 5. Repeat steps 1–4 independently **three times**.

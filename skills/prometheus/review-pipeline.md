@@ -1,8 +1,8 @@
-# Review Pipeline — Lookup
+# Review Pipeline
 
-**This file is lookup-only.** The mandatory review-pipeline rules are defined inline in `SKILL.md > ## Review Pipeline (Mandatory Contract)`. The contract is authoritative.
+**This file is a mandatory full read at its trigger.** The review rules are defined in `SKILL.md > ## Review Pipeline (Mandatory Contract)`; this file adds the procedures and templates. SKILL.md prevails.
 
-Read this file when you are about to execute a SPECIFIC reviewer invocation, Stage A presentation render, Stage B signal-table computation, or Stage C option presentation. Read the corresponding section in full at that moment.
+Read this whole file in one Read call before the first reviewer invocation, Stage A presentation render, Stage B signal-table computation, or Stage C option presentation.
 
 ---
 

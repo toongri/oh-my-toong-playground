@@ -1,8 +1,8 @@
-# Acceptance Criteria — Lookup
+# Acceptance Criteria
 
-**This file is lookup-only.** The mandatory AC rules are defined inline in `SKILL.md > ## Acceptance Criteria (Mandatory Contract)`. The contract is authoritative; this file is per-tool examples + a worked example.
+**This file is a mandatory full read at its trigger.** The AC rules are defined in `SKILL.md > ## Acceptance Criteria (Mandatory Contract)`; this file adds per-tool examples and a worked example. SKILL.md prevails.
 
-Read this file when you want a concrete example for a specific tool, or want to consult a worked AC proposal.
+Read this whole file in one Read call before you propose the AC.
 
 ---
 
@@ -27,15 +27,15 @@ When the Verification can be expressed as a runnable command, prefer one that is
 - [ ] **Login with valid credentials lands on Home and shows username**
       **Verification**:
       ```bash
-      agent-browser open "$APP_URL/login"
+      agent-browser open http://localhost:3000/login
       agent-browser snapshot -i                        # locate email/password/submit refs
-      agent-browser fill @e3 "$TEST_EMAIL"
-      agent-browser fill @e4 "$TEST_PASSWORD"
+      agent-browser fill @e3 "test@example.com"
+      agent-browser fill @e4 "test-password-1"
       agent-browser click @e5
       agent-browser wait --load networkidle
       agent-browser get url | grep -q "/home"          # assert redirect to /home
       agent-browser snapshot -i                        # re-snapshot: @eN refs are scoped to one snapshot and go stale after navigation
-      agent-browser get text @e1 | grep -q "$TEST_USERNAME"  # assert username via a ref from the fresh /home snapshot
+      agent-browser get text @e1 | grep -q "test-user"  # assert username via a ref from the fresh /home snapshot
       agent-browser close
       ```
       (If the test mutates backend persistence, chain Query API verification or add API-symmetric cleanup — browser context reset alone doesn't restore backend state.)

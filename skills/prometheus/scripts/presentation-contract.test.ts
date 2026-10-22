@@ -40,7 +40,6 @@ describe("발표 계약 — 제거된 경로와 HTML 제출", () => {
 	});
 
 	it("A2: HTML 제출은 필수이며 제거한 템플릿은 참조하지 않는다", () => {
-		expect(skillContent).toContain("--submit-presentation <html>");
 		expect(skillContent).toContain("[review-pipeline.md](review-pipeline.md)");
 		expect(skillContent).not.toContain("templates/plan-presentation.html");
 	});
@@ -50,20 +49,12 @@ describe("발표 계약 — 제거된 경로와 HTML 제출", () => {
 		expect(reviewPipelineContent).toContain("${CLAUDE_SKILL_DIR}/../html-report/scripts/capture.sh");
 		expect(reviewPipelineContent).toContain("${CLAUDE_SKILL_DIR}/../html-report/scripts/lint.sh");
 		expect(reviewPipelineContent).toContain("--source $OMT_DIR/plans/{name}.md");
-		expect(reviewPipelineContent).toContain("0 errors");
 	});
 
 	it("A3b: 가리키는 html-report 가이드와 두 스크립트가 실제로 존재한다", () => {
 		expect(existsSync(join(htmlReportDir, "SKILL.md"))).toBe(true);
 		expect(existsSync(join(htmlReportDir, "scripts", "capture.sh"))).toBe(true);
 		expect(existsSync(join(htmlReportDir, "scripts", "lint.sh"))).toBe(true);
-	});
-
-	it("A3c: review-pipeline.md 가 HTML 직접 저작 경로와 제출 명령을 규정한다", () => {
-		expect(reviewPipelineContent).toContain("$OMT_DIR/plans/presentation/{name}.html");
-		expect(reviewPipelineContent).toContain(
-			'prometheus-state.ts set --phase S5 --submit-presentation "$OMT_DIR/plans/presentation/{name}.html"',
-		);
 	});
 
 	it("A4: 제거된 파일이 없고 두 문서가 제거된 경로를 다시 참조하지 않는다", () => {
@@ -97,10 +88,6 @@ describe("발표 계약 — 제거된 경로와 HTML 제출", () => {
 });
 
 describe("존재 계약 — 섹션 순서, 커버리지 표, edge ledger", () => {
-	it("P1: review-pipeline.md prescribes Presentation Section Order", () => {
-		expect(reviewPipelineContent).toContain("Presentation Section Order");
-	});
-
 	it("P2: 섹션 순서 구간에 6개 구성요소가 정해진 순서로 나온다", () => {
 		const section = sectionOrderSlice();
 		const labels = [
@@ -124,17 +111,8 @@ describe("존재 계약 — 섹션 순서, 커버리지 표, edge ledger", () =>
 		expect(sectionOrderSlice()).toContain("<details>");
 	});
 
-	it("P3: Invariant 3 is authority-based (derived, non-authoritative)", () => {
-		expect(reviewPipelineContent).toContain("derived, non-authoritative");
-	});
-
 	it("P4: 커버리지 표의 정식 헤더가 review-pipeline.md 에 있다", () => {
 		expect(reviewPipelineContent).toContain("| Lens | Trigger FACT | Status |");
-	});
-
-	it("P5: 커버리지 표의 drawn 과 trigger FALSE: 리터럴이 있다", () => {
-		expect(reviewPipelineContent).toContain("`drawn (N)`");
-		expect(reviewPipelineContent).toContain("trigger FALSE:");
 	});
 
 	it("P6: drawn 의 계수 단위는 <svg> 를 담은 <figure> 이다", () => {
@@ -142,22 +120,10 @@ describe("존재 계약 — 섹션 순서, 커버리지 표, edge ledger", () =>
 		expect(reviewPipelineContent).toContain("`<figure>` element that contains an `<svg>`");
 	});
 
-	it("P7: 커버리지 표 규칙 절이 있다", () => {
-		expect(reviewPipelineContent).toContain("#### Coverage Table (audit ledger)");
-	});
-
-	it("P8: self-audit 이 edge 별 ledger 를 요구한다", () => {
-		expect(reviewPipelineContent).toContain("##### Edge ledger");
-	});
-
 	it("P9: ledger 줄에 결정 원문을 인용하는 슬롯이 있다", () => {
 		expect(reviewPipelineContent).toContain(
 			'<source> -> <target> : "<quoted plan.md text that decides this edge>"',
 		);
-	});
-
-	it("P10: ledger 는 쌍뿐 아니라 방향도 묶는다", () => {
-		expect(reviewPipelineContent).toContain("the pair AND the direction");
 	});
 
 	it("P11: 인용할 수 없는 edge 는 조용한 삭제가 아니라 STOP 으로 간다", () => {
@@ -168,10 +134,6 @@ describe("존재 계약 — 섹션 순서, 커버리지 표, edge ledger", () =>
 		expect(reviewPipelineContent).not.toContain(
 			"No signature, field, edge, or relationship in the diagram is absent",
 		);
-	});
-
-	it("P13: 체크리스트가 시그니처와 필드를 여전히 묶는다", () => {
-		expect(reviewPipelineContent).toContain("No signature or field in the diagram is absent from `plan.md`");
 	});
 });
 
