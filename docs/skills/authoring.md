@@ -183,7 +183,7 @@ OCR 정밀값(해시, 포트, 버전 등)은 컨텍스트 추론 금지 — `get
 
 **제약**: 스크립트와 훅은 바꾸지 않습니다. 코드에 맞춰 문서를 고칩니다.
 
-**구성 파일**: `SKILL.md`, `references/`(rule-inventory, behavior-measurement, rewriting, regression-audit), `scripts/score.py`
+**구성 파일**: `SKILL.md`, `references/`(rule-inventory, behavior-measurement, rewriting, regression-audit), `scripts/measure.ts` (측정 증거 `measurement.json`을 쓰는 유일한 CLI)
 
 **사용 시점**: 길어지거나 중복·모순이 쌓인 SKILL.md를 줄일 때, 압축본을 머지 전에 점검할 때
 

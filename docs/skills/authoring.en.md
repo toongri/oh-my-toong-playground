@@ -183,7 +183,7 @@ When 3 or more files are changed, a commit plan is output before any commit runs
 
 **Constraint**: scripts and hooks are not changed. The doc is made to match the code.
 
-**Files**: `SKILL.md`, `references/` (rule-inventory, behavior-measurement, rewriting, regression-audit), `scripts/score.py`
+**Files**: `SKILL.md`, `references/` (rule-inventory, behavior-measurement, rewriting, regression-audit), `scripts/measure.ts` (the only CLI that writes the `measurement.json` evidence file)
 
 **Triggers**: shrinking a SKILL.md that has grown long or accumulated duplicate/contradictory rules; checking a compacted version before merge
 

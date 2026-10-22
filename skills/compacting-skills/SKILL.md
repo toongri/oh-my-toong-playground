@@ -42,7 +42,7 @@ Never change scripts, hooks, or validators as part of compression. When the doc 
 
 ## Process
 
-Keep a plan file with one checkbox per step and append one progress line (date, result, evidence path) as each closes. Store evidence in one directory per target: `rules/`, `pins/`, `scenarios-*.md`, `runs/`, `old-doc/` (frozen copy + `COMMIT`), `trace/`, `regression.md`, `audit.md`, `summary.md`.
+Keep a plan file with one checkbox per step and append one progress line (date, result, evidence path) as each closes. Store evidence in one directory per target: `rules/`, `pins/`, `scenarios-*.md`, `measurement.json` (written only by `scripts/measure.ts`), `runs/`, `old-doc/` (frozen copy + `COMMIT`), `trace/`, `regression.md`, `audit.md`, `summary.md`.
 
 | # | Step | Gate to pass |
 |---|---|---|
