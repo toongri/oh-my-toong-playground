@@ -129,6 +129,17 @@ describe("score", () => {
 		expect(report).not.toContain("| S-A-2 |");
 	});
 
+	test("--reps가 비었거나 중복이면 채점 전에 거부함", () => {
+		const file = evidenceFile();
+		addScenarios(file, ["S-A-1"]);
+		run(file, ["record-grades", "--run", "baseline"], grades([["S-A-1", "r1", "C"]]));
+		for (const reps of ["r1,r1,r1,r1,r1", ",", " "]) {
+			const result = run(file, ["score", "--run", "baseline", "--reps", reps]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("--reps");
+		}
+	});
+
 	test("시나리오가 하나도 없거나 파일이 없으면 실패함", () => {
 		const file = evidenceFile();
 		expect(run(file, ["score", "--run", "baseline"]).exitCode).toBe(1);

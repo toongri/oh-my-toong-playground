@@ -121,6 +121,7 @@ export function runMeasureCli(args: string[], io: { stdin?: string } = {}): Meas
 		if (command === "score") {
 			const runName = name(values.run, "--run");
 			const reps = (values.reps ?? "r1,r2,r3,r4,r5").split(",").map((r) => r.trim()).filter(Boolean);
+			if (reps.length === 0 || new Set(reps).size !== reps.length) throw new Error(`--reps must list distinct rep ids (got ${JSON.stringify(values.reps)})`);
 			const result = score(load(file, false), runName, reps);
 			if (values.out) writeFileSync(resolve(values.out), result.report, "utf8");
 			return { exitCode: result.incomplete ? 1 : 0, stdout: `${values.out ? result.summary : result.report}\n`, stderr: "" };
