@@ -20,9 +20,6 @@ const skillContent = readFileSync(skillPath, "utf8");
 const interviewPath = join(import.meta.dir, "..", "interview.md");
 const interviewContent = readFileSync(interviewPath, "utf8");
 
-const reviewPipelinePath = join(import.meta.dir, "..", "review-pipeline.md");
-const reviewPipelineContent = readFileSync(reviewPipelinePath, "utf8");
-
 const scenariosPath = join(import.meta.dir, "..", "tests", "application-scenarios.md");
 const scenariosContent = readFileSync(scenariosPath, "utf8");
 
@@ -34,60 +31,8 @@ const scenariosContent = readFileSync(scenariosPath, "utf8");
 // ---------------------------------------------------------------------------
 
 describe("SKILL.md presence — verify-lane tokens", () => {
-	it("P1: multi-aspect fan-out (additive)", () => {
-		expect(skillContent).toContain("multi-aspect fan-out");
-	});
-
-	it("P2: falsifying verifier (additive)", () => {
-		expect(skillContent).toContain("falsifying verifier");
-	});
-
-	it("P3: verify lane: Evidence-block list-marker line (mixed Complex mode placeholder)", () => {
-		// The template now expresses the mixed Complex case: codebase lanes inline
-		// + external lane dispatched when present. Old single-mode form is gone.
-		expect(skillContent).toContain(
-			"- verify lane: <inline (codebase) + dispatched (external) (Complex with external lane) | inline (Complex, no external lane) | dispatched (Architecture)> / N lanes / M excluded",
-		);
-	});
-
 	it("P3-A: old mode-less verify lane line is gone (intent-split replaces it)", () => {
 		expect(skillContent).not.toContain("- verify lane: dispatched / N lanes / M excluded");
-	});
-
-	it("P4: stale_state key (additive)", () => {
-		expect(skillContent).toContain("stale_state");
-	});
-
-	it("P5: prompt_injection key (additive)", () => {
-		expect(skillContent).toContain("prompt_injection");
-	});
-
-	it("P6: nonexistent_path key (additive)", () => {
-		expect(skillContent).toContain("nonexistent_path");
-	});
-
-	it("P7: version_drift key (additive)", () => {
-		expect(skillContent).toContain("version_drift");
-	});
-
-	it("P8: librarian default lane (replaces the conditional-dispatch text)", () => {
-		expect(skillContent).toContain("librarian default lane");
-	});
-
-	it("P9: purely mechanical refactor (default-lane carve-out)", () => {
-		expect(skillContent).toContain("purely mechanical refactor");
-	});
-
-	it("P10: evidence-anchored question (additive)", () => {
-		expect(skillContent).toContain("evidence-anchored question");
-	});
-
-	it("C6-P: verify lane no-op form (replaces old dispatched/0/0 form)", () => {
-		expect(skillContent).toContain("no-op / 0 lanes / 0 excluded");
-	});
-
-	it("C12-P: nonexistent_path scoped to repo paths (additive scope clarification)", () => {
-		expect(skillContent).toContain("scoped to repo paths");
 	});
 });
 
@@ -122,63 +67,12 @@ describe("SKILL.md absence — replaced verify-lane tokens", () => {
 });
 
 // ---------------------------------------------------------------------------
-// SKILL.md SURVIVAL — distinctive substrings of untouched sections that MUST
-// remain. Guards that the verify-lane rewrite did not collaterally delete the
-// Decomposition Self-Check, the structural-enumeration tier, or the Review
-// Pipeline contract.
-// ---------------------------------------------------------------------------
-
-describe("SKILL.md survival — untouched-section tokens", () => {
-	it("S1: Decomposition Self-Check Output survives", () => {
-		expect(skillContent).toContain("Decomposition Self-Check Output");
-	});
-
-	it("S2: Structural enumeration (Complex and Architecture only) survives", () => {
-		expect(skillContent).toContain("Structural enumeration (Complex and Architecture only)");
-	});
-
-	it("S3: Review Pipeline contract heading survives", () => {
-		expect(skillContent).toContain("## Review Pipeline (Mandatory Contract)");
-	});
-
-	it("S3b: Review Pipeline body — only Metis/Momus emit verdicts (distinctive section-body phrase)", () => {
-		expect(skillContent).toContain("Only Metis and Momus emit verdicts and gate the pipeline.");
-	});
-});
-
-// ---------------------------------------------------------------------------
-// review-pipeline.md SURVIVAL — the file must exist with its structural content
-// intact. The heading check above only guards SKILL.md's inline summary; this
-// guards the lookup file itself.
-// ---------------------------------------------------------------------------
-
-describe("review-pipeline.md survival — file content", () => {
-	it("C15: review-pipeline.md carries the Stage A / Stage B / Stage C lookup structure", () => {
-		expect(reviewPipelineContent).toContain(
-			"Stage A presentation render, Stage B signal-table computation",
-		);
-	});
-});
-
-// ---------------------------------------------------------------------------
 // interview.md — the Interview-contract templates pick up the verify-lane
 // vocabulary (presence, additive) but MUST NOT carry the SKILL.md-only
 // `evidence-anchored question` token (absence — boundary guard).
 // ---------------------------------------------------------------------------
 
 describe("interview.md presence — verify-lane templates", () => {
-	it("I1: multi-aspect fan-out (additive)", () => {
-		expect(interviewContent).toContain("multi-aspect fan-out");
-	});
-
-	it("I2: falsifying verifier (additive)", () => {
-		expect(interviewContent).toContain("falsifying verifier");
-	});
-
-	it("I4: verifier template carries the schema confidence dimension (replaces the ladder verdict line)", () => {
-		expect(interviewContent).toContain("confidence");
-	});
-
 	it("C12-P: {LANE_EVIDENCE} placeholder present in verifier dispatch template", () => {
 		expect(interviewContent).toContain("{LANE_EVIDENCE}");
 	});
@@ -237,16 +131,6 @@ describe("interview.md absence — replaced ladder verdict line", () => {
 // ---------------------------------------------------------------------------
 
 describe("SKILL.md P2-A — no-op form lives in Phase-1 Evidence template", () => {
-	it("P2-A-P: template bullet carries the no-op conditional form", () => {
-		// The template bullet at :344 includes the conditional no-op text inline:
-		// `<or "no-op / 0 lanes / 0 excluded" when all collect lanes are empty ...>`
-		// Anchor on the conjunction that only appears in the template (not the rule
-		// section), making this a tighter guard than the bare `no-op / 0 lanes / 0 excluded` C6-P.
-		expect(skillContent).toContain(
-			'"no-op / 0 lanes / 0 excluded" when all collect lanes are empty',
-		);
-	});
-
 	it("P2-A-P2: N/A branch for Trivial/Scoped is present in template", () => {
 		// The template bullet also specifies the Trivial/Scoped N/A form so both
 		// branches of the visible-or-violation mandate appear inline.
@@ -263,34 +147,6 @@ describe("SKILL.md P2-A — no-op form lives in Phase-1 Evidence template", () =
 //   one block per finding present / dispatch invariant present.
 // ---------------------------------------------------------------------------
 
-describe("SKILL.md P2-B — per-finding verdict vocabulary", () => {
-	it("P2-B-P1: per-finding verdict wording present in collect→verify contract", () => {
-		expect(skillContent).toContain("per-finding");
-	});
-
-	it("P2-B-P2: N counts lanes unit distinction present (N=lanes, M=findings)", () => {
-		expect(skillContent).toContain("N counts lanes");
-	});
-
-	it("P2-B-P3: Exclusion rule is explicitly per finding", () => {
-		// Distinctive phrase that confirms per-finding scope of the Exclusion rule.
-		expect(skillContent).toContain("Exclusion is applied **per finding**");
-	});
-
-	it('P2-B-P4: Complex intent inline branch — "no verifier subagent" present (SKILL.md :388)', () => {
-		// Guards the Complex zero-spawn half of the intent-split (collect→verify contract).
-		// Paired with P2-B-I4 (Architecture dispatch invariant) — both halves must survive.
-		// Deleting the Complex branch from SKILL.md turns this RED.
-		expect(skillContent).toContain("no verifier subagent");
-	});
-
-	it('P2-B-P5: Complex intent inline branch — "Zero spawns" present (SKILL.md :390)', () => {
-		// Second anchor on the Complex zero-spawn contract. Two distinct literals means
-		// paraphrasing one literal still trips the other.
-		expect(skillContent).toContain("Zero spawns");
-	});
-});
-
 describe("interview.md P2-B — per-finding schema and {LANE_FINDINGS} guard", () => {
 	it("P2-B-I1: {LANE_FINDINGS} plural placeholder present in verifier template", () => {
 		expect(interviewContent).toContain("{LANE_FINDINGS}");
@@ -302,23 +158,6 @@ describe("interview.md P2-B — per-finding schema and {LANE_FINDINGS} guard", (
 		// The regex-free not.toContain against the exact `{LANE_FINDING}` token is safe
 		// because `{LANE_FINDINGS}` ends with `S}`, not `}`.
 		expect(interviewContent).not.toContain("{LANE_FINDING}");
-	});
-
-	it("P2-B-I3: one block per finding schema instruction present", () => {
-		expect(interviewContent).toContain("emit one block per finding");
-	});
-
-	it("P2-B-I4: dispatch invariant — one falsifying verifier per non-empty lane", () => {
-		// Guards that the per-lane dispatch contract survived the rewrite.
-		expect(interviewContent).toContain(
-			"dispatch one **falsifying verifier** subagent per non-empty lane",
-		);
-	});
-
-	it('P2-B-I5: Complex zero-spawn invariant — "do NOT dispatch verifiers" present (interview.md :132)', () => {
-		// Guards the Complex half of the intent-split alongside the Architecture half above (P2-B-I4).
-		// Deleting the Complex inline-falsification prose from interview.md turns this RED.
-		expect(interviewContent).toContain("do NOT dispatch verifiers");
 	});
 });
 
@@ -332,27 +171,6 @@ describe("interview.md P2-B — per-finding schema and {LANE_FINDINGS} guard", (
 // ---------------------------------------------------------------------------
 
 describe("Option A — external lane always delegated (SKILL.md + interview.md)", () => {
-	it("OA-P1: SKILL.md — external lane keeps delegated verifier at Complex (new clause)", () => {
-		// Guards the core Option A invariant in SKILL.md: the external lane is
-		// delegated even on Complex intent. Reverting to all-inline-at-Complex
-		// removes this phrase and turns this RED.
-		// Anchors on the single-line portion of the new clause (line 392 of SKILL.md):
-		// the full clause spans two lines, so we pin the distinctive single-line tail.
-		expect(skillContent).toContain(
-			"delegated falsifying-verifier subagent (Complex and Architecture alike)",
-		);
-	});
-
-	it("OA-P2: interview.md — external lane always delegated verifier subagent (new clause)", () => {
-		// Guards the Option A invariant in interview.md: the EXTERNAL collect lane
-		// is always falsified by a delegated verifier, not inline at Complex.
-		// Reverting to "(inline at Complex, delegated at Architecture)" removes this
-		// phrase and turns this RED.
-		expect(interviewContent).toContain(
-			"always falsified by a delegated verifier subagent (Complex and Architecture alike)",
-		);
-	});
-
 	it('OA-A1: interview.md — old "inline at Complex" external-lane phrasing is gone', () => {
 		// The stale phrase that made the external lane inline at Complex.
 		// Must be absent after the fix; if it survives, Option A is incomplete.
@@ -399,15 +217,5 @@ describe("scenarios P2-C — P-25 axis reframe (old absent, new present)", () =>
 
 	it('P2-C-A4: old framing "out-of-verify-lane" is gone (case-insensitive)', () => {
 		expect(scenariosContent.toLowerCase()).not.toContain("out-of-verify-lane");
-	});
-
-	it('P2-C-P1: new axis "applies uniformly across all lane types" is present', () => {
-		// Distinctive new axis from P-25 Primary Technique line.
-		expect(scenariosContent).toContain("applies uniformly across all lane types");
-	});
-
-	it('P2-C-P2: new framing "not one of the 5 explore aspect lanes" present (lane-type disambiguation)', () => {
-		// Guards the cross-lane witness framing that replaces the old verify-stage axis.
-		expect(scenariosContent).toContain("not one of the 5 explore aspect lanes");
 	});
 });

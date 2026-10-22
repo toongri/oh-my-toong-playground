@@ -325,30 +325,26 @@ test("validator headings match SKILL contract", () => {
 	const skillPath = join(import.meta.dir, "..", "SKILL.md");
 	const skillContent = readFileSync(skillPath, "utf8");
 
-	// Find the anchor line, then extract the immediately following fenced block
-	const anchorLine = "Canonical required section headings (validator single source):";
-	const anchorIdx = skillContent.indexOf(anchorLine);
-	if (anchorIdx === -1) throw new Error(`Anchor not found in SKILL.md: "${anchorLine}"`);
-
-	const afterAnchor = skillContent.slice(anchorIdx + anchorLine.length);
-
-	// Find the opening fence (```)
-	const fenceOpenMatch = afterAnchor.match(/^[ \t]*```[^\n]*\n/m);
-	if (!fenceOpenMatch) throw new Error("Opening fence not found after anchor in SKILL.md");
-	const fenceOpenEnd = fenceOpenMatch.index! + fenceOpenMatch[0].length;
-
-	// Find the closing fence
-	const afterFenceOpen = afterAnchor.slice(fenceOpenEnd);
-	const fenceCloseMatch = afterFenceOpen.match(/^[ \t]*```[ \t]*$/m);
-	if (!fenceCloseMatch) throw new Error("Closing fence not found after anchor in SKILL.md");
-
-	const fenceBody = afterFenceOpen.slice(0, fenceCloseMatch.index!);
-
-	// Extract lines that start with "## " — these are the canonical headings
-	const extracted = fenceBody
-		.split("\n")
-		.filter((line) => line.startsWith("## "))
-		.map((line) => line.slice("## ".length).trim());
+	// Find the block by content: every fenced block whose "## " lines start with "## TL;DR"
+	const blocks: string[][] = [];
+	let current: string[] | null = null;
+	for (const line of skillContent.split("\n")) {
+		if (/^[ \t]*```/.test(line)) {
+			if (current === null) {
+				current = [];
+			} else {
+				blocks.push(current);
+				current = null;
+			}
+		} else if (current !== null) {
+			current.push(line);
+		}
+	}
+	const candidates = blocks
+		.map((body) => body.filter((line) => line.startsWith("## ")).map((line) => line.slice("## ".length).trim()))
+		.filter((headings) => headings[0] === "TL;DR");
+	expect(candidates).toHaveLength(1);
+	const extracted = candidates[0];
 
 	expect(extracted).toEqual(REQUIRED_HEADINGS);
 });

@@ -90,12 +90,10 @@ function parseInlineFormula(md: string): Record<string, number> {
 /** Parses prometheus's single decimal weight-table row, e.g.
  *  `| Intent, Outcome, Scope, Constraints, Success, Context | 0.27, 0.22, ... |` */
 function parsePrometheusTable(md: string): Record<string, number> {
-	const start = md.indexOf("**Ambiguity Score**:");
-	const end = md.indexOf("## Failure Modes to Avoid");
-	const region = md.slice(start === -1 ? 0 : start, end === -1 ? undefined : end);
-	const rowRe = /\|\s*([A-Za-z][A-Za-z, ]*[A-Za-z])\s*\|\s*(\d+\.\d+(?:\s*,\s*\d+\.\d+)*)\s*\|/;
-	const m = region.match(rowRe);
-	if (!m) return {};
+	const rowRe = /\|\s*([A-Za-z][A-Za-z, ]*[A-Za-z])\s*\|\s*(\d+\.\d+(?:\s*,\s*\d+\.\d+)*)\s*\|/g;
+	const rows = [...md.matchAll(rowRe)];
+	if (rows.length !== 1) throw new Error(`expected exactly one weight-table row in prometheus SKILL.md, found ${rows.length}`);
+	const m = rows[0];
 	const dims = m[1].split(",").map((s) => normalizeDim(s));
 	const weights = m[2].split(",").map((s) => parseFloat(s.trim()));
 	const map: Record<string, number> = {};
