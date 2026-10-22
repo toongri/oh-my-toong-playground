@@ -20,8 +20,10 @@ Commands:
                                                        and a (scenario, rep) already graded in RUN
   adjudicate --run RUN --scenario ID --rep REP --grade C|P|W --reason TEXT
                                                        change one recorded grade; keeps before, after, reason
-  score --run RUN [--reps r1,r2,r3,r4,r5] [--out FILE] per-scenario table and total; exits 1 when a scenario
-                                                       is missing a rep or has no grades in RUN
+  score --run RUN [--set SET,...] [--reps r1,r2,r3,r4,r5] [--out FILE]
+                                                       per-scenario table and total; exits 1 when a scenario
+                                                       is missing a rep or has no grades in RUN. --set limits
+                                                       the scenarios scored and checked to those sets
 `;
 
 const POINTS = { C: 1, P: 0.5, W: 0 } as const;
@@ -73,14 +75,16 @@ function byId(a: string, b: string): number {
 	return ha < hb ? -1 : ha > hb ? 1 : na - nb;
 }
 
-function score(state: Measurement, runName: string, reps: string[]): { report: string; summary: string; incomplete: boolean } {
+function score(state: Measurement, runName: string, reps: string[], sets: string[]): { report: string; summary: string; incomplete: boolean } {
 	if (state.scenarios.length === 0) throw new Error("no scenarios registered");
+	for (const set of sets) if (!state.scenarios.some((s) => s.set === set)) throw new Error(`no scenario is registered in set ${set}`);
+	const scenarios = sets.length ? state.scenarios.filter((s) => sets.includes(s.set)) : state.scenarios;
 	const graded = state.runs[runName]?.grades ?? {};
 	const lines = ["| scenario | grades | C | P | W | score |", "|---|---|---|---|---|---|"];
 	const total = { C: 0, P: 0, W: 0 };
 	const missing: string[] = [];
 	const ungraded: string[] = [];
-	for (const id of state.scenarios.map((s) => s.id).sort(byId)) {
+	for (const id of scenarios.map((s) => s.id).sort(byId)) {
 		const reps0 = graded[id];
 		if (!reps0 || Object.keys(reps0).length === 0) { ungraded.push(id); continue; }
 		const got = reps.flatMap((r) => (reps0[r] ? [reps0[r].grade] : []));
@@ -122,7 +126,8 @@ export function runMeasureCli(args: string[], io: { stdin?: string } = {}): Meas
 			const runName = name(values.run, "--run");
 			const reps = (values.reps ?? "r1,r2,r3,r4,r5").split(",").map((r) => r.trim()).filter(Boolean);
 			if (reps.length === 0 || new Set(reps).size !== reps.length) throw new Error(`--reps must list distinct rep ids (got ${JSON.stringify(values.reps)})`);
-			const result = score(load(file, false), runName, reps);
+			const sets = (values.set ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+			const result = score(load(file, false), runName, reps, sets);
 			if (values.out) writeFileSync(resolve(values.out), result.report, "utf8");
 			return { exitCode: result.incomplete ? 1 : 0, stdout: `${values.out ? result.summary : result.report}\n`, stderr: "" };
 		}

@@ -36,7 +36,7 @@ Build question-only sets: `runs/sets/<set>.md` with ~7 scenarios each (situation
 - Grader agents read `scenarios-*.md` (the rubric) and the answer files, apply the Grading sentence literally, and return a JSON array `[{scenario, rep, grade, note}]` with grade C/P/W as their final message. Graders never run `measure.ts`; you record each array with `bun "${CLAUDE_SKILL_DIR}/scripts/measure.ts" --file <evidence-dir>/measurement.json record-grades --run <run>` (array on stdin). Name each run for what it measured (`baseline`, `new`, `old`/`mid` for targeted sets). It refuses the whole batch on an unregistered scenario, a bad grade, or a scenario and rep already graded in that run.
 - Where reps of one scenario mix C and P (or anything with W), one fresh adjudicator per scenario reads only that scenario's rubric and its five answers and re-applies the grading sentences consistently. Change a grade only where the grader misapplied the rubric, with `bun "${CLAUDE_SKILL_DIR}/scripts/measure.ts" --file <evidence-dir>/measurement.json adjudicate --run <run> --scenario <id> --rep <rep> --grade <g> --reason <why>`; it keeps the before and after grade and the reason.
 - Use the same grader instructions and adjudication rule for baseline and new runs. A stricter adjudicator in a later run is a measurement change, not a doc change: when a drop appears, re-grade the baseline answers with the same strictness, into a new run name, before concluding.
-- Score: C=1, P=0.5, W=0; mean per scenario over 5 reps; total over all answers. `bun "${CLAUDE_SKILL_DIR}/scripts/measure.ts" --file <evidence-dir>/measurement.json score --run <run> --out <file>` does this and exits 1 when a registered scenario is missing a rep or has no grades in that run; a run that exits 1 is not a measurement.
+- Score: C=1, P=0.5, W=0; mean per scenario over 5 reps; total over all answers. `bun "${CLAUDE_SKILL_DIR}/scripts/measure.ts" --file <evidence-dir>/measurement.json score --run <run> --out <file>` does this and exits 1 when a registered scenario is missing a rep or has no grades in that run; a run that exits 1 is not a measurement. A re-run of one set (a fixed scenario, a targeted set) goes into a new run name and is scored with `--set <set>`, which checks completeness only within that set; `regression.md`'s run source column names the run each row came from.
 
 ## 4. Interpret
 
@@ -49,7 +49,7 @@ Regression table `regression.md`: scenario, baseline grades, baseline score, new
 
 ## 5. Targeted scenarios for audit findings
 
-For each regression the audit finds, write a scenario that the regression would break, and measure three versions: OLD (before compression), MID (compressed, before the fix), NEW (after the fix). The fix is shown working when MID < NEW. MID already correct means another sentence or a reference file covered the gap (a latent, low-severity regression). A scenario that fails on all three versions is a scenario defect; rewrite it.
+For each regression the audit finds, write a scenario that the regression would break, register it in its own set, and measure three versions (runs `old`, `mid`, `new`, each scored with `--set` on that set): OLD (before compression), MID (compressed, before the fix), NEW (after the fix). The fix is shown working when MID < NEW. MID already correct means another sentence or a reference file covered the gap (a latent, low-severity regression). A scenario that fails on all three versions is a scenario defect; rewrite it.
 
 ## 6. Real-run comparison
 

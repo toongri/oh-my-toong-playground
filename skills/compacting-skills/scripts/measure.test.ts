@@ -129,6 +129,20 @@ describe("score", () => {
 		expect(report).not.toContain("| S-A-2 |");
 	});
 
+	test("--set이 있으면 그 set 시나리오만 채점·완전성 검사하고, 없는 set은 거부함", () => {
+		const file = evidenceFile();
+		addScenarios(file, ["S-A-1"]);
+		expect(run(file, ["add-scenario", "--id", "S-T-1", "--set", "targeted", "--rules", "R-009"]).exitCode).toBe(0);
+		run(file, ["record-grades", "--run", "mid"], grades([["S-T-1", "r1", "W"], ["S-T-1", "r2", "C"]]));
+		const all = run(file, ["score", "--run", "mid", "--reps", "r1,r2"]);
+		expect(all.exitCode).toBe(1);
+		const scoped = run(file, ["score", "--run", "mid", "--reps", "r1,r2", "--set", "targeted"]);
+		expect(scoped.exitCode).toBe(0);
+		expect(scoped.stdout).toContain("| S-T-1 | WC |");
+		expect(scoped.stdout).not.toContain("S-A-1");
+		expect(run(file, ["score", "--run", "mid", "--reps", "r1,r2", "--set", "nope"]).exitCode).toBe(1);
+	});
+
 	test("--reps가 비었거나 중복이면 채점 전에 거부함", () => {
 		const file = evidenceFile();
 		addScenarios(file, ["S-A-1"]);
