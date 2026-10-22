@@ -304,6 +304,10 @@ An AC may use these variables without defining them. The QA executor (the qa ski
 
 No other variable is provided, `$APP_URL` included: the AC defines any other value itself, for example as a literal URL.
 
+### Reference Integration
+
+When the user names a reference ("follow X", "based on the Y pattern"), each reference yields ≥1 AC carrying a specific behavioral constraint derived from it, verifiable without reading the reference itself. If a reference yields no such constraint, ask: "What specific aspect of [reference] should the implementation follow?"
+
 ---
 
 ## Plan Structure (Mandatory Contract)
